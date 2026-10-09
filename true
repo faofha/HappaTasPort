@@ -1444,6 +1444,8 @@ do
 					for k = 1, cnt do
 						local m = mList[k]
 						putZig(MB, q(m[1], 1)); putZig(MB, q(m[2], 1)); putVar(MB, q(m[3], 100))
+						putVar(MB, math.max(0, q(m[4] or 0, 1)))
+						putVar(MB, math.max(0, q(m[5] or 0, 1)))
 					end
 				end
 			end
@@ -1657,7 +1659,7 @@ do
 					local mCount = getVar(R.MB)
 					local mids = {}
 					for k = 1, mCount do
-						mids[k] = { getZig(R.MB), getZig(R.MB), getVar(R.MB) / 100 }
+						mids[k] = { getZig(R.MB), getZig(R.MB), getVar(R.MB) / 100, getVar(R.MB), getVar(R.MB) }
 					end
 					mob.Dynamic = {
 						Start = { sx, sy, str },
@@ -4663,10 +4665,14 @@ end
 					local mids = {}
 					for _, ch in ipairs(dtf:GetChildren()) do
 						if ch.Name == "ThumbstickMiddle" and ch:IsA("ImageLabel") and ch.Visible then
+							local szX = ch.Size.X.Offset > 0 and ch.Size.X.Offset or (ch.AbsoluteSize and ch.AbsoluteSize.X) or 0
+							local szY = ch.Size.Y.Offset > 0 and ch.Size.Y.Offset or (ch.AbsoluteSize and ch.AbsoluteSize.Y) or 0
 							mids[#mids + 1] = {
 								r(ch.Position.X.Offset, 1),
 								r(ch.Position.Y.Offset, 1),
 								r(ch.ImageTransparency, 100),
+								r(szX, 1),
+								r(szY, 1),
 							}
 						end
 					end
@@ -5217,6 +5223,9 @@ end
 									if mImg then
 										mImg.Position = UDim2.new(0, mData[1], 0, mData[2])
 										mImg.ImageTransparency = mData[3]
+										if mData[4] and mData[5] and mData[4] > 0 and mData[5] > 0 then
+											mImg.Size = UDim2.new(0, mData[4], 0, mData[5])
+										end
 										mImg.Visible = true
 									end
 								end
