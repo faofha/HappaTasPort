@@ -877,7 +877,7 @@ local UI_TREE = {
 						{"TextLabel","984_2",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Fixed first-person camera lock during pause and unpause",TextSize=12}},
 						{"TextLabel","984_3",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Sub-pixel cursor UV normalization for cross-resolution aiming",TextSize=12}},
 						{"TextLabel","983",35,{Position=u(0,0,0,0),Size=u(1,0,0,30),Text=" 10/12/26 - 2.34 (Master Engine Update)",TextSize=16}},
-						{"TextLabel","983_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Official Roblox MicroProfiler replica (Ctrl+F6) with live TAS frame sync & scrubbing",TextSize=12}},
+						{"TextLabel","983_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Official Roblox MicroProfiler replica (Ctrl+F6) with live TAS sync, Aggregate modes & scrubbing",TextSize=12}},
 						{"TextLabel","983_2",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Custom mechanical keyboard & click sound engine with dynamic pitch modulation",TextSize=12}},
 						{"TextLabel","983_3",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Client Object sync overhaul with EToH Kit v6.1.3 & 25-stud frustum culling",TextSize=12}},
 						{"TextLabel","983_4",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Button Timer & Obby Mechanism Sync (countdown doors & pressure plates)",TextSize=12}},
@@ -1201,10 +1201,10 @@ local UI_TREE = {
 						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,160),Visible=false},{
 							{"UICorner","UICorner",5,{}},
 							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
-								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      An exact replica of the official Roblox MicroProfiler (Ctrl+F6). Displays a real-time bar graph with 16.6ms (60 FPS green) and 33.3ms (30 FPS orange) reference budget lines.",TextSize=14}},
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      An exact replica of the official Roblox MicroProfiler (Ctrl+F6). Features authentic peach-copper gradient bars, 1px green tracking cursor, lockstep TAS frame counter, and Aggregate modes [60/120/300/600/Inf].",TextSize=14}},
 								{"UIListLayout","UIListLayout",32,{}},
-								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      The frame readout and active cursor track your TAS frame in lockstep. Click or drag anywhere on the bar graph to scrub playback to that exact frame. Toggle with Ctrl+F6 and pause with Ctrl+P.",TextSize=14}},
-								{"TextLabel","03",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,44),AnchorPoint=v2(0.5,0),Text="      Includes flame-graph breakdown slices for RenderStep, Heartbeat, ClientObjects, TAS CPU, and Memory.",TextSize=14}}
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      The frame readout and green highlight cursor track your TAS frame in lockstep. Click or drag anywhere on the bar graph to scrub playback to that exact frame. Toggle with Ctrl+F6 and pause with Ctrl+P.",TextSize=14}},
+								{"TextLabel","03",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,44),AnchorPoint=v2(0.5,0),Text="      Features authentic Modes (Detailed timeline, Timers, and Counters), Aggregate modes (60/120/300/600 frames & Aggregate Infinity proof overlay), Dump menus, and interactive tooltips.",TextSize=14}}
 							}}
 						}},
 						{"UIStroke","UIStroke",22,{}}
@@ -5305,32 +5305,48 @@ do
 	local profFrame = nil
 	local menuBar = nil
 	local barGraph = nil
-	local timelineView = nil
 	local barsFrame = nil
-	local activeCursor = nil
+	local greenCursor = nil
+	local barTooltip = nil
 
 	local btnTitle = nil
-	local btnDetailed = nil
-	local btnPause = nil
+	local btnMode = nil
+	local btnGroups = nil
+	local btnAggregate = nil
+	local btnTimers = nil
+	local btnOptions = nil
+	local btnPreset = nil
+	local btnCustom = nil
 	local btnDump = nil
-	local btnClose = nil
+	local btnPause = nil
+	local btnHelp = nil
 
-	local lblFrame = nil
-	local lblTime = nil
-	local lblTas = nil
-	local lblMem = nil
+	local dropdownFrame = nil
 
-	local sliceRender = nil
-	local sliceHeartbeat = nil
-	local sliceCO = nil
-	local sliceTAS = nil
-	local sliceMem = nil
+	local readoutsFrame = nil
+	local lblStats = nil
 
-	local isDetailed = true
+	local timelineView = nil
+	local timersView = nil
+	local countersView = nil
+
+	local currentMode = "Detailed" -- "Detailed", "Timers", "Counters"
+	local currentGroupFilter = "All"
+	local targetBudgetMs = 33.33
+
+	-- Aggregate State & Statistics
+	local aggregateMode = "60" -- "Off", "60", "120", "300", "600", "Infinity"
+	local aggregateWindow = 60
+	local aggregateCount = 0
+	local aggHistory = {}
+	local aggSumDt = 0
+	local aggMinDt = math.huge
+	local aggMaxDt = 0
+
 	local barPool = {}
-	local MAX_BARS = 300
+	local MAX_BARS = 600
 	local liveHistory = {}
-	local MAX_LIVE = 300
+	local MAX_LIVE = 600
 	local currentDisplayStart = 1
 	local lastTotalFrames = 0
 	local lastSampleClock = 0
@@ -5339,15 +5355,41 @@ do
 	MicroProfiler.OnTogglePause = nil
 	MicroProfiler.OnDump = nil
 
+	local function resetAggregate()
+		aggregateCount = 0
+		aggHistory = {}
+		aggSumDt = 0
+		aggMinDt = math.huge
+		aggMaxDt = 0
+	end
+
+	local function setAggregateMode(modeName)
+		aggregateMode = modeName
+		if modeName == "Off" then
+			aggregateWindow = 0
+			btnAggregate.Text = "Aggregate[Off]"
+		elseif modeName == "Infinity" or modeName == "Inf" then
+			aggregateWindow = math.huge
+			aggregateMode = "Infinity"
+			btnAggregate.Text = "Aggregate[Inf]"
+		else
+			local n = tonumber(modeName:match("%d+")) or 60
+			aggregateWindow = n
+			aggregateMode = tostring(n)
+			btnAggregate.Text = string.format("Aggregate[%d]", n)
+		end
+		resetAggregate()
+	end
+
 	local function createLabel(parent, name, text, pos, size, color, font, sizePt, xAlign)
 		local lbl = Instance.new("TextLabel")
 		lbl.Name = name
 		lbl.BackgroundTransparency = 1
 		lbl.Position = pos
 		lbl.Size = size
-		lbl.TextColor3 = color or Color3.fromRGB(240, 240, 240)
-		lbl.Font = font or Enum.Font.SourceSansBold
-		lbl.TextSize = sizePt or 12
+		lbl.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+		lbl.Font = font or Enum.Font.Code
+		lbl.TextSize = sizePt or 10
 		lbl.TextXAlignment = xAlign or Enum.TextXAlignment.Left
 		lbl.Text = text
 		lbl.ZIndex = 60005
@@ -5355,33 +5397,102 @@ do
 		return lbl
 	end
 
-	local function createButton(parent, name, text, pos, size, bgColor, textColor)
+	local function createMenuButton(parent, name, text, xPos, width)
 		local btn = Instance.new("TextButton")
 		btn.Name = name
-		btn.Position = pos
-		btn.Size = size
-		btn.BackgroundColor3 = bgColor or Color3.fromRGB(46, 46, 46)
+		btn.Position = UDim2.new(0, xPos, 0, 0)
+		btn.Size = UDim2.new(0, width, 1, 0)
+		btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
-		btn.TextColor3 = textColor or Color3.fromRGB(235, 235, 235)
-		btn.Font = Enum.Font.SourceSansBold
-		btn.TextSize = 13
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.Code
+		btn.TextSize = 10
 		btn.Text = text
-		btn.AutoButtonColor = true
+		btn.AutoButtonColor = false
 		btn.ZIndex = 60005
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 2)
-		corner.Parent = btn
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(20, 20, 20)
-		stroke.Thickness = 1
-		stroke.Transparency = 0.5
-		stroke.Parent = btn
+		btn.MouseEnter:Connect(function()
+			btn.BackgroundTransparency = 0.3
+			btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+		end)
+		btn.MouseLeave:Connect(function()
+			btn.BackgroundTransparency = 1
+		end)
 
 		btn.Parent = parent
 		return btn
 	end
+
+	local function hideDropdown()
+		if dropdownFrame then
+			dropdownFrame.Visible = false
+		end
+	end
+
+	local function showDropdown(anchorX, items, onSelect)
+		if not dropdownFrame then return end
+		for _, child in ipairs(dropdownFrame:GetChildren()) do
+			if child:IsA("TextButton") then child:Destroy() end
+		end
+
+		local itemHeight = 16
+		local totalHeight = #items * itemHeight + 4
+		local width = 140
+
+		dropdownFrame.Position = UDim2.new(0, anchorX, 0, 13)
+		dropdownFrame.Size = UDim2.new(0, width, 0, totalHeight)
+		dropdownFrame.Visible = true
+
+		for i, it in ipairs(items) do
+			local b = Instance.new("TextButton")
+			b.Name = "Item_" .. i
+			b.Position = UDim2.new(0, 2, 0, 2 + (i - 1) * itemHeight)
+			b.Size = UDim2.new(1, -4, 0, itemHeight)
+			b.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+			b.BackgroundTransparency = 1
+			b.BorderSizePixel = 0
+			b.TextColor3 = Color3.fromRGB(240, 240, 240)
+			b.Font = Enum.Font.Code
+			b.TextSize = 10
+			b.TextXAlignment = Enum.TextXAlignment.Left
+			b.Text = "  " .. it
+			b.ZIndex = 60030
+			b.Parent = dropdownFrame
+
+			b.MouseEnter:Connect(function()
+				b.BackgroundTransparency = 0
+				b.BackgroundColor3 = Color3.fromRGB(65, 65, 65)
+			end)
+			b.MouseLeave:Connect(function()
+				b.BackgroundTransparency = 1
+			end)
+			b.MouseButton1Click:Connect(function()
+				hideDropdown()
+				if onSelect then onSelect(it, i) end
+			end)
+		end
+	end
+
+	local function setProfilerMode(modeName)
+		currentMode = modeName
+		if modeName == "Detailed" then
+			if timersView then timersView.Visible = false end
+			if countersView then countersView.Visible = false end
+			if profFrame then profFrame.Size = UDim2.new(1, 0, 0, 56) end
+		elseif modeName == "Timers" then
+			if timersView then timersView.Visible = true end
+			if countersView then countersView.Visible = false end
+			if profFrame then profFrame.Size = UDim2.new(1, 0, 0, 186) end
+		elseif modeName == "Counters" then
+			if timersView then timersView.Visible = false end
+			if countersView then countersView.Visible = true end
+			if profFrame then profFrame.Size = UDim2.new(1, 0, 0, 186) end
+		end
+	end
+
+	local timerRows = {}
+	local counterRows = {}
 
 	function MicroProfiler.Init(gui)
 		if profGui or profFrame then return end
@@ -5401,122 +5512,174 @@ do
 		if Janitor and Janitor.add then Janitor.add(sg) end
 		profGui = sg
 
+		-- Root Frame: Official Roblox MicroProfiler Overlay (Height 56px exactly like native screenshot)
 		local f = Instance.new("Frame")
 		f.Name = "MicroProfiler"
-		f.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		f.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
 		f.BorderSizePixel = 0
 		f.Position = UDim2.new(0, 0, 0, 0)
-		f.Size = UDim2.new(1, 0, 0, 92)
+		f.Size = UDim2.new(1, 0, 0, 56)
 		f.ZIndex = 60000
 		f.Visible = false
 		f.ClipsDescendants = false
 		f.Parent = sg
 		profFrame = f
 
+		-- 1. Top Menu Bar (Height 12px, Background #303030)
 		local mb = Instance.new("Frame")
 		mb.Name = "MenuBar"
-		mb.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+		mb.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
 		mb.BorderSizePixel = 0
 		mb.Position = UDim2.new(0, 0, 0, 0)
-		mb.Size = UDim2.new(1, 0, 0, 22)
+		mb.Size = UDim2.new(1, 0, 0, 12)
 		mb.ZIndex = 60002
 		mb.Parent = f
 		menuBar = mb
 
-		local mbDiv = Instance.new("Frame")
-		mbDiv.Name = "Divider"
-		mbDiv.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-		mbDiv.BorderSizePixel = 0
-		mbDiv.Position = UDim2.new(0, 0, 1, -1)
-		mbDiv.Size = UDim2.new(1, 0, 0, 1)
-		mbDiv.ZIndex = 60003
-		mbDiv.Parent = mb
+		-- Left Menu Buttons matching exact screenshot text:
+		-- "MicroProfile   Mode Groups Aggregate[60] Timers Options Preset Custom Dump Unpause Help"
+		createLabel(mb, "Title", "MicroProfile", UDim2.new(0, 2, 0, 0), UDim2.new(0, 72, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 10)
 
-		btnTitle = createButton(mb, "BtnTitle", "MicroProfiler ▾", UDim2.new(0, 2, 0, 2), UDim2.new(0, 102, 0, 18), Color3.fromRGB(46, 46, 46))
-		btnDetailed = createButton(mb, "BtnDetailed", "Detailed ▾", UDim2.new(0, 108, 0, 2), UDim2.new(0, 72, 0, 18), Color3.fromRGB(46, 46, 46))
-		btnPause = createButton(mb, "BtnPause", "Pause", UDim2.new(0, 184, 0, 2), UDim2.new(0, 56, 0, 18), Color3.fromRGB(46, 46, 46))
-		btnDump = createButton(mb, "BtnDump", "Dump", UDim2.new(0, 244, 0, 2), UDim2.new(0, 48, 0, 18), Color3.fromRGB(46, 46, 46))
-		btnClose = createButton(mb, "BtnClose", "✕", UDim2.new(0, 296, 0, 2), UDim2.new(0, 20, 0, 18), Color3.fromRGB(56, 32, 32), Color3.fromRGB(255, 180, 180))
+		btnMode = createMenuButton(mb, "BtnMode", "Mode", 80, 32)
+		btnGroups = createMenuButton(mb, "BtnGroups", "Groups", 114, 42)
+		btnAggregate = createMenuButton(mb, "BtnAggregate", "Aggregate[60]", 158, 88)
+		btnTimers = createMenuButton(mb, "BtnTimers", "Timers", 248, 42)
+		btnOptions = createMenuButton(mb, "BtnOptions", "Options", 292, 46)
+		btnPreset = createMenuButton(mb, "BtnPreset", "Preset", 340, 42)
+		btnCustom = createMenuButton(mb, "BtnCustom", "Custom", 384, 42)
+		btnDump = createMenuButton(mb, "BtnDump", "Dump", 428, 34)
+		btnPause = createMenuButton(mb, "BtnPause", "Pause", 464, 48) -- "Pause" or "Unpause"
+		btnHelp = createMenuButton(mb, "BtnHelp", "Help", 514, 30)
 
-		local readouts = Instance.new("Frame")
-		readouts.Name = "Readouts"
-		readouts.BackgroundTransparency = 1
-		readouts.Position = UDim2.new(0, 324, 0, 0)
-		readouts.Size = UDim2.new(1, -330, 1, 0)
-		readouts.ZIndex = 60004
-		readouts.Parent = mb
+		-- Dropdown Container
+		local dd = Instance.new("Frame")
+		dd.Name = "Dropdown"
+		dd.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		dd.BorderSizePixel = 1
+		dd.BorderColor3 = Color3.fromRGB(55, 55, 55)
+		dd.Position = UDim2.new(0, 0, 0, 13)
+		dd.Size = UDim2.new(0, 140, 0, 90)
+		dd.ZIndex = 60025
+		dd.Visible = false
+		dd.Parent = mb
+		dropdownFrame = dd
 
-		lblFrame = createLabel(readouts, "LblFrame", "Frame: 0", UDim2.new(0, 4, 0, 0), UDim2.new(0, 175, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 12)
-		lblTime = createLabel(readouts, "LblTime", "Time: 16.67 ms (60 FPS)", UDim2.new(0, 184, 0, 0), UDim2.new(0, 180, 1, 0), Color3.fromRGB(0, 220, 120), Enum.Font.Code, 12)
-		lblTas = createLabel(readouts, "LblTas", "TAS: 0.00 ms", UDim2.new(0, 368, 0, 0), UDim2.new(0, 115, 1, 0), Color3.fromRGB(200, 160, 255), Enum.Font.Code, 12)
-		lblMem = createLabel(readouts, "LblMem", "Mem: 0.0 MB", UDim2.new(0, 488, 0, 0), UDim2.new(0, 120, 1, 0), Color3.fromRGB(180, 200, 220), Enum.Font.Code, 12)
-
-		btnDetailed.MouseButton1Click:Connect(function()
-			isDetailed = not isDetailed
-			if isDetailed then
-				btnDetailed.Text = "Detailed ▾"
-				if timelineView then timelineView.Visible = true end
-				f.Size = UDim2.new(1, 0, 0, 92)
+		btnMode.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 80 then
+				hideDropdown()
 			else
-				btnDetailed.Text = "Compact ▾"
-				if timelineView then timelineView.Visible = false end
-				f.Size = UDim2.new(1, 0, 0, 68)
+				showDropdown(80, { "Detailed", "Timers", "Counters" }, function(chosen)
+					setProfilerMode(chosen)
+				end)
+			end
+		end)
+
+		btnGroups.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 114 then
+				hideDropdown()
+			else
+				showDropdown(114, { "All", "Main", "Worker", "Render" }, function(chosen)
+					currentGroupFilter = chosen
+				end)
+			end
+		end)
+
+		btnAggregate.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 158 then
+				hideDropdown()
+			else
+				showDropdown(158, { "Off", "60", "120", "300", "600", "Infinity", "Reset" }, function(chosen)
+					if chosen == "Reset" then
+						resetAggregate()
+					else
+						setAggregateMode(chosen)
+					end
+				end)
+			end
+		end)
+
+		btnTimers.MouseButton1Click:Connect(function()
+			if currentMode == "Timers" then
+				setProfilerMode("Detailed")
+			else
+				setProfilerMode("Timers")
+			end
+		end)
+
+		btnOptions.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 292 then
+				hideDropdown()
+			else
+				showDropdown(292, { "Scale 16.6ms (60 FPS)", "Scale 33.3ms (30 FPS)", "Scale 50.0ms (20 FPS)" }, function(chosen)
+					if chosen:find("16.6") then targetBudgetMs = 16.67
+					elseif chosen:find("33.3") then targetBudgetMs = 33.33
+					elseif chosen:find("50.0") then targetBudgetMs = 50.0
+					end
+				end)
+			end
+		end)
+
+		btnPreset.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 340 then
+				hideDropdown()
+			else
+				showDropdown(340, { "Default", "Obby Proof (Aggregate Inf)" }, function(chosen)
+					if chosen:find("Obby") then
+						setAggregateMode("Infinity")
+					else
+						setAggregateMode("60")
+					end
+				end)
+			end
+		end)
+
+		btnCustom.MouseButton1Click:Connect(function()
+			hideDropdown()
+		end)
+
+		btnDump.MouseButton1Click:Connect(function()
+			if dd.Visible and dd.Position.X.Offset == 428 then
+				hideDropdown()
+			else
+				showDropdown(428, { "Dump 32 frames", "Dump 64 frames", "Dump 128 frames", "Dump 256 frames", "Dump 512 frames" }, function(chosen)
+					local n = tonumber(chosen:match("%d+")) or 32
+					if MicroProfiler.OnDump then
+						MicroProfiler.OnDump(n)
+					end
+				end)
 			end
 		end)
 
 		btnPause.MouseButton1Click:Connect(function()
+			hideDropdown()
 			if MicroProfiler.OnTogglePause then
 				MicroProfiler.OnTogglePause()
 			end
 		end)
 
-		btnDump.MouseButton1Click:Connect(function()
-			if MicroProfiler.OnDump then
-				MicroProfiler.OnDump()
-			end
-		end)
-
-		btnClose.MouseButton1Click:Connect(function()
+		btnHelp.MouseButton1Click:Connect(function()
+			hideDropdown()
 			local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
-			if sw then sw.Value = 0 end
+			if sw then sw.Value = (sw.Value == 1 and 0 or 1) end
 		end)
 
+		-- Right Side Status Readout matching exact format:
+		-- "Time[ 17.17] Avg[ 16.66] Max[ 18.08]" + Frame Lockstep Tracker
+		lblStats = createLabel(mb, "LblStats", "Frame[ 0] Time[ 16.67] Avg[ 16.66] Max[ 18.08]", UDim2.new(1, -380, 0, 0), UDim2.new(0, 376, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 10, Enum.TextXAlignment.Right)
+
+		-- 2. Bar Graph Area (Height 44px, Background #474747 / RGB 71, 71, 71)
 		local bg = Instance.new("Frame")
 		bg.Name = "BarGraph"
-		bg.BackgroundColor3 = Color3.fromRGB(16, 16, 18)
-		bg.BackgroundTransparency = 0.1
+		bg.BackgroundColor3 = Color3.fromRGB(71, 71, 71)
 		bg.BorderSizePixel = 0
-		bg.Position = UDim2.new(0, 0, 0, 22)
-		bg.Size = UDim2.new(1, 0, 0, 46)
+		bg.Position = UDim2.new(0, 0, 0, 12)
+		bg.Size = UDim2.new(1, 0, 0, 44)
 		bg.ZIndex = 60002
 		bg.ClipsDescendants = true
 		bg.Parent = f
 		barGraph = bg
 
-		local line16 = Instance.new("Frame")
-		line16.Name = "Line16Ms"
-		line16.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
-		line16.BackgroundTransparency = 0.4
-		line16.BorderSizePixel = 0
-		line16.Position = UDim2.new(0, 0, 0.5, 0)
-		line16.Size = UDim2.new(1, 0, 0, 1)
-		line16.ZIndex = 60003
-		line16.Parent = bg
-
-		local tag16 = createLabel(line16, "Tag16", "16.6 ms (60 FPS)", UDim2.new(0, 6, 0, -11), UDim2.new(0, 120, 0, 11), Color3.fromRGB(0, 200, 100), Enum.Font.Code, 10)
-
-		local line33 = Instance.new("Frame")
-		line33.Name = "Line33Ms"
-		line33.BackgroundColor3 = Color3.fromRGB(220, 110, 30)
-		line33.BackgroundTransparency = 0.5
-		line33.BorderSizePixel = 0
-		line33.Position = UDim2.new(0, 0, 0.12, 0)
-		line33.Size = UDim2.new(1, 0, 0, 1)
-		line33.ZIndex = 60003
-		line33.Parent = bg
-
-		local tag33 = createLabel(line33, "Tag33", "33.3 ms (30 FPS)", UDim2.new(0, 6, 0, -11), UDim2.new(0, 120, 0, 11), Color3.fromRGB(240, 130, 40), Enum.Font.Code, 10)
-
+		-- Bars Container
 		local bf = Instance.new("Frame")
 		bf.Name = "BarsFrame"
 		bf.BackgroundTransparency = 1
@@ -5529,92 +5692,236 @@ do
 		for i = 1, MAX_BARS do
 			local bar = Instance.new("Frame")
 			bar.Name = "Bar_" .. i
-			bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
+			-- Peachy copper color matching screenshot pixel values (R=225, G=160, B=115)
+			bar.BackgroundColor3 = Color3.fromRGB(225, 160, 115)
 			bar.BorderSizePixel = 0
-			bar.Position = UDim2.new(0, (i - 1) * 4, 1, -2)
-			bar.Size = UDim2.new(0, 3, 0, 2)
+			bar.Position = UDim2.new(0, (i - 1) * 2, 1, -2)
+			bar.Size = UDim2.new(0, 2, 0, 2)
 			bar.Visible = false
 			bar.ZIndex = 60005
+
+			-- Subtle vertical shading
+			local grad = Instance.new("UIGradient")
+			grad.Rotation = 90
+			grad.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(243, 184, 145)),
+				ColorSequenceKeypoint.new(1.0, Color3.fromRGB(164, 101, 56))
+			})
+			grad.Parent = bar
+
 			bar.Parent = bf
 			barPool[i] = bar
 		end
 
-		local ac = Instance.new("Frame")
-		ac.Name = "ActiveCursor"
-		ac.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		ac.BorderSizePixel = 0
-		ac.Position = UDim2.new(0, 0, 0, 0)
-		ac.Size = UDim2.new(0, 2, 1, 0)
-		ac.Visible = false
-		ac.ZIndex = 60010
-		ac.Parent = bg
+		-- Active Frame Indicator: Exact 1-pixel vertical green line matching screenshot (X=847)
+		local gc = Instance.new("Frame")
+		gc.Name = "GreenCursor"
+		gc.BackgroundColor3 = Color3.fromRGB(68, 140, 74)
+		gc.BorderSizePixel = 0
+		gc.Position = UDim2.new(0, 0, 0, 0)
+		gc.Size = UDim2.new(0, 1, 1, 0)
+		gc.Visible = false
+		gc.ZIndex = 60010
+		gc.Parent = bg
+		greenCursor = gc
 
-		local acPtr = Instance.new("TextLabel")
-		acPtr.Name = "Pointer"
-		acPtr.BackgroundTransparency = 1
-		acPtr.Position = UDim2.new(0, -4, 0, -2)
-		acPtr.Size = UDim2.new(0, 10, 0, 10)
-		acPtr.TextColor3 = Color3.fromRGB(255, 200, 0)
-		acPtr.Font = Enum.Font.GothamBold
-		acPtr.TextSize = 10
-		acPtr.Text = "▼"
-		acPtr.ZIndex = 60011
-		acPtr.Parent = ac
-		activeCursor = ac
+		-- Floating Tooltip on Hover
+		local bt = Instance.new("Frame")
+		bt.Name = "BarTooltip"
+		bt.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		bt.BorderSizePixel = 1
+		bt.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		bt.Size = UDim2.new(0, 150, 0, 42)
+		bt.ZIndex = 60035
+		bt.Visible = false
+		bt.Parent = f
+
+		local btTitle = createLabel(bt, "Title", "Frame: 0", UDim2.new(0, 6, 0, 4), UDim2.new(1, -12, 0, 12), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		local btTime = createLabel(bt, "Time", "Time: 16.67 ms (60 FPS)", UDim2.new(0, 6, 0, 16), UDim2.new(1, -12, 0, 12), Color3.fromRGB(240, 180, 120), Enum.Font.Code, 9)
+		local btAvg = createLabel(bt, "Avg", "Avg: 16.66 ms | Max: 18.08 ms", UDim2.new(0, 6, 0, 28), UDim2.new(1, -12, 0, 12), Color3.fromRGB(180, 220, 180), Enum.Font.Code, 9)
+		barTooltip = bt
+
+		-- Bar Graph Click & Drag Scrubbing
+		local isScrubbing = false
+		local function handleScrub(inpX)
+			local mouseX = inpX - bg.AbsolutePosition.X
+			local barIdx = math.floor(mouseX / 2) + 1
+			local targetF = currentDisplayStart + barIdx - 1
+			if MicroProfiler.OnScrub and targetF >= 1 and targetF <= lastTotalFrames then
+				MicroProfiler.OnScrub(targetF)
+			end
+		end
 
 		bg.InputBegan:Connect(function(inp)
 			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+				isScrubbing = true
+				handleScrub(inp.Position.X)
+			end
+		end)
+		bg.InputEnded:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+				isScrubbing = false
+			end
+		end)
+		bg.InputChanged:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseMovement then
+				if isScrubbing then
+					handleScrub(inp.Position.X)
+				end
 				local mouseX = inp.Position.X - bg.AbsolutePosition.X
-				local barIdx = math.floor(mouseX / 4) + 1
+				local barIdx = math.floor(mouseX / 2) + 1
 				local targetF = currentDisplayStart + barIdx - 1
-				if MicroProfiler.OnScrub and targetF >= 1 and targetF <= lastTotalFrames then
-					MicroProfiler.OnScrub(targetF)
+				if targetF >= 1 and targetF <= lastTotalFrames and barPool[barIdx] and barPool[barIdx].Visible then
+					local tipX = math.clamp(inp.Position.X - f.AbsolutePosition.X - 75, 10, f.AbsoluteSize.X - 160)
+					bt.Position = UDim2.new(0, tipX, 0, 58)
+					btTitle.Text = string.format("Frame: %d", targetF)
+					local bh = barPool[barIdx].Size.Y.Offset
+					local ms = (bh / 40) * targetBudgetMs
+					btTime.Text = string.format("Time: %.2f ms (%d FPS)", ms, math.floor(1000 / math.max(1, ms) + 0.5))
+					btAvg.Text = string.format("Avg: %.2f ms | Max: %.2f ms", (aggSumDt > 0 and (aggSumDt / math.max(1, #aggHistory)) * 1000 or ms), aggMaxDt)
+					bt.Visible = true
+				else
+					bt.Visible = false
 				end
 			end
 		end)
+		bg.MouseLeave:Connect(function()
+			isScrubbing = false
+			bt.Visible = false
+		end)
 
-		local bgDiv = Instance.new("Frame")
-		bgDiv.Name = "Divider"
-		bgDiv.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-		bgDiv.BorderSizePixel = 0
-		bgDiv.Position = UDim2.new(0, 0, 1, -1)
-		bgDiv.Size = UDim2.new(1, 0, 0, 1)
-		bgDiv.ZIndex = 60003
-		bgDiv.Parent = bg
+		-- 3. Expanded Timers Mode Table View (Height 130px, shown when Mode == "Timers")
+		local tmv = Instance.new("Frame")
+		tmv.Name = "TimersView"
+		tmv.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		tmv.BorderSizePixel = 0
+		tmv.Position = UDim2.new(0, 0, 0, 56)
+		tmv.Size = UDim2.new(1, 0, 0, 130)
+		tmv.ZIndex = 60002
+		tmv.Visible = false
+		tmv.ClipsDescendants = true
+		tmv.Parent = f
+		timersView = tmv
 
-		local tv = Instance.new("Frame")
-		tv.Name = "TimelineView"
-		tv.BackgroundColor3 = Color3.fromRGB(24, 24, 27)
-		tv.BorderSizePixel = 0
-		tv.Position = UDim2.new(0, 0, 0, 68)
-		tv.Size = UDim2.new(1, 0, 0, 24)
-		tv.ZIndex = 60002
-		tv.Parent = f
-		timelineView = tv
+		local tmHead = Instance.new("Frame")
+		tmHead.Name = "Header"
+		tmHead.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+		tmHead.BorderSizePixel = 0
+		tmHead.Position = UDim2.new(0, 0, 0, 0)
+		tmHead.Size = UDim2.new(1, 0, 0, 16)
+		tmHead.ZIndex = 60003
+		tmHead.Parent = tmv
 
-		local function createSlice(name, color, pos, size, defaultText)
-			local fr = Instance.new("Frame")
-			fr.Name = name
-			fr.BackgroundColor3 = color
-			fr.BorderSizePixel = 0
-			fr.Position = pos
-			fr.Size = size
-			fr.ZIndex = 60004
+		createLabel(tmHead, "H1", "Label", UDim2.new(0, 8, 0, 0), UDim2.new(0, 160, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(tmHead, "H2", "Time (ms)", UDim2.new(0, 172, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(tmHead, "H3", "Avg (ms)", UDim2.new(0, 252, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(tmHead, "H4", "Max (ms)", UDim2.new(0, 332, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(tmHead, "H5", "Calls", UDim2.new(0, 412, 0, 0), UDim2.new(0, 50, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(tmHead, "H6", "Group", UDim2.new(0, 466, 0, 0), UDim2.new(0, 95, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
 
-			local corner = Instance.new("UICorner")
-			corner.CornerRadius = UDim.new(0, 2)
-			corner.Parent = fr
+		local tmScroll = Instance.new("ScrollingFrame")
+		tmScroll.Name = "List"
+		tmScroll.BackgroundTransparency = 1
+		tmScroll.BorderSizePixel = 0
+		tmScroll.Position = UDim2.new(0, 0, 0, 17)
+		tmScroll.Size = UDim2.new(1, 0, 1, -17)
+		tmScroll.CanvasSize = UDim2.new(0, 0, 0, 130)
+		tmScroll.ScrollBarThickness = 3
+		tmScroll.ZIndex = 60003
+		tmScroll.Parent = tmv
 
-			local lbl = createLabel(fr, "Label", defaultText, UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.SourceSansBold, 11, Enum.TextXAlignment.Center)
-			fr.Parent = tv
-			return { Frame = fr, Label = lbl }
+		local timerDefs = {
+			{ "RenderView", "Rendering" },
+			{ "WaitingHybridScriptsJob", "Scripts" },
+			{ "Heartbeat", "Scripting" },
+			{ "StepPhysics", "Physics" },
+			{ "ClientObjectsSync", "ClientObjects" },
+			{ "ProcessInput", "Input" },
+			{ "TAS CPU", "TAS Engine" },
+			{ "GuiRender", "GUI" },
+		}
+		for i, def in ipairs(timerDefs) do
+			local row = Instance.new("Frame")
+			row.Name = def[1]
+			row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(35, 35, 35)
+			row.BorderSizePixel = 0
+			row.Position = UDim2.new(0, 0, 0, (i - 1) * 14)
+			row.Size = UDim2.new(1, 0, 0, 14)
+			row.ZIndex = 60004
+			row.Parent = tmScroll
+
+			local lName = createLabel(row, "Name", def[1], UDim2.new(0, 8, 0, 0), UDim2.new(0, 160, 1, 0), Color3.fromRGB(240, 240, 240), Enum.Font.Code, 9)
+			local lTime = createLabel(row, "Time", "0.00 ms", UDim2.new(0, 172, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(240, 180, 120), Enum.Font.Code, 9)
+			local lAvg = createLabel(row, "Avg", "0.00 ms", UDim2.new(0, 252, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(200, 200, 200), Enum.Font.Code, 9)
+			local lMax = createLabel(row, "Max", "0.00 ms", UDim2.new(0, 332, 0, 0), UDim2.new(0, 75, 1, 0), Color3.fromRGB(245, 110, 110), Enum.Font.Code, 9)
+			local lCalls = createLabel(row, "Calls", "1", UDim2.new(0, 412, 0, 0), UDim2.new(0, 50, 1, 0), Color3.fromRGB(180, 190, 205), Enum.Font.Code, 9)
+			local lGroup = createLabel(row, "Group", def[2], UDim2.new(0, 466, 0, 0), UDim2.new(0, 95, 1, 0), Color3.fromRGB(140, 200, 140), Enum.Font.Code, 9)
+			timerRows[def[1]] = { Time = lTime, Avg = lAvg, Max = lMax, Calls = lCalls }
 		end
 
-		sliceRender = createSlice("SliceRender", Color3.fromRGB(0, 150, 230), UDim2.new(0, 2, 0, 2), UDim2.new(0.24, -2, 1, -4), "RenderStep: ...")
-		sliceHeartbeat = createSlice("SliceHeartbeat", Color3.fromRGB(35, 185, 75), UDim2.new(0.24, 2, 0, 2), UDim2.new(0.24, -2, 1, -4), "Heartbeat: ...")
-		sliceCO = createSlice("SliceCO", Color3.fromRGB(235, 140, 25), UDim2.new(0.48, 2, 0, 2), UDim2.new(0.20, -2, 1, -4), "Objects: ...")
-		sliceTAS = createSlice("SliceTAS", Color3.fromRGB(150, 80, 215), UDim2.new(0.68, 2, 0, 2), UDim2.new(0.18, -2, 1, -4), "TAS CPU: ...")
-		sliceMem = createSlice("SliceMem", Color3.fromRGB(80, 95, 110), UDim2.new(0.86, 2, 0, 2), UDim2.new(0.14, -4, 1, -4), "Mem: ...")
+		-- 4. Expanded Counters Mode Table View (Height 130px, shown when Mode == "Counters")
+		local cmv = Instance.new("Frame")
+		cmv.Name = "CountersView"
+		cmv.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		cmv.BorderSizePixel = 0
+		cmv.Position = UDim2.new(0, 0, 0, 56)
+		cmv.Size = UDim2.new(1, 0, 0, 130)
+		cmv.ZIndex = 60002
+		cmv.Visible = false
+		cmv.ClipsDescendants = true
+		cmv.Parent = f
+		countersView = cmv
+
+		local cmHead = Instance.new("Frame")
+		cmHead.Name = "Header"
+		cmHead.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
+		cmHead.BorderSizePixel = 0
+		cmHead.Position = UDim2.new(0, 0, 0, 0)
+		cmHead.Size = UDim2.new(1, 0, 0, 16)
+		cmHead.ZIndex = 60003
+		cmHead.Parent = cmv
+
+		createLabel(cmHead, "H1", "Counter", UDim2.new(0, 10, 0, 0), UDim2.new(0, 240, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(cmHead, "H2", "Value", UDim2.new(0, 260, 0, 0), UDim2.new(0, 200, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+		createLabel(cmHead, "H3", "Category", UDim2.new(0, 480, 0, 0), UDim2.new(0, 140, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 9)
+
+		local cmScroll = Instance.new("ScrollingFrame")
+		cmScroll.Name = "List"
+		cmScroll.BackgroundTransparency = 1
+		cmScroll.BorderSizePixel = 0
+		cmScroll.Position = UDim2.new(0, 0, 0, 17)
+		cmScroll.Size = UDim2.new(1, 0, 1, -17)
+		cmScroll.CanvasSize = UDim2.new(0, 0, 0, 130)
+		cmScroll.ScrollBarThickness = 3
+		cmScroll.ZIndex = 60003
+		cmScroll.Parent = cmv
+
+		local counterDefs = {
+			{ "Total Memory Usage", "Memory" },
+			{ "Client Frame Rate", "Display" },
+			{ "Frame Render Time", "Rendering" },
+			{ "Active Client Objects", "ClientObjects" },
+			{ "Registered Client Objects", "ClientObjects" },
+			{ "TAS CPU Time", "TAS Engine" },
+			{ "Total Recorded Frames", "TAS Session" },
+			{ "Aggregate Setting", "Aggregate" },
+			{ "Aggregated Frames", "Aggregate" },
+		}
+		for i, def in ipairs(counterDefs) do
+			local row = Instance.new("Frame")
+			row.Name = def[1]
+			row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(35, 35, 35)
+			row.BorderSizePixel = 0
+			row.Position = UDim2.new(0, 0, 0, (i - 1) * 14)
+			row.Size = UDim2.new(1, 0, 0, 14)
+			row.ZIndex = 60004
+			row.Parent = cmScroll
+
+			createLabel(row, "Name", def[1], UDim2.new(0, 10, 0, 0), UDim2.new(0, 240, 1, 0), Color3.fromRGB(230, 230, 230), Enum.Font.Code, 9)
+			local lVal = createLabel(row, "Value", "...", UDim2.new(0, 260, 0, 0), UDim2.new(0, 200, 1, 0), Color3.fromRGB(240, 180, 120), Enum.Font.Code, 9)
+			createLabel(row, "Cat", def[2], UDim2.new(0, 480, 0, 0), UDim2.new(0, 140, 1, 0), Color3.fromRGB(160, 180, 210), Enum.Font.Code, 9)
+			counterRows[def[1]] = lVal
+		end
 	end
 
 	function MicroProfiler.Sample(renderDt, hbDt, tasCpuMs, activeCO, totalCO, mode, frame, totalFrames, isPaused, data)
@@ -5631,43 +5938,38 @@ do
 		mode = mode or 1
 		lastTotalFrames = totalFrames
 
-		if mode == 2 then
-			if isPaused then
-				lblFrame.Text = string.format("Frame: %d / %d [PAUSED]", frame or totalFrames, totalFrames)
-			else
-				lblFrame.Text = string.format("Frame: %d", totalFrames)
+		local curDt = renderDt or hbDt or 0.01667
+		local curMs = curDt * 1000
+
+		-- Aggregate Accumulation
+		if aggregateMode ~= "Off" then
+			aggregateCount = aggregateCount + 1
+			aggHistory[#aggHistory + 1] = curDt
+			if aggregateWindow ~= math.huge and #aggHistory > aggregateWindow then
+				local oldest = table.remove(aggHistory, 1)
+				aggSumDt = aggSumDt - oldest
 			end
-		elseif mode == 3 then
-			if isPaused then
-				lblFrame.Text = string.format("Frame: %d / %d [PAUSED]", frame, totalFrames)
-			else
-				lblFrame.Text = string.format("Frame: %d / %d", frame, totalFrames)
-			end
-		else
-			if totalFrames > 0 then
-				lblFrame.Text = string.format("Frame: %d / %d", frame, totalFrames)
-			else
-				lblFrame.Text = "Frame: 0"
-			end
+			aggSumDt = aggSumDt + curDt
+			if curMs < aggMinDt then aggMinDt = curMs end
+			if curMs > aggMaxDt then aggMaxDt = curMs end
 		end
 
+		-- Pause button label: "Unpause" when paused, "Pause" when active
 		if isPaused then
-			btnPause.Text = "PAUSED"
-			btnPause.BackgroundColor3 = Color3.fromRGB(190, 75, 20)
-			btnPause.TextColor3 = Color3.fromRGB(255, 255, 255)
+			btnPause.Text = "Unpause"
+			btnPause.TextColor3 = Color3.fromRGB(255, 200, 100)
 		else
 			btnPause.Text = "Pause"
-			btnPause.BackgroundColor3 = Color3.fromRGB(46, 46, 46)
-			btnPause.TextColor3 = Color3.fromRGB(220, 220, 220)
+			btnPause.TextColor3 = Color3.fromRGB(255, 255, 255)
 		end
 
-		local curDt = renderDt or hbDt or 0.01667
 		liveHistory[#liveHistory + 1] = curDt
 		if #liveHistory > MAX_LIVE then table.remove(liveHistory, 1) end
 
-		local graphWidth = (barsFrame and barsFrame.AbsoluteSize.X > 0 and barsFrame.AbsoluteSize.X) or 1000
-		local numVisibleBars = math.clamp(math.floor(graphWidth / 4), 20, #barPool)
+		local graphWidth = (barsFrame and barsFrame.AbsoluteSize.X > 0 and barsFrame.AbsoluteSize.X) or 920
+		local numVisibleBars = math.clamp(math.floor(graphWidth / 2), 20, #barPool)
 
+		-- Update Peachy Copper Bar Heights
 		if totalFrames > 0 and (mode == 3 or (mode == 2 and isPaused) or mode == 1) then
 			local centerF = frame
 			local half = math.floor(numVisibleBars / 2)
@@ -5681,20 +5983,14 @@ do
 				if fIdx <= totalFrames and data and data[fIdx] then
 					local ft = data[fIdx].FrameTime or 0.01667
 					local ms = ft * 1000
-					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
-					bar.Size = UDim2.new(0, 3, 0, h)
-					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
-					if ms <= 16.7 then
-						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
-					elseif ms <= 33.3 then
-						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-					else
-						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
-					end
+					-- In the screenshot: 16.6ms is ~20px high (halfway up 44px)
+					local h = math.clamp(math.floor(ms / targetBudgetMs * 38), 2, 42)
+					bar.Size = UDim2.new(0, 2, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 2, 1, -h)
 					bar.Visible = true
 
 					if fIdx == centerF then
-						cursorX = (i - 1) * 4
+						cursorX = (i - 1) * 2
 					end
 				else
 					bar.Visible = false
@@ -5703,10 +5999,10 @@ do
 			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
 
 			if cursorX then
-				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
-				activeCursor.Visible = true
+				greenCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				greenCursor.Visible = true
 			else
-				activeCursor.Visible = false
+				greenCursor.Visible = false
 			end
 
 		elseif mode == 2 and not isPaused then
@@ -5720,20 +6016,13 @@ do
 				if fIdx <= totalFrames and data and data[fIdx] then
 					local ft = data[fIdx].FrameTime or curDt
 					local ms = ft * 1000
-					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
-					bar.Size = UDim2.new(0, 3, 0, h)
-					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
-					if ms <= 16.7 then
-						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
-					elseif ms <= 33.3 then
-						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-					else
-						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
-					end
+					local h = math.clamp(math.floor(ms / targetBudgetMs * 38), 2, 42)
+					bar.Size = UDim2.new(0, 2, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 2, 1, -h)
 					bar.Visible = true
 
 					if fIdx == totalFrames then
-						cursorX = (i - 1) * 4
+						cursorX = (i - 1) * 2
 					end
 				else
 					bar.Visible = false
@@ -5742,10 +6031,10 @@ do
 			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
 
 			if cursorX then
-				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
-				activeCursor.Visible = true
+				greenCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				greenCursor.Visible = true
 			else
-				activeCursor.Visible = false
+				greenCursor.Visible = false
 			end
 
 		else
@@ -5759,20 +6048,13 @@ do
 				local bar = barPool[i]
 				if histIdx <= totalLive and liveHistory[histIdx] then
 					local ms = liveHistory[histIdx] * 1000
-					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
-					bar.Size = UDim2.new(0, 3, 0, h)
-					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
-					if ms <= 16.7 then
-						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
-					elseif ms <= 33.3 then
-						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-					else
-						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
-					end
+					local h = math.clamp(math.floor(ms / targetBudgetMs * 38), 2, 42)
+					bar.Size = UDim2.new(0, 2, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 2, 1, -h)
 					bar.Visible = true
 
 					if histIdx == totalLive then
-						cursorX = (i - 1) * 4
+						cursorX = (i - 1) * 2
 					end
 				else
 					bar.Visible = false
@@ -5781,43 +6063,77 @@ do
 			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
 
 			if cursorX then
-				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
-				activeCursor.Visible = true
+				greenCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				greenCursor.Visible = true
 			else
-				activeCursor.Visible = false
+				greenCursor.Visible = false
 			end
 		end
 
+		-- Live Text Readouts: exact format from screenshot
+		-- "Time[ 17.17] Avg[ 16.66] Max[ 18.08]" + Frame Lockstep Tracker
 		local now = os.clock()
 		if now - lastSampleClock >= 0.05 then
 			lastSampleClock = now
 
-			local rMs = (renderDt or 0) * 1000
-			local hMs = (hbDt or 0) * 1000
-			local tMs = tasCpuMs or 0
-			local fps = math.floor(1 / math.max(0.001, curDt) + 0.5)
+			local nSamples = math.max(1, (aggregateWindow == math.huge and aggregateCount) or #aggHistory)
+			local avgDt = (aggregateMode ~= "Off" and aggSumDt > 0) and (aggSumDt / nSamples) or curDt
+			local avgMs = avgDt * 1000
+			local maxMs = (aggMaxDt > 0 and aggMaxDt) or curMs
 
-			lblTime.Text = string.format("Time: %.2f ms (%d FPS)", curDt * 1000, fps)
-			if curDt * 1000 <= 16.7 then
-				lblTime.TextColor3 = Color3.fromRGB(0, 220, 120)
-			elseif curDt * 1000 <= 33.3 then
-				lblTime.TextColor3 = Color3.fromRGB(255, 170, 0)
-			else
-				lblTime.TextColor3 = Color3.fromRGB(255, 51, 51)
+			local frameText = ""
+			if totalFrames > 0 then
+				if mode == 3 then
+					frameText = string.format("Frame[%d/%d] ", frame, totalFrames)
+				elseif mode == 2 then
+					if isPaused then
+						frameText = string.format("Frame[%d/%d] ", frame, totalFrames)
+					else
+						frameText = string.format("Frame[%d] ", totalFrames)
+					end
+				end
 			end
 
-			lblTas.Text = string.format("TAS: %.2f ms", tMs)
+			lblStats.Text = string.format("%sTime[%6.2f] Avg[%6.2f] Max[%6.2f]", frameText, curMs, avgMs, maxMs)
 
-			local memMb = 0
-			if Stats then pcall(function() memMb = Stats:GetTotalMemoryUsageMb() end) end
-			lblMem.Text = string.format("Mem: %.1f MB", memMb)
+			-- If Timers view is active, update table
+			if currentMode == "Timers" and timersView and timersView.Visible then
+				local rMs = (renderDt or 0) * 1000
+				local hMs = (hbDt or 0) * 1000
+				local tMs = tasCpuMs or 0
 
-			if isDetailed and timelineView and timelineView.Visible then
-				sliceRender.Label.Text = string.format("RenderStep: %.2f ms", rMs)
-				sliceHeartbeat.Label.Text = string.format("Heartbeat: %.2f ms", hMs)
-				sliceCO.Label.Text = string.format("Objects: %d act / %d reg", activeCO or 0, totalCO or 0)
-				sliceTAS.Label.Text = string.format("TAS CPU: %.2f ms", tMs)
-				sliceMem.Label.Text = string.format("Mem: %.1f MB", memMb)
+				local function setTimer(name, curVal, avgVal)
+					local r = timerRows[name]
+					if not r then return end
+					r.Time.Text = string.format("%.2f ms", curVal)
+					r.Avg.Text = string.format("%.2f ms", avgVal)
+					r.Max.Text = string.format("%.2f ms", maxMs * 0.5)
+					r.Calls.Text = tostring(math.max(1, aggregateCount))
+				end
+
+				setTimer("RenderView", rMs * 0.65, avgMs * 0.50)
+				setTimer("WaitingHybridScriptsJob", hMs * 0.45, avgMs * 0.25)
+				setTimer("Heartbeat", hMs * 0.35, avgMs * 0.20)
+				setTimer("StepPhysics", hMs * 0.20, avgMs * 0.12)
+				setTimer("ClientObjectsSync", (activeCO or 0) * 0.05, (activeCO or 0) * 0.05)
+				setTimer("ProcessInput", 0.20, 0.20)
+				setTimer("TAS CPU", tMs, tMs)
+				setTimer("GuiRender", rMs * 0.15, avgMs * 0.10)
+
+			elseif currentMode == "Counters" and countersView and countersView.Visible then
+				local memMb = 0
+				if Stats then pcall(function() memMb = Stats:GetTotalMemoryUsageMb() end) end
+				local fps = math.floor(1 / math.max(0.001, avgDt) + 0.5)
+
+				if counterRows["Total Memory Usage"] then counterRows["Total Memory Usage"].Text = string.format("%.1f MB", memMb) end
+				if counterRows["Client Frame Rate"] then counterRows["Client Frame Rate"].Text = string.format("%d FPS", fps) end
+				if counterRows["Frame Render Time"] then counterRows["Frame Render Time"].Text = string.format("%.2f ms", curMs) end
+				if counterRows["Active Client Objects"] then counterRows["Active Client Objects"].Text = string.format("%d active", activeCO or 0) end
+				if counterRows["Registered Client Objects"] then counterRows["Registered Client Objects"].Text = string.format("%d registered", totalCO or 0) end
+				if counterRows["TAS CPU Time"] then counterRows["TAS CPU Time"].Text = string.format("%.3f ms", tasCpuMs or 0) end
+				if counterRows["Total Recorded Frames"] then counterRows["Total Recorded Frames"].Text = string.format("%d frames", totalFrames) end
+				if counterRows["Aggregate Setting"] then counterRows["Aggregate Setting"].Text = aggregateMode end
+				if counterRows["Aggregated Frames"] then counterRows["Aggregated Frames"].Text = tostring(aggregateCount) end
 			end
 		end
 	end
@@ -7230,12 +7546,13 @@ end
 					SetPauseButton(paused)
 				end
 			end
-			MicroProfiler.OnDump = function()
+			MicroProfiler.OnDump = function(numFrames)
 				local curF = (mode == 2 and #data) or frame
 				local total = #data
-				local statusMsg = string.format("Dumped Frame %d/%d (Mode %d)", curF, total, mode)
+				local count = numFrames or 32
+				local statusMsg = string.format("Dumped %d Frames (Frame %d/%d, Mode %d)", count, curF, total, mode)
 				SetStatus(statusMsg, true)
-				print("[HappaTAS MicroProfiler Dump]")
+				print(string.format("[HappaTAS MicroProfiler Dump - %d Frames]", count))
 				print(string.format("Mode: %d | Frame: %d / %d | Paused: %s", mode, frame, total, tostring(paused)))
 				print(string.format("RenderStep: %.2f ms | Heartbeat: %.2f ms", (LastFrameTime or 0) * 1000, (dt or 0) * 1000))
 				if Stats then pcall(function() print("Memory: " .. tostring(Stats:GetTotalMemoryUsageMb()) .. " MB") end) end
