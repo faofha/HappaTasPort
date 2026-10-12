@@ -5168,106 +5168,528 @@ do
 end
 
 -- ================================================================================================
---  MICROPROFILER (Custom Lightweight Real-Time HUD Overlay)
+--  MICROPROFILER (Official Roblox MicroProfiler Replica with TAS Frame Synchronization)
 -- ================================================================================================
 local MicroProfiler = {}
 do
+	local profGui = nil
 	local profFrame = nil
-	local labels = {}
+	local menuBar = nil
+	local barGraph = nil
+	local timelineView = nil
+	local barsFrame = nil
+	local activeCursor = nil
+
+	local btnTitle = nil
+	local btnDetailed = nil
+	local btnPause = nil
+	local btnDump = nil
+	local btnClose = nil
+
+	local lblFrame = nil
+	local lblTime = nil
+	local lblTas = nil
+	local lblMem = nil
+
+	local sliceRender = nil
+	local sliceHeartbeat = nil
+	local sliceCO = nil
+	local sliceTAS = nil
+	local sliceMem = nil
+
+	local isDetailed = true
+	local barPool = {}
+	local MAX_BARS = 300
+	local liveHistory = {}
+	local MAX_LIVE = 300
+	local currentDisplayStart = 1
+	local lastTotalFrames = 0
 	local lastSampleClock = 0
-	local frameCounter = 0
-	local renderDtAccum = 0
-	local hbDtAccum = 0
 
-	function MicroProfiler.Init(gui)
-		if profFrame or not gui then return end
-		local f = Instance.new("Frame")
-		f.Name = "MicroProfiler"
-		f.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
-		f.BackgroundTransparency = 0.2
-		f.BorderSizePixel = 0
-		f.Position = UDim2.new(1, -270, 0, 10)
-		f.Size = UDim2.new(0, 260, 0, 135)
-		f.ZIndex = 50000
-		f.Visible = false
+	MicroProfiler.OnScrub = nil
+	MicroProfiler.OnTogglePause = nil
+	MicroProfiler.OnDump = nil
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 6)
-		corner.Parent = f
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(0, 140, 240)
-		stroke.Thickness = 1
-		stroke.Transparency = 0.4
-		stroke.Parent = f
-
-		local header = Instance.new("TextLabel")
-		header.Name = "Header"
-		header.BackgroundTransparency = 1
-		header.Size = UDim2.new(1, -16, 0, 22)
-		header.Position = UDim2.new(0, 8, 0, 4)
-		header.Font = Enum.Font.GothamBold
-		header.TextSize = 13
-		header.TextColor3 = Color3.fromRGB(0, 190, 255)
-		header.TextXAlignment = Enum.TextXAlignment.Left
-		header.Text = "HappaTAS MicroProfiler"
-		header.ZIndex = 50001
-		header.Parent = f
-
-		local names = { "FPS", "RenderTime", "Heartbeat", "TasCPU", "Memory", "ClientObjects" }
-		for i, n in ipairs(names) do
-			local lbl = Instance.new("TextLabel")
-			lbl.Name = n
-			lbl.BackgroundTransparency = 1
-			lbl.Size = UDim2.new(1, -16, 0, 16)
-			lbl.Position = UDim2.new(0, 8, 0, 24 + (i - 1) * 17)
-			lbl.Font = Enum.Font.Code
-			lbl.TextSize = 11
-			lbl.TextColor3 = Color3.fromRGB(220, 225, 230)
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.Text = n .. ": ..."
-			lbl.ZIndex = 50001
-			lbl.Parent = f
-			labels[n] = lbl
-		end
-
-		f.Parent = gui
-		profFrame = f
+	local function createLabel(parent, name, text, pos, size, color, font, sizePt, xAlign)
+		local lbl = Instance.new("TextLabel")
+		lbl.Name = name
+		lbl.BackgroundTransparency = 1
+		lbl.Position = pos
+		lbl.Size = size
+		lbl.TextColor3 = color or Color3.fromRGB(240, 240, 240)
+		lbl.Font = font or Enum.Font.SourceSansBold
+		lbl.TextSize = sizePt or 12
+		lbl.TextXAlignment = xAlign or Enum.TextXAlignment.Left
+		lbl.Text = text
+		lbl.ZIndex = 60005
+		lbl.Parent = parent
+		return lbl
 	end
 
-	function MicroProfiler.Sample(renderDt, hbDt, tasCpuMs, activeCO, totalCO)
+	local function createButton(parent, name, text, pos, size, bgColor, textColor)
+		local btn = Instance.new("TextButton")
+		btn.Name = name
+		btn.Position = pos
+		btn.Size = size
+		btn.BackgroundColor3 = bgColor or Color3.fromRGB(46, 46, 46)
+		btn.BorderSizePixel = 0
+		btn.TextColor3 = textColor or Color3.fromRGB(235, 235, 235)
+		btn.Font = Enum.Font.SourceSansBold
+		btn.TextSize = 13
+		btn.Text = text
+		btn.AutoButtonColor = true
+		btn.ZIndex = 60005
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 2)
+		corner.Parent = btn
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(20, 20, 20)
+		stroke.Thickness = 1
+		stroke.Transparency = 0.5
+		stroke.Parent = btn
+
+		btn.Parent = parent
+		return btn
+	end
+
+	function MicroProfiler.Init(gui)
+		if profGui or profFrame then return end
+
+		local sg = Instance.new("ScreenGui")
+		sg.Name = "MicroProfilerGui"
+		sg.ResetOnSpawn = false
+		sg.IgnoreGuiInset = true
+		pcall(function() sg.DisplayOrder = 999999 end)
+		pcall(function() sg.ZIndexBehavior = Enum.ZIndexBehavior.Global end)
+
+		if UI and UI.Attach then
+			if not UI.Attach(sg) then sg.Parent = gui end
+		else
+			sg.Parent = gui
+		end
+		if Janitor and Janitor.add then Janitor.add(sg) end
+		profGui = sg
+
+		local f = Instance.new("Frame")
+		f.Name = "MicroProfiler"
+		f.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+		f.BorderSizePixel = 0
+		f.Position = UDim2.new(0, 0, 0, 0)
+		f.Size = UDim2.new(1, 0, 0, 92)
+		f.ZIndex = 60000
+		f.Visible = false
+		f.ClipsDescendants = false
+		f.Parent = sg
+		profFrame = f
+
+		local mb = Instance.new("Frame")
+		mb.Name = "MenuBar"
+		mb.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+		mb.BorderSizePixel = 0
+		mb.Position = UDim2.new(0, 0, 0, 0)
+		mb.Size = UDim2.new(1, 0, 0, 22)
+		mb.ZIndex = 60002
+		mb.Parent = f
+		menuBar = mb
+
+		local mbDiv = Instance.new("Frame")
+		mbDiv.Name = "Divider"
+		mbDiv.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+		mbDiv.BorderSizePixel = 0
+		mbDiv.Position = UDim2.new(0, 0, 1, -1)
+		mbDiv.Size = UDim2.new(1, 0, 0, 1)
+		mbDiv.ZIndex = 60003
+		mbDiv.Parent = mb
+
+		btnTitle = createButton(mb, "BtnTitle", "MicroProfiler ▾", UDim2.new(0, 2, 0, 2), UDim2.new(0, 102, 0, 18), Color3.fromRGB(46, 46, 46))
+		btnDetailed = createButton(mb, "BtnDetailed", "Detailed ▾", UDim2.new(0, 108, 0, 2), UDim2.new(0, 72, 0, 18), Color3.fromRGB(46, 46, 46))
+		btnPause = createButton(mb, "BtnPause", "Pause", UDim2.new(0, 184, 0, 2), UDim2.new(0, 56, 0, 18), Color3.fromRGB(46, 46, 46))
+		btnDump = createButton(mb, "BtnDump", "Dump", UDim2.new(0, 244, 0, 2), UDim2.new(0, 48, 0, 18), Color3.fromRGB(46, 46, 46))
+		btnClose = createButton(mb, "BtnClose", "✕", UDim2.new(0, 296, 0, 2), UDim2.new(0, 20, 0, 18), Color3.fromRGB(56, 32, 32), Color3.fromRGB(255, 180, 180))
+
+		local readouts = Instance.new("Frame")
+		readouts.Name = "Readouts"
+		readouts.BackgroundTransparency = 1
+		readouts.Position = UDim2.new(0, 324, 0, 0)
+		readouts.Size = UDim2.new(1, -330, 1, 0)
+		readouts.ZIndex = 60004
+		readouts.Parent = mb
+
+		lblFrame = createLabel(readouts, "LblFrame", "Frame: 0", UDim2.new(0, 4, 0, 0), UDim2.new(0, 175, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.Code, 12)
+		lblTime = createLabel(readouts, "LblTime", "Time: 16.67 ms (60 FPS)", UDim2.new(0, 184, 0, 0), UDim2.new(0, 180, 1, 0), Color3.fromRGB(0, 220, 120), Enum.Font.Code, 12)
+		lblTas = createLabel(readouts, "LblTas", "TAS: 0.00 ms", UDim2.new(0, 368, 0, 0), UDim2.new(0, 115, 1, 0), Color3.fromRGB(200, 160, 255), Enum.Font.Code, 12)
+		lblMem = createLabel(readouts, "LblMem", "Mem: 0.0 MB", UDim2.new(0, 488, 0, 0), UDim2.new(0, 120, 1, 0), Color3.fromRGB(180, 200, 220), Enum.Font.Code, 12)
+
+		btnDetailed.MouseButton1Click:Connect(function()
+			isDetailed = not isDetailed
+			if isDetailed then
+				btnDetailed.Text = "Detailed ▾"
+				if timelineView then timelineView.Visible = true end
+				f.Size = UDim2.new(1, 0, 0, 92)
+			else
+				btnDetailed.Text = "Compact ▾"
+				if timelineView then timelineView.Visible = false end
+				f.Size = UDim2.new(1, 0, 0, 68)
+			end
+		end)
+
+		btnPause.MouseButton1Click:Connect(function()
+			if MicroProfiler.OnTogglePause then
+				MicroProfiler.OnTogglePause()
+			end
+		end)
+
+		btnDump.MouseButton1Click:Connect(function()
+			if MicroProfiler.OnDump then
+				MicroProfiler.OnDump()
+			end
+		end)
+
+		btnClose.MouseButton1Click:Connect(function()
+			local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
+			if sw then sw.Value = 0 end
+		end)
+
+		local bg = Instance.new("Frame")
+		bg.Name = "BarGraph"
+		bg.BackgroundColor3 = Color3.fromRGB(16, 16, 18)
+		bg.BackgroundTransparency = 0.1
+		bg.BorderSizePixel = 0
+		bg.Position = UDim2.new(0, 0, 0, 22)
+		bg.Size = UDim2.new(1, 0, 0, 46)
+		bg.ZIndex = 60002
+		bg.ClipsDescendants = true
+		bg.Parent = f
+		barGraph = bg
+
+		local line16 = Instance.new("Frame")
+		line16.Name = "Line16Ms"
+		line16.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+		line16.BackgroundTransparency = 0.4
+		line16.BorderSizePixel = 0
+		line16.Position = UDim2.new(0, 0, 0.5, 0)
+		line16.Size = UDim2.new(1, 0, 0, 1)
+		line16.ZIndex = 60003
+		line16.Parent = bg
+
+		local tag16 = createLabel(line16, "Tag16", "16.6 ms (60 FPS)", UDim2.new(0, 6, 0, -11), UDim2.new(0, 120, 0, 11), Color3.fromRGB(0, 200, 100), Enum.Font.Code, 10)
+
+		local line33 = Instance.new("Frame")
+		line33.Name = "Line33Ms"
+		line33.BackgroundColor3 = Color3.fromRGB(220, 110, 30)
+		line33.BackgroundTransparency = 0.5
+		line33.BorderSizePixel = 0
+		line33.Position = UDim2.new(0, 0, 0.12, 0)
+		line33.Size = UDim2.new(1, 0, 0, 1)
+		line33.ZIndex = 60003
+		line33.Parent = bg
+
+		local tag33 = createLabel(line33, "Tag33", "33.3 ms (30 FPS)", UDim2.new(0, 6, 0, -11), UDim2.new(0, 120, 0, 11), Color3.fromRGB(240, 130, 40), Enum.Font.Code, 10)
+
+		local bf = Instance.new("Frame")
+		bf.Name = "BarsFrame"
+		bf.BackgroundTransparency = 1
+		bf.Position = UDim2.new(0, 0, 0, 0)
+		bf.Size = UDim2.new(1, 0, 1, 0)
+		bf.ZIndex = 60004
+		bf.Parent = bg
+		barsFrame = bf
+
+		for i = 1, MAX_BARS do
+			local bar = Instance.new("Frame")
+			bar.Name = "Bar_" .. i
+			bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
+			bar.BorderSizePixel = 0
+			bar.Position = UDim2.new(0, (i - 1) * 4, 1, -2)
+			bar.Size = UDim2.new(0, 3, 0, 2)
+			bar.Visible = false
+			bar.ZIndex = 60005
+			bar.Parent = bf
+			barPool[i] = bar
+		end
+
+		local ac = Instance.new("Frame")
+		ac.Name = "ActiveCursor"
+		ac.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		ac.BorderSizePixel = 0
+		ac.Position = UDim2.new(0, 0, 0, 0)
+		ac.Size = UDim2.new(0, 2, 1, 0)
+		ac.Visible = false
+		ac.ZIndex = 60010
+		ac.Parent = bg
+
+		local acPtr = Instance.new("TextLabel")
+		acPtr.Name = "Pointer"
+		acPtr.BackgroundTransparency = 1
+		acPtr.Position = UDim2.new(0, -4, 0, -2)
+		acPtr.Size = UDim2.new(0, 10, 0, 10)
+		acPtr.TextColor3 = Color3.fromRGB(255, 200, 0)
+		acPtr.Font = Enum.Font.GothamBold
+		acPtr.TextSize = 10
+		acPtr.Text = "▼"
+		acPtr.ZIndex = 60011
+		acPtr.Parent = ac
+		activeCursor = ac
+
+		bg.InputBegan:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+				local mouseX = inp.Position.X - bg.AbsolutePosition.X
+				local barIdx = math.floor(mouseX / 4) + 1
+				local targetF = currentDisplayStart + barIdx - 1
+				if MicroProfiler.OnScrub and targetF >= 1 and targetF <= lastTotalFrames then
+					MicroProfiler.OnScrub(targetF)
+				end
+			end
+		end)
+
+		local bgDiv = Instance.new("Frame")
+		bgDiv.Name = "Divider"
+		bgDiv.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+		bgDiv.BorderSizePixel = 0
+		bgDiv.Position = UDim2.new(0, 0, 1, -1)
+		bgDiv.Size = UDim2.new(1, 0, 0, 1)
+		bgDiv.ZIndex = 60003
+		bgDiv.Parent = bg
+
+		local tv = Instance.new("Frame")
+		tv.Name = "TimelineView"
+		tv.BackgroundColor3 = Color3.fromRGB(24, 24, 27)
+		tv.BorderSizePixel = 0
+		tv.Position = UDim2.new(0, 0, 0, 68)
+		tv.Size = UDim2.new(1, 0, 0, 24)
+		tv.ZIndex = 60002
+		tv.Parent = f
+		timelineView = tv
+
+		local function createSlice(name, color, pos, size, defaultText)
+			local fr = Instance.new("Frame")
+			fr.Name = name
+			fr.BackgroundColor3 = color
+			fr.BorderSizePixel = 0
+			fr.Position = pos
+			fr.Size = size
+			fr.ZIndex = 60004
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 2)
+			corner.Parent = fr
+
+			local lbl = createLabel(fr, "Label", defaultText, UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), Color3.fromRGB(255, 255, 255), Enum.Font.SourceSansBold, 11, Enum.TextXAlignment.Center)
+			fr.Parent = tv
+			return { Frame = fr, Label = lbl }
+		end
+
+		sliceRender = createSlice("SliceRender", Color3.fromRGB(0, 150, 230), UDim2.new(0, 2, 0, 2), UDim2.new(0.24, -2, 1, -4), "RenderStep: ...")
+		sliceHeartbeat = createSlice("SliceHeartbeat", Color3.fromRGB(35, 185, 75), UDim2.new(0.24, 2, 0, 2), UDim2.new(0.24, -2, 1, -4), "Heartbeat: ...")
+		sliceCO = createSlice("SliceCO", Color3.fromRGB(235, 140, 25), UDim2.new(0.48, 2, 0, 2), UDim2.new(0.20, -2, 1, -4), "Objects: ...")
+		sliceTAS = createSlice("SliceTAS", Color3.fromRGB(150, 80, 215), UDim2.new(0.68, 2, 0, 2), UDim2.new(0.18, -2, 1, -4), "TAS CPU: ...")
+		sliceMem = createSlice("SliceMem", Color3.fromRGB(80, 95, 110), UDim2.new(0.86, 2, 0, 2), UDim2.new(0.14, -4, 1, -4), "Mem: ...")
+	end
+
+	function MicroProfiler.Sample(renderDt, hbDt, tasCpuMs, activeCO, totalCO, mode, frame, totalFrames, isPaused, data)
 		if not profFrame then return end
+
 		local show = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler") and SettingValues["Show MicroProfiler"].Value == 1
 		if profFrame.Visible ~= show then
 			profFrame.Visible = show
 		end
 		if not show then return end
 
-		renderDtAccum = renderDtAccum + (renderDt or 0)
-		hbDtAccum = hbDtAccum + (hbDt or 0)
-		frameCounter = frameCounter + 1
+		totalFrames = totalFrames or 0
+		frame = frame or 1
+		mode = mode or 1
+		lastTotalFrames = totalFrames
+
+		if mode == 2 then
+			if isPaused then
+				lblFrame.Text = string.format("Frame: %d / %d [PAUSED]", frame or totalFrames, totalFrames)
+			else
+				lblFrame.Text = string.format("Frame: %d", totalFrames)
+			end
+		elseif mode == 3 then
+			if isPaused then
+				lblFrame.Text = string.format("Frame: %d / %d [PAUSED]", frame, totalFrames)
+			else
+				lblFrame.Text = string.format("Frame: %d / %d", frame, totalFrames)
+			end
+		else
+			if totalFrames > 0 then
+				lblFrame.Text = string.format("Frame: %d / %d", frame, totalFrames)
+			else
+				lblFrame.Text = "Frame: 0"
+			end
+		end
+
+		if isPaused then
+			btnPause.Text = "PAUSED"
+			btnPause.BackgroundColor3 = Color3.fromRGB(190, 75, 20)
+			btnPause.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			btnPause.Text = "Pause"
+			btnPause.BackgroundColor3 = Color3.fromRGB(46, 46, 46)
+			btnPause.TextColor3 = Color3.fromRGB(220, 220, 220)
+		end
+
+		local curDt = renderDt or hbDt or 0.01667
+		liveHistory[#liveHistory + 1] = curDt
+		if #liveHistory > MAX_LIVE then table.remove(liveHistory, 1) end
+
+		local graphWidth = (barsFrame and barsFrame.AbsoluteSize.X > 0 and barsFrame.AbsoluteSize.X) or 1000
+		local numVisibleBars = math.clamp(math.floor(graphWidth / 4), 20, #barPool)
+
+		if totalFrames > 0 and (mode == 3 or (mode == 2 and isPaused) or mode == 1) then
+			local centerF = frame
+			local half = math.floor(numVisibleBars / 2)
+			local startF = math.clamp(centerF - half, 1, math.max(1, totalFrames - numVisibleBars + 1))
+			currentDisplayStart = startF
+
+			local cursorX = nil
+			for i = 1, numVisibleBars do
+				local fIdx = startF + i - 1
+				local bar = barPool[i]
+				if fIdx <= totalFrames and data and data[fIdx] then
+					local ft = data[fIdx].FrameTime or 0.01667
+					local ms = ft * 1000
+					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
+					bar.Size = UDim2.new(0, 3, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
+					if ms <= 16.7 then
+						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
+					elseif ms <= 33.3 then
+						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+					else
+						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
+					end
+					bar.Visible = true
+
+					if fIdx == centerF then
+						cursorX = (i - 1) * 4
+					end
+				else
+					bar.Visible = false
+				end
+			end
+			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
+
+			if cursorX then
+				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				activeCursor.Visible = true
+			else
+				activeCursor.Visible = false
+			end
+
+		elseif mode == 2 and not isPaused then
+			local startF = math.max(1, totalFrames - numVisibleBars + 1)
+			currentDisplayStart = startF
+
+			local cursorX = nil
+			for i = 1, numVisibleBars do
+				local fIdx = startF + i - 1
+				local bar = barPool[i]
+				if fIdx <= totalFrames and data and data[fIdx] then
+					local ft = data[fIdx].FrameTime or curDt
+					local ms = ft * 1000
+					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
+					bar.Size = UDim2.new(0, 3, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
+					if ms <= 16.7 then
+						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
+					elseif ms <= 33.3 then
+						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+					else
+						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
+					end
+					bar.Visible = true
+
+					if fIdx == totalFrames then
+						cursorX = (i - 1) * 4
+					end
+				else
+					bar.Visible = false
+				end
+			end
+			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
+
+			if cursorX then
+				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				activeCursor.Visible = true
+			else
+				activeCursor.Visible = false
+			end
+
+		else
+			local totalLive = #liveHistory
+			local startIdx = math.max(1, totalLive - numVisibleBars + 1)
+			currentDisplayStart = 1
+
+			local cursorX = nil
+			for i = 1, numVisibleBars do
+				local histIdx = startIdx + i - 1
+				local bar = barPool[i]
+				if histIdx <= totalLive and liveHistory[histIdx] then
+					local ms = liveHistory[histIdx] * 1000
+					local h = math.clamp(math.floor(ms / 33.33 * 40), 2, 44)
+					bar.Size = UDim2.new(0, 3, 0, h)
+					bar.Position = UDim2.new(0, (i - 1) * 4, 1, -h)
+					if ms <= 16.7 then
+						bar.BackgroundColor3 = Color3.fromRGB(0, 204, 102)
+					elseif ms <= 33.3 then
+						bar.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+					else
+						bar.BackgroundColor3 = Color3.fromRGB(255, 51, 51)
+					end
+					bar.Visible = true
+
+					if histIdx == totalLive then
+						cursorX = (i - 1) * 4
+					end
+				else
+					bar.Visible = false
+				end
+			end
+			for i = numVisibleBars + 1, #barPool do barPool[i].Visible = false end
+
+			if cursorX then
+				activeCursor.Position = UDim2.new(0, cursorX, 0, 0)
+				activeCursor.Visible = true
+			else
+				activeCursor.Visible = false
+			end
+		end
 
 		local now = os.clock()
-		if now - lastSampleClock >= 0.1 then
-			local count = math.max(1, frameCounter)
-			local avgRender = (renderDtAccum / count) * 1000
-			local avgHb = (hbDtAccum / count) * 1000
-			local fps = math.floor(count / (now - lastSampleClock) + 0.5)
+		if now - lastSampleClock >= 0.05 then
+			lastSampleClock = now
 
-			labels.FPS.Text = string.format("FPS: %d  (%.1f ms)", fps, avgRender)
-			labels.RenderTime.Text = string.format("RenderStep: %.2f ms", avgRender)
-			labels.Heartbeat.Text = string.format("Heartbeat:  %.2f ms", avgHb)
-			labels.TasCPU.Text = string.format("TAS CPU:    %.2f ms", tasCpuMs or 0)
-			
+			local rMs = (renderDt or 0) * 1000
+			local hMs = (hbDt or 0) * 1000
+			local tMs = tasCpuMs or 0
+			local fps = math.floor(1 / math.max(0.001, curDt) + 0.5)
+
+			lblTime.Text = string.format("Time: %.2f ms (%d FPS)", curDt * 1000, fps)
+			if curDt * 1000 <= 16.7 then
+				lblTime.TextColor3 = Color3.fromRGB(0, 220, 120)
+			elseif curDt * 1000 <= 33.3 then
+				lblTime.TextColor3 = Color3.fromRGB(255, 170, 0)
+			else
+				lblTime.TextColor3 = Color3.fromRGB(255, 51, 51)
+			end
+
+			lblTas.Text = string.format("TAS: %.2f ms", tMs)
+
 			local memMb = 0
 			if Stats then pcall(function() memMb = Stats:GetTotalMemoryUsageMb() end) end
-			labels.Memory.Text = string.format("Memory:     %.1f MB", memMb)
-			labels.ClientObjects.Text = string.format("Objects:    %d active / %d reg", activeCO or 0, totalCO or 0)
+			lblMem.Text = string.format("Mem: %.1f MB", memMb)
 
-			lastSampleClock = now
-			frameCounter = 0
-			renderDtAccum = 0
-			hbDtAccum = 0
+			if isDetailed and timelineView and timelineView.Visible then
+				sliceRender.Label.Text = string.format("RenderStep: %.2f ms", rMs)
+				sliceHeartbeat.Label.Text = string.format("Heartbeat: %.2f ms", hMs)
+				sliceCO.Label.Text = string.format("Objects: %d act / %d reg", activeCO or 0, totalCO or 0)
+				sliceTAS.Label.Text = string.format("TAS CPU: %.2f ms", tMs)
+				sliceMem.Label.Text = string.format("Mem: %.1f MB", memMb)
+			end
 		end
 	end
 end
@@ -6660,9 +7082,36 @@ end
 					for _ in pairs(ClientObjects.play.cur) do nAct = nAct + 1 end
 				end
 				local nReg = (ClientObjects and ClientObjects.Reg and ClientObjects.Reg.nextId and ClientObjects.Reg.nextId - 1) or 0
-				MicroProfiler.Sample(LastFrameTime, dt, tasCpuMs, nAct, nReg)
+				MicroProfiler.Sample(LastFrameTime, dt, tasCpuMs, nAct, nReg, mode, frame, #data, paused, data)
 			end
 		end)
+
+		if MicroProfiler then
+			MicroProfiler.OnScrub = function(targetFrame)
+				if (mode == 3 or (mode == 2 and paused)) and data and data[targetFrame] then
+					frame = targetFrame
+					LoadFrame(data[frame], false, true)
+				end
+			end
+			MicroProfiler.OnTogglePause = function()
+				if mode == 2 then
+					if paused then inputs.Unpause() else inputs.Pause() end
+				elseif mode == 3 then
+					paused = not paused
+					SetPauseButton(paused)
+				end
+			end
+			MicroProfiler.OnDump = function()
+				local curF = (mode == 2 and #data) or frame
+				local total = #data
+				local statusMsg = string.format("Dumped Frame %d/%d (Mode %d)", curF, total, mode)
+				SetStatus(statusMsg, true)
+				print("[HappaTAS MicroProfiler Dump]")
+				print(string.format("Mode: %d | Frame: %d / %d | Paused: %s", mode, frame, total, tostring(paused)))
+				print(string.format("RenderStep: %.2f ms | Heartbeat: %.2f ms", (LastFrameTime or 0) * 1000, (dt or 0) * 1000))
+				if Stats then pcall(function() print("Memory: " .. tostring(Stats:GetTotalMemoryUsageMb()) .. " MB") end) end
+			end
+		end
 
 		on(uis.JumpRequest, function()
 			if Humanoid and mode == 2 and frame > 1 and CanCoyoteJump() then
@@ -6671,6 +7120,17 @@ end
 		end)
 
 		on(uis.InputBegan, function(inp, proc)
+			if (inp.KeyCode == Enum.KeyCode.F6 and (uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.RightControl))) then
+				local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
+				if sw then sw.Value = (sw.Value == 1 and 0 or 1) end
+				return
+			end
+			if (inp.KeyCode == Enum.KeyCode.P and (uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.RightControl))) then
+				if MicroProfiler and MicroProfiler.OnTogglePause then
+					MicroProfiler.OnTogglePause()
+				end
+				return
+			end
 			if proc and GetSetting("Ignore Game Processed") == 0 then return end
 			if not Humanoid then return end
 
