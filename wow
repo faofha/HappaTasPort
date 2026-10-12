@@ -5369,6 +5369,9 @@ do
 		aggSumDt = 0
 		aggMinDt = math.huge
 		aggMaxDt = 0
+		if aggregateMode == "Infinity" and btnAggregate then
+			btnAggregate.Text = "Aggregate[0]"
+		end
 	end
 
 	local function setAggregateMode(modeName)
@@ -5379,7 +5382,7 @@ do
 		elseif modeName == "Infinity" or modeName == "Inf" then
 			aggregateWindow = math.huge
 			aggregateMode = "Infinity"
-			btnAggregate.Text = "Aggregate[Inf]"
+			btnAggregate.Text = string.format("Aggregate[%d]", aggregateCount)
 		else
 			local n = tonumber(modeName:match("%d+")) or 60
 			aggregateWindow = n
@@ -5550,14 +5553,14 @@ do
 
 		btnMode = createMenuButton(mb, "BtnMode", "Mode", 80, 32)
 		btnGroups = createMenuButton(mb, "BtnGroups", "Groups", 114, 42)
-		btnAggregate = createMenuButton(mb, "BtnAggregate", "Aggregate[60]", 158, 88)
-		btnTimers = createMenuButton(mb, "BtnTimers", "Timers", 248, 42)
-		btnOptions = createMenuButton(mb, "BtnOptions", "Options", 292, 46)
-		btnPreset = createMenuButton(mb, "BtnPreset", "Preset", 340, 42)
-		btnCustom = createMenuButton(mb, "BtnCustom", "Custom", 384, 42)
-		btnDump = createMenuButton(mb, "BtnDump", "Dump", 428, 34)
-		btnPause = createMenuButton(mb, "BtnPause", "Pause", 464, 48) -- "Pause" or "Unpause"
-		btnHelp = createMenuButton(mb, "BtnHelp", "Help", 514, 30)
+		btnAggregate = createMenuButton(mb, "BtnAggregate", "Aggregate[60]", 158, 98)
+		btnTimers = createMenuButton(mb, "BtnTimers", "Timers", 258, 42)
+		btnOptions = createMenuButton(mb, "BtnOptions", "Options", 302, 46)
+		btnPreset = createMenuButton(mb, "BtnPreset", "Preset", 350, 42)
+		btnCustom = createMenuButton(mb, "BtnCustom", "Custom", 394, 42)
+		btnDump = createMenuButton(mb, "BtnDump", "Dump", 438, 34)
+		btnPause = createMenuButton(mb, "BtnPause", "Pause", 474, 48) -- "Pause" or "Unpause"
+		btnHelp = createMenuButton(mb, "BtnHelp", "Help", 524, 30)
 
 		-- Dropdown Container
 		local dd = Instance.new("Frame")
@@ -5615,10 +5618,10 @@ do
 		end)
 
 		btnOptions.MouseButton1Click:Connect(function()
-			if dd.Visible and dd.Position.X.Offset == 292 then
+			if dd.Visible and dd.Position.X.Offset == 302 then
 				hideDropdown()
 			else
-				showDropdown(292, { "Scale 16.6ms (60 FPS)", "Scale 33.3ms (30 FPS)", "Scale 50.0ms (20 FPS)" }, function(chosen)
+				showDropdown(302, { "Scale 16.6ms (60 FPS)", "Scale 33.3ms (30 FPS)", "Scale 50.0ms (20 FPS)" }, function(chosen)
 					if chosen:find("16.6") then targetBudgetMs = 16.67
 					elseif chosen:find("33.3") then targetBudgetMs = 33.33
 					elseif chosen:find("50.0") then targetBudgetMs = 50.0
@@ -5628,10 +5631,10 @@ do
 		end)
 
 		btnPreset.MouseButton1Click:Connect(function()
-			if dd.Visible and dd.Position.X.Offset == 340 then
+			if dd.Visible and dd.Position.X.Offset == 350 then
 				hideDropdown()
 			else
-				showDropdown(340, { "Default", "Obby Proof (Aggregate Inf)" }, function(chosen)
+				showDropdown(350, { "Default", "Obby Proof (Aggregate Inf)" }, function(chosen)
 					if chosen:find("Obby") then
 						setAggregateMode("Infinity")
 					else
@@ -5646,10 +5649,10 @@ do
 		end)
 
 		btnDump.MouseButton1Click:Connect(function()
-			if dd.Visible and dd.Position.X.Offset == 428 then
+			if dd.Visible and dd.Position.X.Offset == 438 then
 				hideDropdown()
 			else
-				showDropdown(428, { "Dump 32 frames", "Dump 64 frames", "Dump 128 frames", "Dump 256 frames", "Dump 512 frames" }, function(chosen)
+				showDropdown(438, { "Dump 32 frames", "Dump 64 frames", "Dump 128 frames", "Dump 256 frames", "Dump 512 frames" }, function(chosen)
 					local n = tonumber(chosen:match("%d+")) or 32
 					if MicroProfiler.OnDump then
 						MicroProfiler.OnDump(n)
@@ -5700,20 +5703,21 @@ do
 		for i = 1, MAX_BARS do
 			local bar = Instance.new("Frame")
 			bar.Name = "Bar_" .. i
-			-- Peachy copper color matching screenshot pixel values (R=225, G=160, B=115)
-			bar.BackgroundColor3 = Color3.fromRGB(225, 160, 115)
+			-- White base so UIGradient is not multiplied down and renders exact authentic colors
+			bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 			bar.BorderSizePixel = 0
 			bar.Position = UDim2.new(0, (i - 1) * 2, 1, -2)
 			bar.Size = UDim2.new(0, 2, 0, 2)
 			bar.Visible = false
 			bar.ZIndex = 60005
 
-			-- Subtle vertical shading
+			-- Exact peach-copper vertical gradient matching screenshot pixel values
 			local grad = Instance.new("UIGradient")
 			grad.Rotation = 90
 			grad.Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(243, 184, 145)),
-				ColorSequenceKeypoint.new(1.0, Color3.fromRGB(164, 101, 56))
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(242, 187, 151)), -- Peach top tip (#F2BB97)
+				ColorSequenceKeypoint.new(0.4, Color3.fromRGB(223, 160, 115)), -- Copper mid (#DFA073)
+				ColorSequenceKeypoint.new(1.0, Color3.fromRGB(159, 96, 52))    -- Deep base (#9F6034)
 			})
 			grad.Parent = bar
 
@@ -5721,10 +5725,11 @@ do
 			barPool[i] = bar
 		end
 
-		-- Active Frame Indicator: Exact 1-pixel vertical green line matching screenshot (X=847)
+		-- Active Frame Indicator: Exact 1-pixel semi-transparent green line matching screenshot (#44794E)
 		local gc = Instance.new("Frame")
 		gc.Name = "GreenCursor"
-		gc.BackgroundColor3 = Color3.fromRGB(68, 140, 74)
+		gc.BackgroundColor3 = Color3.fromRGB(68, 190, 80)
+		gc.BackgroundTransparency = 0.45
 		gc.BorderSizePixel = 0
 		gc.Position = UDim2.new(0, 0, 0, 0)
 		gc.Size = UDim2.new(0, 1, 1, 0)
@@ -5951,25 +5956,32 @@ do
 
 		-- Aggregate Accumulation
 		if aggregateMode ~= "Off" then
-			aggregateCount = aggregateCount + 1
-			aggHistory[#aggHistory + 1] = curDt
-			if aggregateWindow ~= math.huge and #aggHistory > aggregateWindow then
-				local oldest = table.remove(aggHistory, 1)
-				aggSumDt = aggSumDt - oldest
+			if not isPaused then
+				aggregateCount = aggregateCount + 1
+				if aggregateWindow == math.huge then
+					-- Infinite Mode: counts every frame and accumulates total without ceiling
+					aggSumDt = aggSumDt + curDt
+					btnAggregate.Text = string.format("Aggregate[%d]", aggregateCount)
+				else
+					aggHistory[#aggHistory + 1] = curDt
+					if #aggHistory > aggregateWindow then
+						local oldest = table.remove(aggHistory, 1)
+						aggSumDt = aggSumDt - oldest
+					end
+					aggSumDt = aggSumDt + curDt
+				end
+				if curMs < aggMinDt then aggMinDt = curMs end
+				if curMs > aggMaxDt then aggMaxDt = curMs end
 			end
-			aggSumDt = aggSumDt + curDt
-			if curMs < aggMinDt then aggMinDt = curMs end
-			if curMs > aggMaxDt then aggMaxDt = curMs end
 		end
 
 		-- Pause button label: "Unpause" when paused, "Pause" when active
 		if isPaused then
 			btnPause.Text = "Unpause"
-			btnPause.TextColor3 = Color3.fromRGB(255, 200, 100)
 		else
 			btnPause.Text = "Pause"
-			btnPause.TextColor3 = Color3.fromRGB(255, 255, 255)
 		end
+		btnPause.TextColor3 = Color3.fromRGB(245, 245, 245)
 
 		liveHistory[#liveHistory + 1] = curDt
 		if #liveHistory > MAX_LIVE then table.remove(liveHistory, 1) end
