@@ -472,8 +472,8 @@ local UI_TREE = {
 					{"UIStroke","UIStroke",33,{}}
 				}}
 			}},
-			{"ScrollingFrame","SettingsFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,0,0)},{
-				{"Frame","List",31,{Position=u(0,20,0,20),Size=u(0,360,0,480)},{
+			{"ScrollingFrame","SettingsFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,0,890)},{
+				{"Frame","List",31,{Position=u(0,20,0,20),Size=u(0,360,0,840)},{
 					{"UIListLayout","UIListLayout",9,{}},
 					{"UICorner","UICorner",5,{}},
 					{"UIStroke","UIStroke",33,{}},
@@ -532,14 +532,14 @@ local UI_TREE = {
 					}},
 					{"Frame","Show Stats (Idle)",34,{Position=u(0,0,0,0),Size=u(1,0,0,30)},{
 						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",35,{Position=u(0,10,0,0),Size=u(0.75,0,1,0),Text="Show Stats (Idle)",TextSize=16}},
 						{"Frame","Border",39,{Position=u(0,0,1,0),Size=u(1,0,0,1),AnchorPoint=v2(0,1)}},
 						{"TextButton","Switch",36,{Position=u(0.9,0,0.5,0),Size=u(0,30,0,15),AnchorPoint=v2(0.5,0.5),Text="",TextSize=13},{
 							{"UICorner","UICorner",37,{}},
 							{"Frame","Switcher",38,{Position=u(0,0,0.5,0),Size=u(0,22,0,22),AnchorPoint=v2(0.5,0.5)},{
 								{"UICorner","UICorner",37,{}}
 							}}
-						}},
-						{"TextLabel","N",35,{Position=u(0,10,0,0),Size=u(0.75,0,1,0),Text="Show Stats (Idle)",TextSize=16}}
+						}}
 					}},
 					{"Frame","Show Stats (Test)",34,{Position=u(0,0,0,0),Size=u(1,0,0,30)},{
 						{"UICorner","UICorner",5,{}},
@@ -558,7 +558,8 @@ local UI_TREE = {
 						{"TextBox","Input",40,{Position=u(0.9,0,0.5,0),Size=u(0.15,0,0.7,0),AnchorPoint=v2(0.5,0.5),Text="11",TextSize=13,PlaceholderText=""},{
 							{"UICorner","UICorner",5,{}},
 							{"UIStroke","UIStroke",41,{}}
-						}}
+						}},
+						{"Frame","Border",39,{Position=u(0,0,1,0),Size=u(1,0,0,1),AnchorPoint=v2(0,1)}}
 					}},
 					{"Frame","Interpolate Playback",34,{Position=u(0,0,0,0),Size=u(1,0,0,30)},{
 						{"UICorner","UICorner",5,{}},
@@ -806,7 +807,7 @@ local UI_TREE = {
 					}},
 					{"TextLabel","4CreditsN",30,{Position=u(0.5,0,0,0),Size=u(1,0,0,40),AnchorPoint=v2(0.5,0),Text="Credits",TextSize=14}},
 					{"TextLabel","0ModelN",30,{Position=u(0.5,0,0,0),Size=u(1,0,0,40),AnchorPoint=v2(0.5,0),Text="Executor port - client side script",TextSize=14}},
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,1430)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,1750)},{
 						{"UICorner","UICorner",5,{}},
 						{"TextLabel","999",35,{Position=u(0,0,0.158824,0),Size=u(1,0,0,30),Text=" 7/13/22 - 2.0 Release (Happy_Liam -> HappaTAS)",TextSize=16}},
 						{"TextLabel","998_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="  -  Script still usable in studio when API services are turned off",TextSize=12}},
@@ -870,7 +871,20 @@ local UI_TREE = {
 						{"TextLabel","986_2",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Animation fixes (PLEASE dont be bad)",TextSize=12}},
 						{"TextLabel","986_3",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Fixed coyote frame abuse",TextSize=12}},
 						{"TextLabel","985",35,{Position=u(0,0,0,0),Size=u(1,0,0,30),Text=" 07/03/26 - 2.33",TextSize=16}},
-						{"TextLabel","985_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Fixed camera zoom, NohBoard mouse, and client objects",TextSize=12}}
+						{"TextLabel","985_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Fixed camera zoom, NohBoard mouse, and client objects",TextSize=12}},
+						{"TextLabel","984",35,{Position=u(0,0,0,0),Size=u(1,0,0,30),Text=" 10/10/26 - 2.33.1",TextSize=16}},
+						{"TextLabel","984_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Mobile DynamicThumbstick middle tracking position & size",TextSize=12}},
+						{"TextLabel","984_2",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Fixed first-person camera lock during pause and unpause",TextSize=12}},
+						{"TextLabel","984_3",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Sub-pixel cursor UV normalization for cross-resolution aiming",TextSize=12}},
+						{"TextLabel","983",35,{Position=u(0,0,0,0),Size=u(1,0,0,30),Text=" 10/12/26 - 2.34 (Master Engine Update)",TextSize=16}},
+						{"TextLabel","983_1",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Official Roblox MicroProfiler replica (Ctrl+F6) with live TAS frame sync & scrubbing",TextSize=12}},
+						{"TextLabel","983_2",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Custom mechanical keyboard & click sound engine with dynamic pitch modulation",TextSize=12}},
+						{"TextLabel","983_3",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Client Object sync overhaul with EToH Kit v6.1.3 & 25-stud frustum culling",TextSize=12}},
+						{"TextLabel","983_4",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Button Timer & Obby Mechanism Sync (countdown doors & pressure plates)",TextSize=12}},
+						{"TextLabel","983_5",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Humanoid Death & Respawn recording across character respawns",TextSize=12}},
+						{"TextLabel","983_6",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Tool equip, unequip, activate, and deactivate recording & playback",TextSize=12}},
+						{"TextLabel","983_7",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Modern executor sandboxing (cloneref, gethui, syn.protect_gui, native LZ4)",TextSize=12}},
+						{"TextLabel","983_8",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Settings UI alignment fix and Help page documentation overhaul",TextSize=12}}
 					}},
 					{"TextButton","1Model",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Unload HappaTAS",TextSize=16},{
 						{"UICorner","UICorner",21,{}},
@@ -1176,7 +1190,122 @@ local UI_TREE = {
 					{"TextLabel","29b",30,{Position=u(0.5,0,0,0),Size=u(1,0,0,40),AnchorPoint=v2(0.5,0),Text="Client Objects",TextSize=16}},
 					{"TextLabel","29c",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,184),AnchorPoint=v2(0.5,0),Text="      Turn on 'Sync Client Objects' in Settings (off by default) to record the objects only your game client shows: moving, falling and swinging platforms, balloons, pushboxes, turret bullets, vanishers, morphers, buttons, beat blocks, gradient parts and other parts that move or change while you play (EToH kit objects). They are saved with the TAS and put back exactly while testing and scrubbing, so a replay no longer touches a platform that was somewhere else. Objects far from you are skipped. Sounds, particles, lighting and GUIs are not synced. It is off by default because it needs extra memory.",TextSize=14}},
                     {"TextLabel","PortSettingsHeader",30,{Position=u(0.5,0,0,0),Size=u(1,0,0,40),AnchorPoint=v2(0.5,0),Text="Executor Port Settings",TextSize=16}},
-                    {"TextLabel","PortSettingsDescription",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,135),AnchorPoint=v2(0.5,0),Text="      Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed. Invisible Mouse Speed scales NohBoard cursor movement during playback; values at or below 0 use 1. These settings are in the Settings tab.",TextSize=14}}
+                    {"TextLabel","PortSettingsDescription",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,135),AnchorPoint=v2(0.5,0),Text="      Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed. Invisible Mouse Speed scales NohBoard cursor movement during playback; values at or below 0 use 1. These settings are in the Settings tab.",TextSize=14}},
+					{"TextLabel","FeaturesHeader",30,{Position=u(0.5,0,0,0),Size=u(1,0,0,40),AnchorPoint=v2(0.5,0),Text="Feature Modules & Tools",TextSize=16}},
+					{"TextButton","31",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="MicroProfiler",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,160),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      An exact replica of the official Roblox MicroProfiler (Ctrl+F6). Displays a real-time bar graph with 16.6ms (60 FPS green) and 33.3ms (30 FPS orange) reference budget lines.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      The frame readout and active cursor track your TAS frame in lockstep. Click or drag anywhere on the bar graph to scrub playback to that exact frame. Toggle with Ctrl+F6 and pause with Ctrl+P.",TextSize=14}},
+								{"TextLabel","03",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,44),AnchorPoint=v2(0.5,0),Text="      Includes flame-graph breakdown slices for RenderStep, Heartbeat, ClientObjects, TAS CPU, and Memory.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","32",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Keyboard & Click Sounds",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,140),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Custom mechanical keyboard and mouse click sound feedback. Configure volume, enable keyboard sounds, and enable click sounds in Settings.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Sound Trigger Mode lets you select when audio plays: 0 for live recording, 1 for playback replay, or 2 for both. Dynamic Pitch Variation modulates sound pitch based on typing pace and key hold time.",TextSize=14}},
+								{"TextLabel","03",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,24),AnchorPoint=v2(0.5,0),Text="      Sounds automatically suppress when typing in textboxes or navigating menus.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","33",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Mouse UV Normalization",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,110),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Normalizes cursor positions to camera viewport UV coordinates (0 to 1) after subtracting GuiService topbar insets.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,42),AnchorPoint=v2(0.5,0),Text="      Provides 1:1 cross-resolution aiming: replays on different screen resolutions or window sizes aim and click at the exact sub-pixel world location.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","34",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Death & Respawn Recording",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,110),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Record speedruns that use character deaths (killbricks, reset tricks, or respawn shortcuts) without crashing or resetting to Idle.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,42),AnchorPoint=v2(0.5,0),Text="      Terminal death frames are saved, and playback bridges smoothly across respawns, refreshing character and animation references on CharacterAdded.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","35",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Tool Actions Support",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,95),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Records and replays Tool equips, unequips, activations (clicks), and deactivations from your Character and Backpack.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,27),AnchorPoint=v2(0.5,0),Text="      Missing tools during playback are bypassed gracefully with a temporary status notice.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","36",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Button & Obby Mechanism Sync",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,135),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,67),AnchorPoint=v2(0.5,0),Text="      Stores trigger frame timestamps and remaining countdown deltas. During playback and scrubbing, visual GUI labels and physical door states synchronize with the active timeline so timers never expire prematurely.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}},
+					{"TextButton","37",50,{Position=u(0,0,0,0),Size=u(1,0,0,40),Text="",TextSize=8},{
+						{"UICorner","UICorner",5,{}},
+						{"TextLabel","N",47,{Position=u(0,15,0,0),Size=u(0.7,0,1,0),Text="Frustum Culling & Sandboxing",TextSize=20}},
+						{"TextLabel","Expand",51,{Position=u(1,-10,0.5,0),Size=u(0,30,0,30),AnchorPoint=v2(1,0.5),ZIndex=2,Text="+",TextSize=30},{
+							{"UICorner","UICorner",5,{}}
+						}},
+						{"Frame","Expansion",52,{Position=u(0,0,1,-8),Size=u(1,0,0,135),Visible=false},{
+							{"UICorner","UICorner",5,{}},
+							{"Frame","InnerBox",19,{Position=u(0,10,0,15),Size=u(1,-20,1,-20)},{
+								{"TextLabel","01",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,48),AnchorPoint=v2(0.5,0),Text="      Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag.",TextSize=14}},
+								{"UIListLayout","UIListLayout",32,{}},
+								{"TextLabel","02",49,{Position=u(0.5,0,0,0),Size=u(1,0,0,67),AnchorPoint=v2(0.5,0),Text="      Metatable sandboxing with cloneref prevents game scripts from intercepting TAS operations. UI isolation mounts via gethui/syn.protect_gui, and native LZ4 provides instant file compression.",TextSize=14}}
+							}}
+						}},
+						{"UIStroke","UIStroke",22,{}}
+					}}
 				}}
 			}},
 			{"UIStroke","UIStroke",17,{}}
@@ -7274,6 +7403,9 @@ do
 		local layout = container:FindFirstChildOfClass("UIListLayout")
 		if not layout then return end
 		local function fit()
+			if container.Name == "List" or container.Name == "YourSlots" then
+				container.Size = UDim2.new(container.Size.X.Scale, container.Size.X.Offset, 0, layout.AbsoluteContentSize.Y)
+			end
 			scroller.CanvasSize = UDim2.new(0, 0, 0, container.Position.Y.Offset + layout.AbsoluteContentSize.Y + (extra or 30))
 		end
 		on(layout:GetPropertyChangedSignal("AbsoluteContentSize"), fit)
