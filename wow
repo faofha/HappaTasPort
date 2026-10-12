@@ -202,6 +202,7 @@ local ControlsTable = {
 	{ "Optimize TAS", "Q" },
 	{ "Delete TAS", "Backspace" },
 	{ "Menu", "M" },
+	{ "MicroProfiler", "F6" },
 }
 
 local SettingsTable = {
@@ -404,6 +405,9 @@ local UI_TREE = {
 					{"UICorner","UICorner",5,{}}
 				}},
 				{"TextButton","Optimize",13,{Position=u(0.174869,0,0.614736,0),Size=u(0.111313,0,0.049038,0),Visible=false,Text="Optimize",TextSize=30},{
+					{"UICorner","UICorner",5,{}}
+				}},
+				{"TextButton","MicroProfiler",13,{Position=u(0.174869,0,0.676000,0),Size=u(0.111313,0,0.049038,0),Visible=false,Text="Profiler",TextSize=24},{
 					{"UICorner","UICorner",5,{}}
 				}}
 			}},
@@ -885,6 +889,10 @@ local UI_TREE = {
 						{"TextLabel","983_6",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Tool equip, unequip, activate, and deactivate recording & playback",TextSize=12}},
 						{"TextLabel","983_7",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Modern executor sandboxing (cloneref, gethui, syn.protect_gui, native LZ4)",TextSize=12}},
 						{"TextLabel","983_8",35,{Position=u(0,0,0,0),Size=u(1,0,0,20),Text="   -   Settings UI alignment fix and Help page documentation overhaul",TextSize=12}}
+					}},
+					{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{
+						{"UICorner","UICorner",21,{}},
+						{"UIStroke","UIStroke",48,{}}
 					}},
 					{"TextButton","1Model",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Unload HappaTAS",TextSize=16},{
 						{"UICorner","UICorner",21,{}},
@@ -7566,7 +7574,7 @@ end
 		end)
 
 		on(uis.InputBegan, function(inp, proc)
-			if (inp.KeyCode == Enum.KeyCode.F6 and (uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.RightControl))) then
+			if (inp.KeyCode == Enum.KeyCode.F6 and (uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.RightControl))) or CheckInput(inp, "MicroProfiler") then
 				local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
 				if sw then sw.Value = (sw.Value == 1 and 0 or 1) end
 				return
@@ -8064,6 +8072,12 @@ do
 		on(menu.MoreToggle.MouseButton1Click, function() tab("More") end)
 
 		on(MoreFrame.List["1Model"].MouseButton1Click, function() if onUnload then onUnload() end end)
+		if MoreFrame.List:FindFirstChild("ToggleMicroProfiler") then
+			on(MoreFrame.List.ToggleMicroProfiler.MouseButton1Click, function()
+				local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
+				if sw then sw.Value = (sw.Value == 1 and 0 or 1) end
+			end)
+		end
         -- expandable Help sections
         local hf = HelpFrame.List
         local SelectedHelp = "00"
@@ -8105,6 +8119,12 @@ do
 		on(MobileUI.More.MouseButton1Click, function()
 			for _, ui in ipairs(MobileUI.MobileOptions:GetChildren()) do ui.Visible = not ui.Visible end
 		end)
+		if MobileUI.MobileOptions:FindFirstChild("MicroProfiler") then
+			on(MobileUI.MobileOptions.MicroProfiler.MouseButton1Click, function()
+				local sw = SettingValues and SettingValues:FindFirstChild("Show MicroProfiler")
+				if sw then sw.Value = (sw.Value == 1 and 0 or 1) end
+			end)
+		end
 	end
 
 	function Menu.SetStatus(text, fade) return SetStatus(text, fade) end
