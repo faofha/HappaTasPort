@@ -35,7 +35,8 @@ It started as the HappaTAS .rbxm pair (an initializer that `require()`s an asset
 it loads). Everything, including the old server scripts, was moved into ONE local script that runs
 through an executor.
 
-- Latest script in this repo: **`wow`** = HappaTAS V2.36 (about 10,000 lines), built from `src/parts/`.
+- Latest script in this repo: **`wow`** = HappaTAS V2.37 (about 8,700 lines: the release build without
+  comments / blank lines, made by `bash tools/release.sh` from `src/parts/`). V2.36 is in the git history.
   Older files: `true`, `true real`, `nohboard` (V2.33, dzr's own versions), `HappaTAS_Executor-2.lua` (V2.32).
 - Test game: **EToH Kit V6.1.3** (Eternal's Towers of Hell kit). Every "Continue" may be a new join.
 
@@ -118,6 +119,23 @@ A copy of Roblox's current desktop MicroProfiler, matched to dzr's screenshots.
   **MicroProfiler Text Offset** (-6..6, minus = up).
 - **Open:** waiting for dzr to check clicks and the text height in the real game (tested headless only).
 
+## V2.37 (2026-10-13): "Optimize for less lines and more performance"
+
+- Same behaviour and file format as V2.36: checked with frame-by-frame traces of both builds
+  (tests/test_diff.lua, tests/test_diffco.lua) - headless only, not in a live game.
+- Client objects: the 5 recorded properties (Transparency, CanCollide, Color, Size, Material) and Anchored
+  are tracked with GetPropertyChangedSignal (6 connections per registered part) instead of being read
+  every frame; props are still re-read on the same "every 2nd frame" schedule (only when changed, plus a
+  safety read every 16th frame). Unchanged CFrames skip the velocity maths; the start CFrame skips the
+  tolerance test. Playback state slot 50 = version number: unchanged static poses and property writes
+  are reused. Removed parts rely on DescendantRemoving (the visibility pass still checks Parent).
+  Result in the mock: 60-80% fewer engine calls per frame with Sync Client Objects.
+- Stats panel: remembers the texts / visibility it wrote, labels cached; closure-free ChangeState;
+  AdjustSpeed only when the speed changes; menu-open check only when the cursor needs it.
+- Fewer lines: p04 builds the menus from compact data (style = class base + differences, helpers for
+  rows, help entries, update log); shared helpers in the core (holdAt, unpauseFrom, holdPose, liveRows),
+  client objects (listRemove, restorePart), animation (pick) and menu. Release build strips comments.
+
 ## Code layout
 
 The single file is assembled from parts, in this order:
@@ -135,12 +153,18 @@ Conventions:
 - Debug logging only when `CONFIG.Debug = true`.
 
 ## Build and test (this repo)
-- Edit the parts in `src/parts/`, never the built file by hand. Build: `bash tools/assemble.sh`
-  (writes `src/HappaTAS_Executor.lua`; copy it out as the new release).
+- Edit the parts in `src/parts/`, never the built file by hand. `bash tools/assemble.sh` writes
+  `src/HappaTAS_Executor.lua` (with comments, used by the tests); `bash tools/release.sh` writes `wow`
+  (the same code without comments and blank lines, via tools/strip.py).
 - Tests use a headless mock of the Roblox API (`tests/mock/`) and the `luau` CLI
   (https://github.com/luau-lang/luau/releases). Run one suite:
   `bash tools/build_test.sh profiler && cd tests && luau run_profiler.lua`
-  Suites: smoke, profiler, core, scale, perf, textline. All passed for V2.36.
+  Everything: `bash tools/test_all.sh [OLD_BUILD.lua]` (suites smoke, profiler, core, scale, perf,
+  textline; with an old build also the traces). All passed for V2.37.
+- Behaviour check between two builds: `bash tools/diff_builds.sh OLD.lua [NEW.lua]` (TEST=diffco for the
+  client object trace, IGNORE='regex' to skip lines such as new update log rows).
+- Per-frame cost: `bash tools/build_test.sh bench && cd tests && luau run_bench.lua` (us, engine reads
+  and writes per frame in every mode; PRE='BENCH_PROFILE = true' lists which reads / writes).
 - The mock is not real Roblox: passing tests does not mean it works in game.
 
 ## Reference files from dzr
@@ -185,6 +209,7 @@ screenshots (21726.png, 21727-21740.jpg) plus IMG_20261012_165642.png (looks lik
       infinite or not. Average is the average of the frames that are visible on the bar. If chose mode
       hidden it will work like I said but with the bar invisible"
     - "The UI isn't clickable and the text is down by a little."
+12. V2.37 message, word for word: "Optimize for less lines and more performance"
 
 ---
 
