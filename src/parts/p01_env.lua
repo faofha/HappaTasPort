@@ -1,0 +1,152 @@
+-- ================================================================================================
+--  ENVIRONMENT
+--  Everything that talks to the executor or to Roblox services is looked up here once.
+--  No network functions are used anywhere in this script (no HttpGet / request / loadstring).
+-- ================================================================================================
+local genv = (type(getgenv) == "function" and getgenv()) or _G
+local HANDLE_KEY = "__HappaTAS"
+
+do -- unload an older copy that is still running (re-executing the script)
+	local old = rawget(genv, HANDLE_KEY)
+	if type(old) == "table" and type(old.Unload) == "function" then
+		pcall(old.Unload)
+	end
+end
+
+local cloneref_ = (type(cloneref) == "function") and cloneref or function(x) return x end
+
+local function svc(name)
+	local ok, s = pcall(game.GetService, game, name)
+	if not ok or s == nil then return nil end
+	local ok2, c = pcall(cloneref_, s)
+	if ok2 and c ~= nil then return c end
+	return s
+end
+
+local Players      = svc("Players")
+local RunService   = svc("RunService")
+local UIS          = svc("UserInputService")
+local TweenService = svc("TweenService")
+local HttpService  = svc("HttpService")
+local StarterGui   = svc("StarterGui")
+local GuiService   = svc("GuiService")
+local Stats        = svc("Stats")
+local TextService  = svc("TextService")
+local LocalPlayer  = Players.LocalPlayer
+while not LocalPlayer do
+	task.wait()
+	LocalPlayer = Players.LocalPlayer
+end
+
+local Env = {}
+do
+	local function fn(...)
+		for i = 1, select("#", ...) do
+			local f = select(i, ...)
+			if type(f) == "function" then return f end
+		end
+		return nil
+	end
+	local synT = (type(syn) == "table") and syn or {}
+
+	Env.writefile   = fn(writefile)
+	Env.readfile    = fn(readfile)
+	Env.isfile      = fn(isfile)
+	Env.isfolder    = fn(isfolder)
+	Env.makefolder  = fn(makefolder)
+	Env.listfiles   = fn(listfiles)
+	Env.delfile     = fn(delfile)
+	Env.lz4compress   = fn(lz4compress, synT.lz4compress)
+	Env.lz4decompress = fn(lz4decompress, synT.lz4decompress)
+	Env.getcustomasset = fn(getcustomasset, getsynasset)
+	Env.gethui      = fn(gethui)
+	Env.protectgui  = fn(synT.protect_gui)
+	Env.getgc       = fn(getgc)
+	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
+
+	Env.keypress     = fn(keypress, keydown)
+	Env.keyrelease   = fn(keyrelease, keyup)
+	Env.mouse1press  = fn(mouse1press, mouse1down)
+	Env.mouse1release= fn(mouse1release, mouse1up)
+	Env.mouse2press  = fn(mouse2press, mouse2down)
+	Env.mouse2release= fn(mouse2release, mouse2up)
+	Env.mousemoveabs = fn(mousemoveabs)
+	Env.mousescroll  = fn(mousescroll)
+
+	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
+		and Env.listfiles and Env.delfile and true or false
+	Env.HasLZ4 = (Env.lz4compress ~= nil and Env.lz4decompress ~= nil)
+
+	-- set by the settings module ("Window Guarding")
+	Env.Guarding = true
+	-- true when the Roblox window has focus (or when the executor can't tell / guarding is off)
+	function Env.WindowActive()
+		if not Env.Guarding or not Env.isactive then return true end
+		local ok, a = pcall(Env.isactive)
+		return (not ok) or a ~= false
+	end
+end
+
+local function log(...)
+	if CONFIG.Debug then print("[HappaTAS]", ...) end
+end
+local function warnf(...)
+	warn("[HappaTAS]", ...)
+end
+
+-- ------------------------------------------------------------------------------------------------ janitor
+-- Everything that must be undone on Unload is registered here (connections, instances, functions).
+local Janitor = { items = {}, unloading = false }
+
+function Janitor.add(x)
+	Janitor.items[#Janitor.items + 1] = x
+	return x
+end
+
+function Janitor.cleanup()
+	Janitor.unloading = true
+	for i = #Janitor.items, 1, -1 do
+		local x = Janitor.items[i]
+		pcall(function()
+			local t = typeof(x)
+			if t == "RBXScriptConnection" then
+				x:Disconnect()
+			elseif t == "Instance" then
+				x:Destroy()
+			elseif t == "function" then
+				x()
+			elseif type(x) == "table" and x.Disconnect then
+				x:Disconnect()
+			end
+		end)
+	end
+	Janitor.items = {}
+end
+
+local function on(signal, fn)
+	local c = signal:Connect(fn)
+	Janitor.add(c)
+	return c
+end
+
+-- ------------------------------------------------------------------------------------------------ small helpers
+local function r(n, decimal)
+	local v = math.round(n * decimal) / decimal
+	if v == 0 then v = 0 end -- turns -0 into 0
+	return v
+end
+
+local function clampn(v, lo, hi)
+	if v < lo then return lo end
+	if v > hi then return hi end
+	return v
+end
+
+local ZERO3 = Vector3.zero
+
+-- ------------------------------------------------------------------------------------------------ module tables
+-- Declared up front so every module can call every other one (no forward-reference nil globals).
+local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
+local ClientObjects, Buttons, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}
+local Core, Menu = {}, {}
+
