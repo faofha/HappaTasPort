@@ -1,0 +1,4 @@
+tests/run_*.lua
+*.png
+src/HappaTAS_Executor.lua
+tests/diff_*.txt
