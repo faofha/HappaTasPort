@@ -23,6 +23,7 @@ do
 	local putVar, putZig, bufToString = Codec.PutVar, Codec.PutZig, Codec.BufToString
 	local V3, CF = Vector3.new, CFrame.new
 	local ZV = Vector3.zero
+	local hasMask, addMask = bit32.btest, bit32.bor -- flag tests (masks are small positive integers)
 
 	local RADIUS         = CFG.Radius or 300
 	local ALWAYS         = CFG.AlwaysRadius or 30
@@ -42,8 +43,9 @@ do
 	-- playback state layout (shared by v1 and v2):
 	--   1-3 position (x1000)  4-12 rotation (x1000)  13 transparency  14 can-collide  15-17 colour
 	--   18-20 size  21 material  23 mask  36-38 linear vel (x1000)  39-41 angular vel (x1000)
-	--   42-44 v1 spin  45 keyframe time  46 v1 spin flag  48 "moves by velocity"
-	local I_TR, I_CC, I_COL, I_SZ, I_MAT, I_MASK = 13, 14, 15, 18, 21, 23
+	--   42-44 v1 spin  45 keyframe time  46 v1 spin flag  48 "moves by velocity"  50 version (new number on
+	--   every change, so a pose / property write can be skipped while the state is the same)
+	local I_TR, I_CC, I_COL, I_SZ, I_MAT, I_MASK, I_VER = 13, 14, 15, 18, 21, 23, 50
 	local F_CF, F_TR, F_CC, F_CCV, F_COL, F_SZ, F_MAT, F_ROT = 1, 2, 4, 8, 16, 32, 64, 128
 	local F_VEL, F_SPIN, F_SKIP = 256, 512, 1024
 	local K_KEY, K_ROT, K_LV, K_AV = 1, 2, 4, 8
@@ -230,13 +232,35 @@ do
 		t[9] = part.Material.Value
 	end
 
+	-- Change signals instead of reading every frame: the 5 recorded properties are re-read when one
+	-- of them changed (pd = for the recorder, vd = for the visibility test), Anchored is kept in s.an
+	local PROP_NAMES = { "Transparency", "CanCollide", "Color", "Size", "Material" }
+	local function watchProps(part, s)
+		local list = {}
+		local function dirty() s.pd, s.vd = true, true end
+		local function anchoredChanged() s.an = part.Anchored end
+		for _, n in ipairs(PROP_NAMES) do
+			local ok, cn = pcall(function() return part:GetPropertyChangedSignal(n):Connect(dirty) end)
+			if ok and cn then list[#list + 1] = cn end
+		end
+		local ok, cn = pcall(function() return part:GetPropertyChangedSignal("Anchored"):Connect(anchoredChanged) end)
+		if ok and cn then list[#list + 1] = cn end
+		s.cn = list
+	end
+	local function unwatchProps(s)
+		if not s or not s.cn then return end
+		for _, cn in ipairs(s.cn) do cn:Disconnect() end
+		s.cn = nil
+	end
+
 	local function newRecState(part)
 		local cp = {}
 		readProps(part, cp)
 		local rv = {}
 		for i = 1, 9 do rv[i] = cp[i] end
+		local cf0 = part.CFrame
 		return {
-			rc = { part.CFrame:GetComponents() },
+			rc = { cf0:GetComponents() }, rcf = cf0, pd = false, vd = true, an = part.Anchored, rad = 0, tr = 0,
 			rv = rv, cp = cp,
 			kp = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 			lq = { 0, 0, 0 }, aq = { 0, 0, 0 },
@@ -281,7 +305,9 @@ do
 		parts[id], ids[part], partByKey[key] = part, id, part
 		plist[#plist + 1] = id
 		pidx[id] = #plist
-		S[id] = newRecState(part)
+		local s = newRecState(part)
+		S[id] = s
+		watchProps(part, s)
 		nRegistered = nRegistered + 1
 		unwatch(part)
 	end
@@ -306,6 +332,7 @@ do
 			plist[#plist] = nil
 			pidx[id] = nil
 		end
+		unwatchProps(S[id])
 		ids[part], parts[id], S[id], dropQ[id] = nil, nil, nil, nil
 		orig[part], origVel[part] = nil, nil
 		local key = Reg.idToKey[id]
@@ -414,6 +441,7 @@ do
 		if remConn then remConn:Disconnect(); remConn = nil end
 		for _, cn in pairs(watchConns) do cn:Disconnect() end
 		watchConns, nWatched = {}, 0
+		for _, s in pairs(S) do unwatchProps(s) end
 		parts, ids, S, partByKey = {}, {}, {}, {}
 		plist, pidx, actArr, actPos, dropQ = {}, {}, {}, {}, {}
 		nRegistered = 0
@@ -423,15 +451,20 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- visibility
-	local function isVisible(part, ppos, cam, camPos, vpX, vpY, tanHalf, strict)
+	local function isVisible(part, s, ppos, cam, camPos, vpX, vpY, tanHalf, strict)
+		if s.vd then -- size / transparency changed (or never read)
+			s.vd = false
+			s.rad = part.Size.Magnitude * 0.5
+			s.tr = part.Transparency
+		end
 		local pos = part.Position
 		local d = (pos - ppos).Magnitude
-		local rad = part.Size.Magnitude * 0.5
+		local rad = s.rad
 		if d - rad > RADIUS then return false end
 		if strict then
 			-- Frustum Culling CO: close parts always, otherwise only visible parts on screen
 			if d <= 25 then return true end
-			if part.Transparency >= 1 and part.LocalTransparencyModifier >= 1 then return false end
+			if s.tr >= 1 and part.LocalTransparencyModifier >= 1 then return false end
 			if not cam then return true end
 			local sp, onScreen = cam:WorldToViewportPoint(pos)
 			return onScreen and sp.Z > 0
@@ -466,9 +499,9 @@ do
 			local id = plist[visCursor]
 			visCursor = visCursor + 1
 			if id then
-				local part = parts[id]
-				if part and part.Parent then
-					setActive(id, isVisible(part, ppos, cam, camPos, vpX, vpY, tanHalf, strict))
+				local part, s = parts[id], S[id]
+				if part and s and part.Parent then
+					setActive(id, isVisible(part, s, ppos, cam, camPos, vpX, vpY, tanHalf, strict))
 				else
 					setActive(id, false)
 				end
@@ -517,37 +550,46 @@ do
 		end
 
 		local cf = part.CFrame
-		A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8], A[9], A[10], A[11], A[12] = cf:GetComponents()
-		local x, y, z = A[1], A[2], A[3]
-
 		local cp = s.cp
-		if (frameNo + id) % 2 == 0 then readProps(part, cp) end
+		-- the properties are read on the same frames as always (every 2nd), but only when one of them
+		-- changed since the last read (or every 16th frame, in case a change was not reported)
+		if (frameNo + id) % 2 == 0 and (s.pd or (frameNo + id) % 16 == 0) then
+			s.pd = false
+			readProps(part, cp)
+		end
 
 		-- velocity: physics parts report it, scripted (anchored) parts are measured frame to frame
-		local anchored = part.Anchored
+		local anchored = s.an
 		local instL, instA = ZV, ZV
 		if anchored then
 			local prev = s.prevCF
-			if prev and dtT and s.prevFrame == frameNo - 1 then
+			if prev and dtT and s.prevFrame == frameNo - 1 and cf ~= prev then -- an unchanged CFrame = no velocity
 				instL = (cf.Position - prev.Position) / dtT
 				local axis, ang = (cf.Rotation * prev.Rotation:Inverse()):ToAxisAngle()
 				if ang == ang and ang > 1e-6 and axis.X == axis.X then instA = axis * (ang / dtT) end
 				if instL.X ~= instL.X then instL = ZV end
 			end
-			s.emaL = s.emaL and s.emaL:Lerp(instL, 0.5) or instL
-			s.emaA = s.emaA and s.emaA:Lerp(instA, 0.5) or instA
+			local eL, eA = s.emaL, s.emaA
+			if instL == ZV and (eL == nil or eL == ZV) then s.emaL = ZV else s.emaL = eL and eL:Lerp(instL, 0.5) or instL end
+			if instA == ZV and (eA == nil or eA == ZV) then s.emaA = ZV else s.emaA = eA and eA:Lerp(instA, 0.5) or instA end
 		else
 			instL, instA = part.AssemblyLinearVelocity, part.AssemblyAngularVelocity
 		end
 		s.prevCF, s.prevFrame = cf, frameNo
 
+		local filled = false
 		if not s.moved then
-			local rcv = s.rc
-			local dx, dy, dz = x - rcv[1], y - rcv[2], z - rcv[3]
-			local dev = dx * dx + dy * dy + dz * dz > POS_TOL2
-			if not dev then
-				for i = 4, 12 do
-					if abs(A[i] - rcv[i]) > ROT_TOL then dev = true break end
+			local dev = false
+			if cf ~= s.rcf then -- the exact start CFrame can't be outside the tolerance
+				A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8], A[9], A[10], A[11], A[12] = cf:GetComponents()
+				filled = true
+				local rcv = s.rc
+				local dx, dy, dz = A[1] - rcv[1], A[2] - rcv[2], A[3] - rcv[3]
+				dev = dx * dx + dy * dy + dz * dz > POS_TOL2
+				if not dev then
+					for i = 4, 12 do
+						if abs(A[i] - rcv[i]) > ROT_TOL then dev = true break end
+					end
 				end
 			end
 			if not dev then
@@ -559,6 +601,10 @@ do
 			if not dev then return end
 			s.moved = true
 		end
+		if not filled then
+			A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8], A[9], A[10], A[11], A[12] = cf:GetComponents()
+		end
+		local x, y, z = A[1], A[2], A[3]
 
 		local first = s.needBase or s.chain ~= chainNo
 		local kp, lq, aq, pv = s.kp, s.lq, s.aq, s.pv
@@ -699,7 +745,8 @@ do
 		for i = 1, #actArr do
 			local id = actArr[i]
 			local part, s = parts[id], S[id]
-			if part and s and part.Parent then
+			-- (removed parts are unregistered by DescendantRemoving; the visibility pass checks Parent too)
+			if part and s then
 				recordObject(out, id, part, s, now, dtT)
 				if s.dyn and s.moved then anyDyn = true end
 			end
@@ -738,11 +785,7 @@ do
 		end
 		return p
 	end
-	local function hasMask(mask, f) return floor(mask / f) % 2 == 1 end
-	local function addMask(mask, f)
-		if floor(mask / f) % 2 == 0 then return mask + f end
-		return mask
-	end
+	local verN = 0
 	local function newState()
 		local t = {}
 		for i = 1, 50 do t[i] = 0 end
@@ -789,6 +832,8 @@ do
 			flags, p = rv(str, p)
 			local s = cur[id]
 			if not s then s = newState(); cur[id] = s end
+			verN = verN + 1
+			s[I_VER] = verN
 			s[48] = 0
 			if hasMask(flags, F_SKIP) then
 				if s[46] == 1 then
@@ -852,6 +897,8 @@ do
 
 	-- one v2 record payload onto a state table
 	local function applyPayloadV2(str, p, s, flags, tNow)
+		verN = verN + 1
+		s[I_VER] = verN
 		local mask = s[I_MASK]
 		if hasMask(flags, K_KEY) then
 			for i = 1, 3 do local d; d, p = rz(str, p); s[i] = s[i] + d end
@@ -942,8 +989,8 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- player
-	local function ensureAnchored(part)
-		if orig[part] == nil and not part.Anchored then
+	local function ensureAnchored(part, s)
+		if orig[part] == nil and not s.an then
 			orig[part] = false
 			origVel[part] = { part.AssemblyLinearVelocity, part.AssemblyAngularVelocity }
 			part.Anchored = true
@@ -983,6 +1030,7 @@ do
 	-- pose at playback time t. With a keyframe coming in the next frame, the small correction
 	-- towards it is spread over this frame (the motion itself keeps its speed)
 	local IDENT = CFrame.new()
+	-- returns the pose and whether it was blended with the next keyframe
 	local function targetPose(id, s, t)
 		local cf = poseAt(s, t)
 		local nx = play.next[id]
@@ -994,35 +1042,39 @@ do
 				if alpha > 0 then
 					local rot = cf.Rotation
 					if nx[2] then rot = IDENT:Lerp(nx[2], alpha) * rot end
-					return rot + (cf.Position + nx[1] * alpha)
+					return rot + (cf.Position + nx[1] * alpha), true
 				end
 			end
 		end
-		return cf
+		return cf, false
 	end
 
-	-- force = also write parts that already show this pose (scripts may have moved them)
 	local function writePart(id, s, t, renderPass)
 		local part = parts[id]
-		if not part or not part.Parent then return end
+		if not part then return end -- (removed parts are unregistered)
 		local sh = CO.shown[id]
 		if not sh then sh = {}; CO.shown[id] = sh end
+		local v = s[I_VER]
 		if hasPose(s) then
-			local cf
-			if renderPass and sh.t == t and sh.cf then
-				cf = sh.cf
-			else
-				cf = targetPose(id, s, t)
+			local cf = sh.cf
+			if renderPass and sh.t == t and cf then
+				-- the render pass shows the pose Heartbeat computed for the same time
+			elseif not (cf and sh.v == v and not sh.b and (sh.t == t or s[48] ~= 1) and not play.next[id]) then
+				-- (the same state, not moving, not blended = the same pose as last time)
+				cf, sh.b = targetPose(id, s, t)
 			end
-			ensureAnchored(part)
+			ensureAnchored(part, S[id])
 			-- parts HappaTAS anchored itself only need a write when the pose changed; parts that were
 			-- anchored by the game (scripted movers) are written every time so scripts can't win
 			if orig[part] == nil or sh.cf ~= cf then
 				part.CFrame = cf
 			end
-			sh.cf, sh.t = cf, t
+			sh.cf, sh.t, sh.v = cf, t, v
 		end
-		if not renderPass then writeProps(part, s, sh) end
+		if not renderPass and sh.pv ~= v then
+			writeProps(part, s, sh)
+			sh.pv = v
+		end
 	end
 
 	local function writeAll(t, renderPass)
@@ -1162,8 +1214,8 @@ do
 	end
 
 	local function freeze()
-		for _, part in pairs(parts) do
-			if part.Parent then ensureAnchored(part) end
+		for id, part in pairs(parts) do
+			if part.Parent then ensureAnchored(part, S[id]) end
 		end
 		frozen = true
 	end

@@ -14,6 +14,7 @@ OUT="tests/run_${NAME}.lua"
   echo '__T = { Profiler = Profiler, Settings = Settings, Store = Store, Core = Core, CONFIG = CONFIG, UI = UI, Controls = Controls, InputSys = InputSys, ClientObjects = ClientObjects, Buttons = Buttons, Cursor = Cursor, Bridge = Bridge, Menu = Menu, VERSION = VERSION }'
   echo 'end'
   cat tests/test_util.lua
+  [ -n "$PRE" ] && echo "$PRE"   # optional Lua line(s) run before the test (e.g. PRE='BENCH_PROFILE = true')
   cat "tests/test_${NAME}.lua"
 } > "$OUT"
 echo "$OUT"

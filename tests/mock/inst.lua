@@ -375,8 +375,11 @@ local function fireProp(self, k)
 end
 
 local abs -- forward
+M.propReads = 0 -- every Instance index (property read or method lookup = one Lua/C++ bridge crossing in Roblox)
 instMt.__index = function(self, k)
+	M.propReads = M.propReads + 1
 	local d = rawInst(self)
+	if M.readLog then M.readLog[#M.readLog + 1] = d.class.Name .. "." .. tostring(k) end
 	if k == "ClassName" then return d.class.Name end
 	if k == "Parent" then return d.parent end
 	if k == "Name" then return d.props.Name end
@@ -447,10 +450,15 @@ local function setParent(self, p)
 			end
 		end
 		if od.events and od.events.ChildRemoved then od.events.ChildRemoved:Fire(self) end
+		-- like Roblox: every ancestor gets DescendantRemoving for the instance and each of its descendants
+		local removed = { self }
+		for _, desc in ipairs(self:GetDescendants()) do removed[#removed + 1] = desc end
 		local a = old
 		while a do
 			local ad = rawInst(a)
-			if ad.events and ad.events.DescendantRemoving then ad.events.DescendantRemoving:Fire(self) end
+			if ad.events and ad.events.DescendantRemoving then
+				for _, r in ipairs(removed) do ad.events.DescendantRemoving:Fire(r) end
+			end
 			a = ad.parent
 		end
 	end
