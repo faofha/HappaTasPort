@@ -34,6 +34,16 @@ do
 
 	local ghost = { last = nil, parts = {}, char = nil, tick = 0, active = false }
 
+	-- Calls that make the game's camera module change something (mouse lock refresh, zoom, shift lock
+	-- toggle) run in a thread of their own. Found in the live client: right after such a call the calling
+	-- thread loses access to CoreGui until it next yields ("The current thread cannot access 'Instance'
+	-- (lacking capability Plugin)", and gethui() returns nil), so whatever touched the HappaTAS interface
+	-- next in the same frame failed. task.spawn runs the call straight away, so the order of events is
+	-- the same, and only the short-lived thread loses its access. (Reading values is not affected.)
+	local function gameCall(f, ...)
+		task.spawn(pcall, f, ...)
+	end
+
 	local function patch(tbl, key, makeWrapper)
 		if type(tbl) ~= "table" then return false end
 		local ok = pcall(function()
@@ -202,13 +212,13 @@ do
 			local okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
 			local same = okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4
 				and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
-			if not same then pcall(ctrl.SetCameraToSubjectDistance, ctrl, zoom) end
+			if not same then gameCall(ctrl.SetCameraToSubjectDistance, ctrl, zoom) end
 		end
 		for _, zc in ipairs(zoomControllers) do
 			if zc ~= ctrl then
 				local okG, cur = pcall(zc.GetCameraToSubjectDistance, zc)
 				if not (okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4) then
-					pcall(zc.SetCameraToSubjectDistance, zc, zoom)
+					gameCall(zc.SetCameraToSubjectDistance, zc, zoom)
 				end
 			end
 		end
@@ -304,11 +314,11 @@ do
 		local ctrl = lockController()
 		if not ctrl then return end
 		if type(ctrl.OnMouseLockToggled) == "function" then
-			pcall(ctrl.OnMouseLockToggled, ctrl)
+			gameCall(ctrl.OnMouseLockToggled, ctrl)
 		elseif type(ctrl.DoMouseLockSwitch) == "function" then
 			local wasBlocked = shiftlockBlocked
 			shiftlockBlocked = false
-			pcall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
+			gameCall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
 			shiftlockBlocked = wasBlocked
 		end
 	end
@@ -380,7 +390,7 @@ do
 		if freeMouse then setMouseBehavior(Default) return end
 		local ctrl = activeController()
 		if ctrl and type(ctrl.UpdateMouseBehavior) == "function" then
-			pcall(ctrl.UpdateMouseBehavior, ctrl)
+			gameCall(ctrl.UpdateMouseBehavior, ctrl)
 		end
 		Bridge.GuardMouse(modalOpen)
 	end

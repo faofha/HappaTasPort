@@ -309,6 +309,7 @@ do
 				end
 				ControlBlock.Key.Text = "Press Any Key"
 				ChangingInput = cname
+				Typing.rebinding = true
 				RunService.RenderStepped:Wait()
 				WaitInputConnection = uis.InputBegan:Connect(function(inp, proc)
 					if proc and inp.UserInputType == Enum.UserInputType.Keyboard and not Settings.On("Ignore Game Processed") then return end
@@ -322,6 +323,8 @@ do
 						ControlBlock.Key.Text = FromKey[input]
 						if WaitInputConnection then WaitInputConnection:Disconnect() end
 						ChangingInput = nil
+						Typing.boundInput = inp
+						Typing.rebinding = false
 					end
 				end)
 				Janitor.add(WaitInputConnection)
@@ -371,7 +374,7 @@ do
 		-- a Menu key on the keyboard works even when the game processed it (whatever Ignore Game Processed
 		-- says); never while the player types (chat, a text box) or is in the Roblox menu
 		on(uis.InputBegan, function(inp, proc)
-			if not CheckInput(inp, "Menu") or Typing.Active() then return end
+			if not CheckInput(inp, "Menu") or Typing.Active(inp) then return end
 			if inp.UserInputType ~= Enum.UserInputType.Keyboard then -- bound to a mouse button
 				if InputSys.ClickOnOwnUI(inp) or (proc and not Settings.On("Ignore Game Processed")) then return end
 			end

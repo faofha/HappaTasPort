@@ -23,8 +23,9 @@ do -- saved settings / controls / profiler layout
 	Profiler.SaveConfig = queueSave
 end
 
+UI.RemoveStale()
 local Gui = UI.Create()
-if not UI.Attach(Gui) then
+if not UI.Attach(Gui, true) then
 	Gui:Destroy()
 	error("[HappaTAS] could not parent the interface anywhere (gethui / CoreGui / PlayerGui)")
 end

@@ -768,11 +768,32 @@ do
 			if dd.menu then dd.menu = nil; show(U.dd, false) end
 		end
 
+		-- only the Aggregate[N] and Pause / Unpause labels change: a new label of the same length is just
+		-- written (every frame with Aggregate Infinite), the bar is laid out again when one changes length
+		local BAR = { labels = {}, built = false, dyn = {} }
+		for i, def in ipairs(MENUS) do
+			if type(def.label) == "function" then BAR.dyn[#BAR.dyn + 1] = i end
+		end
 		local function layoutMenuBar()
+			if BAR.built then
+				local relayout = false
+				for _, i in ipairs(BAR.dyn) do
+					local s = MENUS[i].label()
+					local old = BAR.labels[i]
+					if s ~= old then
+						if #s ~= #old then relayout = true break end
+						BAR.labels[i] = s
+						say(U.items[i].t, s, menuX[i], 0)
+					end
+				end
+				if not relayout then return end
+			end
+			BAR.built = true
 			local x = (#"MicroProfiler" + 1 + 2) * CW -- (sizeof("MicroProfiler") + 2) characters
 			for i, def in ipairs(MENUS) do
 				local s = menuLabel(def)
 				local it = U.items[i]
+				BAR.labels[i] = s
 				menuX[i] = x
 				say(it.t, s, x, 0)
 				local w = #s * CW
@@ -1763,6 +1784,7 @@ do
 			end
 			root:GetPropertyChangedSignal("AbsoluteSize"):Connect(resized)
 			resized()
+			BAR.built = false
 			layoutMenuBar()
 			return true
 		end
@@ -1977,7 +1999,7 @@ do
 			local recorded = flip(dt, t0)
 			if U.built and U.root.Visible then
 				local ok, err = pcall(frameUI, recorded)
-				if not ok then log("MicroProfiler:", tostring(err)) end
+				if not ok then reportError("MicroProfiler", err) end
 			end
 			clearClicks() -- clicks last one frame (UI.nMouseLeft = UI.nMouseRight = 0 after drawing)
 			clearAcc()
