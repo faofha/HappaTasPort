@@ -275,19 +275,14 @@ do
 		if uis.TouchEnabled then
 			MobileUI.MenuOpener.Visible = true
 			MobileUI.More.Visible = true
-			MobileUI.MobileModes.Mode1Mobile.Visible = true
-			MobileUI.MobileModes.Mode2Mobile.Visible = true
-			MobileUI.MobileModes.Mode3Mobile.Visible = true
+			for i = 1, 3 do MobileUI.MobileModes["Mode" .. i .. "Mobile"].Visible = true end
 			menu.ControlsFrame.Visible = false
 			menu.ControlsToggle.Visible = false
-			menu.HelpToggle.Position = UDim2.new(0.5, 0, 0.108, 0)
-			menu.HelpToggle.Size = UDim2.new(0, 100, 0, 30)
-			menu.MoreToggle.Position = UDim2.new(0.75, 0, 0.108, 0)
-			menu.MoreToggle.Size = UDim2.new(0, 100, 0, 30)
-			menu.SavesToggle.Position = UDim2.new(0.25, 0, 0.108, 0)
-			menu.SavesToggle.Size = UDim2.new(0, 100, 0, 30)
-			menu.SettingsToggle.Position = UDim2.new(0, 0, 0.108, 0)
-			menu.SettingsToggle.Size = UDim2.new(0, 100, 0, 30)
+			-- touch screens: the tabs without Controls, four in a row
+			for x, t in pairs({ [0] = "Settings", [0.25] = "Saves", [0.5] = "Help", [0.75] = "More" }) do
+				menu[t .. "Toggle"].Position = UDim2.new(x, 0, 0.108, 0)
+				menu[t .. "Toggle"].Size = UDim2.new(0, 100, 0, 30)
+			end
 		end
 
 		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
@@ -350,14 +345,17 @@ do
 		end
 
 		on(MergeMenu.Cancel.MouseButton1Click, function() MergeMenu.Visible = false; pendingMerge = nil end)
-		on(MergeMenu.Options.Before.MouseButton1Click, function()
-			MergeMenu.Visible = false
-			if pendingMerge then local tas = pendingMerge; pendingMerge = nil; Core.SetTAS(tas, "before"); SetStatus("Move into the green hitbox to complete the merge", true) end
-		end)
-		on(MergeMenu.Options.After.MouseButton1Click, function()
-			MergeMenu.Visible = false
-			if pendingMerge then local tas = pendingMerge; pendingMerge = nil; Core.SetTAS(tas, "after"); SetStatus("Move into the green hitbox to complete the merge", true) end
-		end)
+		for _, when in ipairs({ "Before", "After" }) do
+			on(MergeMenu.Options[when].MouseButton1Click, function()
+				MergeMenu.Visible = false
+				if pendingMerge then
+					local tas = pendingMerge
+					pendingMerge = nil
+					Core.SetTAS(tas, when:lower())
+					SetStatus("Move into the green hitbox to complete the merge", true)
+				end
+			end)
+		end
 
 		menu.Title.Text = "HappaTAS " .. VERSION
 		JoinMessage.Title.Text = "HappaTAS " .. VERSION .. " Loaded"

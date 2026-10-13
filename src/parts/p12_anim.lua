@@ -150,17 +150,22 @@ do
 			end
 		end
 
+		-- one of the animations of animName, picked by weight (like the Animate script)
+		local function pick(animName)
+			local list = animTable[animName]
+			local roll = math.random(1, list.totalWeight)
+			local idx = 1
+			while roll > list[idx].weight do
+				roll = roll - list[idx].weight
+				idx = idx + 1
+			end
+			return list[idx].anim
+		end
+
 		function playAnimation(animName, transitionTime, humanoid, TASanim)
 			if not TASanim and LockAnimations then return end
 			if not animTable[animName] then return end
-
-			local roll = math.random(1, animTable[animName].totalWeight)
-			local idx = 1
-			while roll > animTable[animName][idx].weight do
-				roll = roll - animTable[animName][idx].weight
-				idx = idx + 1
-			end
-			local anim = animTable[animName][idx].anim
+			local anim = pick(animName)
 
 			if anim ~= currentAnimInstance then
 				if not TASanim and AnimToNumber[animName] then
@@ -194,13 +199,7 @@ do
 
 		function playToolAnimation(animName, transitionTime, humanoid, priority)
 			if not animTable[animName] then return end
-			local roll = math.random(1, animTable[animName].totalWeight)
-			local idx = 1
-			while roll > animTable[animName][idx].weight do
-				roll = roll - animTable[animName][idx].weight
-				idx = idx + 1
-			end
-			local anim = animTable[animName][idx].anim
+			local anim = pick(animName)
 			if toolAnimInstance ~= anim then
 				if toolAnimTrack ~= nil then
 					toolAnimTrack:Stop()

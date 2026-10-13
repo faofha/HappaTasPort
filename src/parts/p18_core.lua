@@ -157,57 +157,55 @@ do
 		return x .. ", " .. y
 	end
 	local function v3txt(v) return r(v.X, 1000) .. ", " .. r(v.Y, 1000) .. ", " .. r(v.Z, 1000) end
+	local function degTxt(x, y, z) return r(math.deg(x), 1000) .. ", " .. r(math.deg(y), 1000) .. ", " .. r(math.deg(z), 1000) end
+	-- rows that show the live character: position, rotation, velocities, camera, state (row names in n)
+	local function liveRows(f, root, n)
+		setText(f[n[1]], " Root Position: " .. v3txt(root.Position))
+		setText(f[n[2]], " Root Rotation: " .. v3txt(root.Orientation))
+		setText(f[n[3]], " Root Linear Velocity: " .. v3txt(root.AssemblyLinearVelocity))
+		setText(f[n[4]], " Root Angular Velocity: " .. v3txt(root.AssemblyAngularVelocity))
+		setText(f[n[5]], " Camera Rotation: " .. degTxt(workspace.CurrentCamera.CFrame:ToEulerAnglesYXZ()))
+		setText(f[n[6]], " Humanoid State: " .. (C.Humanoid and C.Humanoid:GetState().Name or "None"))
+	end
+	local IDLE_ROWS, CREATE_ROWS = { "2", "3", "4", "5", "6", "7" }, { "4", "5", "6", "7", "8", "9" }
 
 	local SS = {}
-	function SS.Hide()
-		setVisible(C.IdleStatsF, false)
-		setVisible(C.CreateStatsF, false)
-		setVisible(C.TestStatsF, false)
+	local function showPanel(panel) -- one stats panel (or none) is visible
+		setVisible(C.IdleStatsF, panel == C.IdleStatsF)
+		setVisible(C.CreateStatsF, panel == C.CreateStatsF)
+		setVisible(C.TestStatsF, panel == C.TestStatsF)
 	end
+	function SS.Hide() showPanel(nil) end
 
 	function SS.Idle(FrameTime, zoom)
 		local root = C.HRP
 		local panel = C.IdleStatsF
 		if not root or not panel then return end
-		setVisible(panel, true)
-		setVisible(C.CreateStatsF, false)
-		setVisible(C.TestStatsF, false)
+		showPanel(panel)
 		local f = labels(panel)
-		local CAX, CAY, CAZ = workspace.CurrentCamera.CFrame:ToEulerAnglesYXZ()
-		local o = root.Orientation
 		setText(f["1"], " Frame Time: " .. r(FrameTime or 0, 1000000))
-		setText(f["2"], " Root Position: " .. v3txt(root.Position))
-		setText(f["3"], " Root Rotation: " .. v3txt(o))
-		setText(f["4"], " Root Linear Velocity: " .. v3txt(root.AssemblyLinearVelocity))
-		setText(f["5"], " Root Angular Velocity: " .. v3txt(root.AssemblyAngularVelocity))
-		setText(f["6"], " Camera Rotation: " .. r(math.deg(CAX), 1000) .. ", " .. r(math.deg(CAY), 1000) .. ", " .. r(math.deg(CAZ), 1000))
-		setText(f["7"], " Humanoid State: " .. (C.Humanoid and C.Humanoid:GetState().Name or "None"))
+		liveRows(f, root, IDLE_ROWS)
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
 
 	local lastBT = nil
 	function SS.Create(pausedNow, frameNo, FrameData)
 		local panel = C.CreateStatsF
-		setVisible(C.IdleStatsF, false)
-		setVisible(panel, true)
-		setVisible(C.TestStatsF, false)
+		showPanel(panel)
 		local bt = pausedNow and 0.1 or 0.2
 		if lastBT == nil then lastBT = panel.BackgroundTransparency end
 		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
 		local f = labels(panel)
 		setText(f["1"], " Frame: " .. frameNo)
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
-			local rootCF = C.TableToCFrame(FrameData.Cframe)
-			local AX, AY, AZ = rootCF:ToEulerAnglesYXZ()
-			local CAX, CAY, CAZ = C.TableToCFrame(FrameData.CamCframe):ToEulerAnglesYXZ()
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
 			setText(f["3"], " Total Time: " .. C.ToTime(FrameData.TotalTime))
 			setText(f["4"], " Root Position: " .. r(cf[1], 1000) .. ", " .. r(cf[2], 1000) .. ", " .. r(cf[3], 1000))
-			setText(f["5"], " Root Rotation: " .. r(math.deg(AX), 1000) .. ", " .. r(math.deg(AY), 1000) .. ", " .. r(math.deg(AZ), 1000))
+			setText(f["5"], " Root Rotation: " .. degTxt(C.TableToCFrame(cf):ToEulerAnglesYXZ()))
 			setText(f["6"], " Root Linear Velocity: " .. lin[1] .. ", " .. lin[2] .. ", " .. lin[3])
 			setText(f["7"], " Root Angular Velocity: " .. ang[1] .. ", " .. ang[2] .. ", " .. ang[3])
-			setText(f["8"], " Camera Rotation: " .. r(math.deg(CAX), 1000) .. ", " .. r(math.deg(CAY), 1000) .. ", " .. r(math.deg(CAZ), 1000))
+			setText(f["8"], " Camera Rotation: " .. degTxt(C.TableToCFrame(FrameData.CamCframe):ToEulerAnglesYXZ()))
 			setText(f["9"], " Humanoid State: " .. NumberToState[FrameData.State])
 			setText(f["91"], " Zoom: " .. tostring(FrameData.Zoom))
 			setText(f["92"], " Keys: " .. (pausedNow and PausedKeysText(frameNo) or InputSys.Describe(InputSys.Live.held)))
@@ -215,15 +213,9 @@ do
 		else
 			local root = C.HRP
 			if not root then return end
-			local CAX, CAY, CAZ = workspace.CurrentCamera.CFrame:ToEulerAnglesYXZ()
 			setText(f["2"], " Frame Time: 0")
 			setText(f["3"], " Total Time: 0")
-			setText(f["4"], " Root Position: " .. v3txt(root.Position))
-			setText(f["5"], " Root Rotation: " .. v3txt(root.Orientation))
-			setText(f["6"], " Root Linear Velocity: " .. v3txt(root.AssemblyLinearVelocity))
-			setText(f["7"], " Root Angular Velocity: " .. v3txt(root.AssemblyAngularVelocity))
-			setText(f["8"], " Camera Rotation: " .. r(math.deg(CAX), 1000) .. ", " .. r(math.deg(CAY), 1000) .. ", " .. r(math.deg(CAZ), 1000))
-			setText(f["9"], " Humanoid State: " .. (C.Humanoid and C.Humanoid:GetState().Name or "None"))
+			liveRows(f, root, CREATE_ROWS)
 			setText(f["91"], " Zoom: " .. r(Bridge.GetZoom(), 1000))
 			setText(f["92"], " Keys: " .. InputSys.Describe(InputSys.Live.held))
 			setText(f["93"], " Mouse: " .. MouseText(nil))
@@ -250,9 +242,7 @@ do
 
 	function SS.Test(Timer, Speed)
 		local panel = C.TestStatsF
-		setVisible(C.IdleStatsF, false)
-		setVisible(C.CreateStatsF, false)
-		setVisible(panel, true)
+		showPanel(panel)
 		local f = labels(panel)
 		setText(f["1"], " Time: " .. C.ToTime(r(Timer or 0, 1000000)))
 		setText(f["2"], " Playback Speed: " .. tostring(Speed or 1))
@@ -317,6 +307,11 @@ do
 		Bridge.SetZoom(tonumber(FrameData.Zoom) or 12.5, true)
 	end
 
+	-- the character exactly on a recorded frame
+	function C.SyncFrame(fr)
+		C.SyncCharacter(C.TableToCFrame(fr.Cframe), C.TableToVector3(fr.Velocity.Linear), C.TableToVector3(fr.Velocity.Angular))
+	end
+
 	function C.anchor(value)
 		if C.HRP then C.HRP.Anchored = value end
 		Bridge.ShiftlockRotation(not value)
@@ -331,7 +326,7 @@ do
 
 		if not unpausing then
 			if HRP.Anchored ~= (C.mode ~= 3) then C.anchor(C.mode ~= 3) end
-			C.SyncCharacter(C.TableToCFrame(FrameData.Cframe), C.TableToVector3(FrameData.Velocity.Linear), C.TableToVector3(FrameData.Velocity.Angular))
+			C.SyncFrame(FrameData)
 			C.UpdateCamera(FrameData)
 			if C.mode == 2 then
 				ClientObjects.ShowFrame(data, C.frame)
@@ -621,11 +616,8 @@ do
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
 	end
-
-	function inputs.Unpause()
-		if C.DoubleInput() then return end
-		local data = C.data
-		if #data > 1 and C.frame > 1 and C.JumpedOffLader() then C.frame = C.frame - 1 end
+	-- unpausing: cut the frames after the current one, camera back on the last frame
+	local function unpauseFrom(data)
 		C.RemoveCutFrames()
 		C.LookAround = false
 		Bridge.LockAnimations(false)
@@ -633,17 +625,28 @@ do
 			C.UpdateCamera(data[#data], true)
 			Bridge.SetZoom(data[#data].Zoom, true)
 		end
+	end
+	-- no jump on the first recorded frame (one Heartbeat + render step)
+	local function noJumpOneFrame()
+		local hum = C.Humanoid
+		if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false) end
+		rs.Heartbeat:Wait()
+		rs.RenderStepped:Wait()
+		if hum and hum.Parent then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+	end
+
+	function inputs.Unpause()
+		if C.DoubleInput() then return end
+		local data = C.data
+		if #data > 1 and C.frame > 1 and C.JumpedOffLader() then C.frame = C.frame - 1 end
+		unpauseFrom(data)
 		C.LoadFrame(data[#data], true)
 		C.anchor(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.paused = false
 		Bridge.SetFreeMouse(false)
-		local hum = C.Humanoid
-		if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false) end
-		rs.Heartbeat:Wait()
-		rs.RenderStepped:Wait()
-		if hum and hum.Parent then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+		noJumpOneFrame()
 		C.FirstFrameRecord = false
 		-- old camera scripts only re-lock the mouse on events: ask again now (first person fix)
 		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
@@ -664,22 +667,12 @@ do
 		local FrameCount = 1
 		if #data > 1 and C.frame > 1 and C.JumpedOffLader() then C.frame = C.frame - 1; FrameCount = 2 end
 		if #data > 1 and data[C.frame] and data[C.frame].State == Enum.HumanoidStateType.Landed.Value then FrameCount = 2 end
-		C.RemoveCutFrames()
-		C.LookAround = false
-		Bridge.LockAnimations(false)
-		if #data > 0 then
-			C.UpdateCamera(data[#data], true)
-			Bridge.SetZoom(data[#data].Zoom, true)
-		end
+		unpauseFrom(data)
 		C.anchor(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.LoadFrame(data[#data], true)
-		local hum = C.Humanoid
-		if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false) end
-		rs.Heartbeat:Wait()
-		rs.RenderStepped:Wait()
-		if hum and hum.Parent then hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) end
+		noJumpOneFrame()
 		C.paused = false
 		C.FirstFrameRecord = false
 		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
@@ -689,44 +682,23 @@ do
 		Buttons.Pause(frameTime(#C.data))
 	end
 
+	-- paused on frame f (Back / Forward hold it while the key is down)
+	local function holdAt(f)
+		C.frame = f
+		C.paused = true
+		Bridge.LockAnimations(true)
+		C.LoadFrame(C.data[f], false, true)
+	end
 	function inputs.Return()
 		if C.DoubleInput() then return end
 		C.frame = C.LastPause
 		C.RemoveCutFrames()
-		C.paused = true
-		Bridge.LockAnimations(true)
-		C.LoadFrame(C.data[C.frame], false, true)
+		holdAt(C.frame)
 	end
-
-	function inputs.Back1F()
-		if C.DoubleInput() then return end
-		C.frame = C.frame - 1
-		C.paused = true
-		Bridge.LockAnimations(true)
-		C.LoadFrame(C.data[C.frame], false, true)
-	end
-
-	function inputs.Forward1F()
-		if C.DoubleInput() then return end
-		C.frame = C.frame + 1
-		C.paused = true
-		Bridge.LockAnimations(true)
-		C.LoadFrame(C.data[C.frame], false, true)
-	end
-
-	function inputs.Back()
-		if C.DoubleInput() then return end
-		C.back, C.paused = true, true
-		Bridge.LockAnimations(true)
-		C.LoadFrame(C.data[C.frame], false, true)
-	end
-
-	function inputs.Forward()
-		if C.DoubleInput() then return end
-		C.forw, C.paused = true, true
-		Bridge.LockAnimations(true)
-		C.LoadFrame(C.data[C.frame], false, true)
-	end
+	function inputs.Back1F() if not C.DoubleInput() then holdAt(C.frame - 1) end end
+	function inputs.Forward1F() if not C.DoubleInput() then holdAt(C.frame + 1) end end
+	function inputs.Back() if not C.DoubleInput() then C.back = true; holdAt(C.frame) end end
+	function inputs.Forward() if not C.DoubleInput() then C.forw = true; holdAt(C.frame) end end
 
 	local ConfirmDelete, ConfirmOptimize = false, false
 	function inputs.Delete(mobile)
@@ -1025,6 +997,12 @@ do
 	end
 
 	-- ---------------------------------------------------------------------------------------- Heartbeat
+	-- the character, camera and animation stay on frame fr (no blending)
+	local function holdPose(fr)
+		if fr.Cframe and fr.Velocity then C.SyncFrame(fr) end
+		C.UpdateCamera(fr)
+		if fr.Anim and fr.Anim.Anims then Bridge.SetAnimation(fr.Anim, fr.Anim.Anims, 0) end
+	end
 	local function playbackStep(dt)
 		local data = C.data
 		local speed = Settings.Get("Playback Speed")
@@ -1046,13 +1024,7 @@ do
 			Profiler.End("Buttons")
 
 			if data[frame + 1].FrameTime and data[frame + 1].FrameTime > 0.1 then
-				-- a lag spike was recorded here: hold the frame instead of sliding through it
-				local fr = data[frame]
-				if fr.Cframe and fr.Velocity then
-					C.SyncCharacter(C.TableToCFrame(fr.Cframe), C.TableToVector3(fr.Velocity.Linear), C.TableToVector3(fr.Velocity.Angular))
-				end
-				C.UpdateCamera(fr)
-				if fr.Anim and fr.Anim.Anims then Bridge.SetAnimation(fr.Anim, fr.Anim.Anims, 0) end
+				holdPose(data[frame]) -- a lag spike was recorded here: hold the frame instead of sliding through it
 				return
 			end
 
@@ -1085,11 +1057,7 @@ do
 			Buttons.PlaybackTo(data, frame, fr.TotalTime)
 			local FrameTime = fr.FrameTime or 0
 			if C.FreezeTimeRemaining > dt then
-				if fr.Cframe and fr.Velocity then
-					C.SyncCharacter(C.TableToCFrame(fr.Cframe), C.TableToVector3(fr.Velocity.Linear), C.TableToVector3(fr.Velocity.Angular))
-				end
-				C.UpdateCamera(fr)
-				if fr.Anim and fr.Anim.Anims then Bridge.SetAnimation(fr.Anim, fr.Anim.Anims, 0) end
+				holdPose(fr)
 				C.FreezeTimeRemaining = C.FreezeTimeRemaining - dt
 				return
 			end
