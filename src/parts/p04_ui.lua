@@ -268,6 +268,11 @@ local UI_TREE = {
 				HD("4CreditsN", "Credits", 14),
 				HD("0ModelN", "Executor port - client side script", 14),
 				{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2160)},{
+					LV("980", " 10/13/26 - 2.37"),
+					LI("980_1", "   -   Client objects: change signals, far fewer engine calls"),
+					LI("980_2", "   -   Stats panel and playback do less work every frame"),
+					LI("980_3", "   -   Smaller script: compact interface data, shared code"),
+					LI("980_4", "   -   Same TAS files and behaviour as 2.36"),
 					LV("981", " 10/12/26 - 2.36"),
 					LI("981_1", "   -   MicroProfiler font, menus and tooltip match Roblox"),
 					LI("981_2", "   -   Avg = frames on the bar, Max keeps the biggest spike"),

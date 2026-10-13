@@ -500,19 +500,19 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- pose model
+	-- the keyframe pose moved on by its velocity for dt seconds (one CFrame when it doesn't turn)
 	local function buildPose(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9, lx, ly, lz, wx, wy, wz, dt)
-		local cf = CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
 		if dt and dt > 0 then
 			if dt > MAX_EXTRAP then dt = MAX_EXTRAP end
-			local pos = V3(x + lx * dt, y + ly * dt, z + lz * dt)
+			local px, py, pz = x + lx * dt, y + ly * dt, z + lz * dt
 			local mag = sqrt(wx * wx + wy * wy + wz * wz)
-			local rot = cf.Rotation
 			if mag > 1e-5 then
-				rot = CFrame.fromAxisAngle(V3(wx / mag, wy / mag, wz / mag), mag * dt) * rot
+				local rot = CF(0, 0, 0, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+				return CFrame.fromAxisAngle(V3(wx / mag, wy / mag, wz / mag), mag * dt) * rot + V3(px, py, pz)
 			end
-			return rot + pos
+			return CF(px, py, pz, r1, r2, r3, r4, r5, r6, r7, r8, r9)
 		end
-		return cf
+		return CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
 	end
 
 	local function poseAt(s, t)
@@ -1111,6 +1111,7 @@ do
 	end
 
 	-- look one frame ahead: pose of every object that gets a new keyframe in frame f + 1
+	local nextScratch = {}
 	local function computeNext(data, f)
 		play.next = {}
 		play.nextFor = f
@@ -1122,6 +1123,7 @@ do
 		if byte(str, 1) < 2 then return end
 		local p, n = 2, #str
 		local cur = play.cur
+		local s = nextScratch -- (reused for every record: only dp / dr are kept)
 		local ok = pcall(function()
 			while p <= n do
 				local id, flags
@@ -1129,7 +1131,7 @@ do
 				flags, p = rv(str, p)
 				if not hasMask(flags, K_DROP) then
 					local base = cur[id]
-					local s = base and copyState(base) or newState()
+					for i = 1, 50 do s[i] = base and base[i] or 0 end
 					p = applyPayloadV2(str, p, s, flags, play.nextT)
 					if base and hasPose(base) and hasPose(s) and hasMask(flags, K_KEY) then
 						-- where the current model would be vs. the next keyframe
