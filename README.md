@@ -4,7 +4,7 @@ HappaTAS as one client-side Luau script: records and replays TAS (tool-assisted 
 Roblox, saving `.tas` files to `HappaTasPort/<PlaceId>/` in the executor workspace.
 
 ## Files
-- `wow`: the latest script, **HappaTAS V2.37**. This is the one to run. It is the release build: the
+- `wow`: the latest script, **HappaTAS V2.37.2**. This is the one to run. It is the release build: the
   same code as the source, without comments and blank lines.
 - `true`, `true real`, `nohboard`: older V2.33 versions. `HappaTAS_Executor-2.lua`: V2.32.
 - `src/parts/`: the source with comments, split into modules. `bash tools/assemble.sh` joins them into
@@ -16,4 +16,12 @@ Roblox, saving `.tas` files to `HappaTasPort/<PlaceId>/` in the executor workspa
 bash tools/test_all.sh                 # every suite (headless mock, not a real game)
 bash tools/diff_builds.sh old.lua      # same behaviour as an older build? (frame-by-frame traces)
 bash tools/build_test.sh bench && cd tests && luau run_bench.lua   # cost per frame in every mode
+```
+
+Testing in a real Roblox client (development only, never released):
+```
+bash tools/live_build.sh               # build/HappaTAS_live.lua: debug log on, modules exported as
+                                       # getgenv().__HappaTAS_T for test scripts
+python3 tools/prof_patch.py build/HappaTAS_live.lua build/HappaTAS_prof.lua
+                                       # + os.clock timers per section, totals in getgenv().__HPROF
 ```

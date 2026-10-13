@@ -9,7 +9,9 @@ local HANDLE_KEY = "__HappaTAS"
 do -- unload an older copy that is still running (re-executing the script)
 	local old = rawget(genv, HANDLE_KEY)
 	if type(old) == "table" and type(old.Unload) == "function" then
-		pcall(old.Unload)
+		-- in a thread of its own: the Unload of V2.37.1 and older could take its thread's access to
+		-- CoreGui away (see gameCall in the bridge), which would stop this copy using gethui()
+		task.spawn(pcall, old.Unload)
 	end
 end
 
@@ -93,6 +95,16 @@ end
 local function warnf(...)
 	warn("[HappaTAS]", ...)
 end
+-- an error inside a frame handler or a listener: each distinct message is printed once (25 at most),
+-- so a problem shows in the console without flooding it every frame
+local reported = { n = 0 }
+local function reportError(where, err)
+	local msg = tostring(where) .. ": " .. tostring(err)
+	if reported[msg] or reported.n >= 25 then return end
+	reported[msg] = true
+	reported.n = reported.n + 1
+	warnf(msg)
+end
 
 -- ------------------------------------------------------------------------------------------------ janitor
 -- Everything that must be undone on Unload is registered here (connections, instances, functions).
@@ -136,7 +148,10 @@ end
 -- directly: ChatInputBarConfiguration.IsFocused ("whether the default chat input bar is focused", Roblox
 -- docs) and the Focused / FocusLost events of our own boxes.
 local TextChatService = svc("TextChatService")
-local Typing = { own = nil, bar = nil }
+-- rebinding: a control waits for its new key. boundInput: the key press that gave it the new key; Roblox
+-- doesn't promise the order of the InputBegan handlers, so that press is recognised by its InputObject in
+-- the handlers that run after the binding took it (found in the live client: it also ran its old control)
+local Typing = { own = nil, bar = nil, rebinding = false, boundInput = nil }
 do
 	local function chatFocused()
 		local bar = Typing.bar
@@ -157,7 +172,8 @@ do
 		for _, d in ipairs(root:GetDescendants()) do add(d) end
 		on(root.DescendantAdded, add)
 	end
-	function Typing.Active()
+	function Typing.Active(inp)
+		if Typing.rebinding or (inp ~= nil and inp == Typing.boundInput) then return true end
 		if UIS:GetFocusedTextBox() ~= nil then return true end -- game text boxes, the old chat
 		local own = Typing.own
 		if own and own.Parent and own:IsFocused() then return true end

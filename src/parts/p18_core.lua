@@ -1149,20 +1149,20 @@ do
 
 		on(rs.PreRender, function(dt)
 			local ok, err = pcall(preRender, dt)
-			if not ok then log("PreRender:", tostring(err)) end
+			if not ok then reportError("PreRender", err) end
 		end)
 		on(rs.PreSimulation, function()
 			local ok, err = pcall(preSimulation)
-			if not ok then log("PreSimulation:", tostring(err)) end
+			if not ok then reportError("PreSimulation", err) end
 		end)
 		on(rs.Heartbeat, function(dt)
 			local ok, err = pcall(heartbeat, dt)
-			if not ok then log("Heartbeat:", tostring(err)) end
+			if not ok then reportError("Heartbeat", err) end
 		end)
 		pcall(function()
 			rs:BindToRenderStep(RENDER_BIND, Enum.RenderPriority.Last.Value + 1, function()
 				local ok, err = pcall(lateRender)
-				if not ok then log("render step:", tostring(err)) end
+				if not ok then reportError("render step", err) end
 			end)
 		end)
 		Janitor.add(function() pcall(function() rs:UnbindFromRenderStep(RENDER_BIND) end) end)
@@ -1190,7 +1190,7 @@ do
 		end)
 
 		on(uis.InputBegan, function(inp, proc)
-			if Typing.Active() then return end -- typing in chat / a text box, or in the Roblox menu
+			if Typing.Active(inp) then return end -- typing in chat / a text box, the Roblox menu, binding a key
 			-- the MicroProfiler key works even when the game processed the input
 			if CheckInput(inp, "MicroProfiler") then
 				Settings.Set("Show MicroProfiler", Settings.On("Show MicroProfiler") and 0 or 1)

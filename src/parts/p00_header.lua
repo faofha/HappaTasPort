@@ -1,10 +1,25 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.37.1
+	Version: V2.37.2
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.37.2 changes (short): tested in the real Roblox client (EToH kit), the bugs found there fixed
+		- The interface always loads: re-running the script could leave the new copy without access to
+		  gethui() / CoreGui (the old copy's unload took it away), and calls into the game's camera module
+		  (zoom, shift lock, mouse lock) did the same for the rest of the frame. Those calls run in a thread
+		  of their own now, leftover interfaces are removed and attaching retries one frame later.
+		- Client objects HappaTAS holds stay where they belong when a game script un-anchors them (the
+		  EToH kit's DistanceCulling does it every 0.2 s): anchored again and put back on their pose.
+		- Rebinding a control: the key press that gave it the new key no longer runs its old action.
+		- Replay Keyboard: replayed keys came back as live input (sound played twice in Sound Mode 2).
+		- Errors in the frame handlers are printed to the console once each (before: only with Debug on).
+		- 2-5x less CPU per frame (measured in game): Roblox's automatic translation (AutoLocalize) checked
+		  every text HappaTAS wrote and is now off for HappaTAS's own interfaces, client objects at rest
+		  skip the velocity work, the MicroProfiler menu bar is only laid out again when a label changes.
+		- The same TAS files and behaviour as V2.37.1 (checked frame by frame, headless).
 
 	V2.37.1 changes (short):
 		- The Menu key works even when the game processed the key press (Ignore Game Processed off).
@@ -29,7 +44,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.37.1"
+local VERSION = "V2.37.2"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

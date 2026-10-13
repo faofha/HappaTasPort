@@ -398,7 +398,7 @@ C.AnimationTrack.Methods.AdjustSpeed = function(self, s) self.Speed = s end
 C.AnimationTrack.Methods.AdjustWeight = function(self, w) self.WeightTarget = w end
 C.AnimationTrack.Methods.GetMarkerReachedSignal = function() return M.newSignal("marker") end
 C.AnimationTrack.Methods.GetTimeOfKeyframe = function() return 0 end
-C.Sound.Methods.Play = function(self) self.Playing = true; self.IsPlaying = true end
+C.Sound.Methods.Play = function(self) self.Playing = true; self.IsPlaying = true; M.soundPlays = (M.soundPlays or 0) + 1 end
 C.Sound.Methods.Stop = function(self) self.Playing = false; self.IsPlaying = false end
 C.Sound.Methods.Pause = function(self) self.Playing = false end
 C.Sound.Methods.Resume = function(self) self.Playing = true end

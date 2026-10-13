@@ -102,7 +102,7 @@ do
 		if not list then return end
 		for _, f in ipairs(list) do
 			local ok, err = pcall(f, ...)
-			if not ok then log("listener failed:", tostring(err)) end
+			if not ok then reportError("setting listener", err) end
 		end
 	end
 

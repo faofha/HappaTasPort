@@ -76,6 +76,7 @@ do
 		data = nil, version = -1, frame = nil, sweep = 0,
 		ck = {}, ckN = 0, ckData = nil, ckVer = -1,
 		t = 0, curT = 0, nextT = 0, next = {}, nextFor = nil,
+		lost = {}, -- held parts a game script let go since the last pass (see fixLost)
 	}
 	CO.play = play
 
@@ -238,7 +239,16 @@ do
 	local function watchProps(part, s)
 		local list = {}
 		local function dirty() s.pd, s.vd = true, true end
-		local function anchoredChanged() s.an = part.Anchored end
+		local function anchoredChanged()
+			s.an = part.Anchored
+			-- a game script let go of a part HappaTAS holds (the EToH kit's DistanceCulling sets the
+			-- PrimaryPart's Anchored every 0.2 s): anchor it again and write its pose on the next pass
+			-- (physics may have moved it meanwhile, found in the live client with the Tilting Platform)
+			if not s.an and orig[part] ~= nil then
+				s.lost = true
+				play.lost[part] = true
+			end
+		end
 		for _, n in ipairs(PROP_NAMES) do
 			local ok, cn = pcall(function() return part:GetPropertyChangedSignal(n):Connect(dirty) end)
 			if ok and cn then list[#list + 1] = cn end
@@ -261,6 +271,7 @@ do
 		local cf0 = part.CFrame
 		return {
 			rc = { cf0:GetComponents() }, rcf = cf0, pd = false, vd = true, an = part.Anchored, rad = 0, tr = 0,
+			rest = true, emaZ = true, propsOff = false,
 			rv = rv, cp = cp,
 			kp = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 			lq = { 0, 0, 0 }, aq = { 0, 0, 0 },
@@ -414,6 +425,7 @@ do
 		orig, origVel = {}, {}
 		frozen = false
 		CO.shown = {}
+		play.lost = {}
 		play.next, play.nextFor = {}, nil
 	end
 
@@ -531,6 +543,7 @@ do
 		if s.gen ~= recGen then
 			s.gen = recGen
 			s.prevCF, s.emaL, s.emaA = nil, nil, nil
+			s.rest, s.emaZ = true, true
 		end
 
 		local cf = part.CFrame
@@ -540,10 +553,26 @@ do
 		if (frameNo + id) % 2 == 0 and (s.pd or (frameNo + id) % 16 == 0) then
 			s.pd = false
 			readProps(part, cp)
+			local rvv, off = s.rv, false
+			for i = 1, 9 do
+				if cp[i] ~= rvv[i] then off = true break end
+			end
+			s.propsOff = off
+		end
+
+		-- most parts never move: still exactly on the start CFrame, properties as they started and (scripted
+		-- parts) no velocity left from earlier frames means the full path below would only keep its
+		-- bookkeeping, so only that is done (no velocity reads, no maths). s.rest: the last CFrame was the
+		-- start CFrame (or none yet), s.emaZ: no measured velocity left
+		local anchored = s.an
+		if not s.moved and not s.propsOff and cf == s.rcf
+			and (not anchored or (s.emaZ and (s.rest or not dtT or s.prevFrame ~= frameNo - 1))) then
+			if anchored then s.emaL, s.emaA = ZV, ZV end
+			s.prevCF, s.prevFrame, s.rest = cf, frameNo, true
+			return
 		end
 
 		-- velocity: physics parts report it, scripted (anchored) parts are measured frame to frame
-		local anchored = s.an
 		local instL, instA = ZV, ZV
 		if anchored then
 			local prev = s.prevCF
@@ -556,10 +585,12 @@ do
 			local eL, eA = s.emaL, s.emaA
 			if instL == ZV and (eL == nil or eL == ZV) then s.emaL = ZV else s.emaL = eL and eL:Lerp(instL, 0.5) or instL end
 			if instA == ZV and (eA == nil or eA == ZV) then s.emaA = ZV else s.emaA = eA and eA:Lerp(instA, 0.5) or instA end
+			s.emaZ = s.emaL == ZV and s.emaA == ZV
 		else
 			instL, instA = part.AssemblyLinearVelocity, part.AssemblyAngularVelocity
 		end
 		s.prevCF, s.prevFrame = cf, frameNo
+		s.rest = cf == s.rcf
 
 		local filled = false
 		if not s.moved then
@@ -973,12 +1004,16 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- player
+	-- true when the part was just anchored (it was free until now, so its pose must be written)
 	local function ensureAnchored(part, s)
 		if orig[part] == nil and not s.an then
 			orig[part] = false
-			origVel[part] = { part.AssemblyLinearVelocity, part.AssemblyAngularVelocity }
+			-- (the CFrame it had when HappaTAS took it: where it is held while no recorded pose moves it)
+			origVel[part] = { part.AssemblyLinearVelocity, part.AssemblyAngularVelocity, part.CFrame }
 			part.Anchored = true
+			return true
 		end
+		return false
 	end
 
 	local function writeProps(part, s, sh)
@@ -1038,6 +1073,13 @@ do
 		if not part then return end -- (removed parts are unregistered)
 		local sh = CO.shown[id]
 		if not sh then sh = {}; CO.shown[id] = sh end
+		local rs = S[id]
+		if rs.lost then
+			rs.lost = false
+			play.lost[part] = nil
+			if orig[part] ~= nil then part.Anchored = true end
+			sh.cf = nil
+		end
 		local v = s[I_VER]
 		if hasPose(s) then
 			local cf = sh.cf
@@ -1047,10 +1089,11 @@ do
 				-- (the same state, not moving, not blended = the same pose as last time)
 				cf, sh.b = targetPose(id, s, t)
 			end
-			ensureAnchored(part, S[id])
-			-- parts HappaTAS anchored itself only need a write when the pose changed; parts that were
-			-- anchored by the game (scripted movers) are written every time so scripts can't win
-			if orig[part] == nil or sh.cf ~= cf then
+			local fresh = ensureAnchored(part, rs)
+			-- parts HappaTAS anchored itself only need a write when the pose changed (or when they were
+			-- free until now); parts anchored by the game (scripted movers) are written every time so
+			-- scripts can't win
+			if fresh or orig[part] == nil or sh.cf ~= cf then
 				part.CFrame = cf
 			end
 			sh.cf, sh.t, sh.v = cf, t, v
@@ -1191,11 +1234,34 @@ do
 		if play.nextFor ~= f then computeNext(data, f) end
 	end
 
+	-- a held part goes back on the pose HappaTAS last gave it, or the one it had when HappaTAS took it
+	local function restoreHeld(part)
+		part.Anchored = true
+		local sh = CO.shown[ids[part]]
+		local ov = origVel[part]
+		local cf = (sh and sh.cf) or (ov and ov[3])
+		if cf then part.CFrame = cf end
+	end
+	-- held parts a game script let go since the last pass (found in the live client: the EToH kit's
+	-- DistanceCulling sets Anchored every 0.2 s, physics moved the parts in between). Parts with a
+	-- recorded pose were already put back by writePart, this handles the rest (frozen while paused,
+	-- or never recorded because they did not move)
+	local function fixLost()
+		for part in pairs(play.lost) do
+			play.lost[part] = nil
+			if orig[part] ~= nil and part.Parent then
+				restoreHeld(part)
+				local rs = S[ids[part]]
+				if rs then rs.lost = false end
+			end
+		end
+	end
 	local function sweepAnchors()
+		if next(play.lost) then fixLost() end
 		play.sweep = play.sweep + 1
 		if play.sweep % 5 ~= 0 then return end
 		for part in pairs(orig) do
-			if part.Parent and not part.Anchored then part.Anchored = true end
+			if part.Parent and not part.Anchored then restoreHeld(part) end
 		end
 	end
 
@@ -1266,6 +1332,7 @@ do
 	function CO.RenderStep()
 		if not play.active then return end
 		writeAll(play.t, true)
+		if next(play.lost) then fixLost() end
 	end
 
 	function CO.EndPlayback()

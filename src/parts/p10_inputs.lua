@@ -133,11 +133,19 @@ do
 	local function onBegan(inp, proc)
 		if proc and not Settings.On("Ignore Game Processed") then return end
 		local id = idOf(inp)
-		if not id or getControlIds()[id] or ignoring() then return end
+		if not id or getControlIds()[id] or ignoring(inp) then return end
 		if isMouseId(id) and overOwnUI() then return end
 		if live.held[id] then return end
 		live.held[id] = true
 		pushEvent(id)
+		-- a key / click the replay pressed itself comes back here like real input (found in the live
+		-- client: Sound Mode 0 = live only played the replayed keys, 2 played them twice)
+		local rp = InputSys.Replay
+		local t = rp and rp.recent[id]
+		if t then
+			rp.recent[id] = nil
+			if os.clock() - t < 0.5 then return end
+		end
 		if Sounds.PlayLive then Sounds.PlayLive(id, isMouseId(id), id == ID_M2) end
 	end
 
@@ -222,7 +230,8 @@ do
 	end
 
 	-- ------------------------------------------------------------------------------------ replay
-	local replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil }
+	-- recent: id -> os.clock() of the last press the replay sent (recognised when it comes back as input)
+	local replay = { active = false, applied = 0, injected = {}, state = {}, recent = {}, lastMX = nil, lastMY = nil }
 	InputSys.Replay = replay
 
 	local function allowed(id)
@@ -245,7 +254,10 @@ do
 	local function press(id)
 		replay.state[id] = true
 		if replay.injected[id] or not allowed(id) or not Env.WindowActive() then return end
-		if sendDown(id) then replay.injected[id] = true end
+		if sendDown(id) then
+			replay.injected[id] = true
+			replay.recent[id] = os.clock()
+		end
 	end
 	local function release(id)
 		replay.state[id] = nil

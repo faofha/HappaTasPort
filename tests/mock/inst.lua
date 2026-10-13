@@ -51,8 +51,13 @@ function sigMt.Wait(s)
 	return coroutine.yield()
 end
 -- like Roblox, every handler runs in its own thread, so it may yield (Wait / task.wait)
+-- M.reverseSignals = true runs the newest connection first (Roblox doesn't promise an order)
 function sigMt.Fire(s, ...)
 	local list = table.clone(s._conns)
+	if M.reverseSignals then
+		local n = #list
+		for i = 1, math.floor(n / 2) do list[i], list[n - i + 1] = list[n - i + 1], list[i] end
+	end
 	for _, c in ipairs(list) do
 		if c.Connected then
 			local co = coroutine.create(c._fn)
