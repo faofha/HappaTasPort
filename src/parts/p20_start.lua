@@ -29,6 +29,7 @@ if not UI.Attach(Gui) then
 	error("[HappaTAS] could not parent the interface anywhere (gethui / CoreGui / PlayerGui)")
 end
 Janitor.add(Gui)
+Typing.Watch(Gui) -- typing a slot name or a setting never triggers HappaTAS keys
 
 -- what HappaTAS changes on the player, so Unload can put it back exactly
 local restore = {}

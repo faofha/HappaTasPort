@@ -16,7 +16,7 @@ bash tools/build_test.sh "$TEST" "$NEW" >/dev/null
 (cd tests && "$LUAU" "run_$TEST.lua" > diff_new.txt 2>&1) || { echo "new build failed:"; tail -5 tests/diff_new.txt; exit 1; }
 # the version string is allowed to differ; IGNORE='regex' drops more lines (e.g. IGNORE=':3UpdateLog/'
 # when the update log got new rows)
-sed -i -E 's/V2\.[0-9]+/V2.xx/g' tests/diff_old.txt tests/diff_new.txt
+sed -i -E 's/V2\.[0-9]+(\.[0-9]+)?/V2.xx/g' tests/diff_old.txt tests/diff_new.txt
 if [ -n "$IGNORE" ]; then
   for f in tests/diff_old.txt tests/diff_new.txt; do grep -v -E "$IGNORE" "$f" > "$f.tmp"; mv "$f.tmp" "$f"; done
 fi

@@ -75,7 +75,7 @@ do
 
 	local function play(isLive, isMouse, isRight)
 		if not holder or not allowed(isLive) then return end
-		if UIS:GetFocusedTextBox() ~= nil then return end
+		if Typing.Active() then return end
 		pcall(function()
 			if isMouse then playClick(isRight) else playKey() end
 		end)
