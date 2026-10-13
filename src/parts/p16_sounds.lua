@@ -5,8 +5,12 @@
 -- ================================================================================================
 do
 	local POOL = 6
+	-- checked in the live client: 9119713951 is the audio "Switch 2 (SFX)" (ProSoundEffects). The click used
+	-- to be 9119714049, which is a Place, not audio: click sounds never played and Roblox printed "Failed to
+	-- load sound ... Asset type does not match requested type" six times on every start. The click is now a
+	-- sound file that ships with the Roblox client itself (content/sounds), so it can't go missing.
 	local DEFAULT_KEY = "rbxassetid://9119713951"
-	local DEFAULT_CLICK = "rbxassetid://9119714049"
+	local DEFAULT_CLICK = "rbxasset://sounds/clickfast.wav"
 	local keyPool, clickPool = {}, {}
 	local keyIndex, clickIndex = 1, 1
 	local lastKeyClock = 0

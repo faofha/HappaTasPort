@@ -7,6 +7,9 @@
 --   * a part HappaTAS holds during playback that a game script lets go (the EToH kit's DistanceCulling
 --     un-anchors its PrimaryPart every 0.2 s) is anchored again and put back on its recorded pose
 --   * an error inside a frame handler is printed once, not only in debug builds
+--   * rebinding a control: the key press that sets the new key doesn't also run the control's old action
+--   * a key the replay pressed itself comes back as input: it plays no live key sound
+--   * the default click sound is a real sound (the old asset id was a Place: Roblox printed load errors)
 
 -- ------------------------------------------------------------------------------------------- before boot
 -- a PlayerModule with a camera controller and a mouse lock controller that log the thread they run on
@@ -76,6 +79,23 @@ M.steps(3)
 local prof = hui:FindFirstChild("HappaProfiler")
 check(prof ~= nil and prof.AutoLocalize == false, "MicroProfiler overlay: AutoLocalize off")
 S.Set("Show MicroProfiler", 0)
+
+section("default sounds are sound assets")
+-- (checked in the live client with MarketplaceService:GetProductInfo: 9119713951 = audio "Switch 2 (SFX)",
+-- 9119714049 = a Place; rbxasset://sounds/clickfast.wav loads, 0.288 s, it ships with the client)
+local soundFolder = C.Gui:FindFirstChild("Sounds")
+check(soundFolder ~= nil, "the sound pool exists")
+if soundFolder then
+	local keys, clicks, bad = 0, 0, 0
+	for _, s in ipairs(soundFolder:GetChildren()) do
+		if s.SoundId == "rbxassetid://9119714049" then bad = bad + 1 end
+		if s.Name:sub(1, 1) == "K" and s.SoundId == "rbxassetid://9119713951" then keys = keys + 1 end
+		if s.Name:sub(1, 1) == "C" and s.SoundId == "rbxasset://sounds/clickfast.wav" then clicks = clicks + 1 end
+	end
+	eq(keys, 6, "6 key sounds: Switch 2 (SFX)")
+	eq(clicks, 6, "6 click sounds: the client's clickfast.wav")
+	eq(bad, 0, "no sound uses the old id (a Place)")
+end
 
 section("the camera module runs in a thread of its own")
 check(Bridge.Controller() == ctrl, "the bridge found the mock camera controller")

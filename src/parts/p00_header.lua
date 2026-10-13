@@ -15,6 +15,8 @@
 		  EToH kit's DistanceCulling does it every 0.2 s): anchored again and put back on their pose.
 		- Rebinding a control: the key press that gave it the new key no longer runs its old action.
 		- Replay Keyboard: replayed keys came back as live input (sound played twice in Sound Mode 2).
+		- The click sound plays: its asset id was a Roblox Place, not a sound (Roblox printed six "Failed to
+		  load sound" errors on every start). It is now a sound file that comes with the Roblox client.
 		- Errors in the frame handlers are printed to the console once each (before: only with Debug on).
 		- 2-5x less CPU per frame (measured in game): Roblox's automatic translation (AutoLocalize) checked
 		  every text HappaTAS wrote and is now off for HappaTAS's own interfaces, client objects at rest

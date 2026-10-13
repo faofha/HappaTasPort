@@ -269,7 +269,7 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2390)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2410)},{
 						LV("978", " 10/13/26 - 2.37.2"),
 						LI("978_1", "   -   Tested in the real Roblox client, the bugs found fixed"),
 						LI("978_2", "   -   Interface always loads, also when re-running the script"),
@@ -277,6 +277,7 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 						LI("978_4", "   -   Rebinding a key doesn't also run the old control"),
 						LI("978_5", "   -   Replayed keys play their sound once, errors print once"),
 						LI("978_6", "   -   2-5x less CPU per frame (auto-translate off, less work)"),
+						LI("978_7", "   -   Click sound plays (its old sound id was not a sound)"),
 						LV("979", " 10/13/26 - 2.37.1"),
 						LI("979_1", "   -   Menu key works even when the game used the key"),
 						LI("979_2", "   -   Keys do nothing while typing in chat or a text box"),
