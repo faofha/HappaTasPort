@@ -25,3 +25,5 @@ bash tools/live_build.sh               # build/HappaTAS_live.lua: debug log on, 
 python3 tools/prof_patch.py build/HappaTAS_live.lua build/HappaTAS_prof.lua
                                        # + os.clock timers per section, totals in getgenv().__HPROF
 ```
+`tools/live/harness.lua` (key taps, real mouse clicks on GUI objects, console capture) and
+`tools/live/perf_scenario.lua` (cost per frame in every mode) run inside the client; see their headers.
