@@ -1,10 +1,17 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.37
+	Version: V2.37.1
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.37.1 changes (short):
+		- The Menu key works even when the game processed the key press (Ignore Game Processed off).
+		- No HappaTAS key does anything while you type: chat (the new TextChatService chat too), any text
+		  box (HappaTAS's slot names and settings too) or the Roblox menu, whatever Ignore Game Processed
+		  says. Keys typed there are not recorded into the TAS either.
+		- A click on a HappaTAS window (menu, merge dialog, MicroProfiler) never pauses / unpauses.
 
 	V2.37 changes (short):
 		- Faster: client objects notice property / Anchored changes through change signals instead of
@@ -22,7 +29,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.37"
+local VERSION = "V2.37.1"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

@@ -52,6 +52,7 @@ cls("ContextActionService", "Instance")
 cls("Teams", "Instance")
 cls("Chat", "Instance")
 cls("TextChatService", "Instance")
+cls("ChatInputBarConfiguration", "Instance", { IsFocused = false, Enabled = true, TargetTextChannel = nil })
 cls("StarterPlayer", "Instance", { CameraMaxZoomDistance = 128, CameraMinZoomDistance = 0.5, CharacterWalkSpeed = 16 })
 cls("StarterPack", "Instance")
 cls("CollectionService", "Instance")
@@ -97,6 +98,12 @@ UserSettings = function()
 	return us
 end
 for name in pairs(SERVICE_CLASS) do if name ~= "UserGameSettings" then getService(name) end end
+do -- TextChatService's chat bar settings (IsFocused = the player is typing in the new chat)
+	local bar = Instance.new("ChatInputBarConfiguration")
+	bar.Name = "ChatInputBarConfiguration"
+	bar.Parent = services.TextChatService
+	M.chatBar = bar
+end
 workspace = services.Workspace
 Workspace = workspace
 do local t = Instance.new("Terrain"); t.Name = "Terrain"; t.Anchored = true; t.Parent = workspace end
@@ -206,7 +213,31 @@ U.GetMouseLocation = function() return M.mouse end
 U.GetMouseDelta = function() return M.mouseDelta end
 U.IsKeyDown = function(_, kc) return M.keysDown[kc] == true end
 U.IsMouseButtonPressed = function(_, t) return M.buttonsDown[t] == true end
-U.GetFocusedTextBox = function() return M.focusedBox end
+-- like the Roblox client, GetFocusedTextBox() doesn't report a text box inside CoreGui (the new chat
+-- bar, interfaces under gethui()). M.focus(box) focuses a text box (nil = none) and fires its events.
+local function inCoreGui(inst)
+	local a = inst
+	while a do
+		if a == services.CoreGui then return true end
+		a = a.Parent
+	end
+	return false
+end
+U.GetFocusedTextBox = function()
+	local b = M.focusedBox
+	if b and inCoreGui(b) then return nil end
+	return b
+end
+function M.focus(box)
+	local old = M.focusedBox
+	if old == box then return end
+	M.focusedBox = box
+	if old then old.FocusLost:Fire(false, nil) end
+	if box then box.Focused:Fire() end
+end
+C.TextBox.Methods.IsFocused = function(self) return M.focusedBox == self end
+C.TextBox.Methods.CaptureFocus = function(self) M.focus(self) end
+C.TextBox.Methods.ReleaseFocus = function(self) if M.focusedBox == self then M.focus(nil) end end
 U.GetKeysPressed = function()
 	local out = {}
 	for k, v in pairs(M.keysDown) do if v then out[#out + 1] = { KeyCode = k } end end

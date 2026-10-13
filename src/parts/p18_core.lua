@@ -1190,7 +1190,9 @@ do
 		end)
 
 		on(uis.InputBegan, function(inp, proc)
-			if CheckInput(inp, "MicroProfiler") and not (proc and inp.UserInputType == Enum.UserInputType.Keyboard and uis:GetFocusedTextBox()) then
+			if Typing.Active() then return end -- typing in chat / a text box, or in the Roblox menu
+			-- the MicroProfiler key works even when the game processed the input
+			if CheckInput(inp, "MicroProfiler") then
 				Settings.Set("Show MicroProfiler", Settings.On("Show MicroProfiler") and 0 or 1)
 				return
 			end
@@ -1198,8 +1200,8 @@ do
 				Profiler.TogglePause()
 				return
 			end
+			if InputSys.ClickOnOwnUI(inp) then return end -- a click on the HappaTAS menu is for the menu
 			if proc and not Settings.On("Ignore Game Processed") then return end
-			if uis:GetFocusedTextBox() then return end
 			if not C.Humanoid then return end
 			local mode, paused, data, merge = C.mode, C.paused, C.data, C.merge
 			if CheckInput(inp, "Idle") and not merge then inputs.Idle()

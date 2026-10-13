@@ -129,6 +129,44 @@ local function on(signal, fn)
 	return c
 end
 
+-- ------------------------------------------------------------------------------------------------ typing
+-- HappaTAS keys do nothing while the player types (chat, any text box) or has the Roblox menu open.
+-- UserInputService:GetFocusedTextBox() doesn't see text boxes inside CoreGui, like the new chat bar
+-- (TextChatService) or HappaTAS's own slot name and settings boxes (under gethui()), so those are checked
+-- directly: ChatInputBarConfiguration.IsFocused ("whether the default chat input bar is focused", Roblox
+-- docs) and the Focused / FocusLost events of our own boxes.
+local TextChatService = svc("TextChatService")
+local Typing = { own = nil, bar = nil }
+do
+	local function chatFocused()
+		local bar = Typing.bar
+		if not (bar and bar.Parent) then
+			bar = TextChatService and TextChatService:FindFirstChildOfClass("ChatInputBarConfiguration")
+			Typing.bar = bar
+		end
+		return bar ~= nil and bar.IsFocused == true
+	end
+	-- every TextBox under root, also the ones added later (new save slots), counts as one of ours
+	function Typing.Watch(root)
+		local function add(d)
+			if not d:IsA("TextBox") then return end
+			-- (these connections go away with the box; the whole interface is destroyed on Unload)
+			d.Focused:Connect(function() Typing.own = d end)
+			d.FocusLost:Connect(function() if Typing.own == d then Typing.own = nil end end)
+		end
+		for _, d in ipairs(root:GetDescendants()) do add(d) end
+		on(root.DescendantAdded, add)
+	end
+	function Typing.Active()
+		if UIS:GetFocusedTextBox() ~= nil then return true end -- game text boxes, the old chat
+		local own = Typing.own
+		if own and own.Parent and own:IsFocused() then return true end
+		if GuiService and GuiService.MenuIsOpen then return true end
+		local ok, chat = pcall(chatFocused)
+		return ok and chat == true
+	end
+end
+
 -- ------------------------------------------------------------------------------------------------ small helpers
 local function r(n, decimal)
 	local v = math.round(n * decimal) / decimal

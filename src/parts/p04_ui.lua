@@ -267,7 +267,11 @@ local UI_TREE = {
 				}},
 				HD("4CreditsN", "Credits", 14),
 				HD("0ModelN", "Executor port - client side script", 14),
-				{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2160)},{
+				{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2240)},{
+					LV("979", " 10/13/26 - 2.37.1"),
+					LI("979_1", "   -   Menu key works even when the game used the key"),
+					LI("979_2", "   -   Keys do nothing while typing in chat or a text box"),
+					LI("979_3", "   -   Clicks on the HappaTAS menu never pause / unpause"),
 					LV("980", " 10/13/26 - 2.37"),
 					LI("980_1", "   -   Client objects: change signals, far fewer engine calls"),
 					LI("980_2", "   -   Stats panel and playback do less work every frame"),
@@ -440,7 +444,7 @@ local UI_TREE = {
 				HD("29b", "Client Objects"),
 				PA("29c", 184, "Turn on 'Sync Client Objects' in Settings (off by default) to record the objects only your game client shows: moving, falling and swinging platforms, balloons, pushboxes, turret bullets, vanishers, beat blocks and other parts that move or change while you play (EToH kit objects). They are saved with the TAS and put back while testing and scrubbing. 'Smooth Client Objects' blends between recorded keyframes so they move smoothly at any FPS. Sounds, particles, lighting and GUIs are not synced."),
                     HD("PortSettingsHeader", "Executor Port Settings"),
-                    PA("PortSettingsDescription", 195, "Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed. NohBoard Cursor draws a fake cursor that stays still while the camera is locked (right click, shift lock, first person) and moves the hidden real cursor like the camera while testing. Invisible Mouse Speed scales that movement."),
+                    PA("PortSettingsDescription", 225, "Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed (the Menu key always does). No HappaTAS key does anything while you type in chat or a text box. NohBoard Cursor draws a fake cursor that stays still while the camera is locked (right click, shift lock, first person) and moves the hidden real cursor like the camera while testing. Invisible Mouse Speed scales that movement."),
 				HD("FeaturesHeader", "Feature Modules & Tools"),
 				H("31", "MicroProfiler", 210, true, {
 					{ 48, "A copy of Roblox's MicroProfiler (F6). Time = last frame, Avg = average of the frames on the bar, Max = biggest frame (stays until a bigger one)." },

@@ -107,6 +107,13 @@ do
 		end
 		return Profiler.IsMouseOver ~= nil and Profiler.IsMouseOver(m) or false
 	end
+	-- a mouse button pressed over a HappaTAS window (menu, merge dialog, MicroProfiler) is meant for that
+	-- window, never a HappaTAS control (Left Click = Pause / Unpause)
+	local MOUSE_BUTTON = { [Enum.UserInputType.MouseButton1] = true, [Enum.UserInputType.MouseButton2] = true,
+		[Enum.UserInputType.MouseButton3] = true }
+	function InputSys.ClickOnOwnUI(inp)
+		return MOUSE_BUTTON[inp.UserInputType] == true and overOwnUI()
+	end
 
 	local function idOf(inp)
 		local t = inp.UserInputType
@@ -121,11 +128,7 @@ do
 	end
 	InputSys.IdOf = idOf
 
-	local function ignoring()
-		if UIS:GetFocusedTextBox() ~= nil then return true end
-		if GuiService and GuiService.MenuIsOpen then return true end
-		return false
-	end
+	local ignoring = Typing.Active -- typing (chat, a text box) or in the Roblox menu: nothing is recorded
 
 	local function onBegan(inp, proc)
 		if proc and not Settings.On("Ignore Game Processed") then return end

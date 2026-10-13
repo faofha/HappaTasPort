@@ -368,10 +368,14 @@ do
 		JoinTween:Play()
 		on(JoinMessage.Close.MouseButton1Down, function() ReverseJoinTween:Play() end)
 
+		-- a Menu key on the keyboard works even when the game processed it (whatever Ignore Game Processed
+		-- says); never while the player types (chat, a text box) or is in the Roblox menu
 		on(uis.InputBegan, function(inp, proc)
-			if proc and not Settings.On("Ignore Game Processed") then return end
-			if uis:GetFocusedTextBox() then return end
-			if CheckInput(inp, "Menu") then menu.Visible = not menu.Visible end
+			if not CheckInput(inp, "Menu") or Typing.Active() then return end
+			if inp.UserInputType ~= Enum.UserInputType.Keyboard then -- bound to a mouse button
+				if InputSys.ClickOnOwnUI(inp) or (proc and not Settings.On("Ignore Game Processed")) then return end
+			end
+			menu.Visible = not menu.Visible
 		end)
 
 		local TABS = { "Controls", "Settings", "Saves", "Help", "More" }
