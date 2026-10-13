@@ -1,0 +1,17 @@
+section("boot")
+check(boot(10), "script boots")
+local h = M.genv.__HappaTAS
+check(type(h) == "table" and h.Version ~= nil, "getgenv handle with Version")
+M.realPrint("version: " .. tostring(h and h.Version))
+local gui = M.hui:FindFirstChild("TASUserInterface")
+check(gui ~= nil, "main UI attached under gethui")
+local list = gui and path(gui, "MainMenu.SettingsFrame.List")
+check(list ~= nil and list:FindFirstChild("MicroProfiler Scale") ~= nil, "Settings tab has the MicroProfiler Size row")
+local row = list and list:FindFirstChild("MicroProfiler Scale")
+check(row and row.N.Text == "MicroProfiler Size (1 = Roblox)", "row label")
+M.steps(120)
+section("unload")
+if h and h.Unload then h.Unload() end
+M.steps(5)
+check(M.hui:FindFirstChild("TASUserInterface") == nil, "UI removed on unload")
+finish()
