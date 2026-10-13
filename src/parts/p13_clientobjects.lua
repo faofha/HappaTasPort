@@ -270,6 +270,17 @@ do
 		}
 	end
 
+	-- removes id from a list kept with its positions (the last entry takes its place)
+	local function listRemove(arr, pos, id)
+		local i = pos[id]
+		if not i then return end
+		local last = arr[#arr]
+		arr[i] = last
+		pos[last] = i
+		arr[#arr] = nil
+		pos[id] = nil
+	end
+
 	local function setActive(id, active)
 		local was = actPos[id] ~= nil
 		if active == was then return end
@@ -277,12 +288,7 @@ do
 			actArr[#actArr + 1] = id
 			actPos[id] = #actArr
 		else
-			local i = actPos[id]
-			local last = actArr[#actArr]
-			actArr[i] = last
-			actPos[last] = i
-			actArr[#actArr] = nil
-			actPos[id] = nil
+			listRemove(actArr, actPos, id)
 			local s = S[id]
 			if s and s.moved and not s.needBase then
 				dropQ[id] = true
@@ -316,22 +322,8 @@ do
 		unwatch(part)
 		local id = ids[part]
 		if not id then return end
-		if actPos[id] then
-			local i = actPos[id]
-			local last = actArr[#actArr]
-			actArr[i] = last
-			actPos[last] = i
-			actArr[#actArr] = nil
-			actPos[id] = nil
-		end
-		local pi = pidx[id]
-		if pi then
-			local lastId = plist[#plist]
-			plist[pi] = lastId
-			pidx[lastId] = pi
-			plist[#plist] = nil
-			pidx[id] = nil
-		end
+		listRemove(actArr, actPos, id)
+		listRemove(plist, pidx, id)
 		unwatchProps(S[id])
 		ids[part], parts[id], S[id], dropQ[id] = nil, nil, nil, nil
 		orig[part], origVel[part] = nil, nil
@@ -395,19 +387,22 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- releasing
+	-- a part HappaTAS anchored goes back to how it was (Anchored + the velocity it had)
+	local function restorePart(part, was)
+		if not part.Parent then return end
+		pcall(function()
+			part.Anchored = was
+			local ov = origVel[part]
+			if ov then
+				part.AssemblyLinearVelocity = ov[1]
+				part.AssemblyAngularVelocity = ov[2]
+			end
+		end)
+	end
 	local function releasePart(id)
 		local part = parts[id]
 		if part then
-			if part.Parent and orig[part] ~= nil then
-				pcall(function()
-					part.Anchored = orig[part]
-					local ov = origVel[part]
-					if ov then
-						part.AssemblyLinearVelocity = ov[1]
-						part.AssemblyAngularVelocity = ov[2]
-					end
-				end)
-			end
+			if orig[part] ~= nil then restorePart(part, orig[part]) end
 			orig[part], origVel[part] = nil, nil
 		end
 		CO.shown[id] = nil
@@ -415,18 +410,7 @@ do
 
 	function CO.Release()
 		play.active = false
-		for part, was in pairs(orig) do
-			if part.Parent then
-				pcall(function()
-					part.Anchored = was
-					local ov = origVel[part]
-					if ov then
-						part.AssemblyLinearVelocity = ov[1]
-						part.AssemblyAngularVelocity = ov[2]
-					end
-				end)
-			end
-		end
+		for part, was in pairs(orig) do restorePart(part, was) end
 		orig, origVel = {}, {}
 		frozen = false
 		CO.shown = {}

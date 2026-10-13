@@ -231,6 +231,14 @@ M.releaseKey(Enum.KeyCode.T)
 M.steps(2)
 stats("scrubbed")
 T("scrubbed", C.frame, #Core.GetTAS())
+-- Unpause 1 Frame (records one or two frames, then pauses again) and Return
+key(Enum.KeyCode.V)
+for i = 1, 6 do M.step(1 / 60); worldState("unpause1f-" .. i) end
+T("unpause1f", C.frame, #Core.GetTAS(), tostring(C.paused))
+key(Enum.KeyCode.E)
+M.steps(2)
+worldState("return")
+T("return", C.frame, #Core.GetTAS(), tostring(C.paused))
 
 -- ------------------------------------------------------------------ cut + record more
 click()
