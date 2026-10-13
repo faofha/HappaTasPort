@@ -162,7 +162,7 @@ do
 		st.wasLocked = locked
 	end
 
-	-- called once per frame after the camera has updated
+	-- called once per frame after the camera has updated. menuOpen = function: is a HappaTAS window open?
 	function Cursor.Update(mode, fr, menuOpen)
 		frameNo = frameNo + 1
 		if not Settings.On("NohBoard Cursor") or not UIS.MouseEnabled then
@@ -180,7 +180,7 @@ do
 			return
 		end
 		local mb = UIS.MouseBehavior
-		local locked = mb ~= Default and not Bridge.IsMouseFree() and not menuOpen
+		local locked = mb ~= Default and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
 		if locked then
 			if not ensure() then return end
 			local m = UIS:GetMouseLocation()

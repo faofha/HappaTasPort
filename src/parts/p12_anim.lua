@@ -59,6 +59,8 @@ do
 		if not (RightShoulder and LeftShoulder and RightHip and LeftHip) then return nil end
 
 		local FrameAnims = {}
+		local handedOut = false -- FrameAnims went into a recorded frame: the next frame needs a new table
+		local function useFrameAnims() handedOut = true return FrameAnims end
 		local LockAnimations = false
 
 		local pose = "Standing"
@@ -128,8 +130,9 @@ do
 			return oldAnim
 		end
 
+		-- (the track always runs at currentAnimSpeed, so an equal speed needs no AdjustSpeed call)
 		function setAnimationSpeed(speed, TASanim)
-			if (speed ~= currentAnimSpeed and LockAnimations == false) or TASanim then
+			if speed ~= currentAnimSpeed and (TASanim or LockAnimations == false) then
 				currentAnimSpeed = speed
 				if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed) end
 			end
@@ -256,12 +259,7 @@ do
 		local function onPlatformStanding() pose = "PlatformStanding" end
 		local function onSwimming(speed) pose = (speed > 0) and "Running" or "Standing" end
 
-		local function getTool()
-			for _, kid in ipairs(Figure:GetChildren()) do
-				if kid.ClassName == "Tool" then return kid end
-			end
-			return nil
-		end
+		local function getTool() return Figure:FindFirstChildOfClass("Tool") end
 
 		local function getToolAnim(tool)
 			for _, ch in ipairs(tool:GetChildren()) do
@@ -344,7 +342,7 @@ do
 					Pose = PoseToNumber[pose] or 0,
 					JumpTime = math.round(jumpAnimTime * 1000) / 1000,
 					Speed = math.round(currentAnimSpeed * 1000) / 1000,
-					Anims = StartOfTAS and { { AnimToNumber[currentAnim] or 1, 0 } } or FrameAnims,
+					Anims = StartOfTAS and { { AnimToNumber[currentAnim] or 1, 0 } } or useFrameAnims(),
 				}
 			end
 			return nil
@@ -393,7 +391,7 @@ do
 		end
 
 		connect(RunService.Heartbeat, function(deltaTime)
-			FrameAnims = {}
+			if handedOut or #FrameAnims > 0 then FrameAnims = {}; handedOut = false end
 			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - deltaTime end
 		end)
 

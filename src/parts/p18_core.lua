@@ -42,6 +42,9 @@ do
 		Buttons.Invalidate()
 	end
 
+	local function changeState(hum, st) hum:ChangeState(st) end
+	C.ChangeState = function(st) if C.Humanoid then pcall(changeState, C.Humanoid, st) end end
+
 	function C.CharLoaded()
 		local h = C.HRP
 		return C.Char ~= nil and h ~= nil and h.Parent ~= nil and C.Humanoid ~= nil
@@ -104,7 +107,11 @@ do
 	Core.SetStatus = function(text, inverse) return C.SetStatus(text, inverse) end
 
 	-- ------------------------------------------------------------------------------------ stats panels
+	-- Only these functions write the panels, so what was written last is remembered in Lua instead of
+	-- being read back from the instances every frame (each read is a call into the engine).
 	local lastText = setmetatable({}, { __mode = "k" })
+	local lastVis = setmetatable({}, { __mode = "k" })
+	local labelCache = setmetatable({}, { __mode = "k" })
 	local function setText(lbl, text)
 		if lbl and lastText[lbl] ~= text then
 			lastText[lbl] = text
@@ -112,7 +119,24 @@ do
 		end
 	end
 	local function setVisible(f, v)
-		if f and f.Visible ~= v then f.Visible = v end
+		if not f then return end
+		local cur = lastVis[f]
+		if cur == nil then cur = f.Visible end
+		if cur ~= v then f.Visible = v end
+		lastVis[f] = v
+	end
+	-- the rows of a panel by name (the panels never change their children)
+	local function labels(f)
+		local t = labelCache[f]
+		if not t then
+			t = setmetatable({}, { __index = function(tt, k)
+				local ch = f:FindFirstChild(k)
+				rawset(tt, k, ch or false)
+				return ch or false
+			end })
+			labelCache[f] = t
+		end
+		return t
 	end
 	local statsTick = 0
 	local keysCache = { frame = -1, data = nil, text = "-", t = 0 }
@@ -143,11 +167,12 @@ do
 
 	function SS.Idle(FrameTime, zoom)
 		local root = C.HRP
-		local f = C.IdleStatsF
-		if not root or not f then return end
-		setVisible(f, true)
+		local panel = C.IdleStatsF
+		if not root or not panel then return end
+		setVisible(panel, true)
 		setVisible(C.CreateStatsF, false)
 		setVisible(C.TestStatsF, false)
+		local f = labels(panel)
 		local CAX, CAY, CAZ = workspace.CurrentCamera.CFrame:ToEulerAnglesYXZ()
 		local o = root.Orientation
 		setText(f["1"], " Frame Time: " .. r(FrameTime or 0, 1000000))
@@ -160,13 +185,16 @@ do
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
 
+	local lastBT = nil
 	function SS.Create(pausedNow, frameNo, FrameData)
-		local f = C.CreateStatsF
+		local panel = C.CreateStatsF
 		setVisible(C.IdleStatsF, false)
-		setVisible(f, true)
+		setVisible(panel, true)
 		setVisible(C.TestStatsF, false)
 		local bt = pausedNow and 0.1 or 0.2
-		if f.BackgroundTransparency ~= bt then f.BackgroundTransparency = bt end
+		if lastBT == nil then lastBT = panel.BackgroundTransparency end
+		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
+		local f = labels(panel)
 		setText(f["1"], " Frame: " .. frameNo)
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local rootCF = C.TableToCFrame(FrameData.Cframe)
@@ -203,17 +231,17 @@ do
 	end
 
 	function SS.Merge(reqDist, goalCFrame, FrameData)
-		local m = C.MergeStats
+		local m = labels(C.MergeStats)
 		if type(FrameData) == "table" and FrameData.Cframe and goalCFrame then
 			local dist = (Vector3.new(FrameData.Cframe[1], FrameData.Cframe[2], FrameData.Cframe[3]) - Vector3.new(goalCFrame[1], goalCFrame[2], goalCFrame[3])).Magnitude
 			setText(m["1"], " Current Distance: " .. r(dist, 1000))
 			if dist < reqDist then
 				setText(m["3"], " Click here to complete merge")
-				m.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
+				C.MergeStats.BackgroundColor3 = Color3.fromRGB(0, 80, 0)
 				C.mergeCanComplete = true
 			else
 				setText(m["3"], " Click here to cancel merge")
-				m.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+				C.MergeStats.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
 				C.mergeCanComplete = false
 			end
 		end
@@ -221,21 +249,23 @@ do
 	end
 
 	function SS.Test(Timer, Speed)
-		local f = C.TestStatsF
+		local panel = C.TestStatsF
 		setVisible(C.IdleStatsF, false)
 		setVisible(C.CreateStatsF, false)
-		setVisible(f, true)
+		setVisible(panel, true)
+		local f = labels(panel)
 		setText(f["1"], " Time: " .. C.ToTime(r(Timer or 0, 1000000)))
 		setText(f["2"], " Playback Speed: " .. tostring(Speed or 1))
 		setText(f["3"], " Keys: " .. InputSys.Describe(InputSys.Replay.state))
 		setText(f["4"], " Mouse: " .. MouseText(C.data[C.frame]))
 	end
 
+	local STAT_SETTING = { Idle = "Show Stats (Idle)", Create = "Show Stats (Create)", Test = "Show Stats (Test)" }
 	-- every frame while paused (values change on scrub), ~30 times a second otherwise
 	function C.SetStats(statMode, FrameData, FrameTime, frameNo)
 		statsTick = statsTick + 1
 		local mode3speed = (statMode == "Test" and Settings.Get("Playback Speed") ~= 1)
-		if Settings.On("Show Stats (" .. statMode .. ")") or mode3speed then
+		if Settings.On(STAT_SETTING[statMode]) or mode3speed then
 			if statMode == "Create" and C.paused then
 				SS.Create(true, frameNo, FrameData)
 			elseif statsTick % 2 == 0 then
@@ -260,8 +290,8 @@ do
 	-- moves the whole character (the root moves the assembly; the torso is aligned through the
 	-- root joint so the limbs never trail a frame behind)
 	function C.SyncCharacter(hrpCF, linVel, angVel)
-		local HRP = C.HRP
-		if not HRP or not HRP.Parent then return end
+		local HRP = C.HRP -- (every caller has checked C.CharLoaded() this frame)
+		if not HRP then return end
 		HRP.CFrame = hrpCF
 		HRP.AssemblyLinearVelocity = linVel
 		HRP.AssemblyAngularVelocity = angVel
@@ -316,7 +346,7 @@ do
 
 		HRP.AssemblyLinearVelocity = C.TableToVector3(FrameData.Velocity.Linear)
 		HRP.AssemblyAngularVelocity = C.TableToVector3(FrameData.Velocity.Angular)
-		pcall(function() C.Humanoid:ChangeState(FrameData.State) end)
+		C.ChangeState(FrameData.State)
 
 		local BacktrackAnim, BacktrackAnimSpeed
 		local AnimTime = 0
@@ -974,8 +1004,9 @@ do
 			if fd and fd.Cframe == nil then
 				Profiler.Begin("Record")
 				local HRP, hum = C.HRP, C.Humanoid
+				local state = hum:GetState()
 				fd.Cframe = C.CFrameToTable(HRP.CFrame)
-				fd.State = hum:GetState().Value
+				fd.State = state.Value
 				fd.Anim = Bridge.GetAnimation(#data == 2)
 				Profiler.End("Record")
 				Profiler.Begin("Client Objects")
@@ -985,7 +1016,7 @@ do
 				Profiler.Begin("Buttons")
 				fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
 				Profiler.End("Buttons")
-				if hum:GetState() == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
+				if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 			end
 		elseif C.mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
@@ -1027,7 +1058,7 @@ do
 
 			local p = C.PlaybackPose()
 			C.SyncCharacter(p.root, p.lin, p.ang)
-			if data[frame].State then pcall(function() C.Humanoid:ChangeState(data[frame].State) end) end
+			if data[frame].State then C.ChangeState(data[frame].State) end
 			C.UpdateCamera(p)
 			local lo, hi = prevFrame + 1, frame
 			if lo > hi then lo, hi = frame, frame end
@@ -1040,7 +1071,7 @@ do
 					if fr.Tools then ToolSync.ReplayFrame(fr.Tools, C.Char) end
 				end
 			end
-			if data[frame].Died then pcall(function() C.Humanoid:ChangeState(Enum.HumanoidStateType.Dead) end) end
+			if data[frame].Died then C.ChangeState(Enum.HumanoidStateType.Dead) end
 			ToolSync.Step(C.Char, C.Humanoid)
 			C.SetStats("Test")
 		else
@@ -1133,7 +1164,7 @@ do
 		ClientObjects.RenderStep()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
-		Cursor.Update(C.mode, (C.mode == 3) and C.data[C.frame] or nil, menuOpen())
+		Cursor.Update(C.mode, (C.mode == 3) and C.data[C.frame] or nil, menuOpen) -- (asked only when needed)
 		Profiler.End("Cursor")
 		Profiler.End("HappaTAS")
 	end

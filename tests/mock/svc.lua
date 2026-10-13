@@ -99,6 +99,7 @@ end
 for name in pairs(SERVICE_CLASS) do if name ~= "UserGameSettings" then getService(name) end end
 workspace = services.Workspace
 Workspace = workspace
+do local t = Instance.new("Terrain"); t.Name = "Terrain"; t.Anchored = true; t.Parent = workspace end
 M.services = services
 
 -- ------------------------------------------------------------------------------------------------ service methods
@@ -299,6 +300,8 @@ C.Camera.Methods.GetRoll = function() return 0 end
 -- Humanoid
 C.Humanoid.Methods.GetState = function(self) return rawget(self, "_d").state end
 C.Humanoid.Methods.ChangeState = function(self, st)
+	-- Roblox converts a number / name argument to the EnumItem
+	if type(st) == "number" then st = Enum.HumanoidStateType:FromValue(st) elseif type(st) == "string" then st = Enum.HumanoidStateType[st] end
 	local d = rawget(self, "_d")
 	local old = d.state
 	d.state = st
