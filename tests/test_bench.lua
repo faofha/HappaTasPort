@@ -3,7 +3,10 @@
 --   rd   = Instance reads / method lookups per frame (each one is a Lua <-> C++ bridge crossing in Roblox)
 --   wr   = Instance property writes per frame
 -- Run against two builds to compare:  bash tools/build_test.sh bench <script>; luau tests/run_bench.lua
-check(boot(30), "boots")
+local tBoot, wBoot, rBoot = M.realClock(), M.propWrites, M.propReads
+check(boot(0), "boots")
+M.realPrint(string.format("BENCH %-22s %8.1f us %8.1f rd %8.1f wr", "boot (once)", (M.realClock() - tBoot) * 1e6, M.propReads - rBoot, M.propWrites - wBoot))
+M.steps(30)
 local S, Core, CO = __T.Settings, __T.Core, __T.ClientObjects
 local C = Core.State
 local guard = 0
