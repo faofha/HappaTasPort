@@ -269,7 +269,12 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2580)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2690)},{
+						LV("976", " 10/14/26 - 2.38.1"),
+						LI("976_1", "   -   Frame colours checked against Roblox's own profiler"),
+						LI("976_2", "   -   Render time taken from the right frame (exact)"),
+						LI("976_3", "   -   Same bars as Roblox's: 501 of 503 the same colour"),
+						LI("976_4", "   -   Frame tooltip rows like Roblox's (GPU Time added)"),
 						LV("977", " 10/14/26 - 2.38"),
 						LI("977_1", "   -   MicroProfiler compared side by side with Roblox's"),
 						LI("977_2", "   -   Close box turns grey under the mouse, hint box"),

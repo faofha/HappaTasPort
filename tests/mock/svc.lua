@@ -667,7 +667,10 @@ function M.step(dt)
 		local ok, err = pcall(b.fn, dt)
 		if not ok then M.logs[#M.logs + 1] = "BIND ERROR " .. b.name .. ": " .. tostring(err) end
 	end
-	if M.jobMs then M.clockOff = math.max(0, dt - M.jobMs / 1000); M.clockTicks = 0 end
+	-- PreAnimation starts at a fixed point of the frame (like Roblox: shortly after the frame starts), so the
+	-- time from one PreAnimation to the next is exactly the frame's dt; with M.jobMs the jobs take jobMs
+	M.clockOff = M.jobMs and math.max(0, dt - M.jobMs / 1000) or 0
+	M.clockTicks = 0
 	RS.PreAnimation:Fire(dt)
 	RS.PreSimulation:Fire(dt)
 	RS.Stepped:Fire(M.now, dt)

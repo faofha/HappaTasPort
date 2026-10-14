@@ -20,10 +20,13 @@
 --  Time", blue = "Render Wall Time exceeds the Jobs Wall Time". Render = Stats.RenderCPUFrameTime; jobs =
 --  os.clock from RunService.PreAnimation to the next PreRender (the docs' frame order: PreRender ->
 --  render -> PreAnimation -> animations -> PreSimulation -> physics -> PostSimulation -> Heartbeat ->
---  replication), paired like Roblox's frame: the jobs that end where the frame's render starts, plus
---  JOBS_UNSEEN for the engine jobs before PreAnimation that scripts can't time. Red bars need "GPU
---  Wait Time", which no API gives, so there are none. The bars are one EditableImage (508 frames when
---  the client has no EditableImage), so the graph adds little render time of its own.
+--  replication). Roblox's own rule (its LibMP dump viewer, checked against the client's graph bar by
+--  bar): Jobs Wall Time = frame start .. end of the PreRender step, Render Wall Time = Prepare +
+--  Perform. Measured against its dumps: Stats.RenderCPUFrameTime is exactly that Render Wall Time three
+--  frames later and Stats.RenderGPUFrameTime the GPU device time one frame later, so every frame joins
+--  the graph three frames after it ran (like Roblox's). Jobs = PreAnimation .. the end of HappaTAS's
+--  PreRender work + FRAME_LEAD + PRERENDER_TAIL. Red bars need "GPU Wait Time", which no API gives, so
+--  there are none. The bars are one EditableImage (508 frames when the client has no EditableImage).
 --  Detailed lanes: "Engine" = those RunService phases + the render time, "HappaTAS" = its own scopes.
 --
 --  Mouse: GuiBase2d.AbsolutePosition and InputObject.Position are measured from the bottom of the
@@ -68,13 +71,13 @@ do
 		-- green selection over the graph: (39, 144, 53) at 60 %, measured over two backgrounds in the client
 		local HL, HL_T = Color3.fromRGB(39, 144, 53), 0.4
 		local SQUARE = Color3.fromRGB(255, 0, 0)        -- the square next to the longer of render / jobs
-		-- Roblox's "Jobs Wall Time" also holds engine work that runs before RunService.PreAnimation, which
-		-- no script can time. Compared in the client with Roblox's own MicroProfiler, its Jobs Wall Time
-		-- came out about 0.3 ms longer than PreAnimation .. PreRender. The one number here that is a
-		-- measurement, not an API value; it only moves the line between orange and blue. (Roblox's own
-		-- profiler also makes the jobs about 0.2 ms longer by its own work, so it shows a few more
-		-- orange bars than this one does for the same game.)
-		local JOBS_UNSEEN = 0.3
+		-- Roblox's frame colours (its dump viewer, Roblox LibMP tools.js calculateStatistics, checked bar by
+		-- bar against the client's own graph): Jobs Wall Time = frame start .. end of the "PreRender" step,
+		-- Render Wall Time = the "Prepare" + "Perform" render steps; blue when render is longer. Two parts
+		-- of the jobs can't be timed by a script; their medians, measured in Roblox's dumps with HappaTAS
+		-- running (ms). With them 97 % of the bars had Roblox's colour (all of them had its render time).
+		local FRAME_LEAD = 0.22      -- frame start .. RunService.PreAnimation handlers
+		local PRERENDER_TAIL = 0.15  -- end of HappaTAS's PreRender work .. end of the PreRender step
 		local RULER_TEXT = hex(0x808080)
 		local FRAME_LINE = hex(0x757575)                -- frame start lines, opaque (measured)
 		-- colours measured in the Roblox client (native window captures), transparency = 1 - alpha
@@ -178,7 +181,7 @@ do
 
 		local statOk = {}
 		if Stats then
-			for _, p in ipairs({ "RenderCPUFrameTime", "RenderGPUFrameTime", "HeartbeatTime", "PhysicsStepTime",
+			for _, p in ipairs({ "RenderCPUFrameTime", "RenderGPUFrameTime", "FrameTime", "HeartbeatTime", "PhysicsStepTime",
 				"DataReceiveKbps", "DataSendKbps", "PhysicsReceiveKbps", "PhysicsSendKbps", "InstanceCount", "PrimitivesCount",
 				"MovingPrimitivesCount", "ContactsCount", "SceneDrawcallCount", "SceneTriangleCount", "ShadowsDrawcallCount",
 				"ShadowsTriangleCount", "UI2DDrawcallCount", "UI2DTriangleCount", "UI3DDrawcallCount", "UI3DTriangleCount" }) do
@@ -228,12 +231,21 @@ do
 		local K = 0                -- frames recorded by the profiler
 		local lastStart = nil      -- os.clock at the start of the frame in progress
 		local lastMs = 0
-		-- frame history ring; pa / ps / po / hb = os.clock of PreAnimation / PreSimulation / PostSimulation /
-		-- Heartbeat inside the frame (false when missing)
-		local HIS = { ms = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {}, pa = {}, ps = {}, po = {}, hb = {} }
-		-- RunService events of the frame in progress (connected only while the profiler is open);
-		-- prevJob = the jobs that ended at the previous PreRender (they belong to the render that started there)
-		local EVQ = { pa = false, ps = false, po = false, hb = false, prevJob = 0, conns = nil }
+		-- frame history ring (finished frames, see RAW): ms = CPU Time, gft = GPU Time, gpu = GPU Time (device),
+		-- ren / job = Render / Jobs Wall Time; pa / ps / po / hb / pr = os.clock of PreAnimation /
+		-- PreSimulation / PostSimulation / Heartbeat / PreRender inside the frame (false when missing)
+		local HIS = { ms = {}, gft = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {}, pa = {}, ps = {},
+			po = {}, hb = {}, pr = {} }
+		-- RunService events of the frame in progress (connected only while the profiler is open)
+		local EVQ = { pa = false, ps = false, po = false, hb = false, conns = nil }
+		-- Frames in progress (a ring of RAW_N). Measured against Roblox's own MicroProfiler (its dumps, read
+		-- with Roblox's LibMP): a frame starts shortly before PreAnimation and its jobs run until the end of
+		-- the PreRender step; Stats.RenderCPUFrameTime gives that frame's Render Wall Time three frames
+		-- later, Stats.RenderGPUFrameTime its GPU device time one frame later, and the time from its
+		-- PreAnimation to the next one is its length. So a frame joins the history (and the graph) three
+		-- frames after it ran, like in Roblox's profiler (MICROPROFILE_GPU_FRAME_DELAY 3).
+		local RAW_N = 8
+		local RAW = { n = 0, pa = {}, ps = {}, po = {}, hb = {}, pr = {}, prEnd = {}, dt = {}, len = {}, gpu = {}, hap = {}, phy = {}, no = {} }
 		function EVQ.connect()
 			if EVQ.conns then return end
 			EVQ.conns = {}
@@ -249,7 +261,8 @@ do
 			if not EVQ.conns then return end
 			for _, c in ipairs(EVQ.conns) do pcall(function() c:Disconnect() end) end
 			EVQ.conns = nil
-			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb, EVQ.prevJob = false, false, false, false, 0
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
+			RAW.n = 0
 		end
 		Janitor.add(EVQ.disconnect)
 		-- sum / max / count = nFlipAggregate, nFlipMax, nAggregateFlipCount
@@ -288,9 +301,9 @@ do
 
 		local function hi(k) return (k - 1) % MAX_HISTORY + 1 end
 		local function slotOf(k) return (k - 1) % NUM_FRAMES + 1 end
-		-- the detailed view is measured from nFrameCurrent, which trails the newest frame by
-		-- MICROPROFILE_GPU_FRAME_DELAY (3), so a 50 ms window at offset 0 shows the latest frames
-		local function baseStart() return HIS.start[hi(mmax(1, K - 3))] end
+		-- the detailed view is measured from nFrameCurrent: the newest frame in the history, which trails
+		-- the frame in progress by MICROPROFILE_GPU_FRAME_DELAY (3) frames
+		local function baseStart() return HIS.start[hi(mmax(1, K))] end
 
 		-- -------------------------------------------------------------------------------- timer API
 		function P.Begin(name)
@@ -360,34 +373,31 @@ do
 			end
 		end
 
-		-- records the frame that just ended. Returns true when a frame was added to the history.
-		local function flip(dt, now)
-			local ms = (dt or 0) * 1000
-			local start = lastStart or (now - (dt or 0))
-			lastStart = now
-			-- the RunService events seen since the last PreRender; the jobs = PreAnimation .. now
-			local pa, ps, po, hb = EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb
-			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
-			if pa and pa < start then pa = false end
-			local job = pa and (now - pa) * 1000 or 0
-			local prevJob = EVQ.prevJob
-			-- Jobs Wall Time of the bar = the measured jobs + the engine work before PreAnimation that no
-			-- script can time (JOBS_UNSEEN, see the colours)
-			EVQ.prevJob = pa and job + JOBS_UNSEEN or 0
-			if paused and not cfg.force then return false end -- Pause stops the capture (Force Enable keeps it)
-			lastMs = ms
+		-- Jobs Wall Time of a raw frame: frame start .. end of the PreRender step, i.e. FRAME_LEAD + our
+		-- PreAnimation .. the end of HappaTAS's PreRender work + PRERENDER_TAIL (0 when unknown)
+		local function rawJob(j)
+			local pa, e = RAW.pa[j], RAW.prEnd[j]
+			if pa and e and e > pa then return FRAME_LEAD + (e - pa) * 1000 + PRERENDER_TAIL end
+			return 0
+		end
+		-- a raw frame whose Render Wall Time just arrived joins the history as frame K
+		local function finish(j, ren, gft)
 			K = K + 1
 			local i = hi(K)
-			EV[1], EV[2], EV[3], EV[4] = ms, statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime"), job
-			EV[5] = (pa and ps and ps >= pa) and (ps - pa) * 1000 or 0
-			EV[6] = (ps and po and po >= ps) and (po - ps) * 1000 or 0
-			EV[7] = (hb and hb >= start) and (now - hb) * 1000 or 0
-			EV[8] = statMs("PhysicsStepTime")
-			-- the bar's render = the render that started at `start`, its jobs = the ones that ended there
-			HIS.ms[i], HIS.ren[i], HIS.gpu[i], HIS.job[i], HIS.phy[i] = ms, EV[2], EV[3], prevJob, EV[8]
-			HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i] = pa, ps or false, po or false, hb or false
-			HIS.start[i] = start
-			HIS.no[i] = frameNo - 1
+			local ms = RAW.len[j] or RAW.dt[j]
+			HIS.ms[i], HIS.gft[i], HIS.gpu[i], HIS.ren[i], HIS.job[i] = ms, gft, RAW.gpu[j] or 0, ren, rawJob(j)
+			HIS.phy[i], HIS.hap[i], HIS.no[i] = RAW.phy[j], RAW.hap[j] or 0, RAW.no[j]
+			local pa = RAW.pa[j]
+			HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i], HIS.pr[i] = pa, RAW.ps[j], RAW.po[j], RAW.hb[j], RAW.pr[j]
+			-- the frame starts FRAME_LEAD before PreAnimation (or, without one, where the last frame ended)
+			if pa then
+				HIS.start[i] = pa - FRAME_LEAD / 1000
+			elseif K > 1 then
+				HIS.start[i] = HIS.start[hi(K - 1)] + HIS.ms[hi(K - 1)] / 1000
+			else
+				HIS.start[i] = RAW.pr[j] - 0.001
+			end
+			lastMs = ms
 			RO.sum = RO.sum + ms
 			if K > NUM_FRAMES then RO.sum = RO.sum - HIS.ms[hi(K - NUM_FRAMES)] end
 			if ms > RO.max then RO.max = ms end
@@ -398,6 +408,44 @@ do
 				for k = mmax(1, K - NUM_FRAMES + 1), K do sum = sum + HIS.ms[hi(k)] end
 				RO.sum = sum
 			end
+		end
+
+		-- called at PreRender, at the start of HappaTAS's PreRender work. Returns true when a frame joined
+		-- the history (the frame three frames back).
+		local function flip(dt, now)
+			local ms = (dt or 0) * 1000
+			local start = lastStart or (now - (dt or 0))
+			lastStart = now
+			-- the RunService events seen since the last PreRender (they belong to this frame)
+			local pa, ps, po, hb = EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
+			if pa and pa < start then pa = false end
+			if paused and not cfg.force then RAW.n = 0 return false end -- Pause stops the capture (Force Enable keeps it)
+			local r = RAW.n + 1
+			RAW.n = r
+			local i = (r - 1) % RAW_N + 1
+			RAW.pa[i], RAW.ps[i], RAW.po[i], RAW.hb[i], RAW.pr[i] = pa, ps or false, po or false, hb or false, now
+			RAW.prEnd[i], RAW.dt[i], RAW.len[i], RAW.gpu[i], RAW.no[i] = false, ms, false, false, frameNo
+			RAW.phy[i] = statMs("PhysicsStepTime")
+			local ren, gpu = statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime")
+			local jobPrev = 0
+			if r >= 2 then -- the last frame: its length (PreAnimation to PreAnimation) and GPU device time
+				local j = (r - 2) % RAW_N + 1
+				local pj = RAW.pa[j]
+				RAW.len[j] = (pa and pj and pa > pj) and (pa - pj) * 1000 or ms
+				RAW.gpu[j] = gpu
+				jobPrev = rawJob(j)
+			end
+			local done = false
+			if r >= 4 then -- three frames back: its Render Wall Time arrived
+				finish((r - 4) % RAW_N + 1, ren, statMs("FrameTime"))
+				done = true
+			end
+			EV[1], EV[2], EV[3], EV[4] = ms, ren, gpu, jobPrev
+			EV[5] = (pa and ps and ps >= pa) and (ps - pa) * 1000 or 0
+			EV[6] = (ps and po and po >= ps) and (po - ps) * 1000 or 0
+			EV[7] = (hb and hb >= start) and (now - hb) * 1000 or 0
+			EV[8] = RAW.phy[i]
 			local child = TV.child
 			for j = 1, NT do child[j] = 0 end
 			for j = 1, NT do
@@ -421,9 +469,16 @@ do
 				for _, j in ipairs(list) do s = s + TV.last[j] end
 				TV.gLast[g] = s
 			end
-			HIS.hap[i] = TV.gLast.HappaTAS
+			-- HappaTAS's work since its last PreRender: mostly the last frame's
+			if r >= 2 then RAW.hap[(r - 2) % RAW_N + 1] = TV.gLast.HappaTAS end
 			if not paused then aggregate(ms) end
-			return true
+			return done
+		end
+		-- called at the end of HappaTAS's PreRender work: the end of this frame's jobs as far as a script can see
+		function P.FrameEnd()
+			if not P.active or RAW.n < 1 then return end
+			local i = (RAW.n - 1) % RAW_N + 1
+			if not RAW.prEnd[i] then RAW.prEnd[i] = clock() end
 		end
 
 		-- average of the frames on the bar / biggest frame on the bar
@@ -1333,9 +1388,13 @@ do
 			local i = hi(k)
 			local ren, job = HIS.ren[i], HIS.job[i]
 			-- the red square marks the longer of the two (the one that gives the bar its colour)
+			-- Roblox's rows (GPU Wait Time, CPU Freq and Mem Free have no script API, so they are left out):
+			-- CPU Time = the frame's length, GPU Time = Stats.FrameTime three frames later (Roblox's GPU frame
+			-- time within ~0.1 ms), GPU Time (device) = Stats.RenderGPUFrameTime one frame later (exact)
 			local rows = {
 				{ "Frame " .. tostring(HIS.no[i]), "" },
 				{ "CPU Time", sfmt("%6.2fms", HIS.ms[i]) },
+				{ "GPU Time", sfmt("%6.2fms", HIS.gft[i] or 0) },
 				{ "GPU Time (device)", sfmt("%6.2fms", HIS.gpu[i]) },
 				{ "", "" },
 				{ "Render Wall Time", sfmt("%6.2fms", ren), (ren > job) and SQUARE or nil },
@@ -1486,14 +1545,14 @@ do
 					if en < D.w0 then break end
 					if st <= D.w1 then
 						nf = nf + 1
-						entry(rj, st, st + HIS.ren[i] / 1000, 1, st)
-						local pa, ps, po, hb = HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i]
-						if pa then
-							entry(jj, pa, en, 1, pa)
-							if ps and ps >= pa then entry(aj, pa, ps, 2, pa) end
-							if ps and po and po >= ps then entry(sj, ps, po, 2, ps) end
-						end
-						if hb then entry(hj, hb, en, 2, hb) end
+						-- Roblox's frame: the jobs from its start to the end of PreRender, then the render
+						local je = st + HIS.job[i] / 1000
+						if je > st then entry(jj, st, je, 1, st) end
+						entry(rj, je, je + HIS.ren[i] / 1000, 1, je)
+						local pa, ps, po, hb, pr = HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i], HIS.pr[i]
+						if pa and ps and ps >= pa then entry(aj, pa, ps, 2, pa) end
+						if ps and po and po >= ps then entry(sj, ps, po, 2, ps) end
+						if hb and pr and pr >= hb then entry(hj, hb, pr, 2, hb) end
 					end
 					k = k - 1
 				end

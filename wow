@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.1 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38"
+local VERSION = "V2.38.1"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -631,7 +631,12 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2580)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2690)},{
+						LV("976", " 10/14/26 - 2.38.1"),
+						LI("976_1", "   -   Frame colours checked against Roblox's own profiler"),
+						LI("976_2", "   -   Render time taken from the right frame (exact)"),
+						LI("976_3", "   -   Same bars as Roblox's: 501 of 503 the same colour"),
+						LI("976_4", "   -   Frame tooltip rows like Roblox's (GPU Time added)"),
 						LV("977", " 10/14/26 - 2.38"),
 						LI("977_1", "   -   MicroProfiler compared side by side with Roblox's"),
 						LI("977_2", "   -   Close box turns grey under the mouse, hint box"),
@@ -5164,7 +5169,8 @@ do
 		local WHITE, BLACK = Color3.new(1, 1, 1), Color3.new(0, 0, 0)
 		local HL, HL_T = Color3.fromRGB(39, 144, 53), 0.4
 		local SQUARE = Color3.fromRGB(255, 0, 0)
-		local JOBS_UNSEEN = 0.3
+		local FRAME_LEAD = 0.22
+		local PRERENDER_TAIL = 0.15
 		local RULER_TEXT = hex(0x808080)
 		local FRAME_LINE = hex(0x757575)
 		local COL = {
@@ -5247,7 +5253,7 @@ do
 		for j = 1, NE do EV[j] = 0 end
 		local statOk = {}
 		if Stats then
-			for _, p in ipairs({ "RenderCPUFrameTime", "RenderGPUFrameTime", "HeartbeatTime", "PhysicsStepTime",
+			for _, p in ipairs({ "RenderCPUFrameTime", "RenderGPUFrameTime", "FrameTime", "HeartbeatTime", "PhysicsStepTime",
 				"DataReceiveKbps", "DataSendKbps", "PhysicsReceiveKbps", "PhysicsSendKbps", "InstanceCount", "PrimitivesCount",
 				"MovingPrimitivesCount", "ContactsCount", "SceneDrawcallCount", "SceneTriangleCount", "ShadowsDrawcallCount",
 				"ShadowsTriangleCount", "UI2DDrawcallCount", "UI2DTriangleCount", "UI3DDrawcallCount", "UI3DTriangleCount" }) do
@@ -5292,8 +5298,11 @@ do
 		local K = 0
 		local lastStart = nil
 		local lastMs = 0
-		local HIS = { ms = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {}, pa = {}, ps = {}, po = {}, hb = {} }
-		local EVQ = { pa = false, ps = false, po = false, hb = false, prevJob = 0, conns = nil }
+		local HIS = { ms = {}, gft = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {}, pa = {}, ps = {},
+			po = {}, hb = {}, pr = {} }
+		local EVQ = { pa = false, ps = false, po = false, hb = false, conns = nil }
+		local RAW_N = 8
+		local RAW = { n = 0, pa = {}, ps = {}, po = {}, hb = {}, pr = {}, prEnd = {}, dt = {}, len = {}, gpu = {}, hap = {}, phy = {}, no = {} }
 		function EVQ.connect()
 			if EVQ.conns then return end
 			EVQ.conns = {}
@@ -5309,7 +5318,8 @@ do
 			if not EVQ.conns then return end
 			for _, c in ipairs(EVQ.conns) do pcall(function() c:Disconnect() end) end
 			EVQ.conns = nil
-			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb, EVQ.prevJob = false, false, false, false, 0
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
+			RAW.n = 0
 		end
 		Janitor.add(EVQ.disconnect)
 		local AG = { sum = 0, max = 0, count = 0, dsum = 0, dmax = 0, dframes = 0, clear = false }
@@ -5338,7 +5348,7 @@ do
 		local view = { offset = 0, range = 50 }
 		local function hi(k) return (k - 1) % MAX_HISTORY + 1 end
 		local function slotOf(k) return (k - 1) % NUM_FRAMES + 1 end
-		local function baseStart() return HIS.start[hi(mmax(1, K - 3))] end
+		local function baseStart() return HIS.start[hi(mmax(1, K))] end
 		function P.Begin(name)
 			if not P.active then return end
 			local t = clock()
@@ -5400,29 +5410,27 @@ do
 				end
 			end
 		end
-		local function flip(dt, now)
-			local ms = (dt or 0) * 1000
-			local start = lastStart or (now - (dt or 0))
-			lastStart = now
-			local pa, ps, po, hb = EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb
-			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
-			if pa and pa < start then pa = false end
-			local job = pa and (now - pa) * 1000 or 0
-			local prevJob = EVQ.prevJob
-			EVQ.prevJob = pa and job + JOBS_UNSEEN or 0
-			if paused and not cfg.force then return false end
-			lastMs = ms
+		local function rawJob(j)
+			local pa, e = RAW.pa[j], RAW.prEnd[j]
+			if pa and e and e > pa then return FRAME_LEAD + (e - pa) * 1000 + PRERENDER_TAIL end
+			return 0
+		end
+		local function finish(j, ren, gft)
 			K = K + 1
 			local i = hi(K)
-			EV[1], EV[2], EV[3], EV[4] = ms, statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime"), job
-			EV[5] = (pa and ps and ps >= pa) and (ps - pa) * 1000 or 0
-			EV[6] = (ps and po and po >= ps) and (po - ps) * 1000 or 0
-			EV[7] = (hb and hb >= start) and (now - hb) * 1000 or 0
-			EV[8] = statMs("PhysicsStepTime")
-			HIS.ms[i], HIS.ren[i], HIS.gpu[i], HIS.job[i], HIS.phy[i] = ms, EV[2], EV[3], prevJob, EV[8]
-			HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i] = pa, ps or false, po or false, hb or false
-			HIS.start[i] = start
-			HIS.no[i] = frameNo - 1
+			local ms = RAW.len[j] or RAW.dt[j]
+			HIS.ms[i], HIS.gft[i], HIS.gpu[i], HIS.ren[i], HIS.job[i] = ms, gft, RAW.gpu[j] or 0, ren, rawJob(j)
+			HIS.phy[i], HIS.hap[i], HIS.no[i] = RAW.phy[j], RAW.hap[j] or 0, RAW.no[j]
+			local pa = RAW.pa[j]
+			HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i], HIS.pr[i] = pa, RAW.ps[j], RAW.po[j], RAW.hb[j], RAW.pr[j]
+			if pa then
+				HIS.start[i] = pa - FRAME_LEAD / 1000
+			elseif K > 1 then
+				HIS.start[i] = HIS.start[hi(K - 1)] + HIS.ms[hi(K - 1)] / 1000
+			else
+				HIS.start[i] = RAW.pr[j] - 0.001
+			end
+			lastMs = ms
 			RO.sum = RO.sum + ms
 			if K > NUM_FRAMES then RO.sum = RO.sum - HIS.ms[hi(K - NUM_FRAMES)] end
 			if ms > RO.max then RO.max = ms end
@@ -5433,6 +5441,40 @@ do
 				for k = mmax(1, K - NUM_FRAMES + 1), K do sum = sum + HIS.ms[hi(k)] end
 				RO.sum = sum
 			end
+		end
+		local function flip(dt, now)
+			local ms = (dt or 0) * 1000
+			local start = lastStart or (now - (dt or 0))
+			lastStart = now
+			local pa, ps, po, hb = EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
+			if pa and pa < start then pa = false end
+			if paused and not cfg.force then RAW.n = 0 return false end
+			local r = RAW.n + 1
+			RAW.n = r
+			local i = (r - 1) % RAW_N + 1
+			RAW.pa[i], RAW.ps[i], RAW.po[i], RAW.hb[i], RAW.pr[i] = pa, ps or false, po or false, hb or false, now
+			RAW.prEnd[i], RAW.dt[i], RAW.len[i], RAW.gpu[i], RAW.no[i] = false, ms, false, false, frameNo
+			RAW.phy[i] = statMs("PhysicsStepTime")
+			local ren, gpu = statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime")
+			local jobPrev = 0
+			if r >= 2 then
+				local j = (r - 2) % RAW_N + 1
+				local pj = RAW.pa[j]
+				RAW.len[j] = (pa and pj and pa > pj) and (pa - pj) * 1000 or ms
+				RAW.gpu[j] = gpu
+				jobPrev = rawJob(j)
+			end
+			local done = false
+			if r >= 4 then
+				finish((r - 4) % RAW_N + 1, ren, statMs("FrameTime"))
+				done = true
+			end
+			EV[1], EV[2], EV[3], EV[4] = ms, ren, gpu, jobPrev
+			EV[5] = (pa and ps and ps >= pa) and (ps - pa) * 1000 or 0
+			EV[6] = (ps and po and po >= ps) and (po - ps) * 1000 or 0
+			EV[7] = (hb and hb >= start) and (now - hb) * 1000 or 0
+			EV[8] = RAW.phy[i]
 			local child = TV.child
 			for j = 1, NT do child[j] = 0 end
 			for j = 1, NT do
@@ -5455,9 +5497,14 @@ do
 				for _, j in ipairs(list) do s = s + TV.last[j] end
 				TV.gLast[g] = s
 			end
-			HIS.hap[i] = TV.gLast.HappaTAS
+			if r >= 2 then RAW.hap[(r - 2) % RAW_N + 1] = TV.gLast.HappaTAS end
 			if not paused then aggregate(ms) end
-			return true
+			return done
+		end
+		function P.FrameEnd()
+			if not P.active or RAW.n < 1 then return end
+			local i = (RAW.n - 1) % RAW_N + 1
+			if not RAW.prEnd[i] then RAW.prEnd[i] = clock() end
 		end
 		local function readAvg()
 			local n = mmin(K, NUM_FRAMES)
@@ -6293,6 +6340,7 @@ do
 			local rows = {
 				{ "Frame " .. tostring(HIS.no[i]), "" },
 				{ "CPU Time", sfmt("%6.2fms", HIS.ms[i]) },
+				{ "GPU Time", sfmt("%6.2fms", HIS.gft[i] or 0) },
 				{ "GPU Time (device)", sfmt("%6.2fms", HIS.gpu[i]) },
 				{ "", "" },
 				{ "Render Wall Time", sfmt("%6.2fms", ren), (ren > job) and SQUARE or nil },
@@ -6429,14 +6477,13 @@ do
 					if en < D.w0 then break end
 					if st <= D.w1 then
 						nf = nf + 1
-						entry(rj, st, st + HIS.ren[i] / 1000, 1, st)
-						local pa, ps, po, hb = HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i]
-						if pa then
-							entry(jj, pa, en, 1, pa)
-							if ps and ps >= pa then entry(aj, pa, ps, 2, pa) end
-							if ps and po and po >= ps then entry(sj, ps, po, 2, ps) end
-						end
-						if hb then entry(hj, hb, en, 2, hb) end
+						local je = st + HIS.job[i] / 1000
+						if je > st then entry(jj, st, je, 1, st) end
+						entry(rj, je, je + HIS.ren[i] / 1000, 1, je)
+						local pa, ps, po, hb, pr = HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i], HIS.pr[i]
+						if pa and ps and ps >= pa then entry(aj, pa, ps, 2, pa) end
+						if ps and po and po >= ps then entry(sj, ps, po, 2, ps) end
+						if hb and pr and pr >= hb then entry(hj, hb, pr, 2, hb) end
 					end
 					k = k - 1
 				end
@@ -8670,6 +8717,7 @@ do
 			Profiler.End("Playback")
 		end
 		Profiler.End("HappaTAS")
+		Profiler.FrameEnd()
 	end
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
