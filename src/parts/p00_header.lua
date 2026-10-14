@@ -1,10 +1,32 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.37.2
+	Version: V2.38
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38 changes (short): the MicroProfiler compared side by side with Roblox's own, in the real client
+		- The close box (X) turns grey under the mouse, with Roblox's hint box ("Press F6 to close",
+		  "Hold Ctrl (or Cmd) to click through"). Holding Ctrl lets clicks go through to the game.
+		- [Dump] always sits on its lighter box. The graph starts under the menu bar like Roblox's, the
+		  green selection and the tooltip's red square match too.
+		- Frame bar colours work like Roblox's (Roblox docs): orange = the frame's jobs (animations,
+		  physics, scripts) took longer than its render, blue = the render took longer. Jobs are timed
+		  from RunService.PreAnimation to the next frame, plus 0.3 ms for the engine work before
+		  PreAnimation that no script can time (measured against Roblox's own profiler). Red bars need
+		  the GPU wait time, which no API gives.
+		- The frame graph is one EditableImage instead of 508 frames: the profiler costs about 0.1 ms of
+		  render time instead of 0.4-0.6 ms (measured), so it no longer pushes the bars towards blue.
+		  Clients without EditableImage get the frames.
+		- Detailed: lanes like Roblox's ("0000:  Engine" = each frame's render, jobs, animations,
+		  simulation and heartbeat; "0001:  HappaTAS" = its own work), time ruler and frame lines.
+		- Timers: Roblox's timer tooltip (frame time, average, max, min, calls, exclusive times, group)
+		  with a border in the timer's colour.
+		- Counters: Roblox's layout (Name, Value, Limit, Graph, Min, Max; groups collapse; a click shows
+		  a counter's graph). Roblox's own counters can't be read by scripts, so the values come from
+		  Stats, collectgarbage and HappaTAS, and the red line at the top says so.
+		- The profiler is drawn above Roblox's top bar, like Roblox's.
 
 	V2.37.2 changes (short): tested in the real Roblox client (EToH kit), the bugs found there fixed
 		- The interface always loads: re-running the script could leave the new copy without access to
@@ -46,7 +68,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.37.2"
+local VERSION = "V2.38"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

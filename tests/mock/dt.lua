@@ -498,6 +498,7 @@ do
 		ApplyStrokeMode = { Contextual = 0, Border = 1 },
 		ScaleType = { Stretch = 0, Slice = 1, Tile = 2, Fit = 3, Crop = 4 },
 		ResampleMode = { Default = 0, Pixelated = 1 },
+		ResamplerMode = { Default = 0, Pixelated = 1 },
 		TextTruncate = { None = 0, AtEnd = 1, SplitWord = 2 },
 		SizeConstraint = { RelativeXY = 0, RelativeXX = 1, RelativeYY = 2 },
 		BorderMode = { Outline = 0, Middle = 1, Inset = 2 },

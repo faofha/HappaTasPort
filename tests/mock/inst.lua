@@ -11,9 +11,13 @@ M.writeLog = nil -- set to a table to record {inst, prop}
 M.logs = {}
 
 M.clockStep = 1e-6 -- simulated CPU time per os.clock() call
+-- M.jobMs: when set, os.clock() runs (frame - jobMs) ahead from PreAnimation to the end of the frame, so the
+-- jobs (PreAnimation .. the next PreRender) take jobMs, like the wait between render and jobs in the client
+M.jobMs = nil
+M.clockOff = 0
 function M.clock()
 	M.clockTicks = M.clockTicks + 1
-	return M.now + M.clockTicks * M.clockStep
+	return M.now + M.clockOff + M.clockTicks * M.clockStep
 end
 
 -- ------------------------------------------------------------------------------------------------ Signal
@@ -179,7 +183,7 @@ local textDefaults = {
 }
 local imageDefaults = {
 	Image = "", ImageColor3 = Color3.new(1, 1, 1), ImageTransparency = 0, ImageRectOffset = Vector2.new(0, 0),
-	ImageRectSize = Vector2.new(0, 0), ResampleMode = Enum.ResampleMode.Default, ScaleType = Enum.ScaleType.Stretch,
+	ImageRectSize = Vector2.new(0, 0), ResampleMode = Enum.ResamplerMode.Default, ScaleType = Enum.ScaleType.Stretch, ImageContent = nil,
 	SliceCenter = Rect.new(0, 0, 0, 0), SliceScale = 1, TileSize = UDim2.new(1, 0, 1, 0), AutoButtonColor = true,
 	HoverImage = "", PressedImage = "",
 }

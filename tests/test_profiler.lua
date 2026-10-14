@@ -1,5 +1,5 @@
 -- ================================================================================================
--- MicroProfiler tests (V2.36): look, menus, Time / Avg / Max / Aggregate semantics, modes, dumps
+-- MicroProfiler tests (V2.38): look, menus, Time / Avg / Max / Aggregate semantics, modes, dumps
 -- ================================================================================================
 local function rgb(c) local r, g, b = M.rgb255(c); return r .. "," .. g .. "," .. b end
 local function seqEnds(seq) return rgb(seq.Keypoints[1].Value), rgb(seq.Keypoints[#seq.Keypoints].Value) end
@@ -20,7 +20,8 @@ M.step(1 / 60)
 check(P.active == true, "Show MicroProfiler opens it")
 local U, I = P.Internals()
 check(U.root ~= nil and U.root.Visible, "profiler root visible")
-check(U.root:IsDescendantOf(M.hui), "parented under gethui()")
+check(U.sg.Parent == M.services.CoreGui, "straight in CoreGui (above the top bar, not inside gethui()'s ScreenGui)")
+eq(U.sg.DisplayOrder, 2147482000, "DisplayOrder above Roblox's top bar")
 
 section("font: Roboto Mono Bold, 6 px grid, 1 px black drop shadow")
 local ff = U.title.sh.FontFace
@@ -51,16 +52,31 @@ for i, n in ipairs(names) do
 end
 check(U.menu.Size == UDim2.new(1, 0, 0, 10), "menu bar is 10 px tall")
 eq(rgb(U.menu.BackgroundColor3), "49,49,49", "menu bar 0x313131")
-check(U.graph.f.Position == UDim2.fromOffset(0, 10) and U.graph.f.Size == UDim2.new(1, -50, 0, 50), "graph 50 px under the menu, room for the close box")
+check(U.graph.f.Position == UDim2.fromOffset(0, 9) and U.graph.f.Size == UDim2.new(1, -50, 0, 50), "graph from y 9 (top row under the menu bar, bars end on row 58), room for the close box")
+check(U.menu.ZIndex > U.graph.f.ZIndex, "the menu bar is drawn over the graph's top row")
 eq(rgb(U.graph.f.BackgroundColor3), "71,71,71", "graph 0x474747")
 eq(#U.bars, 508, "508 frame bars (512 - GPU delay - 1)")
-check(U.close.f.Size == UDim2.fromOffset(50, 50) and U.close.f.Position == UDim2.new(1, -50, 0, 10), "50x50 close box at the right")
-local xLines = 0
-for _, c in ipairs(U.close.f:GetChildren()) do if c:IsA("Frame") and (c.Rotation == 45 or c.Rotation == -45) then xLines = xLines + 1 end end
-eq(xLines, 2, "close box draws an X")
+check(U.close.f.Size == UDim2.fromOffset(50, 50) and U.close.f.Position == UDim2.new(1, -50, 0, 9), "50x50 close box at the right")
+local xPix, nPix = {}, 0
+for _, c in ipairs(U.close.f:GetChildren()) do
+	if c:IsA("Frame") and c.Size == UDim2.fromOffset(1, 1) then
+		xPix[c.Position.X.Offset .. "," .. c.Position.Y.Offset] = rgb(c.BackgroundColor3)
+		nPix = nPix + 1
+	end
+end
+local xOk = true
+for i = 0, 29 do
+	if xPix[(10 + i) .. "," .. (10 + i)] ~= "255,255,255" or xPix[(39 - i) .. "," .. (10 + i)] ~= "255,255,255" then xOk = false end
+end
+check(xOk and nPix == 60, "close box X: white 1 px steps from (10,10) to (39,39) and from (39,10) to (10,39)")
+check(not U.closeHover.f.Visible and U.closeHover.x == 2 and U.closeHover.y == 2 and U.closeHover.w == 46 and U.closeHover.h == 46, "46x46 hover box at (2,2), hidden")
+eq(rgb(U.closeHover.f.BackgroundColor3), "136,136,136", "hover box 0x888888")
+eq(rgb(U.dumpBox.f.BackgroundColor3), "90,90,90", "[Dump] always on a 0x5a5a5a box")
+check(U.dumpBox.f.Visible and U.dumpBox.x == I.menuX[8] - 1 and U.dumpBox.w == 32 and U.dumpBox.h == 10, "the [Dump] box: x - 1, 32 x 10 (the client's)")
+check(U.items[8].hl.w == 6 * 6 + 2 and U.items[1].hl.w == 4 * 6 + 1, "hover boxes: [Dump] 1 px wider than the others")
 local ap, as = U.graph.f.AbsolutePosition, U.graph.f.AbsoluteSize
 -- AbsolutePosition is measured from the bottom of the top bar (GuiBase2d.AbsolutePosition docs)
-check(ap.Y == 10 - M.inset and as.X == 1870 and as.Y == 50, "graph absolute 0,10-inset 1870x50 on 1920x1080")
+check(ap.Y == 9 - M.inset and as.X == 1870 and as.Y == 50, "graph absolute 0,9-inset 1870x50 on 1920x1080")
 
 section("readout format")
 local s = U.readout.s
@@ -184,16 +200,26 @@ local function newestBar()
 	local K = P.Snapshot().recorded
 	return U.bars[(K - 1) % 508 + 1], K
 end
-M.stats.HeartbeatTime, M.stats.RenderCPUFrameTime = 0.004, 0.001
-stepMs(33.33 / 2)
+-- jobs = PreAnimation .. the next PreRender (M.jobMs), render = Stats.RenderCPUFrameTime. A bar pairs the
+-- render that started at its first PreRender with the jobs that ended there (measured the frame before)
+M.jobMs, M.stats.RenderCPUFrameTime = 4, 0.001
+stepMs(33.33 / 2, 3)
 local b = newestBar()
 eq(b.f.Size.Y.Offset, 25, "half the reference = 25 px")
 local top, bottom = seqEnds(b.g.Color)
 eq(top, "255,191,147", "orange top colour ((c+max)/2)")
 eq(bottom, "147,83,39", "orange bottom colour ((c+min)/2)")
 eq(b.g.Rotation, 90, "gradient runs top to bottom")
-M.stats.HeartbeatTime, M.stats.RenderCPUFrameTime = 0.001, 0.004
+local HIS = I.his
+local iK = (P.Snapshot().recorded - 1) % 512 + 1
+near(HIS.job[iK], 4.3, 0.01, "Jobs Wall Time = PreAnimation .. PreRender (4 ms) + 0.3 ms of unseen engine jobs")
+near(HIS.ren[iK], 1, 1e-9, "Render Wall Time = Stats.RenderCPUFrameTime")
+M.jobMs, M.stats.RenderCPUFrameTime = 1, 0.0039
 stepMs(100)
+b = newestBar()
+top = seqEnds(b.g.Color)
+eq(top, "255,191,147", "the first slow frame still pairs the 4 ms jobs that ended at its start: orange")
+stepMs(100, 2)
 b = newestBar()
 eq(b.f.Size.Y.Offset, 50, "longer than the reference = full height")
 top, bottom = seqEnds(b.g.Color)
@@ -205,7 +231,7 @@ local prev = U.bars[(K - 2) % 508 + 1]
 near(prev.f.Position.X.Scale + 1 / 508, b.f.Position.X.Scale, 1e-9, "bars are contiguous")
 stepMs(5)
 eq(newestBar().f.Size.Y.Offset, 8, "5 ms = ceil(5/33.33*50) = 8 px")
-M.stats.HeartbeatTime, M.stats.RenderCPUFrameTime = 0.0012, 0.0021
+M.jobMs, M.stats.RenderCPUFrameTime = nil, 0.0021
 
 section("Options: reference time")
 MENUS[5].click(6)     -- 66.66ms (Reference header is line 0)
@@ -220,10 +246,10 @@ stepMs(16, 40)
 local hl = U.hl.f
 check(hl.Visible, "selection visible")
 K = P.Snapshot().recorded
-near(hl.Position.X.Scale + U.strip.Position.X.Scale, 504 / 508, 1e-6, "default window starts at nFrameCurrent (3 frames behind)")
+near(hl.Position.X.Scale, 504 / 508, 1e-6, "default window starts at nFrameCurrent (3 frames behind)")
 near(hl.Size.X.Scale, 4 / 508, 1e-9, "50 ms = the last 4 frames at 16 ms")
-eq(rgb(hl.BackgroundColor3), "51,187,68", "0x33bb44")
-near(hl.BackgroundTransparency, 1 - 0x77 / 255, 1e-6, "alpha 0x77")
+eq(rgb(hl.BackgroundColor3), "39,144,53", "selection colour (39, 144, 53), measured in the client")
+near(hl.BackgroundTransparency, 0.4, 1e-6, "60 % opaque")
 -- click a bar 20 frames back: the 50 ms window is centred on it
 local gw = 1870
 local function barX(back) return gw - (back + 0.5) * gw / 508 end
@@ -236,7 +262,7 @@ local v = P.Snapshot()
 near(v.offset, -(20 - 3) * 16 + 8 - 25, 0.01, "left click centres the 50 ms window on that frame")
 near(v.range, 50, 1e-9, "range stays 50 ms")
 local clickedK = P.Snapshot().recorded - 20
-local cbar = U.bars[(clickedK - 1) % 508 + 1].f.Position.X.Scale
+local cbar = U.bars[(clickedK - 1) % 508 + 1].f.Position.X.Scale + U.strip.Position.X.Scale
 check(hl.Position.X.Scale <= cbar + 1e-9 and cbar < hl.Position.X.Scale + hl.Size.X.Scale, "the clicked frame is inside the green selection")
 near(hl.Size.X.Scale, 5 / 508, 1e-9, "50 ms window centred on a 16 ms frame touches 5 frames")
 M.click(2)
@@ -261,7 +287,8 @@ eq(labels[3], "GPU Time (device)", "row 3 GPU Time (device)")
 eq(values[3], "  1.73ms", "GPU from Stats.RenderGPUFrameTime")
 eq(labels[5], "Render Wall Time", "Render Wall Time")
 eq(labels[6], "Jobs Wall Time", "Jobs Wall Time")
-check(tip.rows[6].sq.f.Visible and rgb(tip.rows[6].sq.f.BackgroundColor3) == "215,40,20", "red square next to Jobs Wall Time")
+check(tip.rows[6].sq.f.Visible and rgb(tip.rows[6].sq.f.BackgroundColor3) == "255,0,0", "red square next to Jobs Wall Time (the jobs are longer)")
+check(not tip.rows[5].sq.f.Visible, "no square next to Render Wall Time")
 eq(labels[8], "Mem Used", "Mem Used")
 eq(values[8], "1234.5MB", "memory from Stats:GetTotalMemoryUsageMb")
 eq(rgb(tip.outer.f.BackgroundColor3), "255,255,255", "white border")
@@ -277,6 +304,17 @@ M.step(16 / 1000)
 check(not tip.outer.f.Visible, "tooltip hidden when the mouse leaves")
 top = seqEnds(hb.g.Color)
 check(top ~= "255,255,255", "hovered colour restored")
+-- render longer than the jobs: the square moves up to Render Wall Time
+M.jobMs, M.stats.RenderCPUFrameTime = 0.5, 0.003
+stepMs(4.37, 3)
+mouse(barX(0), 40)
+M.step(4.37 / 1000)
+check(tip.outer.f.Visible and tip.rows[5].sq.f.Visible and not tip.rows[6].sq.f.Visible, "render longer: the square is next to Render Wall Time")
+eq(tip.rows[6].v.s, "  0.80ms", "Jobs Wall Time 0.50 ms + 0.3 ms unseen")
+eq(tip.rows[5].v.s, "  3.00ms", "Render Wall Time 3.00 ms")
+away()
+M.step(4.37 / 1000)
+M.jobMs, M.stats.RenderCPUFrameTime = nil, 0.0021
 
 section("menus open on hover, stay open inside, close outside")
 local function ddTexts()
@@ -395,16 +433,64 @@ check(hasSpike, "Spike Display renames Max Time")
 MENUS[5].click(22)
 MENUS[4].click(0)
 
-section("Counters mode")
+section("Counters mode (MicroProfileDrawCounterView)")
 P.SetMode("Counters")
 stepMs(16, 16)
 local cnt = I.cnt
 local cn = {}
 for n = 1, cnt.n do cn[#cn + 1] = cnt.rows[n].name.s end
 local joined = table.concat(cn, "|")
-check(joined:find("^frame|    fps|    frames|memory|    total %(MB%)") ~= nil, "counter rows: " .. joined:sub(1, 80))
+check(joined:find("^frame_stats|basic|cpu_frame_time_microsec|render_cpu_time_microsec|gpu_device_time_microsec|jobs_time_microsec") ~= nil, "counter rows: " .. joined:sub(1, 120))
+check(joined:find("|instance_count|instance|") ~= nil and joined:find("|memory|total|") ~= nil and joined:find("|happatas|tas_frames|") ~= nil, "groups instance_count, memory, happatas")
 check(joined:find("network") ~= nil, "network rows with verbosity Low")
-eq(cnt.heads[1].t.s, "Name", "Name header")
+local cheads = {}
+for i, h in ipairs(cnt.heads) do cheads[i] = h.t.s end
+eq(table.concat(cheads, "|"), "Name|Value|Limit|Graph|Min|Max", "headers like the client")
+local r1, r2, r3 = cnt.rows[1], cnt.rows[2], cnt.rows[3]
+eq(r1.name.x, 6, "level 0 name 1 character in")
+eq(r2.name.x, 4 * 6 + 6, "level 1: 4 more characters")
+eq(r3.name.x, 8 * 6 + 6, "level 2")
+eq(r1.y, 27, "first row at y 27 (under the note row and the headers)")
+eq(r2.y, 36, "9 px rows")
+check(not r1.v.vis and r3.v.vis, "a group has no value, a counter has")
+eq(rgb(cnt.note.f.BackgroundColor3), "204,51,51", "note row 0xcc3333")
+check(cnt.note.y == 10 and cnt.note.h == 9, "note row at y 10, 9 px tall")
+eq(cnt.heads[2].t.x, cnt.vline.x + 2, "Value header at nTimerWidth (the line is 2 px before it)")
+eq(cnt.fmt(5743243264), "5 743 243 264", "MicroProfileFormatCounter: groups of three digits")
+eq(cnt.fmt(0), "0", "zero")
+eq(cnt.fmt(156426240, true), "149.18mb", "bytes")
+eq(cnt.fmt(512, true), "512b", "bytes under 1 kb")
+eq(cnt.fmt(-1234), "-1 234", "negative")
+local frameRow
+for n = 1, cnt.n do if cnt.rows[n].name.s == "frame_count" then frameRow = cnt.rows[n] end end
+check(frameRow ~= nil and frameRow.v.s:match("^%d[%d ]*$") ~= nil, "frame_count value " .. tostring(frameRow and frameRow.v.s))
+check(frameRow.v.x + #frameRow.v.s * 6 == cnt.heads[3].t.x - 15, "values end at nTimerWidth + nCounterWidth")
+-- a click right of the Limit column shows the graph and min / max, again = 5 rows tall, right click hides
+mouse(cnt.limitEnd + 30, frameRow.y + 4)
+M.step(16 / 1000)
+local hc = rgb(frameRow.bg.f.BackgroundColor3)
+check(hc == "115,115,115" or hc == "93,93,93", "the row under the mouse is lit (+0x2c2c2c): " .. hc)
+M.click(1)
+stepMs(16, 2)
+check(frameRow.mn.vis and frameRow.mx.vis, "detailed: min / max shown")
+check(frameRow.cols ~= nil and frameRow.cols[1].f.Visible, "detailed: the graph is drawn")
+M.click(1)
+stepMs(16, 2)
+eq(frameRow.rows, 5, "a second click: the graph is 5 rows tall")
+M.click(2)
+stepMs(16, 2)
+check(not frameRow.mn.vis and frameRow.rows == 1, "a right click hides them")
+-- a click on a group's name closes it ('*' in front), another opens it
+mouse(20, cnt.rows[1].y + 4)
+M.step(16 / 1000)
+local before = cnt.n
+M.click(1)
+stepMs(16, 2)
+check(cnt.n < before and cnt.rows[1].star.vis and cnt.rows[1].star.s == "*", "closed group: children hidden, '*' in front")
+M.click(1)
+stepMs(16, 2)
+eq(cnt.n, before, "opened again")
+away()
 MENUS[12].click(1) -- Network Off
 stepMs(16, 16)
 cn = {}
@@ -412,18 +498,74 @@ for n = 1, cnt.n do cn[#cn + 1] = cnt.rows[n].name.s end
 check(table.concat(cn, "|"):find("network") == nil, "Network Off removes network rows")
 MENUS[12].click(2)
 
-section("Detailed mode: HappaTAS scopes on a timeline")
+section("Detailed mode: engine phases and HappaTAS scopes on a timeline")
 P.SetMode("Detailed")
 P.SetView(0, 50)
 check(U.det.f.Visible and U.graph.f.Visible, "detailed panel under the graph")
+check(U.det.f.Position == UDim2.fromOffset(0, 59) and U.det.f.Size == UDim2.new(1, 0, 1, -59), "the detailed view fills the screen from y 59")
 MENUS[3].click(4) -- 60
+M.jobMs = 3
 stepMs(16, 8)
 local det = I.det
 check(det.nStripes > 3, "time stripes drawn (" .. det.nStripes .. ")")
 eq(det.stripes[1].t.s, "3.16ms", "50 ms range uses 3.16 ms steps (10^(floor(2*(log10(50)-1))/2))")
+eq(det.stripes[1].t.y, 0, "step labels on the first row")
+check(det.stripes[1].b.h == 1080 - 59, "ruler columns run to the bottom of the screen")
 check(det.nLines >= 2, "frame start lines drawn (" .. det.nLines .. ")")
-check(det.nBars >= 1, "HappaTAS scopes drawn (" .. det.nBars .. ")")
-eq(det.thread.s, "HappaTAS (Lua)", "thread name")
+eq(rgb(det.lines[1].f.BackgroundColor3), "117,117,117", "frame lines 0x757575 (measured)")
+check(det.lines[1].h == 1080 - 59, "frame lines run to the bottom")
+eq(det.heads[1].t.s, "0000:  Engine", "lane 1 name")
+eq(det.heads[2].t.s, "0001:  HappaTAS", "lane 2 name")
+-- MicroProfileDrawDetailedBars: nY = 9, + 3 -> name at 12 (on its box at x 10), + 3 + 9 -> first level at 24
+eq(det.heads[1].t.x, 10, "lane name at x 10")
+eq(det.heads[1].t.y, 12, "lane 1 name 3 px under the step labels' row")
+check(det.heads[1].b.x == 10 and det.heads[1].b.w == #"0000:  Engine" * 6 + 2 and det.heads[1].b.h == 9, "name box: the text width + 2, 9 px")
+eq(det.heads[1].band.y, 24, "band (= level 1) 12 px under the name")
+check(det.heads[1].band.h == 12 and det.heads[1].band.w == 1920, "band 12 px tall across the view")
+local names = {}
+local byName = {}
+for i = 1, det.nBars do
+	local b = det.bars[i]
+	if b.t.vis then names[b.t.s] = true end
+	byName[#byName + 1] = b
+end
+check(names["Render CPU"] and names["Jobs"], "engine scopes drawn with their names")
+local inLane2 = 0
+for i = 1, det.nBars do if det.bars[i].b.y >= det.heads[2].band.y then inLane2 = inLane2 + 1 end end
+check(inLane2 > 0, "HappaTAS scopes in lane 2 (" .. inLane2 .. ")")
+local lvl2 = false
+for i = 1, det.nBars do
+	local b = det.bars[i].b
+	if b.y == 24 + 12 and b.vis then lvl2 = true end
+	check(b.h == 12, "scopes are 12 px tall")
+	if b.h ~= 12 then break end
+end
+check(lvl2, "level 2 scopes (Animations / Simulation / Heartbeat) 12 px lower")
+-- lane 2 starts after lane 1's levels: 24 + 2 levels * 12 + 13 + 3
+eq(det.heads[2].t.y, 24 + 2 * 12 + 13 + 3, "lane 2 under lane 1 (nY += levels * 12 + 12 + 1)")
+local rj = 0
+for i = 1, det.nBars do
+	local b = det.bars[i]
+	if b.t.vis and b.t.s == "Jobs" then rj = b.b.w end
+end
+near(rj, 3 * 1920 / 50, 2, "the Jobs scope is 3 ms wide at 50 ms per screen")
+-- hovering a scope: the timer tooltip with the timer's colour as the border
+local jb
+for i = 1, det.nBars do if det.bars[i].t.vis and det.bars[i].t.s == "Jobs" then jb = det.bars[i] end end
+mouse(jb.b.x + 3, 59 + jb.b.y + 6)
+stepMs(16, 2)
+check(U.tip.outer.f.Visible, "hovering a scope shows the timer tooltip")
+eq(U.tip.rows[1].l.s, "Timer:", "row 1 Timer:")
+eq(U.tip.rows[1].v.s, "Jobs", "the hovered timer")
+eq(U.tip.rows[2].l.s, "Time:", "row 2 Time: (the scope's own time)")
+local tl = {}
+for i = 1, U.tip.n do tl[i] = U.tip.rows[i].l.s end
+eq(table.concat(tl, "|"), "Timer:|Time:||Frame Time:|Average:|Max:|Min:||Call Average:|Call Count:||Exclusive Frame Time:|Exclusive Average:|Exclusive Max:||Group:|Frame Time:|Frame Average:|Frame Max:", "MicroProfileDrawFloatTooltip rows")
+eq(rgb(U.tip.outer.f.BackgroundColor3), "255,175,95", "border in the timer's colour")
+check(det.hover and det.hover.j ~= nil, "hover recorded")
+away()
+stepMs(16, 2)
+M.jobMs = nil
 local r0 = P.Snapshot().range
 mouse(960, 60 + 30)
 M.step(16 / 1000)
@@ -444,12 +586,12 @@ mouse(960 - 192, 60 + 30)
 M.step(16 / 1000)
 M.mouseUp(1)
 near(P.Snapshot().offset - off0, 192 * P.Snapshot().range / 1920, 1e-6, "dragging 192 px pans by a tenth of the range")
-mouse(960, 400)
+mouse(960, 30)
 M.step(16 / 1000)
 local r1 = P.Snapshot().range
 M.wheel(1)
 M.step(16 / 1000)
-eq(P.Snapshot().range, r1, "the wheel outside the panel leaves the view alone")
+eq(P.Snapshot().range, r1, "the wheel over the graph leaves the view alone")
 P.SetView(0, 50)
 r0 = 50
 away()
@@ -483,7 +625,7 @@ local cb = U.bars[(curF - 1) % 508 + 1]
 eq(cb.f.Size.Y.Offset, 25, "TAS bar height from FrameTime (16 ms = ceil(24.0) = 25 px, like (int)(base + (1-f)*50))")
 local sb = U.bars[(575 - 1) % 508 + 1]
 eq(sb.f.Size.Y.Offset, 50, "TAS spike frame (50 ms) full height")
-near(U.hl.f.Position.X.Scale - (curF - (curF - 1) % 508 - 1) * 0, U.bars[(curF - 1) % 508 + 1].f.Position.X.Scale, 1e-9, "selection on the current TAS frame")
+near(U.hl.f.Position.X.Scale, U.bars[(curF - 1) % 508 + 1].f.Position.X.Scale + U.strip.Position.X.Scale, 1e-9, "selection on the current TAS frame")
 MENUS[3].click(0) -- Infinite
 M.step(16 / 1000)
 eq(U.items[3].t.s, "Aggregate[600]", "Infinite in TAS view counts TAS frames")
@@ -644,7 +786,12 @@ near(ft.avg, 16, 1e-9, "Frame average over the window")
 local rc = P.TimerStats("Render CPU")
 near(rc.time, M.stats.RenderCPUFrameTime * 1000, 1e-9, "Render CPU timer = Stats.RenderCPUFrameTime")
 local hb = P.TimerStats("Heartbeat")
-near(hb.time, M.stats.HeartbeatTime * 1000, 1e-9, "Heartbeat timer = Stats.HeartbeatTime")
+check(hb.time > 15.9 and hb.time <= 16 + 1e-9, "Heartbeat timer = Heartbeat to the next PreRender (" .. hb.time .. ")")
+local jt = P.TimerStats("Jobs")
+check(jt.time >= hb.time and jt.time <= 16 + 1e-9, "Jobs timer = PreAnimation to the next PreRender")
+local ph = P.TimerStats("Physics")
+near(ph.time, M.stats.PhysicsStepTime * 1000, 1e-9, "Physics timer = Stats.PhysicsStepTime")
+check(jt.exclusive <= jt.time + 1e-12 and P.TimerStats("Animations").time >= 0, "Jobs exclusive = minus Animations, Simulation, Heartbeat")
 local cu = P.TimerStats("Cursor")
 eq(cu.calls, 1, "Cursor scope once per frame")
 check(ht.exclusive <= ht.time + 1e-12, "exclusive <= inclusive")
@@ -832,5 +979,5 @@ S.Set("Show MicroProfiler", 1)
 M.step(16 / 1000)
 M.genv.__HappaTAS.Unload()
 M.step(16 / 1000)
-check(M.hui:FindFirstChild("HappaProfiler") == nil, "profiler GUI removed on unload")
+check(M.hui:FindFirstChild("HappaProfiler") == nil and M.services.CoreGui:FindFirstChild("HappaProfiler") == nil, "profiler GUI removed on unload")
 finish()

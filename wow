@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.37.2 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.37.2"
+local VERSION = "V2.38"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -631,7 +631,15 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2410)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2580)},{
+						LV("977", " 10/14/26 - 2.38"),
+						LI("977_1", "   -   MicroProfiler compared side by side with Roblox's"),
+						LI("977_2", "   -   Close box turns grey under the mouse, hint box"),
+						LI("977_3", "   -   Hold Ctrl to click through; [Dump] box like Roblox's"),
+						LI("977_4", "   -   Orange = jobs longer, blue = render longer"),
+						LI("977_5", "   -   Frame graph is one image: far less render time"),
+						LI("977_6", "   -   Detailed lanes, Timers tooltip, Counters layout"),
+						LI("977_7", "   -   Drawn above Roblox's top bar"),
 						LV("978", " 10/13/26 - 2.37.2"),
 						LI("978_1", "   -   Tested in the real Roblox client, the bugs found fixed"),
 						LI("978_2", "   -   Interface always loads, also when re-running the script"),
@@ -1047,7 +1055,13 @@ do
 		noTranslate(sg)
 		pcall(function() sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling end)
 		pcall(function() sg.DisplayOrder = displayOrder end)
-		if not UI.Attach(sg) then
+		if Env.protectgui then pcall(Env.protectgui, sg) end
+		local core = svc("CoreGui")
+		if core and tryParent(sg, core) then
+			UI.OverlayParent = "CoreGui"
+		elseif UI.Attach(sg) then
+			UI.OverlayParent = UI.ParentName
+		else
 			sg:Destroy()
 			return nil
 		end
@@ -5140,27 +5154,38 @@ do
 		local BAR_H = 12
 		local BAR_W = 100
 		local SCALE = 1
-		local DET_Y = MENU_H + HIST_H
-		local DET_H = 2 * RH + 2 * BAR_H + 4
+		local GRAPH_Y = TH + 1
+		local DET_Y = GRAPH_Y + HIST_H
 		local function hex(h) return Color3.fromRGB(floor(h / 65536) % 256, floor(h / 256) % 256, h % 256) end
 		local BACK = { hex(0x474747), hex(0x313131) }
 		local BACK_HOVER = { hex(0x737373), hex(0x5d5d5d) }
 		local HOVER = hex(0x888888)
 		local SEP = hex(0x777777)
 		local WHITE, BLACK = Color3.new(1, 1, 1), Color3.new(0, 0, 0)
-		local HL, HL_T = hex(0x33bb44), 1 - 0x77 / 255
-		local SQUARE = Color3.fromRGB(215, 40, 20)
+		local HL, HL_T = Color3.fromRGB(39, 144, 53), 0.4
+		local SQUARE = Color3.fromRGB(255, 0, 0)
+		local JOBS_UNSEEN = 0.3
 		local RULER_TEXT = hex(0x808080)
-		local FRAME_LINE = hex(0xbbbbbb)
-		local seqCache = {}
+		local FRAME_LINE = hex(0x757575)
+		local COL = {
+			dump = hex(0x5a5a5a),
+			band = Color3.fromRGB(24, 75, 60), bandT = 0.56,
+			lane = hex(0x606060), laneT = 0.375,
+			red = hex(0xcc3333),
+			cline = Color3.fromRGB(69, 69, 69), clineT = 0.59,
+			graph = hex(0x0088ff),
+			range = hex(0x009900),
+		}
+		local seqCache, SEQ_RGB = {}, {}
 		local function barSeq(r, g, b)
 			local key = r * 65536 + g * 256 + b
 			local s = seqCache[key]
 			if s then return s end
 			local mx, mn = mmax(r, g, b, 30), mmin(r, g, b, 180)
-			s = ColorSequence.new(Color3.fromRGB(floor((r + mx) / 2), floor((g + mx) / 2), floor((b + mx) / 2)),
-				Color3.fromRGB(floor((r + mn) / 2), floor((g + mn) / 2), floor((b + mn) / 2)))
+			local t = { floor((r + mx) / 2), floor((g + mx) / 2), floor((b + mx) / 2), floor((r + mn) / 2), floor((g + mn) / 2), floor((b + mn) / 2) }
+			s = ColorSequence.new(Color3.fromRGB(t[1], t[2], t[3]), Color3.fromRGB(t[4], t[5], t[6]))
 			seqCache[key] = s
+			SEQ_RGB[s] = t
 			return s
 		end
 		local SEQ_CPU = barSeq(255, 127, 39)
@@ -5192,7 +5217,10 @@ do
 			{ "Frame", "Engine", 255, 127, 39 },
 			{ "Render CPU", "Engine", 55, 160, 238 },
 			{ "Render GPU", "Engine", 120, 200, 250 },
-			{ "Heartbeat", "Engine", 235, 205, 70 },
+			{ "Jobs", "Engine", 255, 175, 95 },
+			{ "Animations", "Engine", 225, 120, 210, "Jobs" },
+			{ "Simulation", "Engine", 70, 195, 170, "Jobs" },
+			{ "Heartbeat", "Engine", 235, 205, 70, "Jobs" },
 			{ "Physics", "Engine", 95, 205, 115 },
 			{ "HappaTAS", "HappaTAS", 185, 125, 255 },
 			{ "Record", "HappaTAS", 255, 95, 95, "HappaTAS" },
@@ -5211,14 +5239,18 @@ do
 			t.color = Color3.fromRGB(t[3], t[4], t[5])
 			t.seq = barSeq(t[3], t[4], t[5])
 		end
+		for _, t in ipairs(TIMERS) do t.pj = t.parent and TI[t.parent] end
 		local GROUPS = { "Engine", "HappaTAS" }
-		local EV = { 0, 0, 0, 0, 0 }
+		local GROUP_OF = { Engine = { TI.Frame }, HappaTAS = { TI.HappaTAS, TI.Profiler } }
+		local NE = TI.Physics
+		local EV = {}
+		for j = 1, NE do EV[j] = 0 end
 		local statOk = {}
 		if Stats then
 			for _, p in ipairs({ "RenderCPUFrameTime", "RenderGPUFrameTime", "HeartbeatTime", "PhysicsStepTime",
 				"DataReceiveKbps", "DataSendKbps", "PhysicsReceiveKbps", "PhysicsSendKbps", "InstanceCount", "PrimitivesCount",
 				"MovingPrimitivesCount", "ContactsCount", "SceneDrawcallCount", "SceneTriangleCount", "ShadowsDrawcallCount",
-				"UI2DDrawcallCount" }) do
+				"ShadowsTriangleCount", "UI2DDrawcallCount", "UI2DTriangleCount", "UI3DDrawcallCount", "UI3DTriangleCount" }) do
 				local ok, v = pcall(function() return Stats[p] end)
 				statOk[p] = ok and type(v) == "number"
 			end
@@ -5260,22 +5292,49 @@ do
 		local K = 0
 		local lastStart = nil
 		local lastMs = 0
-		local HIS = { ms = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {} }
+		local HIS = { ms = {}, gpu = {}, ren = {}, job = {}, phy = {}, hap = {}, start = {}, no = {}, pa = {}, ps = {}, po = {}, hb = {} }
+		local EVQ = { pa = false, ps = false, po = false, hb = false, prevJob = 0, conns = nil }
+		function EVQ.connect()
+			if EVQ.conns then return end
+			EVQ.conns = {}
+			for _, e in ipairs({ { "PreAnimation", "pa" }, { "PreSimulation", "ps" }, { "PostSimulation", "po" }, { "Heartbeat", "hb" } }) do
+				local key = e[2]
+				local ok, c = pcall(function()
+					return RunService[e[1]]:Connect(function() if not EVQ[key] then EVQ[key] = clock() end end)
+				end)
+				if ok and c then EVQ.conns[#EVQ.conns + 1] = c end
+			end
+		end
+		function EVQ.disconnect()
+			if not EVQ.conns then return end
+			for _, c in ipairs(EVQ.conns) do pcall(function() c:Disconnect() end) end
+			EVQ.conns = nil
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb, EVQ.prevJob = false, false, false, false, 0
+		end
+		Janitor.add(EVQ.disconnect)
 		local AG = { sum = 0, max = 0, count = 0, dsum = 0, dmax = 0, dframes = 0, clear = false }
 		local RO = { sum = 0, max = 0, exact = 0 }
 		local tAcc, tCnt, tStart = {}, {}, {}
 		local TV = { last = {}, lastC = {}, lastX = {}, aT = {}, aMax = {}, aMin = {}, aC = {}, aX = {}, aXMax = {},
-			dT = {}, dMax = {}, dMin = {}, dC = {}, dX = {}, dXMax = {} }
+			dT = {}, dMax = {}, dMin = {}, dC = {}, dX = {}, dXMax = {}, child = {},
+			gLast = {}, gA = {}, gAMax = {}, gD = {}, gDMax = {} }
 		local function clearTimerAcc()
 			for j = 1, NT do TV.aT[j], TV.aMax[j], TV.aMin[j], TV.aC[j], TV.aX[j], TV.aXMax[j] = 0, 0, HUGE, 0, 0, 0 end
+			for _, g in ipairs(GROUPS) do TV.gA[g], TV.gAMax[g] = 0, 0 end
 		end
 		for j = 1, NT do
 			TV.last[j], TV.lastC[j], TV.lastX[j] = 0, 0, 0
 			TV.dT[j], TV.dMax[j], TV.dMin[j], TV.dC[j], TV.dX[j], TV.dXMax[j] = 0, 0, 0, 0, 0, 0
 		end
+		for _, g in ipairs(GROUPS) do TV.gLast[g], TV.gD[g], TV.gDMax[g] = 0, 0, 0 end
 		clearTimerAcc()
 		local LOG_N = 4096
 		local slog = { name = {}, t0 = {}, t1 = {}, depth = {}, pos = 0, depthNow = 0, on = false, open = {} }
+		function slog.push(name, t0, t1, depth)
+			slog.pos = slog.pos + 1
+			local i = (slog.pos - 1) % LOG_N + 1
+			slog.name[i], slog.t0[i], slog.t1[i], slog.depth[i] = name, t0, t1, depth
+		end
 		local view = { offset = 0, range = 50 }
 		local function hi(k) return (k - 1) % MAX_HISTORY + 1 end
 		local function slotOf(k) return (k - 1) % NUM_FRAMES + 1 end
@@ -5322,12 +5381,18 @@ do
 				if x > TV.aXMax[j] then TV.aXMax[j] = x end
 				if c > 0 and v < TV.aMin[j] then TV.aMin[j] = v end
 			end
+			for _, g in ipairs(GROUPS) do
+				local v = TV.gLast[g]
+				TV.gA[g] = TV.gA[g] + v
+				if v > TV.gAMax[g] then TV.gAMax[g] = v end
+			end
 			if cfg.aggregate == 0 or AG.count >= cfg.aggregate then
 				AG.dframes, AG.dsum, AG.dmax = AG.count, AG.sum, AG.max
 				for j = 1, NT do
 					TV.dT[j], TV.dMax[j], TV.dC[j], TV.dX[j], TV.dXMax[j] = TV.aT[j], TV.aMax[j], TV.aC[j], TV.aX[j], TV.aXMax[j]
 					TV.dMin[j] = (TV.aMin[j] == HUGE) and 0 or TV.aMin[j]
 				end
+				for _, g in ipairs(GROUPS) do TV.gD[g], TV.gDMax[g] = TV.gA[g], TV.gAMax[g] end
 				if cfg.aggregate ~= 0 or AG.clear then
 					AG.clear = false
 					AG.sum, AG.max, AG.count = 0, 0, 0
@@ -5339,13 +5404,23 @@ do
 			local ms = (dt or 0) * 1000
 			local start = lastStart or (now - (dt or 0))
 			lastStart = now
+			local pa, ps, po, hb = EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb
+			EVQ.pa, EVQ.ps, EVQ.po, EVQ.hb = false, false, false, false
+			if pa and pa < start then pa = false end
+			local job = pa and (now - pa) * 1000 or 0
+			local prevJob = EVQ.prevJob
+			EVQ.prevJob = pa and job + JOBS_UNSEEN or 0
 			if paused and not cfg.force then return false end
 			lastMs = ms
 			K = K + 1
 			local i = hi(K)
-			EV[1], EV[2], EV[3] = ms, statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime")
-			EV[4], EV[5] = statMs("HeartbeatTime"), statMs("PhysicsStepTime")
-			HIS.ms[i], HIS.ren[i], HIS.gpu[i], HIS.job[i], HIS.phy[i] = ms, EV[2], EV[3], EV[4], EV[5]
+			EV[1], EV[2], EV[3], EV[4] = ms, statMs("RenderCPUFrameTime"), statMs("RenderGPUFrameTime"), job
+			EV[5] = (pa and ps and ps >= pa) and (ps - pa) * 1000 or 0
+			EV[6] = (ps and po and po >= ps) and (po - ps) * 1000 or 0
+			EV[7] = (hb and hb >= start) and (now - hb) * 1000 or 0
+			EV[8] = statMs("PhysicsStepTime")
+			HIS.ms[i], HIS.ren[i], HIS.gpu[i], HIS.job[i], HIS.phy[i] = ms, EV[2], EV[3], prevJob, EV[8]
+			HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i] = pa, ps or false, po or false, hb or false
 			HIS.start[i] = start
 			HIS.no[i] = frameNo - 1
 			RO.sum = RO.sum + ms
@@ -5358,21 +5433,29 @@ do
 				for k = mmax(1, K - NUM_FRAMES + 1), K do sum = sum + HIS.ms[hi(k)] end
 				RO.sum = sum
 			end
-			local childSum = 0
+			local child = TV.child
+			for j = 1, NT do child[j] = 0 end
 			for j = 1, NT do
 				local v, c
-				if j <= 5 then
+				if j <= NE then
 					v, c = EV[j], 1
 				else
 					local n = TIMERS[j].name
 					v, c = (tAcc[n] or 0) * 1000, tCnt[n] or 0
 				end
 				TV.last[j], TV.lastC[j], TV.lastX[j] = v, c, v
-				if TIMERS[j].parent then childSum = childSum + v end
+				local p = TIMERS[j].pj
+				if p then child[p] = child[p] + v end
 			end
-			local hj = TI.HappaTAS
-			TV.lastX[hj] = mmax(0, TV.last[hj] - childSum)
-			HIS.hap[i] = TV.last[hj] + TV.last[TI.Profiler]
+			for j = 1, NT do
+				if child[j] > 0 then TV.lastX[j] = mmax(0, TV.last[j] - child[j]) end
+			end
+			for g, list in pairs(GROUP_OF) do
+				local s = 0
+				for _, j in ipairs(list) do s = s + TV.last[j] end
+				TV.gLast[g] = s
+			end
+			HIS.hap[i] = TV.gLast.HappaTAS
 			if not paused then aggregate(ms) end
 			return true
 		end
@@ -5702,7 +5785,7 @@ do
 					U.barsDirty = true
 					if actions.applyMode then actions.applyMode() end
 				end },
-			{ label = "[Dump]",
+			{ label = "[Dump]", dump = true,
 				item = function(i)
 					if i < 4 then return sfmt("%d frames", 32 * BITS[i + 1]), false end
 					if i == 4 then return sfmt("512 frames (%d complete)", mmin(K, MAX_HISTORY)), false end
@@ -5750,7 +5833,7 @@ do
 		local function ddLine(n)
 			local l = dd.lines[n]
 			if l then return l end
-			l = { hl = box(U.dd.f, HOVER, 11), t = text(U.dd.f, 12), b = { f = newButton(U.dd.f, 13) } }
+			l = { hl = box(U.dd.f, HOVER, 11), t = text(U.dd.f, 12) }
 			show(l.hl, false)
 			dd.lines[n] = l
 			return l
@@ -5768,26 +5851,25 @@ do
 			end
 			local w = (2 + maxLen) * CW
 			place(U.dd, menuX[m], RH, w, #lines * RH)
+			place(U.cDd, menuX[m], RH, w, #lines * RH)
 			for n, l in ipairs(lines) do
 				local line = ddLine(n)
 				local ly = (n - 1) * RH
 				place(line.hl, 0, ly, w, RH)
-				place(line.b, 0, ly, w, RH)
 				say(line.t, (l[2] and "*" or " ") .. " " .. l[1], 0, ly)
 				show(line.t, true)
-				show(line.b, true)
 			end
 			for n = #lines + 1, dd.count do
 				local line = dd.lines[n]
 				show(line.t, false)
-				show(line.b, false)
 				show(line.hl, false)
 			end
 			dd.count, dd.menu, dd.width = #lines, m, w
 			show(U.dd, true)
+			show(U.cDd, true)
 		end
 		local function ddClose()
-			if dd.menu then dd.menu = nil; show(U.dd, false) end
+			if dd.menu then dd.menu = nil; show(U.dd, false); show(U.cDd, false) end
 		end
 		local BAR = { labels = {}, built = false, dyn = {} }
 		for i, def in ipairs(MENUS) do
@@ -5816,8 +5898,12 @@ do
 				menuX[i] = x
 				say(it.t, s, x, 0)
 				local w = #s * CW
-				place(it.hl, x - 1, 0, w + 1, MENU_H)
-				place(it.b, x - 1, 0, w + 1, MENU_H)
+				if def.dump then
+					place(U.dumpBox, x - 1, 0, w - CW + 2, MENU_H)
+					place(it.hl, x - 1, 0, w + 2, MENU_H)
+				else
+					place(it.hl, x - 1, 0, w + 1, MENU_H)
+				end
 				x = x + (#s + 1) * CW
 			end
 		end
@@ -5855,10 +5941,132 @@ do
 			end
 			helpOn = (m ~= nil and MENUS[m].help == true)
 		end
-		local slotK, slotH = {}, {}
-		local K0, stripX, hlKey = 0, nil, nil
+		local slotK, slotH, slotC = {}, {}, {}
+		local K0, stripX, shownFirst = 0, nil, 1
 		local hoverK = nil
 		U.barsDirty = true
+		local GI = { ok = false, cols = {}, batch = false }
+		function GI.drop()
+			GI.ok = false
+			for _, o in ipairs({ GI.label, GI.img, GI.xLabel, GI.xImg }) do pcall(function() o:Destroy() end) end
+			GI.label, GI.img, GI.xLabel, GI.xImg = nil, nil, nil, nil
+		end
+		Janitor.add(GI.drop)
+		local function imageLabel(parent, img, z)
+			local lab = Instance.new("ImageLabel")
+			lab.BackgroundTransparency = 1
+			lab.BorderSizePixel = 0
+			lab.ZIndex = z
+			lab.ResampleMode = Enum.ResamplerMode.Pixelated
+			lab.ImageContent = Content.fromObject(img)
+			lab.Parent = parent
+			return lab
+		end
+		function GI.make(graph, close)
+			local ok = pcall(function()
+				local AssetService = svc("AssetService")
+				GI.img = AssetService:CreateEditableImage({ Size = Vector2.new(2 * NUM_FRAMES, HIST_H) })
+				local lab = imageLabel(graph, GI.img, 2)
+				lab.Name = "Bars"
+				lab.ImageRectSize = Vector2.new(NUM_FRAMES, HIST_H)
+				lab.Size = UDim2.new(1, 0, 1, 0)
+				GI.label = lab
+				GI.blank = buffer.create(HIST_H * 4)
+				GI.size = Vector2.new(1, HIST_H)
+				GI.xImg = AssetService:CreateEditableImage({ Size = Vector2.new(30, 30) })
+				local px = buffer.create(30 * 30 * 4)
+				for i = 0, 29 do
+					buffer.writeu32(px, (i * 30 + i) * 4, 4294967295)
+					buffer.writeu32(px, (i * 30 + 29 - i) * 4, 4294967295)
+				end
+				GI.xImg:WritePixelsBuffer(Vector2.new(0, 0), Vector2.new(30, 30), px)
+				GI.xLabel = imageLabel(close, GI.xImg, 3)
+				GI.xLabel.Name = "X"
+				GI.xLabel.Position = UDim2.fromOffset(10, 10)
+				GI.xLabel.Size = UDim2.fromOffset(30, 30)
+			end)
+			if not ok then GI.drop() return false end
+			GI.ok = true
+			return true
+		end
+		function GI.colbuf(h, seq)
+			if h <= 0 or not seq then return GI.blank end
+			local per = GI.cols[seq]
+			if not per then per = {}; GI.cols[seq] = per end
+			local b = per[h]
+			if b then return b end
+			b = buffer.create(HIST_H * 4)
+			local c = SEQ_RGB[seq]
+			for r = 0, h - 1 do
+				local f = (r + 0.5) / h
+				local R = floor(c[1] + (c[4] - c[1]) * f + 0.5)
+				local G = floor(c[2] + (c[5] - c[2]) * f + 0.5)
+				local B = floor(c[3] + (c[6] - c[3]) * f + 0.5)
+				buffer.writeu32(b, (HIST_H - h + r) * 4, R + G * 256 + B * 65536 + 4278190080)
+			end
+			per[h] = b
+			return b
+		end
+		function GI.frames()
+			local graph, close = U.graph.f, U.close.f
+			local strip = newFrame(graph, WHITE, 1, 1)
+			strip.Name = "Strip"
+			strip.Size = UDim2.new(1, 0, 1, 0)
+			U.strip = strip
+			U.bars = {}
+			for s = 1, NUM_FRAMES do
+				local b = gradBox(strip, 2)
+				b.f.Name = "Bar"
+				b.f.AnchorPoint = Vector2.new(0, 1)
+				b.f.Size = UDim2.new(1 / NUM_FRAMES, 0, 0, 0)
+				b.f.Position = UDim2.new(0, 0, 1, 0)
+				U.bars[s] = b
+			end
+			for i = 0, 29 do
+				for _, x in ipairs({ 10 + i, 39 - i }) do
+					local px = newFrame(close, WHITE, 3)
+					px.Position = UDim2.fromOffset(x, 10 + i)
+					px.Size = UDim2.fromOffset(1, 1)
+				end
+			end
+			K0, stripX = 0, nil
+			for s = 1, NUM_FRAMES do slotK[s], slotH[s], slotC[s] = nil, nil, nil end
+			U.barsDirty = true
+		end
+		function GI.fail()
+			GI.drop()
+			GI.frames()
+		end
+		function GI.write(x, w, buf)
+			local img = GI.img
+			if not pcall(img.WritePixelsBuffer, img, Vector2.new(x, 0), Vector2.new(w, HIST_H), buf) then GI.fail() end
+		end
+		function GI.column(s)
+			if GI.batch then return end
+			local b = GI.colbuf(slotH[s] or 0, slotC[s])
+			GI.write(s - 1, 1, b)
+			if GI.ok then GI.write(s - 1 + NUM_FRAMES, 1, b) end
+		end
+		function GI.flush()
+			GI.batch = false
+			local w2 = 2 * NUM_FRAMES
+			local full = GI.full
+			if not full then full = buffer.create(w2 * HIST_H * 4); GI.full = full end
+			buffer.fill(full, 0, 0)
+			for s = 1, NUM_FRAMES do
+				local h = slotH[s] or 0
+				if h > 0 then
+					local b = GI.colbuf(h, slotC[s])
+					for r = HIST_H - h, HIST_H - 1 do
+						local v = buffer.readu32(b, r * 4)
+						local o = (r * w2 + s - 1) * 4
+						buffer.writeu32(full, o, v)
+						buffer.writeu32(full, o + NUM_FRAMES * 4, v)
+					end
+				end
+			end
+			GI.write(0, w2, full)
+		end
 		local function graphVisible() return cfg.mode == "Frame" or cfg.mode == "Detailed" end
 		local function graphW() return W - CLOSE_W end
 		local function liveSeq(k)
@@ -5874,36 +6082,58 @@ do
 		end
 		local function drawBar(k, ms, seq)
 			local s = slotOf(k)
+			local h = barH(ms)
+			local c = (k == hoverK) and SEQ_HOVER or seq
+			if GI.ok then
+				if slotK[s] ~= k or slotH[s] ~= h or slotC[s] ~= c then
+					slotK[s], slotH[s], slotC[s] = k, h, c
+					GI.column(s)
+				end
+				return
+			end
 			local b = U.bars[s]
 			if slotK[s] ~= k then
 				slotK[s] = k
 				b.f.Position = UDim2.new((k - K0) / NUM_FRAMES, 0, 1, 0)
 			end
-			local h = barH(ms)
 			if slotH[s] ~= h then
 				slotH[s] = h
 				b.f.Size = UDim2.new(1 / NUM_FRAMES, 0, 0, h)
 			end
-			grad(b, (k == hoverK) and SEQ_HOVER or seq)
+			slotC[s] = c
+			grad(b, c)
 		end
 		local function clearBar(s)
-			if slotH[s] ~= 0 then slotH[s] = 0; U.bars[s].f.Size = UDim2.new(1 / NUM_FRAMES, 0, 0, 0) end
+			if slotH[s] ~= 0 then
+				slotH[s] = 0
+				if GI.ok then GI.column(s) else U.bars[s].f.Size = UDim2.new(1 / NUM_FRAMES, 0, 0, 0) end
+			end
 			slotK[s] = nil
 		end
+		local function recolor(s, c)
+			slotC[s] = c
+			if GI.ok then GI.column(s) else grad(U.bars[s], c) end
+		end
 		local function setStrip(first)
+			shownFirst = first
+			if GI.ok then
+				local c = (first - 1) % NUM_FRAMES
+				if stripX ~= c then stripX = c; GI.label.ImageRectOffset = Vector2.new(c, 0) end
+				return
+			end
 			if first - K0 > 50000 or first < K0 then
 				K0 = first
 				for s = 1, NUM_FRAMES do
 					local k = slotK[s]
 					if k then U.bars[s].f.Position = UDim2.new((k - K0) / NUM_FRAMES, 0, 1, 0) end
 				end
-				hlKey = nil
 			end
 			local x = -(first - K0) / NUM_FRAMES
 			if stripX ~= x then stripX = x; U.strip.Position = UDim2.new(x, 0, 0, 0) end
 		end
 		local function redrawLive()
 			local first = K - NUM_FRAMES + 1
+			GI.batch = GI.ok
 			setStrip(first)
 			for k = first, K do
 				if k >= 1 then
@@ -5913,17 +6143,14 @@ do
 					clearBar(slotOf(k))
 				end
 			end
+			if GI.ok then GI.flush() end
 		end
-		local hlA, hlB = nil, nil
+		local hlA, hlN = nil, nil
 		local function setHL(kFirst, kLast)
 			if not kFirst or not kLast or kFirst > kLast then show(U.hl, false) return end
-			if hlKey ~= K0 or hlA ~= kFirst then
-				U.hl.f.Position = UDim2.new((kFirst - K0) / NUM_FRAMES, 0, 0, 0)
-			end
-			if hlKey ~= K0 or hlB - hlA ~= kLast - kFirst then
-				U.hl.f.Size = UDim2.new((kLast - kFirst + 1) / NUM_FRAMES, 0, 1, 0)
-			end
-			hlKey, hlA, hlB = K0, kFirst, kLast
+			local a, n = kFirst - shownFirst, kLast - kFirst + 1
+			if hlA ~= a then hlA = a; U.hl.f.Position = UDim2.new(a / NUM_FRAMES, 0, 0, 0) end
+			if hlN ~= n then hlN = n; U.hl.f.Size = UDim2.new(n / NUM_FRAMES, 0, 1, 0) end
 			show(U.hl, true)
 		end
 		local function frameEnd(k)
@@ -5987,10 +6214,12 @@ do
 			end
 			if full then
 				U.barsDirty = false
+				GI.batch = GI.ok
 				setStrip(a)
 				for k = a, a + NUM_FRAMES - 1 do
 					if data[k] then drawBar(k, tasFrameMs(data[k]), SEQ_CPU) else clearBar(slotOf(k)) end
 				end
+				if GI.ok then GI.flush() end
 			elseif n > tas.len then
 				for k = mmax(a, tas.len + 1), mmin(n, a + NUM_FRAMES - 1) do drawBar(k, tasFrameMs(data[k]), SEQ_CPU) end
 			end
@@ -6051,22 +6280,23 @@ do
 			hoverK = k
 			if old then
 				local s = slotOf(old)
-				if slotK[s] == old then grad(U.bars[s], cfg.custom and SEQ_CPU or liveSeq(old)) end
+				if slotK[s] == old then recolor(s, cfg.custom and SEQ_CPU or liveSeq(old)) end
 			end
 			if k then
 				local s = slotOf(k)
-				if slotK[s] == k then grad(U.bars[s], SEQ_HOVER) end
+				if slotK[s] == k then recolor(s, SEQ_HOVER) end
 			end
 		end
 		local function frameTip(k)
 			local i = hi(k)
+			local ren, job = HIS.ren[i], HIS.job[i]
 			local rows = {
 				{ "Frame " .. tostring(HIS.no[i]), "" },
 				{ "CPU Time", sfmt("%6.2fms", HIS.ms[i]) },
 				{ "GPU Time (device)", sfmt("%6.2fms", HIS.gpu[i]) },
 				{ "", "" },
-				{ "Render Wall Time", sfmt("%6.2fms", HIS.ren[i]) },
-				{ "Jobs Wall Time", sfmt("%6.2fms", HIS.job[i]), SQUARE },
+				{ "Render Wall Time", sfmt("%6.2fms", ren), (ren > job) and SQUARE or nil },
+				{ "Jobs Wall Time", sfmt("%6.2fms", job), (ren <= job) and SQUARE or nil },
 				{ "", "" },
 				{ "Mem Used", sfmt("%.1fMB", memUsed()) },
 				{ "HappaTAS", sfmt("%6.2fms", HIS.hap[i]) },
@@ -6105,471 +6335,775 @@ do
 			end
 			return k, frac
 		end
-		local det = { stripes = {}, lines = {}, bars = {}, nStripes = 0, nLines = 0, nBars = 0, hover = nil }
-		local function detStripe(n)
-			local s = det.stripes[n]
-			if not s then
-				s = { b = box(U.det.f, BACK[1], 2), t = text(U.det.f, 3) }
-				tint(s.t, RULER_TEXT)
-				det.stripes[n] = s
+		local det = { stripes = {}, lines = {}, bars = {}, heads = {}, nStripes = 0, nLines = 0, nBars = 0,
+			hover = nil, hoverPrev = nil, pulse = 155, pulseD = 10, rng = nil,
+			LANES = { "0000:  Engine", "0001:  HappaTAS" } }
+		do
+			local D = { w0 = 0, w1 = 0, px = 1, y = 0, nb = 0, depth = 0, hoverOK = false, myd = 0, lastLine = {} }
+			local function stripe(n)
+				local s = det.stripes[n]
+				if not s then
+					s = { b = box(U.det.f, BACK[1], 2), t = text(U.det.f, 3) }
+					tint(s.t, RULER_TEXT)
+					det.stripes[n] = s
+				end
+				return s
 			end
-			return s
-		end
-		local function detLine(n)
-			local l = det.lines[n]
-			if not l then l = box(U.det.f, FRAME_LINE, 4); det.lines[n] = l end
-			return l
-		end
-		local function detBar(n)
-			local b = det.bars[n]
-			if not b then b = { b = gradBox(U.det.f, 5), t = text(U.det.f, 6, BLACK) }; det.bars[n] = b end
-			return b
-		end
-		local function detailUpdate(hoverAllowed)
-			det.hover = nil
-			if K < 1 then return end
-			local base = baseStart()
-			local range = view.range
-			local w0 = base + view.offset / 1000
-			local w1 = w0 + range / 1000
-			local px = W / range
-			local step = 10 ^ (floor(2 * (math.log10(range) - 1)) / 2)
-			local label = ""
-			if step >= 0.005 and step <= 1000 then
-				label = (step >= 1) and sfmt("%.3gms", step) or sfmt("%.2fms", step)
+			local function frameLine(n)
+				local l = det.lines[n]
+				if not l then l = box(U.det.f, FRAME_LINE, 4); det.lines[n] = l end
+				return l
 			end
-			local f = floor(view.offset / step) * step
-			local colorIndex = floor(view.offset / step)
-			local n = 0
-			while f < view.offset + range and n < 64 do
-				n = n + 1
-				local s = detStripe(n)
-				local x0 = floor((f - view.offset) * px)
-				local x1 = floor((f + step - view.offset) * px + 1)
-				place(s.b, x0, 0, x1 - x0, DET_H)
-				paint(s.b, BACK[colorIndex % 2 + 1], bgT())
-				show(s.b, true)
-				if label ~= "" then
-					say(s.t, label, x0 + floor((step * px - #label * CW) / 2), 0)
-					show(s.t, true)
+			local function bar(n)
+				local b = det.bars[n]
+				if not b then b = { b = gradBox(U.det.f, 7), t = text(U.det.f, 8) }; det.bars[n] = b end
+				return b
+			end
+			local function barColor(j, key)
+				local hv = det.hoverPrev
+				if hv and hv.j == j then
+					local c = (hv.key == key) and det.pulse or floor(det.pulse / 4)
+					return barSeq(c, c, c)
+				end
+				return TIMERS[j].seq
+			end
+			local function entry(j, t0, t1, depth, key)
+				if t1 < D.w0 or t0 > D.w1 then return end
+				local xs, xe = (t0 - D.w0) * 1000 * D.px, (t1 - D.w0) * 1000 * D.px
+				local ys = D.y + (depth - 1) * BAR_H
+				if depth > D.depth then D.depth = depth end
+				if D.hoverOK and mmax(xs - mx, mx - xe) < 0.5 and ys <= D.myd and D.myd <= ys + BAR_H and D.myd > 0 then
+					det.hover = { j = j, ms = (t1 - t0) * 1000, t0 = t0, t1 = t1, key = key }
+				end
+				local iw = floor(xe - xs)
+				local x0, wpx
+				if iw >= 1 then
+					x0 = floor(xs)
+					wpx = floor(xe) - x0
 				else
-					show(s.t, false)
+					x0 = floor((xs + xe) / 2 + 0.5)
+					if D.lastLine[depth] == x0 then return end
+					D.lastLine[depth] = x0
+					wpx = 1
 				end
-				colorIndex = colorIndex + 1
-				f = f + step
-			end
-			for i = n + 1, det.nStripes do show(det.stripes[i].b, false); show(det.stripes[i].t, false) end
-			det.nStripes = n
-			local nl = 0
-			local k = K
-			while k >= 1 and K - k < MAX_HISTORY and nl < 128 do
-				local st = HIS.start[hi(k)]
-				if st < w0 then break end
-				if st <= w1 then
-					nl = nl + 1
-					local l = detLine(nl)
-					place(l, floor((st - w0) * 1000 * px), 0, 1, DET_H)
-					paint(l, FRAME_LINE, fgT())
-					show(l, true)
+				if D.nb >= 400 then return end
+				D.nb = D.nb + 1
+				local b = bar(D.nb)
+				place(b.b, x0, ys, wpx, BAR_H)
+				grad(b.b, barColor(j, key))
+				paint(b.b, WHITE, fgT())
+				show(b.b, true)
+				if iw > 3 * TW then
+					local xst = mmax(xs, 0)
+					local nch = floor((floor(xe - xst) - TW) / CW)
+					if nch > 0 then
+						say(b.t, TIMERS[j].name:sub(1, nch), floor(xst + 1), ys + 1)
+						show(b.t, true)
+						return
+					end
 				end
-				k = k - 1
+				show(b.t, false)
 			end
-			for i = nl + 1, det.nLines do show(det.lines[i], false) end
-			det.nLines = nl
-			say(det.thread, "HappaTAS (Lua)", 2, RH)
-			local nb, idx, count = 0, slog.pos, 0
-			local now = clock()
-			while count < LOG_N and idx >= 1 do
-				local i = (idx - 1) % LOG_N + 1
-				local t0 = slog.t0[i]
-				if not t0 or t0 < w0 - 1 then break end
-				local e = slog.t1[i] or now
-				if e >= w0 and t0 <= w1 and nb < 240 then
-					nb = nb + 1
-					local b = detBar(nb)
-					local x0 = floor((t0 - w0) * 1000 * px)
-					local x1 = floor((e - w0) * 1000 * px)
-					if x1 <= x0 then x1 = x0 + 1 end
-					local y = 2 * RH + mmin(slog.depth[i], 1) * BAR_H
-					place(b.b, x0, y, x1 - x0, BAR_H - 1)
-					local t = TIMERS[TI[slog.name[i]] or 1]
-					grad(b.b, t.seq)
+			local function lane(n)
+				D.y = D.y + 3
+				local h = det.heads[n]
+				if not h then
+					h = { band = box(U.det.f, COL.band, 5, COL.bandT), b = box(U.det.f, COL.lane, 5, COL.laneT), t = text(U.det.f, 6) }
+					det.heads[n] = h
+				end
+				local s = det.LANES[n]
+				place(h.b, 10, D.y, #s * CW + 2, RH)
+				say(h.t, s, 10, D.y)
+				D.y = D.y + 3 + RH
+				place(h.band, 0, D.y, W, BAR_H)
+				show(h.b, true); show(h.t, true); show(h.band, true)
+				D.depth = 0
+			end
+			local function laneEnd() D.y = D.y + D.depth * BAR_H + BAR_H + 1 end
+			local function engineLane()
+				local k, nf = K, 0
+				local rj, jj, aj, sj, hj = TI["Render CPU"], TI.Jobs, TI.Animations, TI.Simulation, TI.Heartbeat
+				while k >= 1 and K - k < MAX_HISTORY - 1 and nf < 64 do
+					local i = hi(k)
+					local st, en = HIS.start[i], frameEnd(k)
+					if en < D.w0 then break end
+					if st <= D.w1 then
+						nf = nf + 1
+						entry(rj, st, st + HIS.ren[i] / 1000, 1, st)
+						local pa, ps, po, hb = HIS.pa[i], HIS.ps[i], HIS.po[i], HIS.hb[i]
+						if pa then
+							entry(jj, pa, en, 1, pa)
+							if ps and ps >= pa then entry(aj, pa, ps, 2, pa) end
+							if ps and po and po >= ps then entry(sj, ps, po, 2, ps) end
+						end
+						if hb then entry(hj, hb, en, 2, hb) end
+					end
+					k = k - 1
+				end
+			end
+			local function happaLane()
+				local idx, count = slog.pos, 0
+				local now = clock()
+				while count < LOG_N and idx >= 1 do
+					local i = (idx - 1) % LOG_N + 1
+					local t0 = slog.t0[i]
+					if not t0 or t0 < D.w0 - 1 then break end
+					local j = TI[slog.name[i]]
+					if j then entry(j, t0, slog.t1[i] or now, slog.depth[i] + 1, t0) end
+					idx = idx - 1
+					count = count + 1
+				end
+			end
+			local function rangeShow(hgt)
+				local a, b
+				if paused then
+					if hoverK and not cfg.custom then
+						a, b = HIS.start[hi(hoverK)], frameEnd(hoverK)
+					elseif det.hover then
+						a, b = det.hover.t0, det.hover.t1
+					end
+				end
+				local r = det.rng
+				if not a then
+					if r then for _, o in pairs(r) do show(o, false) end end
+					return
+				end
+				if not r then
+					r = { box = box(U.det.f, COL.range, 9, 1 - 0x20 / 255), l0 = box(U.det.f, COL.range, 9, 1 - 0x44 / 255),
+						l1 = box(U.det.f, COL.range, 9, 1 - 0x44 / 255), b0 = box(U.det.f, BLACK, 10, 1 - 0x33 / 255),
+						b1 = box(U.det.f, BLACK, 10, 1 - 0x33 / 255), t0 = text(U.det.f, 11), t1 = text(U.det.f, 11) }
+					det.rng = r
+				end
+				local xs, xe = (a - D.w0) * 1000 * D.px, (b - D.w0) * 1000 * D.px
+				place(r.box, floor(xs), 0, mmax(floor(xe) - floor(xs), 0), hgt)
+				place(r.l0, floor(xs), 0, 1, hgt)
+				place(r.l1, floor(xe), 0, 1, hgt)
+				local base = baseStart()
+				local s0, s1 = sfmt("%.2fms", (a - base) * 1000), sfmt("%.2fms", (b - base) * 1000)
+				local x0 = floor(xs - #s0 * CW - 2)
+				place(r.b0, x0, 0, #s0 * CW + 2, TH + 2)
+				say(r.t0, s0, x0 + 1, 0)
+				local x1 = floor(xe + 1)
+				place(r.b1, x1, 0, #s1 * CW + 3, TH + 2)
+				say(r.t1, s1, floor(xe + 2), 1)
+				for _, o in pairs(r) do show(o, true) end
+			end
+			function det.update(hoverAllowed)
+				det.hoverPrev = det.hover
+				det.hover = nil
+				if K < 1 then return end
+				det.pulse = det.pulse + det.pulseD
+				if det.pulse >= 245 then det.pulseD = -10 elseif det.pulse < 100 then det.pulseD = 10 end
+				local range = view.range
+				D.w0 = baseStart() + view.offset / 1000
+				D.w1 = D.w0 + range / 1000
+				D.px = W / range
+				D.hoverOK = hoverAllowed
+				D.myd = my - DET_Y
+				local hgt = mmax(0, H - DET_Y)
+				local nl, k = 0, K
+				while k >= 1 and K - k < MAX_HISTORY and nl < 128 do
+					local st = HIS.start[hi(k)]
+					if st < D.w0 then break end
+					if st <= D.w1 then
+						nl = nl + 1
+						local l = frameLine(nl)
+						place(l, floor((st - D.w0) * 1000 * D.px), 0, 1, hgt)
+						paint(l, FRAME_LINE, fgT())
+						show(l, true)
+					end
+					k = k - 1
+				end
+				for i = nl + 1, det.nLines do show(det.lines[i], false) end
+				det.nLines = nl
+				local step = 10 ^ (floor(2 * (math.log10(range) - 1)) / 2)
+				local label = ""
+				if step >= 0.005 and step <= 1000 then
+					label = (step >= 1) and sfmt("%.3gms", step) or sfmt("%.2fms", step)
+				end
+				local f = floor(view.offset / step) * step
+				local colorIndex = floor(view.offset / step)
+				local n = 0
+				while f < view.offset + range and n < 64 do
+					n = n + 1
+					local s = stripe(n)
+					local x0 = floor((f - view.offset) * D.px)
+					local x1 = floor((f + step - view.offset) * D.px + 1)
+					place(s.b, x0, 0, x1 - x0, hgt)
+					paint(s.b, BACK[colorIndex % 2 + 1], bgT())
+					show(s.b, true)
+					if label ~= "" then
+						say(s.t, label, x0 + floor((step * D.px - #label * CW) / 2), 0)
+						show(s.t, true)
+					else
+						show(s.t, false)
+					end
+					colorIndex = colorIndex + 1
+					f = f + step
+				end
+				for i = n + 1, det.nStripes do show(det.stripes[i].b, false); show(det.stripes[i].t, false) end
+				det.nStripes = n
+				D.y, D.nb = RH, 0
+				for key in pairs(D.lastLine) do D.lastLine[key] = nil end
+				lane(1); engineLane(); laneEnd()
+				lane(2); happaLane(); laneEnd()
+				for i = D.nb + 1, det.nBars do show(det.bars[i].b, false); show(det.bars[i].t, false) end
+				det.nBars = D.nb
+				rangeShow(hgt)
+			end
+			function det.tip(j, ms)
+				local fr = mmax(AG.dframes, 1)
+				local calls = (TV.dC[j] > 0) and TV.dC[j] or 1
+				local g = TIMERS[j].group
+				local rows = { { "Timer:", TIMERS[j].name } }
+				local function add(a, b) rows[#rows + 1] = { a, b } end
+				if ms then
+					add("Time:", sfmt("%6.3fms", ms))
+					add("", "")
+				end
+				add("Frame Time:", sfmt("%6.3fms", TV.last[j]))
+				add("Average:", sfmt("%6.3fms", TV.dT[j] / fr))
+				add("Max:", sfmt("%6.3fms", TV.dMax[j]))
+				add("Min:", sfmt("%6.3fms", TV.dMin[j]))
+				add("", "")
+				add("Call Average:", sfmt("%6.3fms", TV.dT[j] / calls))
+				add("Call Count:", sfmt("%6.2f", calls / fr))
+				add("", "")
+				add("Exclusive Frame Time:", sfmt("%6.3fms", TV.lastX[j]))
+				add("Exclusive Average:", sfmt("%6.3fms", TV.dX[j] / fr))
+				add("Exclusive Max:", sfmt("%6.3fms", TV.dXMax[j]))
+				add("", "")
+				add("Group:", g)
+				add("Frame Time:", sfmt("%6.3f", TV.gLast[g] or 0))
+				add("Frame Average:", sfmt("%6.3f", (TV.gD[g] or 0) / fr))
+				add("Frame Max:", sfmt("%6.3f", TV.gDMax[g] or 0))
+				return rows
+			end
+		end
+		local tim = { rows = {}, cells = {}, heads = {}, seps = {}, n = 0, layout = nil }
+		do
+			local function layout()
+				local groups = {}
+				local maxLen = 1
+				for _, g in ipairs(GROUPS) do
+					if cfg.all or cfg.groups[g] then
+						local ts = {}
+						for j = 1, NT do
+							if TIMERS[j].group == g then
+								ts[#ts + 1] = j
+								if #TIMERS[j].name > maxLen then maxLen = #TIMERS[j].name end
+							end
+						end
+						groups[#groups + 1] = { g, ts }
+					end
+				end
+				local cols = {}
+				local function add(kind, title, width) cols[#cols + 1] = { kind = kind, title = title, width = width } end
+				local bw = BAR_W + 5 + 6 * CW
+				if hasBit(cfg.bars, 1) then add("time", "Time", bw) end
+				if hasBit(cfg.bars, 2) then add("avg", "Average", bw) end
+				if hasBit(cfg.bars, 4) then add("max", cfg.spikes and "Max Time, Spike" or "Max Time", bw) end
+				if hasBit(cfg.bars, 8) then add("min", cfg.spikes and "Min Time, Spike" or "Min Time", bw) end
+				if hasBit(cfg.bars, 16) then add("callavg", "Call Average", bw); add("count", "Count", 5 + 6 * TW) end
+				if hasBit(cfg.bars, 32) then add("xtime", "Exclusive Time", bw) end
+				if hasBit(cfg.bars, 64) then add("xavg", "Exclusive Average", bw) end
+				if hasBit(cfg.bars, 128) then add("xmax", cfg.spikes and "Excl Max Time, Spike" or "Exclusive Max Time", bw) end
+				local width = 0
+				for _, c in ipairs(cols) do
+					width = width + ((c.kind == "count") and (6 + 6 * TW) or (BAR_W + 6 + 6 * CW))
+				end
+				width = width + (1 + maxLen) * CW
+				return { groups = groups, cols = cols, nameW = 2 + (4 + maxLen) * CW, width = width }
+			end
+			local function row(n)
+				local r = tim.rows[n]
+				if not r then
+					r = { v = box(U.tim.f, BACK[1], 1), nm = box(U.tim.f, BACK[1], 1), t = text(U.tim.f, 3) }
+					tim.rows[n] = r
+				end
+				return r
+			end
+			local function cell(r, c)
+				local key = r * 64 + c
+				local ce = tim.cells[key]
+				if not ce then ce = { t = text(U.tim.f, 3), bar = gradBox(U.tim.f, 2) }; tim.cells[key] = ce end
+				return ce
+			end
+			local function head(c)
+				local h = tim.heads[c]
+				if not h then h = { b = box(U.tim.f, BACK[2], 4), t = text(U.tim.f, 5) }; tim.heads[c] = h end
+				return h
+			end
+			local function sep(c)
+				local s = tim.seps[c]
+				if not s then s = box(U.tim.f, SEP, 2); tim.seps[c] = s end
+				return s
+			end
+			local function colValue(kind, j)
+				local fr = mmax(AG.dframes, 1)
+				if kind == "time" then return TV.last[j]
+				elseif kind == "avg" then return TV.dT[j] / fr
+				elseif kind == "max" then return TV.dMax[j]
+				elseif kind == "min" then return TV.dMin[j]
+				elseif kind == "callavg" then return TV.dT[j] / mmax(TV.dC[j], 1)
+				elseif kind == "count" then return TV.lastC[j]
+				elseif kind == "xtime" then return TV.lastX[j]
+				elseif kind == "xavg" then return TV.dX[j] / fr
+				elseif kind == "xmax" then return TV.dXMax[j] end
+				return 0
+			end
+			function tim.update()
+				if timersDirty or not tim.layout then
+					timersDirty = false
+					tim.layout = layout()
+					for _, ce in pairs(tim.cells) do show(ce.t, false); show(ce.bar, false) end
+					for _, h in pairs(tim.heads) do show(h.b, false); show(h.t, false) end
+					for _, s in pairs(tim.seps) do show(s, false) end
+				end
+				local L = tim.layout
+				local nameW = L.nameW
+				local rowsN = 1
+				for _, g in ipairs(L.groups) do rowsN = rowsN + 1 + #g[2] end
+				local y0 = TH + 3
+				local hovRow = nil
+				if activeMenu == nil and my >= y0 and my < y0 + rowsN * RH then hovRow = floor((my - y0) / RH) + 1 end
+				local rowText = {}
+				local rowOf = {}
+				local rr = 1
+				for _, g in ipairs(L.groups) do
+					rr = rr + 1
+					rowText[rr] = { g[1], 0, WHITE }
+					for _, j in ipairs(g[2]) do
+						rr = rr + 1
+						rowOf[j] = rr
+						rowText[rr] = { TIMERS[j].name, nameW - 5 - #TIMERS[j].name * CW, TIMERS[j].color }
+					end
+				end
+				for r = 1, rowsN do
+					local o = row(r)
+					local yy = y0 + (r - 1) * RH
+					local ci = (r - 1) % 2 + 1
+					local ni = (rowsN + r - 1) % 2 + 1
+					place(o.v, nameW, yy, L.width, RH + 1)
+					paint(o.v, (hovRow == r) and BACK_HOVER[ci] or BACK[ci], bgT())
+					place(o.nm, 0, yy, nameW, RH + 1)
+					paint(o.nm, (hovRow == r) and BACK_HOVER[ni] or BACK[ni], 0)
+					show(o.v, true)
+					show(o.nm, true)
+					local rt = rowText[r]
+					if rt then
+						say(o.t, rt[1], rt[2], yy + 1)
+						tint(o.t, rt[3])
+					end
+					show(o.t, rt ~= nil)
+				end
+				for r = rowsN + 1, tim.n do
+					local o = tim.rows[r]
+					show(o.v, false); show(o.nm, false); show(o.t, false)
+				end
+				tim.n = rowsN
+				local x = nameW + 10
+				local totalH = rowsN * RH + y0
+				for c, col in ipairs(L.cols) do
+					local s = sep(c)
+					place(s, x - 5, 0, 1, totalH)
+					paint(s, SEP, bgT())
+					show(s, true)
+					local h = head(c)
+					local hw = (col.kind == "count") and (5 + 6 * TW) or (6 * CW + BAR_W)
+					place(h.b, x - 8, TH + 2, hw + 13, RH)
+					say(h.t, col.title, x, TH + 2)
+					show(h.b, true)
+					show(h.t, true)
+					for _, g in ipairs(L.groups) do
+						for _, j in ipairs(g[2]) do
+							local r = rowOf[j]
+							local ce = cell(r, c)
+							local yy = y0 + (r - 1) * RH + 1
+							local v = colValue(col.kind, j)
+							local str
+							if col.kind == "count" then
+								str = sfmt("%5d", v)
+							elseif (col.kind == "max" or col.kind == "min" or col.kind == "xmax") and cfg.spikes then
+								local avg = (col.kind == "xmax") and colValue("xavg", j) or colValue("avg", j)
+								str = (avg > 0.1) and sfmt("%5.2f %3.1fx", v, v / avg) or sfmt("%5.2f", v)
+							else
+								str = sfmt("%5.2f", v)
+							end
+							say(ce.t, str, x, yy)
+							show(ce.t, true)
+							if col.kind ~= "count" and not (cfg.spikes and (col.kind == "max" or col.kind == "min" or col.kind == "xmax")) then
+								local w = floor(BAR_W * mmin(v / cfg.ref, 1))
+								place(ce.bar, x + 6 * CW, yy, w, TH)
+								grad(ce.bar, TIMERS[j].seq)
+								paint(ce.bar, WHITE, fgT())
+								show(ce.bar, w > 0)
+							else
+								show(ce.bar, false)
+							end
+						end
+					end
+					x = x + col.width + 1
+				end
+				say(tim.group, "Group", 0, TH + 2)
+				say(tim.timer, "Timer", nameW - 3 - 5 * CW, TH + 2)
+				place(tim.groupBox, 0, TH + 2, nameW + 5, RH)
+				place(tim.vline, nameW, 0, 1, totalH)
+				paint(tim.vline, SEP, bgT())
+				place(tim.hline, 0, 2 * TH + 3, nameW + L.width, 1)
+				paint(tim.hline, SEP, bgT())
+				tim.rect = { nameW + L.width, totalH + 1 }
+				place(U.cTim, 0, 0, tim.rect[1], tim.rect[2])
+				tim.hover = nil
+				if hovRow then
+					for j, r in pairs(rowOf) do if r == hovRow then tim.hover = j end end
+				end
+			end
+		end
+		local cnt = { rows = {}, n = 0, min = {}, max = {}, hist = {}, histPos = 0, closed = {}, detail = {}, big = {},
+			counterW = 8 * CW, list = nil, rowOf = {} }
+		do
+			local HISTORY = 128
+			local NOTE = "Roblox's own counters can't be read by scripts. These come from Stats, collectgarbage and HappaTAS."
+			local EXT = { "b", "kb", "mb", "gb", "tb", "pb", "eb", "zb", "yb" }
+			local function fmt(v, bytes)
+				v = floor(v + 0.5)
+				if v == 0 then return "0" end
+				if bytes then
+					local div, shift = 1, 0
+					local s = floor(math.abs(v) / 1024)
+					while s >= 1 and shift < #EXT - 1 do div = div * 1024; s = floor(s / 1024); shift = shift + 1 end
+					if shift > 0 then return sfmt("%3.2f%s", v / div, EXT[shift + 1]) end
+					return sfmt("%d%s", v, EXT[1])
+				end
+				local neg = v < 0
+				local digits = sfmt("%d", neg and -v or v)
+				local out = {}
+				local first = #digits % 3
+				if first > 0 then out[1] = digits:sub(1, first) end
+				for p = first + 1, #digits, 3 do out[#out + 1] = digits:sub(p, p + 2) end
+				return (neg and "-" or "") .. table.concat(out, " ")
+			end
+			cnt.fmt = fmt
+			local function us(p) return statMs(p) * 1000 end
+			local TAGS = {}
+			pcall(function()
+				for _, item in ipairs(Enum.DeveloperMemoryTag:GetEnumItems()) do
+					local snake = item.Name:gsub("(%l)(%u)", "%1_%2"):gsub("(%u)(%u%l)", "%1_%2"):lower()
+					TAGS[#TAGS + 1] = { snake, item }
+				end
+			end)
+			local function memTag(item)
+				local ok, v = pcall(function() return Stats:GetMemoryUsageMbForTag(item) end)
+				return (ok and type(v) == "number") and v * 1048576 or 0
+			end
+			local function build()
+				local data, f = tasData()
+				local L = {}
+				local function add(name, level, value, bytes) L[#L + 1] = { name, level, value, bytes } end
+				add("frame_stats", 0)
+				add("basic", 1)
+				add("cpu_frame_time_microsec", 2, lastMs * 1000)
+				add("render_cpu_time_microsec", 2, us("RenderCPUFrameTime"))
+				add("gpu_device_time_microsec", 2, us("RenderGPUFrameTime"))
+				add("jobs_time_microsec", 2, TV.last[TI.Jobs] * 1000)
+				add("physics_step_time_microsec", 2, us("PhysicsStepTime"))
+				add("heartbeat_time_microsec", 2, us("HeartbeatTime"))
+				add("frame_count", 2, K)
+				add("instance_count", 0)
+				add("instance", 1, statRaw("InstanceCount"))
+				add("primitives", 1, statRaw("PrimitivesCount"))
+				add("moving_primitives", 1, statRaw("MovingPrimitivesCount"))
+				add("contacts", 1, statRaw("ContactsCount"))
+				add("render", 0)
+				add("scene_drawcalls", 1, statRaw("SceneDrawcallCount"))
+				add("scene_triangles", 1, statRaw("SceneTriangleCount"))
+				add("shadows_drawcalls", 1, statRaw("ShadowsDrawcallCount"))
+				add("shadows_triangles", 1, statRaw("ShadowsTriangleCount"))
+				add("ui2d_drawcalls", 1, statRaw("UI2DDrawcallCount"))
+				add("ui2d_triangles", 1, statRaw("UI2DTriangleCount"))
+				add("ui3d_drawcalls", 1, statRaw("UI3DDrawcallCount"))
+				add("ui3d_triangles", 1, statRaw("UI3DTriangleCount"))
+				add("memory", 0)
+				add("total", 1, memUsed() * 1048576, true)
+				for _, t in ipairs(TAGS) do add(t[1], 1, memTag(t[2]), true) end
+				add("luau", 0)
+				add("heap", 1, luaHeapMb() * 1048576, true)
+				if cfg.network >= 1 then
+					add("network", 0)
+					add("data_receive_per_sec", 1, statRaw("DataReceiveKbps") * 1024, true)
+					add("data_send_per_sec", 1, statRaw("DataSendKbps") * 1024, true)
+					add("physics_receive_per_sec", 1, statRaw("PhysicsReceiveKbps") * 1024, true)
+					add("physics_send_per_sec", 1, statRaw("PhysicsSendKbps") * 1024, true)
+				end
+				add("happatas", 0)
+				add("tas_frames", 1, (type(data) == "table") and #data or 0)
+				add("tas_frame", 1, tonumber(f) or 0)
+				if ClientObjects.Counts then
+					local okc, reg, onScreen, playing = pcall(ClientObjects.Counts)
+					if okc then
+						add("client_objects", 1, tonumber(reg) or 0)
+						add("client_objects_on_screen", 1, tonumber(onScreen) or 0)
+						add("client_objects_playing", 1, tonumber(playing) or 0)
+					end
+				end
+				if Buttons.Count then
+					local okb, nb = pcall(Buttons.Count)
+					if okb then add("buttons", 1, tonumber(nb) or 0) end
+				end
+				local path = {}
+				for i, c in ipairs(L) do
+					path[c[2] + 1] = c[1]
+					for p = c[2] + 2, #path do path[p] = nil end
+					c.key = table.concat(path, ".")
+					local nxt = L[i + 1]
+					c.parent = (nxt ~= nil and nxt[2] > c[2])
+				end
+				return L
+			end
+			local function rowObj(n)
+				local r = cnt.rows[n]
+				if not r then
+					r = { bg = box(U.cnt.f, BACK[1], 1), star = text(U.cnt.f, 3), name = text(U.cnt.f, 3), v = text(U.cnt.f, 3),
+						mn = text(U.cnt.f, 3), mx = text(U.cnt.f, 3), cols = nil, fills = nil }
+					cnt.rows[n] = r
+				end
+				return r
+			end
+			local function graph(r, key, x, y0, rows)
+				if not r.cols then
+					r.cols, r.fills = {}, {}
+					for i = 1, HISTORY do
+						r.fills[i] = box(U.cnt.f, COL.graph, 2, 1 - 0x33 / 255)
+						r.cols[i] = box(U.cnt.f, COL.graph, 2)
+					end
+				end
+				local h = cnt.hist[key]
+				local mnv, mxv = cnt.min[key] or 0, cnt.max[key] or 0
+				local base, off = mxv, 0
+				if mnv < 0 then base = mxv - mnv; off = -mnv end
+				local gh = rows * TH
+				local yo = y0 + ((rows > 1) and 3 or 1)
+				local prevY = nil
+				for i = 1, HISTORY do
+					local v = h and h[(cnt.histPos + i - 1) % HISTORY + 1] or 0
+					v = clampn(v, mnv, mxv)
+					local py = (base > 0) and floor(yo + gh - (v + off) * gh / base + 0.5) or (yo + gh)
+					place(r.fills[i], x + i - 1, py, 1, mmax(0, yo + gh - py))
+					local a = prevY and mmin(prevY, py) or py
+					local b = prevY and mmax(prevY, py) or py
+					place(r.cols[i], x + i - 1, a, 1, b - a + 1)
+					show(r.fills[i], true)
+					show(r.cols[i], true)
+					prevY = py
+				end
+			end
+			local function hideGraph(r)
+				if not r.cols then return end
+				for i = 1, HISTORY do show(r.cols[i], false); show(r.fills[i], false) end
+			end
+			local function sample(L)
+				cnt.histPos = cnt.histPos % HISTORY + 1
+				for _, c in ipairs(L) do
+					if c[3] ~= nil then
+						local key, v = c.key, c[3]
+						cnt.min[key] = mmin(cnt.min[key] or v, v)
+						cnt.max[key] = mmax(cnt.max[key] or v, v)
+						local h = cnt.hist[key]
+						if not h then h = {}; cnt.hist[key] = h end
+						h[cnt.histPos] = v
+					end
+				end
+			end
+			function cnt.update()
+				local L = build()
+				sample(L)
+				cnt.list = L
+				local nameW = 7 * CW
+				for _, c in ipairs(L) do nameW = mmax(nameW, (2 + #c[1] + 4 * c[2]) * CW) end
+				local counterW, limitW = cnt.counterW, 8 * CW
+				local maxLen = 7
+				local y0 = 27
+				local rowW = nameW + counterW * 3 + 100 + limitW + 4 * CW + 4 + HISTORY
+				local graphX = nameW + counterW + 3 * CW + limitW + 100 + 5
+				local n, skipBelow = 0, nil
+				for _, c in ipairs(L) do
+					if skipBelow and c[2] > skipBelow then
+					else
+						skipBelow = nil
+						n = n + 1
+						local r = rowObj(n)
+						local rows = (cnt.detail[c.key] and cnt.big[c.key]) and 5 or 1
+						local yy = y0 + (n - 1) * RH
+						place(r.bg, 0, yy, rowW, RH * rows + 1)
+						paint(r.bg, BACK[(n - 1) % 2 + 1], 0)
+						show(r.bg, true)
+						local indent = 4 * c[2] * CW
+						local closed = c.parent and cnt.closed[c.key]
+						if closed then say(r.star, "*", indent, yy); show(r.star, true) else show(r.star, false) end
+						say(r.name, c[1], indent + CW, yy)
+						show(r.name, true)
+						if c[3] ~= nil then
+							local s = fmt(c[3], c[4])
+							if #s > maxLen then maxLen = #s end
+							say(r.v, s, nameW + counterW - #s * CW, yy)
+							show(r.v, true)
+						else
+							show(r.v, false)
+						end
+						if c[3] ~= nil and cnt.detail[c.key] then
+							graph(r, c.key, graphX, yy, rows)
+							local smn, smx = fmt(cnt.min[c.key] or 0, c[4]), fmt(cnt.max[c.key] or 0, c[4])
+							say(r.mn, smn, graphX + HISTORY + 5, yy)
+							say(r.mx, smx, graphX + HISTORY + 5 + counterW, yy)
+							show(r.mn, true); show(r.mx, true)
+						else
+							hideGraph(r)
+							show(r.mn, false); show(r.mx, false)
+						end
+						r.key, r.parent, r.y, r.rows, r.val = c.key, c.parent, yy, rows, c[3] ~= nil
+						if closed then skipBelow = c[2] end
+						y0 = y0 + RH * (rows - 1)
+					end
+				end
+				for i = n + 1, cnt.n do
+					local r = cnt.rows[i]
+					show(r.bg, false); show(r.star, false); show(r.name, false); show(r.v, false); show(r.mn, false); show(r.mx, false)
+					hideGraph(r)
+					r.key = nil
+				end
+				cnt.n = n
+				cnt.counterW = (1 + maxLen) * CW
+				cnt.hov = nil
+				cnt.hoverPaint()
+				local bottom = 27 + n * RH + (y0 - 27)
+				place(cnt.note, 0, MENU_H, rowW, RH)
+				say(cnt.noteT, NOTE, 0, MENU_H)
+				local hx = { 0, nameW, nameW + counterW + 3 * TW, nameW + counterW + 3 * TW + limitW + 100 + 4 }
+				hx[5] = hx[4] + HISTORY + 4
+				hx[6] = hx[5] + counterW
+				local hw = { nameW, counterW + 3 * TW, limitW + 100, HISTORY, counterW, counterW }
+				for i, h in ipairs(cnt.heads) do
+					place(h.b, hx[i] - 8, 18, hw[i] + 13, RH)
+					say(h.t, h.title, hx[i], 18)
+				end
+				local headW = hx[6] + counterW
+				place(cnt.vline, nameW - 2, MENU_H, 1, bottom - MENU_H)
+				place(cnt.hline, 0, 2 * TH + 3, headW, 1)
+				cnt.rect = { mmax(rowW, headW), bottom + 1 }
+				cnt.limitEnd = nameW + counterW + 3 * CW + limitW + 100 + 5
+				place(U.cCnt, 0, 0, cnt.rect[1], cnt.rect[2])
+			end
+			local function rowAt()
+				if activeMenu ~= nil then return nil end
+				for i = 1, cnt.n do
+					local r = cnt.rows[i]
+					if my >= r.y and my < r.y + RH * r.rows then return i end
+				end
+				return nil
+			end
+			function cnt.hoverPaint()
+				local h = rowAt()
+				if h == cnt.hov then return end
+				for _, i in ipairs({ cnt.hov or 0, h or 0 }) do
+					local r = cnt.rows[i]
+					if r and i <= cnt.n then paint(r.bg, ((i == h) and BACK_HOVER or BACK)[(i - 1) % 2 + 1], 0) end
+				end
+				cnt.hov = h
+			end
+			function cnt.click(left, right)
+				local i = rowAt()
+				local r = i and cnt.rows[i]
+				if not r then return false end
+				if mx > (cnt.limitEnd or 0) and r.val then
+					if right then
+						cnt.detail[r.key], cnt.big[r.key] = nil, nil
+					elseif cnt.detail[r.key] then
+						cnt.big[r.key] = not cnt.big[r.key] or nil
+					else
+						cnt.detail[r.key] = true
+					end
+					return true
+				elseif left and r.parent then
+					cnt.closed[r.key] = not cnt.closed[r.key] or nil
+					return true
+				end
+				return false
+			end
+		end
+		local flm = { boxes = {}, n = 0, hover = nil }
+		do
+			local function boxN(n)
+				local b = flm.boxes[n]
+				if not b then b = { b = gradBox(U.flm.f, 2), t = text(U.flm.f, 3) }; flm.boxes[n] = b end
+				return b
+			end
+			function flm.update(hoverAllowed)
+				local fr = mmax(AG.dframes, 1)
+				local function avg(name) return TV.dT[TI[name]] / fr end
+				local hap, prof = avg("HappaTAS"), avg("Profiler")
+				local total = hap + prof
+				local frameAvg = AG.dsum / fr
+				local items = {}
+				local function add(name, x0, x1, depth, ms, seq)
+					items[#items + 1] = { name = name, x0 = floor(x0), x1 = floor(x1), depth = depth, ms = ms, seq = seq }
+				end
+				local pct = (frameAvg > 0) and (100 * total / frameAvg) or 0
+				add(sfmt("All HappaTAS code %.3fms (%.2f%% of the frame)", total, pct), 0, W, 0, total, barSeq(150, 150, 150))
+				if total > 0 then
+					local hx = W * hap / total
+					add(sfmt("HappaTAS %.3fms", hap), 0, hx, 1, hap, TIMERS[TI.HappaTAS].seq)
+					add(sfmt("Profiler %.3fms", prof), hx, W, 1, prof, TIMERS[TI.Profiler].seq)
+					local x = 0
+					for j = 1, NT do
+						local t = TIMERS[j]
+						if t.parent == "HappaTAS" and hap > 0 then
+							local v = TV.dT[j] / fr
+							local w = hx * v / hap
+							if w >= 1 then add(sfmt("%s %.3fms", t.name, v), x, x + w, 2, v, t.seq) end
+							x = x + w
+						end
+					end
+				end
+				flm.hover = nil
+				for n, it in ipairs(items) do
+					local b = boxN(n)
+					local y = it.depth * BAR_H
+					local w = mmax(1, it.x1 - it.x0)
+					place(b.b, it.x0, y, w, BAR_H)
+					grad(b.b, it.seq)
 					paint(b.b, WHITE, fgT())
 					show(b.b, true)
-					local wpx = x1 - x0
-					if wpx > 3 * TW then
-						local chars = floor((wpx - TW) / CW)
-						say(b.t, t.name:sub(1, chars), x0 + 1, y + 1)
+					if w > 3 * TW then
+						say(b.t, it.name:sub(1, floor((w - TW) / CW)), it.x0 + 1, y + 1)
 						show(b.t, true)
 					else
 						show(b.t, false)
 					end
-					if hoverAllowed and mx >= x0 and mx < x1 and my >= DET_Y + y and my < DET_Y + y + BAR_H then
-						det.hover = { name = t.name, ms = (e - t0) * 1000, t0 = t0, t1 = e }
-					end
+					local top = U.flm.y or 0
+					if hoverAllowed and mx >= it.x0 and mx < it.x0 + w and my >= top + y and my < top + y + BAR_H then flm.hover = it end
 				end
-				idx = idx - 1
-				count = count + 1
-			end
-			for i = nb + 1, det.nBars do show(det.bars[i].b, false); show(det.bars[i].t, false) end
-			det.nBars = nb
-		end
-		local function timerTip(name, ms)
-			local j = TI[name] or 1
-			local fr = mmax(AG.dframes, 1)
-			local calls = (TV.dC[j] > 0) and TV.dC[j] or 1
-			local rows = { { "Timer:", name } }
-			if ms then rows[#rows + 1] = { "Time:", sfmt("%6.3fms", ms) } end
-			rows[#rows + 1] = { "", "" }
-			rows[#rows + 1] = { "Frame Time:", sfmt("%6.3fms", TV.last[j]) }
-			rows[#rows + 1] = { "Average:", sfmt("%6.3fms", TV.dT[j] / fr) }
-			rows[#rows + 1] = { "Max:", sfmt("%6.3fms", TV.dMax[j]) }
-			rows[#rows + 1] = { "Min:", sfmt("%6.3fms", TV.dMin[j]) }
-			rows[#rows + 1] = { "", "" }
-			rows[#rows + 1] = { "Call Average:", sfmt("%6.3fms", TV.dT[j] / calls) }
-			rows[#rows + 1] = { "Call Count:", sfmt("%6.2f", TV.dC[j] / fr) }
-			rows[#rows + 1] = { "Group:", TIMERS[j].group }
-			return rows
-		end
-		local tim = { rows = {}, cells = {}, heads = {}, seps = {}, n = 0, layout = nil }
-		local function timersLayout()
-			local groups = {}
-			local maxLen = 1
-			for _, g in ipairs(GROUPS) do
-				if cfg.all or cfg.groups[g] then
-					local ts = {}
-					for j = 1, NT do
-						if TIMERS[j].group == g then
-							ts[#ts + 1] = j
-							if #TIMERS[j].name > maxLen then maxLen = #TIMERS[j].name end
-						end
-					end
-					groups[#groups + 1] = { g, ts }
-				end
-			end
-			local cols = {}
-			local function add(kind, title, width) cols[#cols + 1] = { kind = kind, title = title, width = width } end
-			local bw = BAR_W + 5 + 6 * CW
-			if hasBit(cfg.bars, 1) then add("time", "Time", bw) end
-			if hasBit(cfg.bars, 2) then add("avg", "Average", bw) end
-			if hasBit(cfg.bars, 4) then add("max", cfg.spikes and "Max Time, Spike" or "Max Time", bw) end
-			if hasBit(cfg.bars, 8) then add("min", cfg.spikes and "Min Time, Spike" or "Min Time", bw) end
-			if hasBit(cfg.bars, 16) then add("callavg", "Call Average", bw); add("count", "Count", 5 + 6 * TW) end
-			if hasBit(cfg.bars, 32) then add("xtime", "Exclusive Time", bw) end
-			if hasBit(cfg.bars, 64) then add("xavg", "Exclusive Average", bw) end
-			if hasBit(cfg.bars, 128) then add("xmax", cfg.spikes and "Excl Max Time, Spike" or "Exclusive Max Time", bw) end
-			local width = 0
-			for _, c in ipairs(cols) do
-				width = width + ((c.kind == "count") and (6 + 6 * TW) or (BAR_W + 6 + 6 * CW))
-			end
-			width = width + (1 + maxLen) * CW
-			return { groups = groups, cols = cols, nameW = 2 + (4 + maxLen) * CW, width = width }
-		end
-		local function timRow(n)
-			local r = tim.rows[n]
-			if not r then
-				r = { v = box(U.tim.f, BACK[1], 1), nm = box(U.tim.f, BACK[1], 1), t = text(U.tim.f, 3) }
-				tim.rows[n] = r
-			end
-			return r
-		end
-		local function timCell(r, c)
-			local key = r * 64 + c
-			local cell = tim.cells[key]
-			if not cell then cell = { t = text(U.tim.f, 3), bar = gradBox(U.tim.f, 2) }; tim.cells[key] = cell end
-			return cell
-		end
-		local function timHead(c)
-			local h = tim.heads[c]
-			if not h then h = { b = box(U.tim.f, BACK[2], 4), t = text(U.tim.f, 5) }; tim.heads[c] = h end
-			return h
-		end
-		local function timSep(c)
-			local s = tim.seps[c]
-			if not s then s = box(U.tim.f, SEP, 2); tim.seps[c] = s end
-			return s
-		end
-		local function colValue(kind, j)
-			local fr = mmax(AG.dframes, 1)
-			if kind == "time" then return TV.last[j]
-			elseif kind == "avg" then return TV.dT[j] / fr
-			elseif kind == "max" then return TV.dMax[j]
-			elseif kind == "min" then return TV.dMin[j]
-			elseif kind == "callavg" then return TV.dT[j] / mmax(TV.dC[j], 1)
-			elseif kind == "count" then return TV.lastC[j]
-			elseif kind == "xtime" then return TV.lastX[j]
-			elseif kind == "xavg" then return TV.dX[j] / fr
-			elseif kind == "xmax" then return TV.dXMax[j] end
-			return 0
-		end
-		local function timersUpdate()
-			if timersDirty or not tim.layout then
-				timersDirty = false
-				tim.layout = timersLayout()
-				for _, cell in pairs(tim.cells) do show(cell.t, false); show(cell.bar, false) end
-				for _, h in pairs(tim.heads) do show(h.b, false); show(h.t, false) end
-				for _, s in pairs(tim.seps) do show(s, false) end
-			end
-			local L = tim.layout
-			local nameW = L.nameW
-			local rowsN = 1
-			for _, g in ipairs(L.groups) do rowsN = rowsN + 1 + #g[2] end
-			local y0 = TH + 3
-			local hovRow = nil
-			if activeMenu == nil and my >= y0 and my < y0 + rowsN * RH then hovRow = floor((my - y0) / RH) + 1 end
-			local rowText = {}
-			local rowOf = {}
-			local row = 1
-			for _, g in ipairs(L.groups) do
-				row = row + 1
-				rowText[row] = { g[1], 0, WHITE }
-				for _, j in ipairs(g[2]) do
-					row = row + 1
-					rowOf[j] = row
-					rowText[row] = { TIMERS[j].name, nameW - 5 - #TIMERS[j].name * CW, TIMERS[j].color }
-				end
-			end
-			for r = 1, rowsN do
-				local o = timRow(r)
-				local yy = y0 + (r - 1) * RH
-				local ci = (r - 1) % 2 + 1
-				local ni = (rowsN + r - 1) % 2 + 1
-				place(o.v, nameW, yy, L.width, RH + 1)
-				paint(o.v, (hovRow == r) and BACK_HOVER[ci] or BACK[ci], bgT())
-				place(o.nm, 0, yy, nameW, RH + 1)
-				paint(o.nm, (hovRow == r) and BACK_HOVER[ni] or BACK[ni], 0)
-				show(o.v, true)
-				show(o.nm, true)
-				local rt = rowText[r]
-				if rt then
-					say(o.t, rt[1], rt[2], yy + 1)
-					tint(o.t, rt[3])
-				end
-				show(o.t, rt ~= nil)
-			end
-			for r = rowsN + 1, tim.n do
-				local o = tim.rows[r]
-				show(o.v, false); show(o.nm, false); show(o.t, false)
-			end
-			tim.n = rowsN
-			local x = nameW + 10
-			local totalH = rowsN * RH + y0
-			for c, col in ipairs(L.cols) do
-				local sep = timSep(c)
-				place(sep, x - 5, 0, 1, totalH)
-				paint(sep, SEP, bgT())
-				show(sep, true)
-				local head = timHead(c)
-				local hw = (col.kind == "count") and (5 + 6 * TW) or (6 * CW + BAR_W)
-				place(head.b, x - 8, TH + 2, hw + 13, RH)
-				say(head.t, col.title, x, TH + 2)
-				show(head.b, true)
-				show(head.t, true)
-				for _, g in ipairs(L.groups) do
-					for _, j in ipairs(g[2]) do
-						local r = rowOf[j]
-						local cell = timCell(r, c)
-						local yy = y0 + (r - 1) * RH + 1
-						local v = colValue(col.kind, j)
-						local s
-						if col.kind == "count" then
-							s = sfmt("%5d", v)
-						elseif (col.kind == "max" or col.kind == "min" or col.kind == "xmax") and cfg.spikes then
-							local avg = (col.kind == "xmax") and colValue("xavg", j) or colValue("avg", j)
-							s = (avg > 0.1) and sfmt("%5.2f %3.1fx", v, v / avg) or sfmt("%5.2f", v)
-						else
-							s = sfmt("%5.2f", v)
-						end
-						say(cell.t, s, x, yy)
-						show(cell.t, true)
-						if col.kind ~= "count" and not (cfg.spikes and (col.kind == "max" or col.kind == "min" or col.kind == "xmax")) then
-							local w = floor(BAR_W * mmin(v / cfg.ref, 1))
-							place(cell.bar, x + 6 * CW, yy, w, TH)
-							grad(cell.bar, TIMERS[j].seq)
-							paint(cell.bar, WHITE, fgT())
-							show(cell.bar, w > 0)
-						else
-							show(cell.bar, false)
-						end
-					end
-				end
-				x = x + col.width + 1
-			end
-			say(tim.group, "Group", 0, TH + 2)
-			say(tim.timer, "Timer", nameW - 3 - 5 * CW, TH + 2)
-			place(tim.groupBox, 0, TH + 2, nameW + 5, RH)
-			place(tim.vline, nameW, 0, 1, totalH)
-			paint(tim.vline, SEP, bgT())
-			place(tim.hline, 0, 2 * TH + 3, nameW + L.width, 1)
-			paint(tim.hline, SEP, bgT())
-			tim.rect = { nameW + L.width, totalH + 1 }
-			tim.hover = nil
-			if hovRow then
-				for j, r in pairs(rowOf) do if r == hovRow then tim.hover = j end end
+				for n = #items + 1, flm.n do show(flm.boxes[n].b, false); show(flm.boxes[n].t, false) end
+				flm.n = #items
 			end
 		end
-		local cnt = { rows = {}, n = 0, min = {}, max = {} }
-		local function counterList()
-			local avgMs = readAvg()
-			local fps = (avgMs > 0) and (1000 / avgMs) or 0
-			local list = {
-				{ "frame", nil, 0 },
-				{ "fps", fps, 1, "%.1f" },
-				{ "frames", K, 1, "%d" },
-				{ "memory", nil, 0 },
-				{ "total (MB)", memUsed(), 1, "%.1f" },
-				{ "lua heap (MB)", luaHeapMb(), 1, "%.1f" },
-				{ "instances", nil, 0 },
-				{ "count", statRaw("InstanceCount"), 1, "%d" },
-				{ "primitives", statRaw("PrimitivesCount"), 1, "%d" },
-				{ "moving", statRaw("MovingPrimitivesCount"), 1, "%d" },
-				{ "contacts", statRaw("ContactsCount"), 1, "%d" },
-				{ "rendering", nil, 0 },
-				{ "scene draw calls", statRaw("SceneDrawcallCount"), 1, "%d" },
-				{ "scene triangles", statRaw("SceneTriangleCount"), 1, "%d" },
-				{ "shadow draw calls", statRaw("ShadowsDrawcallCount"), 1, "%d" },
-				{ "ui draw calls", statRaw("UI2DDrawcallCount"), 1, "%d" },
-			}
-			if cfg.network >= 1 then
-				list[#list + 1] = { "network", nil, 0 }
-				list[#list + 1] = { "receive (KB/s)", statRaw("DataReceiveKbps"), 1, "%.2f" }
-				list[#list + 1] = { "send (KB/s)", statRaw("DataSendKbps"), 1, "%.2f" }
-				list[#list + 1] = { "physics receive (KB/s)", statRaw("PhysicsReceiveKbps"), 1, "%.2f" }
-				list[#list + 1] = { "physics send (KB/s)", statRaw("PhysicsSendKbps"), 1, "%.2f" }
-			end
-			local data, f = tasData()
-			list[#list + 1] = { "happatas", nil, 0 }
-			list[#list + 1] = { "tas frames", (type(data) == "table") and #data or 0, 1, "%d" }
-			list[#list + 1] = { "tas frame", tonumber(f) or 0, 1, "%d" }
-			if ClientObjects.Counts then
-				local okc, reg, onScreen, playing = pcall(ClientObjects.Counts)
-				if okc then
-					list[#list + 1] = { "client objects", tonumber(reg) or 0, 1, "%d" }
-					list[#list + 1] = { "on screen", tonumber(onScreen) or 0, 1, "%d" }
-					list[#list + 1] = { "playing", tonumber(playing) or 0, 1, "%d" }
-				end
-			end
-			if Buttons.Count then
-				local okb, nb = pcall(Buttons.Count)
-				if okb then list[#list + 1] = { "buttons", tonumber(nb) or 0, 1, "%d" } end
-			end
-			return list
+		MS.ctrlKeys = {}
+		for _, n in ipairs({ "LeftControl", "RightControl", "LeftSuper", "RightSuper", "LeftMeta", "RightMeta" }) do
+			local ok, k = pcall(function() return Enum.KeyCode[n] end)
+			if ok and k then MS.ctrlKeys[#MS.ctrlKeys + 1] = k end
 		end
-		local function cntRow(n)
-			local r = cnt.rows[n]
-			if not r then
-				r = { bg = box(U.cnt.f, BACK[1], 1), name = text(U.cnt.f, 3), v = text(U.cnt.f, 3), mn = text(U.cnt.f, 3), mx = text(U.cnt.f, 3) }
-				cnt.rows[n] = r
+		function MS.ctrlHeld()
+			for _, k in ipairs(MS.ctrlKeys) do
+				local ok, down = pcall(UIS.IsKeyDown, UIS, k)
+				if ok and down then return true end
 			end
-			return r
-		end
-		local function countersUpdate()
-			local list = counterList()
-			local nameW = 7 * CW
-			for _, c in ipairs(list) do nameW = mmax(nameW, (2 + #c[1] + 4 * c[3]) * CW) end
-			local valW = 14 * CW
-			local y0 = 2 * TH + 3
-			local total = nameW + 3 * valW
-			for n, c in ipairs(list) do
-				local r = cntRow(n)
-				local yy = y0 + (n - 1) * RH
-				place(r.bg, 0, yy, total, RH + 1)
-				paint(r.bg, BACK[(n - 1) % 2 + 1], bgT())
-				show(r.bg, true)
-				say(r.name, string.rep(" ", 4 * c[3]) .. c[1], 0, yy + 1)
-				show(r.name, true)
-				if c[2] ~= nil then
-					local key = c[1] .. "#" .. n
-					local v = c[2]
-					cnt.min[key] = mmin(cnt.min[key] or v, v)
-					cnt.max[key] = mmax(cnt.max[key] or v, v)
-					local function fmtv(x)
-						local s = sfmt(c[4], (c[4] == "%d") and floor(x + 0.5) or x)
-						return s
-					end
-					local sv, smn, smx = fmtv(v), fmtv(cnt.min[key]), fmtv(cnt.max[key])
-					say(r.v, sv, nameW + valW - #sv * CW - CW, yy + 1)
-					say(r.mn, smn, nameW + 2 * valW - #smn * CW - CW, yy + 1)
-					say(r.mx, smx, nameW + 3 * valW - #smx * CW - CW, yy + 1)
-					show(r.v, true); show(r.mn, true); show(r.mx, true)
-				else
-					show(r.v, false); show(r.mn, false); show(r.mx, false)
-				end
-			end
-			for n = #list + 1, cnt.n do
-				local r = cnt.rows[n]
-				show(r.bg, false); show(r.name, false); show(r.v, false); show(r.mn, false); show(r.mx, false)
-			end
-			cnt.n = #list
-			for i, h in ipairs(cnt.heads) do
-				local hx = (i == 1) and 0 or (nameW + (i - 2) * valW)
-				local hw = (i == 1) and nameW or valW
-				place(h.b, hx, TH + 2, hw - 2, RH)
-				say(h.t, h.title, hx + 2, TH + 2)
-			end
-			place(cnt.hline, 0, 2 * TH + 3, total, 1)
-			paint(cnt.hline, SEP, bgT())
-			cnt.rect = { total, y0 + #list * RH + 1 }
-		end
-		local flm = { boxes = {}, n = 0, hover = nil }
-		local function flmBox(n)
-			local b = flm.boxes[n]
-			if not b then b = { b = gradBox(U.flm.f, 2), t = text(U.flm.f, 3, BLACK) }; flm.boxes[n] = b end
-			return b
-		end
-		local function flameUpdate(hoverAllowed)
-			local fr = mmax(AG.dframes, 1)
-			local function avg(name) return TV.dT[TI[name]] / fr end
-			local hap, prof = avg("HappaTAS"), avg("Profiler")
-			local total = hap + prof
-			local frameAvg = AG.dsum / fr
-			local items = {}
-			local function add(name, x0, x1, depth, ms, seq)
-				items[#items + 1] = { name = name, x0 = floor(x0), x1 = floor(x1), depth = depth, ms = ms, seq = seq }
-			end
-			local pct = (frameAvg > 0) and (100 * total / frameAvg) or 0
-			add(sfmt("All HappaTAS code %.3fms (%.2f%% of the frame)", total, pct), 0, W, 0, total, barSeq(150, 150, 150))
-			if total > 0 then
-				local hx = W * hap / total
-				add(sfmt("HappaTAS %.3fms", hap), 0, hx, 1, hap, TIMERS[TI.HappaTAS].seq)
-				add(sfmt("Profiler %.3fms", prof), hx, W, 1, prof, TIMERS[TI.Profiler].seq)
-				local x = 0
-				for j = 1, NT do
-					local t = TIMERS[j]
-					if t.parent == "HappaTAS" and hap > 0 then
-						local v = TV.dT[j] / fr
-						local w = hx * v / hap
-						if w >= 1 then add(sfmt("%s %.3fms", t.name, v), x, x + w, 2, v, t.seq) end
-						x = x + w
-					end
-				end
-			end
-			flm.hover = nil
-			for n, it in ipairs(items) do
-				local b = flmBox(n)
-				local y = it.depth * BAR_H
-				local w = mmax(1, it.x1 - it.x0)
-				place(b.b, it.x0, y, w, BAR_H - 1)
-				grad(b.b, it.seq)
-				paint(b.b, WHITE, fgT())
-				show(b.b, true)
-				if w > 3 * TW then
-					say(b.t, it.name:sub(1, floor((w - TW) / CW)), it.x0 + 1, y + 1)
-					show(b.t, true)
-				else
-					show(b.t, false)
-				end
-				local top = U.flm.y or 0
-				if hoverAllowed and mx >= it.x0 and mx < it.x0 + w and my >= top + y and my < top + y + BAR_H then flm.hover = it end
-			end
-			for n = #items + 1, flm.n do show(flm.boxes[n].b, false); show(flm.boxes[n].t, false) end
-			flm.n = #items
+			return false
 		end
 		local function overUI(x, y)
 			if x < 0 or x >= W or y < 0 then return false end
 			if y < MENU_H then return true end
 			if graphVisible() and y < MENU_H + HIST_H then return true end
-			if U.det.vis and y >= DET_Y and y < DET_Y + DET_H then return true end
+			if U.det.vis and y >= DET_Y then return true end
 			if U.flm.vis and U.flm.y and y >= U.flm.y and y < U.flm.y + 3 * BAR_H then return true end
 			if dd.menu and x >= menuX[dd.menu] and x <= menuX[dd.menu] + dd.width and y >= RH and y <= RH + dd.count * RH then return true end
 			if U.tim.vis and tim.rect and x < tim.rect[1] and y < tim.rect[2] then return true end
@@ -6593,51 +7127,30 @@ do
 			U.scale = Instance.new("UIScale")
 			U.scale.Scale = SCALE
 			U.scale.Parent = root
-			local graph = newButton(root, 1)
+			local graph = newFrame(root, BACK[1], 1)
 			graph.Name = "Graph"
-			graph.BackgroundTransparency = 0
-			graph.BackgroundColor3 = BACK[1]
 			graph.ClipsDescendants = true
-			graph.Position = UDim2.fromOffset(0, MENU_H)
+			graph.Position = UDim2.fromOffset(0, GRAPH_Y)
 			graph.Size = UDim2.new(1, -CLOSE_W, 0, HIST_H)
 			U.graph = { f = graph }
-			local strip = newFrame(graph, WHITE, 1, 1)
-			strip.Name = "Strip"
-			strip.Size = UDim2.new(1, 0, 1, 0)
-			U.strip = strip
-			U.bars = {}
-			for s = 1, NUM_FRAMES do
-				local b = gradBox(strip, 2)
-				b.f.Name = "Bar"
-				b.f.AnchorPoint = Vector2.new(0, 1)
-				b.f.Size = UDim2.new(1 / NUM_FRAMES, 0, 0, 0)
-				b.f.Position = UDim2.new(0, 0, 1, 0)
-				U.bars[s] = b
-			end
-			U.hl = box(strip, HL, 3, HL_T)
+			local close = newFrame(root, BACK[1], 1)
+			close.Name = "Close"
+			close.Position = UDim2.new(1, -CLOSE_W, 0, GRAPH_Y)
+			close.Size = UDim2.fromOffset(CLOSE_W, HIST_H)
+			U.close = { f = close }
+			U.closeHover = box(close, HOVER, 2)
+			place(U.closeHover, 2, 2, CLOSE_W - 4, CLOSE_W - 4)
+			show(U.closeHover, false)
+			if not GI.make(graph, close) then GI.frames() end
+			U.hl = box(graph, HL, 3, HL_T)
 			U.hl.f.Name = "Selection"
 			show(U.hl, false)
-			local close = newButton(root, 1)
-			close.Name = "Close"
-			close.BackgroundTransparency = 0
-			close.BackgroundColor3 = BACK[1]
-			close.Position = UDim2.new(1, -CLOSE_W, 0, MENU_H)
-			close.Size = UDim2.fromOffset(CLOSE_W, HIST_H)
-			for _, rot in ipairs({ 45, -45 }) do
-				local l = newFrame(close, WHITE, 2)
-				l.AnchorPoint = Vector2.new(0.5, 0.5)
-				l.Position = UDim2.fromOffset(26, 24)
-				l.Size = UDim2.fromOffset(43, 1)
-				l.Rotation = rot
-			end
-			U.close = { f = close }
-			local detF = newButton(root, 2)
+			local detF = newFrame(root, WHITE, 2, 1)
 			detF.Name = "Detailed"
 			detF.ClipsDescendants = true
 			detF.Position = UDim2.fromOffset(0, DET_Y)
-			detF.Size = UDim2.new(1, 0, 0, DET_H)
+			detF.Size = UDim2.new(1, 0, 1, -DET_Y)
 			U.det = { f = detF }
-			det.thread = text(detF, 7)
 			show(U.det, false)
 			local timF = newFrame(root, WHITE, 2, 1)
 			timF.Name = "Timers"
@@ -6654,39 +7167,64 @@ do
 			cntF.Size = UDim2.new(1, 0, 1, 0)
 			U.cnt = { f = cntF }
 			cnt.heads = {}
-			for _, title in ipairs({ "Name", "Value", "Min", "Max" }) do
+			for _, title in ipairs({ "Name", "Value", "Limit", "Graph", "Min", "Max" }) do
 				cnt.heads[#cnt.heads + 1] = { title = title, b = box(cntF, BACK[2], 4), t = text(cntF, 5) }
 			end
-			cnt.hline = box(cntF, SEP, 2)
+			cnt.note = box(cntF, COL.red, 6)
+			cnt.noteT = text(cntF, 7)
+			cnt.vline = box(cntF, COL.cline, 4, COL.clineT)
+			cnt.hline = box(cntF, COL.cline, 4, COL.clineT)
 			show(U.cnt, false)
-			local flmF = newButton(root, 2)
+			local flmF = newFrame(root, WHITE, 2, 1)
 			flmF.Name = "Flamegraph"
 			flmF.ClipsDescendants = true
 			flmF.Size = UDim2.new(1, 0, 0, 3 * BAR_H)
 			U.flm = { f = flmF }
 			show(U.flm, false)
-			local menu = newButton(root, 5)
-			menu.BackgroundTransparency = 0
-			menu.BackgroundColor3 = BACK[2]
+			local menu = newFrame(root, BACK[2], 5)
 			menu.Name = "Menu"
 			menu.Size = UDim2.new(1, 0, 0, MENU_H)
 			U.menu = menu
-			U.title = text(menu, 7)
+			U.title = text(menu, 8)
 			say(U.title, "MicroProfiler", 0, 0)
+			U.dumpBox = box(menu, COL.dump, 6)
 			U.items = {}
-			for i, def in ipairs(MENUS) do
-				local it = { hl = box(menu, HOVER, 6), t = text(menu, 7), b = { f = newButton(menu, 8) } }
-				it.b.f.Name = "Item" .. i
+			for i in ipairs(MENUS) do
+				local it = { hl = box(menu, HOVER, 7), t = text(menu, 8) }
 				show(it.hl, false)
 				U.items[i] = it
 			end
-			U.readout = text(menu, 7)
+			U.readout = text(menu, 8)
+			U.hint = box(root, BACK[2], 9)
+			place(U.hint, 20, DET_Y + 10, 240, 68)
+			U.hintT = { text(U.hint.f, 10), text(U.hint.f, 10), text(U.hint.f, 10) }
+			say(U.hintT[1], "This is the MicroProfiler", 16, 15)
+			say(U.hintT[3], "Hold Ctrl (or Cmd) to click through", 16, 45)
+			show(U.hint, false)
 			local ddF = newFrame(root, BACK[2], 10)
 			ddF.Name = "Dropdown"
 			U.dd = { f = ddF }
 			show(U.dd, false)
 			U.tip = window(12)
 			U.help = { window(11), window(11), window(11) }
+			local catch = newFrame(root, WHITE, 20, 1)
+			catch.Name = "Input"
+			catch.Size = UDim2.new(1, 0, 1, 0)
+			U.catch = { f = catch }
+			local function catcher(name)
+				local b = newButton(catch, 20)
+				b.Name = name
+				return { f = b }
+			end
+			U.cMenu, U.cGraph, U.cDet = catcher("Menu"), catcher("Graph"), catcher("Detailed")
+			U.cDd, U.cFlm, U.cTim, U.cCnt = catcher("Dropdown"), catcher("Flamegraph"), catcher("Timers"), catcher("Counters")
+			U.cMenu.f.Size = UDim2.new(1, 0, 0, MENU_H)
+			U.cGraph.f.Position = UDim2.fromOffset(0, MENU_H)
+			U.cGraph.f.Size = UDim2.new(1, 0, 0, HIST_H)
+			U.cDet.f.Position = UDim2.fromOffset(0, DET_Y)
+			U.cDet.f.Size = UDim2.new(1, 0, 1, -DET_Y)
+			U.cFlm.f.Size = UDim2.new(1, 0, 0, 3 * BAR_H)
+			for _, c in ipairs({ U.cDet, U.cDd, U.cFlm, U.cTim, U.cCnt }) do show(c, false) end
 			local MB1, MB2 = Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2
 			local TOUCH = Enum.UserInputType.Touch
 			local function live() return P.active and root.Visible end
@@ -6699,6 +7237,7 @@ do
 				if (t ~= MB1 and t ~= MB2 and t ~= TOUCH) or not live() then return end
 				if t == TOUCH and MS.touch then return end
 				evPos(input)
+				if t ~= TOUCH and MS.ctrlHeld() then return end
 				local x, y = toLocal(MS.gx, MS.gy)
 				if not overUI(x, y) then return end
 				if not (MS.downL or MS.downR) then MS.dx, MS.dy = x, y end
@@ -6753,24 +7292,40 @@ do
 		end
 		local function flamePlace()
 			if not U.built then return end
-			local y = DET_Y + ((cfg.mode == "Detailed") and DET_H or 0)
+			local y = (cfg.mode == "Detailed" and not cfg.custom) and floor(H - 3 * BAR_H) or DET_Y
 			U.flm.y = y
-			if U.flm.py ~= y then U.flm.py = y; U.flm.f.Position = UDim2.fromOffset(0, y) end
-			show(U.flm, cfg.flame and graphVisible())
+			if U.flm.py ~= y then
+				U.flm.py = y
+				U.flm.f.Position = UDim2.fromOffset(0, y)
+				U.cFlm.f.Position = UDim2.fromOffset(0, y)
+			end
+			local on2 = cfg.flame and graphVisible()
+			show(U.flm, on2)
+			show(U.cFlm, on2)
 		end
 		local function applyMode()
 			if not U.built then return end
 			local gv = graphVisible()
+			local dv = cfg.mode == "Detailed" and gv and not cfg.custom
 			show(U.graph, gv)
 			show(U.close, gv)
-			show(U.det, cfg.mode == "Detailed" and gv and not cfg.custom)
+			show(U.cGraph, gv)
+			show(U.det, dv)
+			show(U.cDet, dv)
 			show(U.tim, cfg.mode == "Timers")
+			show(U.cTim, cfg.mode == "Timers")
 			show(U.cnt, cfg.mode == "Counters")
-			slog.on = (cfg.mode == "Detailed") and P.active and not cfg.custom
+			show(U.cCnt, cfg.mode == "Counters")
+			slog.on = dv and P.active
 			U.barsDirty = true
 			timersDirty = true
-			hlKey = nil
-			if not gv then windowHide(U.tip) end
+			countersDirty = true
+			hlA, hlN = nil, nil
+			if not gv then
+				windowHide(U.tip)
+				show(U.hint, false)
+				show(U.closeHover, false)
+			end
 			flamePlace()
 		end
 		actions.applyMode = applyMode
@@ -6814,19 +7369,24 @@ do
 			local s = sfmt("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", t, a, m)
 			say(U.readout, s, floor(W - #s * CW), 0)
 		end
+		local function closeKey()
+			local ok, k = pcall(function() return Controls.Get("MicroProfiler") end)
+			return (ok and type(k) == "string" and k ~= "") and k or "F6"
+		end
 		local function helpUpdate()
 			local h = U.help
 			if not helpOn then
 				windowHide(h[1]); windowHide(h[2]); windowHide(h[3])
 				return
 			end
+			local key = closeKey()
 			if graphVisible() then
 				windowShow(h[1], W, 20, { { "Left-Click", "Center View" }, { "Right-Click", "Zoom to frame" } }, SEP)
 				windowShow(h[2], W, HIST_H + 20, { { "Drag", "Pan View" }, { "Mouse Wheel", "Zoom" },
-					{ "F6", "Show / Hide" }, { "Ctrl+P", "Pause" } }, SEP)
+					{ key, "Show / Hide" }, { "Ctrl+P", "Pause" } }, SEP)
 			else
 				windowHide(h[1])
-				windowShow(h[2], W, HIST_H + 20, { { "F6", "Show / Hide" }, { "Ctrl+P", "Pause" } }, SEP)
+				windowShow(h[2], W, HIST_H + 20, { { key, "Show / Hide" }, { "Ctrl+P", "Pause" } }, SEP)
 			end
 			windowShow(h[3], 0, H - 10, { { "Memory Usage", sfmt("%4.2fmb", luaHeapMb()) }, { "Frames", tostring(K) } }, SEP)
 		end
@@ -6835,13 +7395,17 @@ do
 			readMouse()
 			if MS.downL and not MS.touch and not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then MS.downL = false end
 			if MS.downR and not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then MS.downR = false end
+			MS.ctrl = MS.ctrlHeld()
+			show(U.catch, not MS.ctrl)
 			layoutMenuBar()
 			updateMenus()
 			if not P.active then return end
 			local gv = graphVisible()
 			local overTip = false
 			local detailed = cfg.mode == "Detailed" and gv and not cfg.custom
-			local inDet = detailed and activeMenu == nil and mx >= 0 and mx < W and my >= DET_Y and my < DET_Y + DET_H
+			local inDet = detailed and activeMenu == nil and mx >= 0 and mx < W and my >= DET_Y and my < H
+			local overGraph = gv and activeMenu == nil and mx >= 0 and mx < W and my >= MENU_H and my < MENU_H + HIST_H
+			local overClose = overGraph and mx >= W - CLOSE_W
 			if gv then
 				if cfg.custom then
 					tasStep()
@@ -6891,7 +7455,8 @@ do
 						end
 					end
 				end
-				if (MS.clickL or MS.clickR) and activeMenu == nil and mx >= W - CLOSE_W and mx < W and my >= MENU_H and my < MENU_H + HIST_H then
+				show(U.closeHover, overClose)
+				if (MS.clickL or MS.clickR) and overClose then
 					P.Close()
 					return
 				end
@@ -6899,30 +7464,40 @@ do
 			else
 				setHover(nil)
 			end
+			if overGraph then
+				say(U.hintT[2], "Press " .. closeKey() .. " to close", 16, 30)
+			end
+			show(U.hint, overGraph)
 			readoutUpdate()
 			if detailed then
-				if tick % 2 == 0 or det.drag then detailUpdate(activeMenu == nil and not overTip) end
-				if det.hover and not overTip then
-					windowShow(U.tip, mx, my + 20, timerTip(det.hover.name, det.hover.ms), WHITE)
+				if tick % 2 == 0 or det.drag or inDet then det.update(activeMenu == nil and not overTip) end
+				local dh = det.hover
+				if dh and inDet and not overTip then
+					windowShow(U.tip, mx, my + 20, det.tip(dh.j, dh.ms), TIMERS[dh.j].color)
 					overTip = true
 				end
 			end
 			if cfg.mode == "Timers" then
-				if tick % 6 == 0 or timersDirty then timersUpdate() end
+				if tick % 6 == 0 or timersDirty then tim.update() end
 				if tim.hover and activeMenu == nil then
-					windowShow(U.tip, mx, my + 20, timerTip(TIMERS[tim.hover].name), WHITE)
+					windowShow(U.tip, mx, my + 20, det.tip(tim.hover), TIMERS[tim.hover].color)
 					overTip = true
 				end
 			end
-			if cfg.mode == "Counters" and (tick % 15 == 0 or countersDirty) then
-				countersDirty = false
-				countersUpdate()
+			if cfg.mode == "Counters" then
+				if (MS.clickL or MS.clickR) and activeMenu == nil and cnt.click(MS.clickL, MS.clickR) then countersDirty = true end
+				if tick % 15 == 0 or countersDirty then
+					countersDirty = false
+					cnt.update()
+				else
+					cnt.hoverPaint()
+				end
 			end
 			if cfg.flame and gv then
 				flamePlace()
-				if tick % 15 == 0 or flm.n == 0 then flameUpdate(false) end
+				if tick % 15 == 0 or flm.n == 0 then flm.update(false) end
 				if activeMenu == nil and not overTip and U.flm.y and my >= U.flm.y and my < U.flm.y + 3 * BAR_H then
-					flameUpdate(true)
+					flm.update(true)
 					local h = flm.hover
 					if h then
 						windowShow(U.tip, mx, my + 20, { { h.name, "" }, { "Average", sfmt("%6.3fms", h.ms) } }, WHITE)
@@ -6931,6 +7506,7 @@ do
 				end
 			elseif U.flm.vis then
 				show(U.flm, false)
+				show(U.cFlm, false)
 			end
 			if not overTip then windowHide(U.tip) end
 			if dd.menu and tick % 15 == 0 then actions.ddRender(dd.menu) end
@@ -6950,8 +7526,10 @@ do
 			end
 			clearClicks()
 			clearAcc()
-			tAcc.Profiler = clock() - t0
+			local t1 = clock()
+			tAcc.Profiler = t1 - t0
 			tCnt.Profiler = 1
+			if slog.on then slog.push("Profiler", t0, t1, 0) end
 		end
 		function P.SetVisible(v)
 			v = v and true or false
@@ -6961,8 +7539,10 @@ do
 			lastStart = nil
 			for k in pairs(tStart) do tStart[k] = nil end
 			if v then
+				EVQ.connect()
 				applyMode()
 			else
+				EVQ.disconnect()
 				slog.on = false
 				activeMenu, helpOn, det.drag = nil, false, nil
 				MS.downL, MS.downR, MS.touch = false, false, nil
@@ -6972,11 +7552,14 @@ do
 					windowHide(U.tip)
 					for _, w in ipairs(U.help) do windowHide(w) end
 					setHover(nil)
+					show(U.hint, false)
+					show(U.closeHover, false)
 				end
 			end
 		end
 		function P.IsMouseOver(m)
 			if not P.active or not U.built or not U.root.Visible then return false end
+			if MS.ctrlHeld() then return false end
 			local gx, gy
 			local okc, cur = pcall(UIS.GetMouseLocation, UIS)
 			if typeof(m) ~= "Vector2" or (okc and typeof(cur) == "Vector2" and cur.X == m.X and cur.Y == m.Y) then
@@ -6987,194 +7570,198 @@ do
 			end
 			return overUI(toLocal(gx, gy))
 		end
-		local function htmlEscape(s) return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")) end
-		function actions.dump(n)
-			local rows = {}
-			local title
-			if cfg.custom then
-				local data, f = tasData()
-				if type(data) == "table" and #data > 0 then
-					f = clampn(math.floor(tonumber(f) or #data), 1, #data)
-					for k = mmax(1, f - n + 1), f do
-						local fr = data[k]
-						rows[#rows + 1] = { k, tasFrameMs(fr), 0, 0, 0, 0, 0, fr.TotalTime or 0 }
+		do
+			local function htmlEscape(s) return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")) end
+			function actions.dump(n)
+				local rows = {}
+				local title
+				if cfg.custom then
+					local data, f = tasData()
+					if type(data) == "table" and #data > 0 then
+						f = clampn(math.floor(tonumber(f) or #data), 1, #data)
+						for k = mmax(1, f - n + 1), f do
+							local fr = data[k]
+							rows[#rows + 1] = { k, tasFrameMs(fr), 0, 0, 0, 0, 0, fr.TotalTime or 0 }
+						end
+					end
+					title = "TAS frame times"
+				else
+					for k = mmax(1, K - mmin(n, MAX_HISTORY) + 1), K do
+						local i = hi(k)
+						rows[#rows + 1] = { HIS.no[i], HIS.ms[i], HIS.gpu[i], HIS.ren[i], HIS.job[i], HIS.phy[i], HIS.hap[i] }
+					end
+					if cfg.dumpIncomplete and lastStart then
+						rows[#rows + 1] = { frameNo, (clock() - lastStart) * 1000, 0, 0, 0, 0, 0, incomplete = true }
+					end
+					title = "MicroProfiler frames"
+				end
+				local avg, peak = readAvg(), RO.max
+				local name = "microprofile-" .. os.date("%Y%m%d-%H%M%S")
+				local textOut, ext
+				if cfg.dumpBinary then
+					local out = { "frame,cpu_ms,gpu_ms,render_ms,jobs_ms,physics_ms,happatas_ms" }
+					for _, r in ipairs(rows) do
+						out[#out + 1] = sfmt("%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f%s", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r.incomplete and ",incomplete" or "")
+					end
+					textOut, ext = table.concat(out, "\n") .. "\n", "csv"
+				elseif cfg.dumpLegacy then
+					local out = { "HappaTAS " .. VERSION .. " " .. title, sfmt("frames %d  avg %.2f ms  max %.2f ms  aggregate %s",
+						#rows, avg, peak, (cfg.aggregate == 0) and "infinite" or tostring(cfg.aggregate)), "",
+						sfmt("%10s %9s %9s %9s %9s %9s %9s", "frame", "cpu", "gpu", "render", "jobs", "physics", "happatas") }
+					for _, r in ipairs(rows) do
+						out[#out + 1] = sfmt("%10d %9.3f %9.3f %9.3f %9.3f %9.3f %9.3f%s", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r.incomplete and " incomplete" or "")
+					end
+					textOut, ext = table.concat(out, "\n") .. "\n", "txt"
+				else
+					local mxv = 0
+					for _, r in ipairs(rows) do if r[2] > mxv then mxv = r[2] end end
+					local bw = 4
+					local svg = { sfmt("<svg width=\"%d\" height=\"120\" viewBox=\"0 0 %d 120\">", mmax(1, #rows * bw), mmax(1, #rows * bw)) }
+					for i, r in ipairs(rows) do
+						local h = (mxv > 0) and floor(r[2] / mxv * 118 + 0.5) or 0
+						local col = (r[5] >= r[4]) and "#ff7f27" or "#37a0ee"
+						svg[#svg + 1] = sfmt("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"%s\"><title>%s %.2fms</title></rect>",
+							(i - 1) * bw, 120 - h, bw - 1, h, col, htmlEscape(tostring(r[1])), r[2])
+					end
+					svg[#svg + 1] = "</svg>"
+					local tbl = { "<table><tr><th>frame</th><th>cpu ms</th><th>gpu ms</th><th>render ms</th><th>jobs ms</th><th>physics ms</th><th>HappaTAS ms</th></tr>" }
+					for _, r in ipairs(rows) do
+						tbl[#tbl + 1] = sfmt("<tr><td>%s</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>",
+							htmlEscape(tostring(r[1]) .. (r.incomplete and " (incomplete)" or "")), r[2], r[3], r[4], r[5], r[6], r[7])
+					end
+					tbl[#tbl + 1] = "</table>"
+					textOut = table.concat({
+						"<!doctype html><html><head><meta charset=\"utf-8\"><title>", htmlEscape(name), "</title><style>",
+						"body{background:#313131;color:#fff;font:12px 'Roboto Mono',monospace;margin:16px}",
+						"svg{background:#474747;display:block;margin:12px 0}table{border-collapse:collapse}",
+						"th{background:#474747}td,th{padding:2px 10px;text-align:right;border-bottom:1px solid #474747}",
+						"</style></head><body><h3>HappaTAS ", htmlEscape(VERSION), " - ", htmlEscape(title), "</h3>",
+						sfmt("<p>%d frames, Avg %.2f ms, Max %.2f ms, Aggregate %s, Place %s</p>", #rows, avg, peak,
+							(cfg.aggregate == 0) and "Infinite" or tostring(cfg.aggregate), htmlEscape(tostring(game.PlaceId))),
+						table.concat(svg), table.concat(tbl), "</body></html>",
+					})
+					ext = "html"
+				end
+				local ok, res = Store.WriteText(name, textOut, ext)
+				if Core.SetStatus then
+					task.spawn(Core.SetStatus, ok and ("Dumped " .. #rows .. " frames to " .. name .. "." .. ext) or ("Dump failed: " .. tostring(res)))
+				end
+				return ok, res, ext
+			end
+			P.Dump = function(n) return actions.dump(tonumber(n) or 128) end
+		end
+		do
+			local function inList(v, list)
+				for _, x in ipairs(list) do if x == v then return true end end
+				return false
+			end
+			local function nearest(v, list)
+				local best, bd = list[1], HUGE
+				for _, x in ipairs(list) do
+					local d = math.abs(x - v)
+					if d < bd then best, bd = x, d end
+				end
+				return best
+			end
+			local function readConfig(t, c)
+				if type(t) ~= "table" then return c end
+				local mode = t.mode
+				if mode == "Frame Graph" then mode = "Frame" end
+				if mode == "TAS Timeline" then mode = "Frame"; c.custom = true end
+				if inList(mode, MODES) then c.mode = mode end
+				local a = tonumber(t.aggregate)
+				if a then
+					if a >= 1e9 then a = 0 end
+					c.aggregate = inList(a, AGG) and a or nearest(a, AGG)
+				end
+				local ref = tonumber(t.ref)
+				if ref and inList(ref, REF) then c.ref = ref end
+				local bg, fg = tonumber(t.bg), tonumber(t.fg)
+				if bg and inList(bg, OPAC) then c.bg = bg end
+				if fg and inList(fg, OPAC) then c.fg = fg end
+				local bars = tonumber(t.bars)
+				if bars and bars >= 0 and bars <= 255 and bars % 1 == 0 then c.bars = bars end
+				local net = tonumber(t.network)
+				if net and (net == 0 or net == 1 or net == 2) then c.network = net end
+				for _, k in ipairs({ "force", "spikes", "all", "flame", "custom", "dumpIncomplete", "dumpLegacy", "dumpBinary" }) do
+					if type(t[k]) == "boolean" then c[k] = t[k] end
+				end
+				if type(t.groups) == "table" then
+					for _, g in ipairs(GROUPS) do
+						if type(t.groups[g]) == "boolean" then c.groups[g] = t.groups[g] end
 					end
 				end
-				title = "TAS frame times"
-			else
-				for k = mmax(1, K - mmin(n, MAX_HISTORY) + 1), K do
-					local i = hi(k)
-					rows[#rows + 1] = { HIS.no[i], HIS.ms[i], HIS.gpu[i], HIS.ren[i], HIS.job[i], HIS.phy[i], HIS.hap[i] }
+				return c
+			end
+			local function snapshotOf(c)
+				return { mode = c.mode, aggregate = c.aggregate, ref = c.ref, bg = c.bg, fg = c.fg, spikes = c.spikes,
+					bars = c.bars, all = c.all, groups = { Engine = c.groups.Engine, HappaTAS = c.groups.HappaTAS },
+					network = c.network, flame = c.flame, force = c.force }
+			end
+			local function snapshot() return snapshotOf(cfg) end
+			local function applied()
+				U.barsDirty, timersDirty, countersDirty = true, true, true
+				applyMode()
+			end
+			function actions.savePreset(name)
+				if not inList(name, PRESET_NAMES) then return end
+				presets[name] = snapshot()
+				P.SaveConfig()
+				if Core.SetStatus then task.spawn(Core.SetStatus, "MicroProfiler preset '" .. name .. "' saved") end
+			end
+			function actions.loadPreset(name)
+				if not inList(name, PRESET_NAMES) then return end
+				local p = presets[name]
+				if p then
+					local before = cfg.aggregate
+					readConfig(p, cfg)
+					if cfg.aggregate == 0 and before ~= 0 then pickInfinite() end
+				elseif name == "Default" then
+					local keep = { custom = cfg.custom, dumpIncomplete = cfg.dumpIncomplete, dumpLegacy = cfg.dumpLegacy, dumpBinary = cfg.dumpBinary }
+					cfg = defaults()
+					for k, v in pairs(keep) do cfg[k] = v end
+				else
+					if Core.SetStatus then task.spawn(Core.SetStatus, "MicroProfiler preset '" .. name .. "' is empty (use Save first)") end
+					return
 				end
-				if cfg.dumpIncomplete and lastStart then
-					rows[#rows + 1] = { frameNo, (clock() - lastStart) * 1000, 0, 0, 0, 0, 0, incomplete = true }
+				applied()
+				P.SaveConfig()
+			end
+			P.LoadPreset, P.SavePreset = actions.loadPreset, actions.savePreset
+			function P.Config() return cfg end
+			function P.LoadConfig(t)
+				if type(t) ~= "table" then return end
+				cfg = readConfig(t, defaults())
+				if t.ref == nil and tonumber(t.scale) then
+					local s = tonumber(t.scale)
+					for _, v in ipairs(REF) do if math.abs(v - s) < 0.02 then cfg.ref = v end end
 				end
-				title = "MicroProfiler frames"
-			end
-			local avg, peak = readAvg(), RO.max
-			local name = "microprofile-" .. os.date("%Y%m%d-%H%M%S")
-			local textOut, ext
-			if cfg.dumpBinary then
-				local out = { "frame,cpu_ms,gpu_ms,render_ms,jobs_ms,physics_ms,happatas_ms" }
-				for _, r in ipairs(rows) do
-					out[#out + 1] = sfmt("%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f%s", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r.incomplete and ",incomplete" or "")
+				presets = {}
+				if type(t.presets) == "table" then
+					for _, n in ipairs(PRESET_NAMES) do
+						if type(t.presets[n]) == "table" then presets[n] = snapshotOf(readConfig(t.presets[n], defaults())) end
+					end
 				end
-				textOut, ext = table.concat(out, "\n") .. "\n", "csv"
-			elseif cfg.dumpLegacy then
-				local out = { "HappaTAS " .. VERSION .. " " .. title, sfmt("frames %d  avg %.2f ms  max %.2f ms  aggregate %s",
-					#rows, avg, peak, (cfg.aggregate == 0) and "infinite" or tostring(cfg.aggregate)), "",
-					sfmt("%10s %9s %9s %9s %9s %9s %9s", "frame", "cpu", "gpu", "render", "jobs", "physics", "happatas") }
-				for _, r in ipairs(rows) do
-					out[#out + 1] = sfmt("%10d %9.3f %9.3f %9.3f %9.3f %9.3f %9.3f%s", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r.incomplete and " incomplete" or "")
+				if U.built then applied() end
+			end
+			function P.SerializeConfig()
+				local out = snapshot()
+				out.custom = cfg.custom
+				out.dumpIncomplete, out.dumpLegacy, out.dumpBinary = cfg.dumpIncomplete, cfg.dumpLegacy, cfg.dumpBinary
+				local ps = {}
+				local any = false
+				for n, p in pairs(presets) do
+					local copy = {}
+					for k, v in pairs(p) do copy[k] = v end
+					copy.groups = { Engine = p.groups.Engine, HappaTAS = p.groups.HappaTAS }
+					ps[n] = copy
+					any = true
 				end
-				textOut, ext = table.concat(out, "\n") .. "\n", "txt"
-			else
-				local mxv = 0
-				for _, r in ipairs(rows) do if r[2] > mxv then mxv = r[2] end end
-				local bw = 4
-				local svg = { sfmt("<svg width=\"%d\" height=\"120\" viewBox=\"0 0 %d 120\">", mmax(1, #rows * bw), mmax(1, #rows * bw)) }
-				for i, r in ipairs(rows) do
-					local h = (mxv > 0) and floor(r[2] / mxv * 118 + 0.5) or 0
-					local col = (r[5] >= r[4]) and "#ff7f27" or "#37a0ee"
-					svg[#svg + 1] = sfmt("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"%s\"><title>%s %.2fms</title></rect>",
-						(i - 1) * bw, 120 - h, bw - 1, h, col, htmlEscape(tostring(r[1])), r[2])
-				end
-				svg[#svg + 1] = "</svg>"
-				local tbl = { "<table><tr><th>frame</th><th>cpu ms</th><th>gpu ms</th><th>render ms</th><th>jobs ms</th><th>physics ms</th><th>HappaTAS ms</th></tr>" }
-				for _, r in ipairs(rows) do
-					tbl[#tbl + 1] = sfmt("<tr><td>%s</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>",
-						htmlEscape(tostring(r[1]) .. (r.incomplete and " (incomplete)" or "")), r[2], r[3], r[4], r[5], r[6], r[7])
-				end
-				tbl[#tbl + 1] = "</table>"
-				textOut = table.concat({
-					"<!doctype html><html><head><meta charset=\"utf-8\"><title>", htmlEscape(name), "</title><style>",
-					"body{background:#313131;color:#fff;font:12px 'Roboto Mono',monospace;margin:16px}",
-					"svg{background:#474747;display:block;margin:12px 0}table{border-collapse:collapse}",
-					"th{background:#474747}td,th{padding:2px 10px;text-align:right;border-bottom:1px solid #474747}",
-					"</style></head><body><h3>HappaTAS ", htmlEscape(VERSION), " - ", htmlEscape(title), "</h3>",
-					sfmt("<p>%d frames, Avg %.2f ms, Max %.2f ms, Aggregate %s, Place %s</p>", #rows, avg, peak,
-						(cfg.aggregate == 0) and "Infinite" or tostring(cfg.aggregate), htmlEscape(tostring(game.PlaceId))),
-					table.concat(svg), table.concat(tbl), "</body></html>",
-				})
-				ext = "html"
+				if any then out.presets = ps end
+				return out
 			end
-			local ok, res = Store.WriteText(name, textOut, ext)
-			if Core.SetStatus then
-				task.spawn(Core.SetStatus, ok and ("Dumped " .. #rows .. " frames to " .. name .. "." .. ext) or ("Dump failed: " .. tostring(res)))
-			end
-			return ok, res, ext
+			P.SaveConfig = function() end
 		end
-		P.Dump = function(n) return actions.dump(tonumber(n) or 128) end
-		local function inList(v, list)
-			for _, x in ipairs(list) do if x == v then return true end end
-			return false
-		end
-		local function nearest(v, list)
-			local best, bd = list[1], HUGE
-			for _, x in ipairs(list) do
-				local d = math.abs(x - v)
-				if d < bd then best, bd = x, d end
-			end
-			return best
-		end
-		local function readConfig(t, c)
-			if type(t) ~= "table" then return c end
-			local mode = t.mode
-			if mode == "Frame Graph" then mode = "Frame" end
-			if mode == "TAS Timeline" then mode = "Frame"; c.custom = true end
-			if inList(mode, MODES) then c.mode = mode end
-			local a = tonumber(t.aggregate)
-			if a then
-				if a >= 1e9 then a = 0 end
-				c.aggregate = inList(a, AGG) and a or nearest(a, AGG)
-			end
-			local ref = tonumber(t.ref)
-			if ref and inList(ref, REF) then c.ref = ref end
-			local bg, fg = tonumber(t.bg), tonumber(t.fg)
-			if bg and inList(bg, OPAC) then c.bg = bg end
-			if fg and inList(fg, OPAC) then c.fg = fg end
-			local bars = tonumber(t.bars)
-			if bars and bars >= 0 and bars <= 255 and bars % 1 == 0 then c.bars = bars end
-			local net = tonumber(t.network)
-			if net and (net == 0 or net == 1 or net == 2) then c.network = net end
-			for _, k in ipairs({ "force", "spikes", "all", "flame", "custom", "dumpIncomplete", "dumpLegacy", "dumpBinary" }) do
-				if type(t[k]) == "boolean" then c[k] = t[k] end
-			end
-			if type(t.groups) == "table" then
-				for _, g in ipairs(GROUPS) do
-					if type(t.groups[g]) == "boolean" then c.groups[g] = t.groups[g] end
-				end
-			end
-			return c
-		end
-		local function snapshotOf(c)
-			return { mode = c.mode, aggregate = c.aggregate, ref = c.ref, bg = c.bg, fg = c.fg, spikes = c.spikes,
-				bars = c.bars, all = c.all, groups = { Engine = c.groups.Engine, HappaTAS = c.groups.HappaTAS },
-				network = c.network, flame = c.flame, force = c.force }
-		end
-		local function snapshot() return snapshotOf(cfg) end
-		local function applied()
-			U.barsDirty, timersDirty, countersDirty = true, true, true
-			applyMode()
-		end
-		function actions.savePreset(name)
-			if not inList(name, PRESET_NAMES) then return end
-			presets[name] = snapshot()
-			P.SaveConfig()
-			if Core.SetStatus then task.spawn(Core.SetStatus, "MicroProfiler preset '" .. name .. "' saved") end
-		end
-		function actions.loadPreset(name)
-			if not inList(name, PRESET_NAMES) then return end
-			local p = presets[name]
-			if p then
-				local before = cfg.aggregate
-				readConfig(p, cfg)
-				if cfg.aggregate == 0 and before ~= 0 then pickInfinite() end
-			elseif name == "Default" then
-				local keep = { custom = cfg.custom, dumpIncomplete = cfg.dumpIncomplete, dumpLegacy = cfg.dumpLegacy, dumpBinary = cfg.dumpBinary }
-				cfg = defaults()
-				for k, v in pairs(keep) do cfg[k] = v end
-			else
-				if Core.SetStatus then task.spawn(Core.SetStatus, "MicroProfiler preset '" .. name .. "' is empty (use Save first)") end
-				return
-			end
-			applied()
-			P.SaveConfig()
-		end
-		P.LoadPreset, P.SavePreset = actions.loadPreset, actions.savePreset
-		function P.Config() return cfg end
-		function P.LoadConfig(t)
-			if type(t) ~= "table" then return end
-			cfg = readConfig(t, defaults())
-			if t.ref == nil and tonumber(t.scale) then
-				local s = tonumber(t.scale)
-				for _, v in ipairs(REF) do if math.abs(v - s) < 0.02 then cfg.ref = v end end
-			end
-			presets = {}
-			if type(t.presets) == "table" then
-				for _, n in ipairs(PRESET_NAMES) do
-					if type(t.presets[n]) == "table" then presets[n] = snapshotOf(readConfig(t.presets[n], defaults())) end
-				end
-			end
-			if U.built then applied() end
-		end
-		function P.SerializeConfig()
-			local out = snapshot()
-			out.custom = cfg.custom
-			out.dumpIncomplete, out.dumpLegacy, out.dumpBinary = cfg.dumpIncomplete, cfg.dumpLegacy, cfg.dumpBinary
-			local ps = {}
-			local any = false
-			for n, p in pairs(presets) do
-				local copy = {}
-				for k, v in pairs(p) do copy[k] = v end
-				copy.groups = { Engine = p.groups.Engine, HappaTAS = p.groups.HappaTAS }
-				ps[n] = copy
-				any = true
-			end
-			if any then out.presets = ps end
-			return out
-		end
-		P.SaveConfig = function() end
 		function P.Snapshot()
 			return { time = lastMs, avg = readAvg(), max = RO.max, onBar = mmin(K, NUM_FRAMES),
 				aggAvg = (AG.dframes > 0) and (AG.dsum / AG.dframes) or 0, aggMax = AG.dmax,
@@ -7193,7 +7780,7 @@ do
 			if offset and offset == offset and math.abs(offset) < 1e7 then view.offset = offset end
 			if range and range == range and range >= 1e-4 and range <= 10000 then view.range = range end
 		end
-		function P.Internals() return U, { det = det, tim = tim, cnt = cnt, flm = flm, dd = dd, tas = tas, view = view, menuX = menuX } end
+		function P.Internals() return U, { det = det, tim = tim, cnt = cnt, flm = flm, dd = dd, tas = tas, view = view, menuX = menuX, his = HIS, evq = EVQ, ms = MS } end
 		function P.SetScale(s)
 			s = clampn(tonumber(s) or 1, 0.5, 4)
 			if s ~= s then s = 1 end

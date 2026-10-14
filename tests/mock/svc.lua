@@ -65,6 +65,56 @@ cls("VirtualUser", "Instance")
 cls("Debris", "Instance")
 cls("LogService", "Instance", {}, {}, { "MessageOut" })
 
+-- AssetService:CreateEditableImage (Roblox docs: RGBA bytes from the top-left corner, at most 1024 x 1024,
+-- shown with ImageLabel.ImageContent = Content.fromObject(image)). Off unless M.editableImages = true, like
+-- a client without EditableImage. M.eiWrites counts WritePixelsBuffer calls, M.eiImages the live images.
+M.editableImages = false
+M.eiWrites = 0
+M.eiImages = {}
+local eiMt = {}
+eiMt.__index = eiMt
+M.eiFail = false -- true: every write errors (an image that stopped working)
+function eiMt.WritePixelsBuffer(self, pos, size, buf)
+	if M.eiFail then error("EditableImage write failed (mock)", 2) end
+	assert(not self.destroyed, "EditableImage was destroyed")
+	assert(typeof(pos) == "Vector2" and typeof(size) == "Vector2", "WritePixelsBuffer(Vector2, Vector2, buffer)")
+	local x0, y0, w, h = pos.X, pos.Y, size.X, size.Y
+	assert(x0 >= 0 and y0 >= 0 and x0 + w <= self.Size.X and y0 + h <= self.Size.Y, "region outside the image")
+	assert(buffer.len(buf) == w * h * 4, "buffer must be size.X * size.Y * 4 bytes")
+	for r = 0, h - 1 do
+		buffer.copy(self.px, ((y0 + r) * self.Size.X + x0) * 4, buf, r * w * 4, w * 4)
+	end
+	M.eiWrites = M.eiWrites + 1
+end
+function eiMt.ReadPixelsBuffer(self, pos, size)
+	local out = buffer.create(size.X * size.Y * 4)
+	for r = 0, size.Y - 1 do
+		buffer.copy(out, r * size.X * 4, self.px, ((pos.Y + r) * self.Size.X + pos.X) * 4, size.X * 4)
+	end
+	return out
+end
+-- r, g, b, a of one pixel
+function eiMt.Pixel(self, x, y)
+	local o = (y * self.Size.X + x) * 4
+	return buffer.readu8(self.px, o), buffer.readu8(self.px, o + 1), buffer.readu8(self.px, o + 2), buffer.readu8(self.px, o + 3)
+end
+function eiMt.Destroy(self) self.destroyed = true; M.eiImages[self] = nil end
+cls("AssetService", "Instance", {}, {
+	CreateEditableImage = function(_, opts)
+		if not M.editableImages then error("EditableImage is not available (mock)", 2) end
+		local size = opts and opts.Size or Vector2.new(512, 512)
+		assert(size.X >= 1 and size.Y >= 1 and size.X <= 1024 and size.Y <= 1024, "EditableImage size must be 1..1024")
+		local img = setmetatable({ Size = size, px = buffer.create(size.X * size.Y * 4) }, eiMt)
+		M.eiImages[img] = true
+		return img
+	end,
+})
+Content = {
+	none = { SourceType = "None" },
+	fromObject = function(o) return { SourceType = "Object", Object = o } end,
+	fromUri = function(u) return { SourceType = "Uri", Uri = u } end,
+}
+
 -- ------------------------------------------------------------------------------------------------ DataModel
 game = Instance.new("DataModel")
 game.Name = "Game"
@@ -76,7 +126,7 @@ local SERVICE_CLASS = { Workspace = "Workspace", Players = "Players", RunService
 	ContextActionService = "ContextActionService", Teams = "Teams", Chat = "Chat", TextChatService = "TextChatService",
 	StarterPlayer = "StarterPlayer", StarterPack = "StarterPack", CollectionService = "CollectionService",
 	PhysicsService = "PhysicsService", UserGameSettings = "UserGameSettings", MarketplaceService = "MarketplaceService",
-	VirtualUser = "VirtualUser", Debris = "Debris", LogService = "LogService" }
+	VirtualUser = "VirtualUser", Debris = "Debris", LogService = "LogService", AssetService = "AssetService" }
 local function getService(name)
 	local s = services[name]
 	if s then return s end
@@ -608,6 +658,7 @@ local RS = services.RunService
 function M.step(dt)
 	dt = dt or (1 / 60)
 	M.clockTicks = 0
+	M.clockOff = 0
 	M.now = M.now + dt
 	M.frame = M.frame + 1
 	RS.PreRender:Fire(dt)
@@ -616,6 +667,7 @@ function M.step(dt)
 		local ok, err = pcall(b.fn, dt)
 		if not ok then M.logs[#M.logs + 1] = "BIND ERROR " .. b.name .. ": " .. tostring(err) end
 	end
+	if M.jobMs then M.clockOff = math.max(0, dt - M.jobMs / 1000); M.clockTicks = 0 end
 	RS.PreAnimation:Fire(dt)
 	RS.PreSimulation:Fire(dt)
 	RS.Stepped:Fire(M.now, dt)

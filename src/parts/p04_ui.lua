@@ -269,7 +269,15 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2410)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2580)},{
+						LV("977", " 10/14/26 - 2.38"),
+						LI("977_1", "   -   MicroProfiler compared side by side with Roblox's"),
+						LI("977_2", "   -   Close box turns grey under the mouse, hint box"),
+						LI("977_3", "   -   Hold Ctrl to click through; [Dump] box like Roblox's"),
+						LI("977_4", "   -   Orange = jobs longer, blue = render longer"),
+						LI("977_5", "   -   Frame graph is one image: far less render time"),
+						LI("977_6", "   -   Detailed lanes, Timers tooltip, Counters layout"),
+						LI("977_7", "   -   Drawn above Roblox's top bar"),
 						LV("978", " 10/13/26 - 2.37.2"),
 						LI("978_1", "   -   Tested in the real Roblox client, the bugs found fixed"),
 						LI("978_2", "   -   Interface always loads, also when re-running the script"),
@@ -698,7 +706,11 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 		end
 	end
 
-	-- extra ScreenGuis (cursor, profiler) that sit above everything
+	-- extra ScreenGuis (cursor, profiler) that sit above everything. They go straight into CoreGui when it
+	-- takes them: gethui() is itself a ScreenGui (CoreGui.RobloxGui in the Real executor), and a ScreenGui
+	-- inside another one is drawn in that one's layer, under Roblox's top bar (its own ScreenGui in
+	-- CoreGui) whatever its DisplayOrder. Directly in CoreGui the DisplayOrder puts it above the top bar,
+	-- like the real MicroProfiler and mouse cursor (seen in the client).
 	function UI.Overlay(name, displayOrder)
 		local sg = Instance.new("ScreenGui")
 		sg.Name = name
@@ -707,7 +719,13 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 		noTranslate(sg)
 		pcall(function() sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling end)
 		pcall(function() sg.DisplayOrder = displayOrder end)
-		if not UI.Attach(sg) then
+		if Env.protectgui then pcall(Env.protectgui, sg) end
+		local core = svc("CoreGui")
+		if core and tryParent(sg, core) then
+			UI.OverlayParent = "CoreGui"
+		elseif UI.Attach(sg) then
+			UI.OverlayParent = UI.ParentName
+		else
 			sg:Destroy()
 			return nil
 		end
