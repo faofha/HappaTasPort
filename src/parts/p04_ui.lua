@@ -269,7 +269,11 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2910)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,3000)},{
+						LV("973", " 10/14/26 - 2.38.4"),
+						LI("973_1", "   -   MicroProfiler Avg = every frame since the count started"),
+						LI("973_2", "   -   Picking Aggregate Infinite starts Avg and Max again"),
+						LI("973_3", "   -   TAS Timeline: Avg / Max from the TAS's first frame"),
 						LV("974", " 10/14/26 - 2.38.3"),
 						LI("974_1", "   -   Camera script hooked in place (hookfunction)"),
 						LI("974_2", "   -   No visible PlayerGui interface unless you allow it"),
@@ -480,8 +484,8 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 	                    PA("PortSettingsDescription", 225, "Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed (the Menu key always does). No HappaTAS key does anything while you type in chat or a text box. NohBoard Cursor draws a fake cursor that stays still while the camera is locked (right click, shift lock, first person) and moves the hidden real cursor like the camera while testing. Invisible Mouse Speed scales that movement."),
 					HD("FeaturesHeader", "Feature Modules & Tools"),
 					H("31", "MicroProfiler", 210, true, {
-						{ 48, "A copy of Roblox's MicroProfiler (F6). Time = last frame, Avg = average of the frames on the bar, Max = biggest frame (stays until a bigger one)." },
-						{ 48, "Aggregate Infinite counts frames; picking it resets Max. Custom > TAS Timeline shows your TAS (green = current frame, click to jump there)." },
+						{ 48, "A copy of Roblox's MicroProfiler (F6). Time = last frame, Avg = average of all frames since the count started, Max = biggest frame so far." },
+						{ 48, "Aggregate Infinite counts frames; picking it starts Avg and Max again. Custom > TAS Timeline shows your TAS (green = current frame, click to jump)." },
 						{ 44, "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves frames to HappaTasPort. Pause or Ctrl+P freezes it." },
 						{ 48, "Hover a menu to open it, click a line to pick it. If the text sits too high or low, change Settings > MicroProfiler Text Offset (- = up)." } }),
 					H("32", "Keyboard & Click Sounds", 140, true, {

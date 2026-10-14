@@ -1,10 +1,20 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.3
+	Version: V2.38.4
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.4 changes (short): the MicroProfiler's Avg counts every frame
+		- Avg in the Time / Avg / Max readout is the average of every frame since the count started, also the
+		  frames that already left the graph (before: only the 508 frames on the graph). Max is the biggest
+		  frame since then, as before. This is what Roblox's own profiler shows with Aggregate Infinite.
+		- Picking Aggregate Infinite starts the count again: Aggregate[1], Avg and Max (before, Max went back
+		  to the biggest frame still on the graph).
+		- Custom > TAS Timeline works the same way with the TAS: Avg and Max cover the TAS's frames from the
+		  first one to the current one (the number Aggregate[N] shows there). A [Dump] writes the same Avg /
+		  Max as the readout.
 
 	V2.38.3 changes (short): harder for game scripts to notice
 		- The game's camera script is changed with the executor's hookfunction when it has one: its functions
@@ -110,7 +120,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.3"
+local VERSION = "V2.38.4"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

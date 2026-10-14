@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.3 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.4 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.3"
+local VERSION = "V2.38.4"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -637,7 +637,11 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2910)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,3000)},{
+						LV("973", " 10/14/26 - 2.38.4"),
+						LI("973_1", "   -   MicroProfiler Avg = every frame since the count started"),
+						LI("973_2", "   -   Picking Aggregate Infinite starts Avg and Max again"),
+						LI("973_3", "   -   TAS Timeline: Avg / Max from the TAS's first frame"),
 						LV("974", " 10/14/26 - 2.38.3"),
 						LI("974_1", "   -   Camera script hooked in place (hookfunction)"),
 						LI("974_2", "   -   No visible PlayerGui interface unless you allow it"),
@@ -848,8 +852,8 @@ do
 	                    PA("PortSettingsDescription", 225, "Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed (the Menu key always does). No HappaTAS key does anything while you type in chat or a text box. NohBoard Cursor draws a fake cursor that stays still while the camera is locked (right click, shift lock, first person) and moves the hidden real cursor like the camera while testing. Invisible Mouse Speed scales that movement."),
 					HD("FeaturesHeader", "Feature Modules & Tools"),
 					H("31", "MicroProfiler", 210, true, {
-						{ 48, "A copy of Roblox's MicroProfiler (F6). Time = last frame, Avg = average of the frames on the bar, Max = biggest frame (stays until a bigger one)." },
-						{ 48, "Aggregate Infinite counts frames; picking it resets Max. Custom > TAS Timeline shows your TAS (green = current frame, click to jump there)." },
+						{ 48, "A copy of Roblox's MicroProfiler (F6). Time = last frame, Avg = average of all frames since the count started, Max = biggest frame so far." },
+						{ 48, "Aggregate Infinite counts frames; picking it starts Avg and Max again. Custom > TAS Timeline shows your TAS (green = current frame, click to jump)." },
 						{ 44, "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves frames to HappaTasPort. Pause or Ctrl+P freezes it." },
 						{ 48, "Hover a menu to open it, click a line to pick it. If the text sits too high or low, change Settings > MicroProfiler Text Offset (- = up)." } }),
 					H("32", "Keyboard & Click Sounds", 140, true, {
@@ -5446,7 +5450,7 @@ do
 		end
 		Janitor.add(EVQ.disconnect)
 		local AG = { sum = 0, max = 0, count = 0, dsum = 0, dmax = 0, dframes = 0, clear = false }
-		local RO = { sum = 0, max = 0, exact = 0 }
+		local RO = { sum = 0, n = 0, max = 0, clear = false }
 		local tAcc, tCnt, tStart = {}, {}, {}
 		local TV = { last = {}, lastC = {}, lastX = {}, aT = {}, aMax = {}, aMin = {}, aC = {}, aX = {}, aXMax = {},
 			dT = {}, dMax = {}, dMin = {}, dC = {}, dX = {}, dXMax = {}, child = {},
@@ -5554,16 +5558,9 @@ do
 				HIS.start[i] = RAW.pr[j] - 0.001
 			end
 			lastMs = ms
-			RO.sum = RO.sum + ms
-			if K > NUM_FRAMES then RO.sum = RO.sum - HIS.ms[hi(K - NUM_FRAMES)] end
+			if RO.clear then RO.clear, RO.sum, RO.n, RO.max = false, 0, 0, 0 end
+			RO.sum, RO.n = RO.sum + ms, RO.n + 1
 			if ms > RO.max then RO.max = ms end
-			RO.exact = RO.exact + 1
-			if RO.exact >= 4096 then
-				RO.exact = 0
-				local sum = 0
-				for k = mmax(1, K - NUM_FRAMES + 1), K do sum = sum + HIS.ms[hi(k)] end
-				RO.sum = sum
-			end
 		end
 		local function flip(dt, now)
 			local ms = (dt or 0) * 1000
@@ -5630,21 +5627,12 @@ do
 			if not RAW.prEnd[i] then RAW.prEnd[i] = clock() end
 		end
 		local function readAvg()
-			local n = mmin(K, NUM_FRAMES)
-			if n <= 0 then return 0 end
-			return RO.sum / n
-		end
-		local function visibleMax()
-			local m = 0
-			for k = mmax(1, K - NUM_FRAMES + 1), K do
-				local v = HIS.ms[hi(k)]
-				if v > m then m = v end
-			end
-			return m
+			if RO.n <= 0 then return 0 end
+			return RO.sum / RO.n
 		end
 		local function pickInfinite()
 			AG.clear = true
-			RO.max = visibleMax()
+			RO.clear = true
 		end
 		local U = { built = false }
 		local W, H = 1920, 1080
@@ -6359,7 +6347,7 @@ do
 			local back = floor(NUM_FRAMES * (gw - mx) / gw)
 			return back, (NUM_FRAMES * mx / gw) % 1
 		end
-		local tas = { a = nil, version = nil, len = -1, f = 1, cv = nil, cf = 0, ca = nil, sum = 0, max = 0, agg = -1 }
+		local tas = { a = nil, version = nil, len = -1, f = 1, pd = nil, pv = nil, pn = 0, ps = {}, pm = {} }
 		local function tasData()
 			if not P.GetTAS then return nil end
 			return P.GetTAS()
@@ -6401,34 +6389,30 @@ do
 			if type(data) ~= "table" or #data == 0 then return 0, 0, 0 end
 			local n = #data
 			f = clampn(math.floor(tonumber(f) or 1), 1, n)
-			local cur = tasFrameMs(data[f])
-			local a = tas.a or mmax(1, f - floor(NUM_FRAMES * 0.7))
-			local b = mmin(n, a + NUM_FRAMES - 1)
-			if tas.wv == version and tas.wa == a and tas.wb and b >= tas.wb then
-				for k = tas.wb + 1, b do tas.wsum = tas.wsum + tasFrameMs(data[k]) end
-			else
-				local sum = 0
-				for k = a, b do sum = sum + tasFrameMs(data[k]) end
-				tas.wsum = sum
-			end
-			tas.wv, tas.wa, tas.wb = version, a, b
-			if tas.mv == version and tas.mn and n >= tas.mn then
-				local mxv = tas.mmax
-				for k = tas.mn + 1, n do
+			if tas.pd ~= data or tas.pv ~= version then tas.pd, tas.pv, tas.pn = data, version, 0 end
+			if tas.pn > n - 1 then tas.pn = n - 1 end
+			local ps, pm = tas.ps, tas.pm
+			local want = mmin(f, n - 1)
+			if want > tas.pn then
+				local s, m = 0, 0
+				if tas.pn > 0 then s, m = ps[tas.pn], pm[tas.pn] end
+				for k = tas.pn + 1, want do
 					local v = tasFrameMs(data[k])
-					if v > mxv then mxv = v end
+					s = s + v
+					if v > m then m = v end
+					ps[k], pm[k] = s, m
 				end
-				tas.mmax = mxv
-			else
-				local mxv = 0
-				for k = 1, n do
-					local v = tasFrameMs(data[k])
-					if v > mxv then mxv = v end
-				end
-				tas.mmax = mxv
+				tas.pn = want
 			end
-			tas.mv, tas.mn = version, n
-			return cur, tas.wsum / mmax(1, b - a + 1), tas.mmax
+			local c = mmin(f, tas.pn)
+			local s, m = 0, 0
+			if c > 0 then s, m = ps[c], pm[c] end
+			for k = c + 1, f do
+				local v = tasFrameMs(data[k])
+				s = s + v
+				if v > m then m = v end
+			end
+			return tasFrameMs(data[f]), s / f, m
 		end
 		local memMb, memAt = 0, -1000
 		local function memUsed()
@@ -7533,10 +7517,12 @@ do
 		local function clearClicks()
 			MS.pressL, MS.pressR, MS.clickL, MS.clickR, MS.wheel = false, false, false, false, 0
 		end
+		local function readoutValues()
+			if cfg.custom then return tasReadout() end
+			return lastMs, readAvg(), RO.max
+		end
 		local function readoutUpdate()
-			local t, a, m = lastMs, readAvg(), RO.max
-			if cfg.custom then t, a, m = tasReadout() end
-			local s = sfmt("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", t, a, m)
+			local s = sfmt("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", readoutValues())
 			say(U.readout, s, floor(W - #s * CW), 0)
 		end
 		local function closeKey()
@@ -7765,7 +7751,7 @@ do
 					end
 					title = "MicroProfiler frames"
 				end
-				local avg, peak = readAvg(), RO.max
+				local _, avg, peak = readoutValues()
 				local name = "microprofile-" .. os.date("%Y%m%d-%H%M%S")
 				local textOut, ext
 				if cfg.dumpBinary then
@@ -7933,7 +7919,7 @@ do
 			P.SaveConfig = function() end
 		end
 		function P.Snapshot()
-			return { time = lastMs, avg = readAvg(), max = RO.max, onBar = mmin(K, NUM_FRAMES),
+			return { time = lastMs, avg = readAvg(), max = RO.max, averaged = RO.n, onBar = mmin(K, NUM_FRAMES),
 				aggAvg = (AG.dframes > 0) and (AG.dsum / AG.dframes) or 0, aggMax = AG.dmax,
 				frames = AG.dframes, count = AG.count, recorded = K, frameNo = frameNo, paused = paused,
 				offset = view.offset, range = view.range, hover = hoverK }

@@ -7,11 +7,16 @@
 --  with a 1 px black drop shadow, measured from the current Roblox client.
 --
 --    Time[ ]  the last frame's time
---    Avg[ ]   the average of the frames on the bar (the last 508), whatever Aggregate is set to
---    Max[ ]   the biggest frame since the profiler opened; it stays until a bigger frame comes
+--    Avg[ ]   the average of every frame since the count started, also the frames that already left
+--             the bar, whatever Aggregate is set to
+--    Max[ ]   the biggest frame since the count started; it stays until a bigger frame comes
 --    Aggregate[N]  shows N, or for Infinite the number of frames counted so far (nAggregateFlipCount,
---                  "Aggregate[%d]" in microprofileui.h). Picking Infinite restarts the count and resets
---                  Max. The Aggregate window is what the Timers table averages over, like Roblox's.
+--                  "Aggregate[%d]" in microprofileui.h). The count starts when the profiler first opens;
+--                  picking Infinite starts it again, Avg and Max too (Roblox's Infinite readout is
+--                  nFlipAggregateDisplay / nAggregateFrames and nFlipMaxDisplay: every frame since
+--                  Infinite was picked). The Aggregate window is what the Timers table averages over.
+--    TAS Timeline (Custom): the same with the TAS's frames: Time = the current TAS frame, Avg / Max =
+--                  TAS frames 1 .. the current one, Aggregate[N] = the current TAS frame's number.
 --  Every number comes from a documented Roblox API: frame time = RunService.PreRender delta, render /
 --  GPU / physics = Stats.RenderCPUFrameTime / RenderGPUFrameTime / PhysicsStepTime, memory =
 --  Stats:GetTotalMemoryUsageMb() / GetMemoryUsageMbForTag(), HappaTAS's own work = os.clock around
@@ -268,10 +273,10 @@ do
 		-- sum / max / count = nFlipAggregate, nFlipMax, nAggregateFlipCount
 		-- dsum / dmax / dframes = nFlipAggregateDisplay, nFlipMaxDisplay, nAggregateFrames; clear = nAggregateClear
 		local AG = { sum = 0, max = 0, count = 0, dsum = 0, dmax = 0, dframes = 0, clear = false }
-		-- the Time / Avg / Max readout (HappaTAS rule, the same for every Aggregate setting and in Hidden):
-		-- Avg = the frames on the bar (the last NUM_FRAMES), Max = the biggest frame since the profiler
-		-- opened, kept until a bigger one comes (picking Infinite in the Aggregate menu resets it)
-		local RO = { sum = 0, max = 0, exact = 0 }
+		-- the Time / Avg / Max readout (the same for every Aggregate setting and in Hidden): sum / n / max of
+		-- every frame since the count started (frames that left the bar too). clear = picking Infinite
+		-- starts the count again when the next frame comes (like nAggregateClear)
+		local RO = { sum = 0, n = 0, max = 0, clear = false }
 		local tAcc, tCnt, tStart = {}, {}, {}
 		-- per timer: last frame (time, calls, exclusive), accumulating window (a*), shown window (d*)
 		-- g* = per group: frame time, accumulating sum / max, shown sum / max (AggregateGroup / Max)
@@ -398,16 +403,9 @@ do
 				HIS.start[i] = RAW.pr[j] - 0.001
 			end
 			lastMs = ms
-			RO.sum = RO.sum + ms
-			if K > NUM_FRAMES then RO.sum = RO.sum - HIS.ms[hi(K - NUM_FRAMES)] end
+			if RO.clear then RO.clear, RO.sum, RO.n, RO.max = false, 0, 0, 0 end
+			RO.sum, RO.n = RO.sum + ms, RO.n + 1
 			if ms > RO.max then RO.max = ms end
-			RO.exact = RO.exact + 1
-			if RO.exact >= 4096 then -- recount now and then, so the running sum can never drift
-				RO.exact = 0
-				local sum = 0
-				for k = mmax(1, K - NUM_FRAMES + 1), K do sum = sum + HIS.ms[hi(k)] end
-				RO.sum = sum
-			end
 		end
 
 		-- called at PreRender, at the start of HappaTAS's PreRender work. Returns true when a frame joined
@@ -481,24 +479,16 @@ do
 			if not RAW.prEnd[i] then RAW.prEnd[i] = clock() end
 		end
 
-		-- average of the frames on the bar / biggest frame on the bar
+		-- average of every frame since the count started
 		local function readAvg()
-			local n = mmin(K, NUM_FRAMES)
-			if n <= 0 then return 0 end
-			return RO.sum / n
+			if RO.n <= 0 then return 0 end
+			return RO.sum / RO.n
 		end
-		local function visibleMax()
-			local m = 0
-			for k = mmax(1, K - NUM_FRAMES + 1), K do
-				local v = HIS.ms[hi(k)]
-				if v > m then m = v end
-			end
-			return m
-		end
-		-- picking Infinite restarts the frame count and resets Max (to the biggest frame still on the bar)
+		-- picking Infinite starts the count again: Aggregate[N], Avg and Max (MicroProfileUIClickAggregate's
+		-- nAggregateClear)
 		local function pickInfinite()
 			AG.clear = true
-			RO.max = visibleMax()
+			RO.clear = true
 		end
 
 		-- -------------------------------------------------------------------------------- instances
@@ -1282,7 +1272,9 @@ do
 		end
 
 		-- -------------------------------------------------------------------------------- TAS timeline (Custom)
-		local tas = { a = nil, version = nil, len = -1, f = 1, cv = nil, cf = 0, ca = nil, sum = 0, max = 0, agg = -1 }
+		-- a / version / len / f = the bar window; ps / pm = running sum / max of the frame times of TAS frames
+		-- 1 .. k, kept for k <= pn (for data table pd at version pv)
+		local tas = { a = nil, version = nil, len = -1, f = 1, pd = nil, pv = nil, pn = 0, ps = {}, pm = {} }
 		local function tasData()
 			if not P.GetTAS then return nil end
 			return P.GetTAS()
@@ -1319,41 +1311,39 @@ do
 			tas.a, tas.version, tas.len = a, version, n
 			setHL(f, f)
 		end
-		-- TAS Timeline readout: Time = the current TAS frame, Avg = the TAS frames on the bar,
-		-- Max = the biggest frame of the whole TAS
+		-- TAS Timeline readout, the live readout's rules with the TAS's frames: Time = the current TAS frame,
+		-- Avg / Max = TAS frames 1 .. the current one (the number Aggregate[N] shows), also the ones off the bar.
+		-- The running sums are kept per data version; the last frame can still change while it is being
+		-- recorded, so it is never kept (read fresh, at most one frame per call).
 		local function tasReadout()
 			local data, f, version = tasData()
 			if type(data) ~= "table" or #data == 0 then return 0, 0, 0 end
 			local n = #data
 			f = clampn(math.floor(tonumber(f) or 1), 1, n)
-			local cur = tasFrameMs(data[f])
-			local a = tas.a or mmax(1, f - floor(NUM_FRAMES * 0.7))
-			local b = mmin(n, a + NUM_FRAMES - 1)
-			if tas.wv == version and tas.wa == a and tas.wb and b >= tas.wb then
-				for k = tas.wb + 1, b do tas.wsum = tas.wsum + tasFrameMs(data[k]) end
-			else
-				local sum = 0
-				for k = a, b do sum = sum + tasFrameMs(data[k]) end
-				tas.wsum = sum
-			end
-			tas.wv, tas.wa, tas.wb = version, a, b
-			if tas.mv == version and tas.mn and n >= tas.mn then
-				local mxv = tas.mmax
-				for k = tas.mn + 1, n do
+			if tas.pd ~= data or tas.pv ~= version then tas.pd, tas.pv, tas.pn = data, version, 0 end
+			if tas.pn > n - 1 then tas.pn = n - 1 end
+			local ps, pm = tas.ps, tas.pm
+			local want = mmin(f, n - 1)
+			if want > tas.pn then
+				local s, m = 0, 0
+				if tas.pn > 0 then s, m = ps[tas.pn], pm[tas.pn] end
+				for k = tas.pn + 1, want do
 					local v = tasFrameMs(data[k])
-					if v > mxv then mxv = v end
+					s = s + v
+					if v > m then m = v end
+					ps[k], pm[k] = s, m
 				end
-				tas.mmax = mxv
-			else
-				local mxv = 0
-				for k = 1, n do
-					local v = tasFrameMs(data[k])
-					if v > mxv then mxv = v end
-				end
-				tas.mmax = mxv
+				tas.pn = want
 			end
-			tas.mv, tas.mn = version, n
-			return cur, tas.wsum / mmax(1, b - a + 1), tas.mmax
+			local c = mmin(f, tas.pn)
+			local s, m = 0, 0
+			if c > 0 then s, m = ps[c], pm[c] end
+			for k = c + 1, f do
+				local v = tasFrameMs(data[k])
+				s = s + v
+				if v > m then m = v end
+			end
+			return tasFrameMs(data[f]), s / f, m
 		end
 
 		-- -------------------------------------------------------------------------------- hover / tooltip
@@ -2550,10 +2540,13 @@ do
 		local function clearClicks()
 			MS.pressL, MS.pressR, MS.clickL, MS.clickR, MS.wheel = false, false, false, false, 0
 		end
+		-- the numbers in the readout (a dump writes the same ones)
+		local function readoutValues()
+			if cfg.custom then return tasReadout() end
+			return lastMs, readAvg(), RO.max
+		end
 		local function readoutUpdate()
-			local t, a, m = lastMs, readAvg(), RO.max
-			if cfg.custom then t, a, m = tasReadout() end
-			local s = sfmt("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", t, a, m)
+			local s = sfmt("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", readoutValues())
 			say(U.readout, s, floor(W - #s * CW), 0)
 		end
 		-- the key bound to Show / Hide (Controls > MicroProfiler)
@@ -2804,7 +2797,7 @@ do
 					end
 					title = "MicroProfiler frames"
 				end
-				local avg, peak = readAvg(), RO.max
+				local _, avg, peak = readoutValues()
 				local name = "microprofile-" .. os.date("%Y%m%d-%H%M%S")
 				local textOut, ext
 				if cfg.dumpBinary then
@@ -2981,7 +2974,7 @@ do
 
 		-- read-only view of the numbers (the tests and the stats panel use it)
 		function P.Snapshot()
-			return { time = lastMs, avg = readAvg(), max = RO.max, onBar = mmin(K, NUM_FRAMES),
+			return { time = lastMs, avg = readAvg(), max = RO.max, averaged = RO.n, onBar = mmin(K, NUM_FRAMES),
 				aggAvg = (AG.dframes > 0) and (AG.dsum / AG.dframes) or 0, aggMax = AG.dmax,
 				frames = AG.dframes, count = AG.count, recorded = K, frameNo = frameNo, paused = paused,
 				offset = view.offset, range = view.range, hover = hoverK }

@@ -83,85 +83,112 @@ local s = U.readout.s
 check(s:match("^Time%[%s*%d+%.%d%d%] Avg%[%s*%d+%.%d%d%] Max%[%s*%d+%.%d%d%]$") ~= nil and #s:match("Avg%[(.-)%]") == 6, "Time[%6.2f] Avg[%6.2f] Max[%6.2f]: " .. s)
 eq(U.readout.x + #s * 6, 1920, "readout is right-aligned")
 
-section("Avg = the frames on the bar, Max = the biggest frame (any Aggregate)")
+section("Avg = every frame since the count started (off the bar too), Max = the biggest frame (any Aggregate)")
 local MENUS = P.Menus
 eq(P.Config().aggregate, 60, "default aggregate is 60")
+do -- (locals of the readout tests)
 -- a frame joins the history (and the bar) three frames after it ran, like Roblox's (its render time arrives then)
 stepMs(1000 / 60, 4)
 local s0 = P.Snapshot()
 check(s0.onBar > 0 and s0.onBar < 508, "only a few frames on the bar so far (" .. s0.onBar .. ")")
-near(s0.avg, 1000 / 60, 1e-6, "before the bar is full, Avg = the frames recorded so far")
-stepMs(10, 600)
+eq(s0.averaged, s0.recorded, "every recorded frame is in the average")
+near(s0.avg, 1000 / 60, 1e-6, "Avg = the frames recorded so far")
+-- model of the readout: a frame joins three frames after it ran (RM.pend); Avg / Max = every joined frame
+-- since the count started; clear = Infinite was picked (the count starts again with the next joined frame)
+local RM = { pend = { 1000 / 60, 1000 / 60, 1000 / 60 }, sum = s0.avg * s0.averaged, n = s0.averaged, max = s0.max,
+	last = s0.time, clear = false }
+local function run(ms, n)
+	for _ = 1, (n or 1) do
+		M.step(ms / 1000)
+		RM.pend[#RM.pend + 1] = ms
+		local v = table.remove(RM.pend, 1)
+		if RM.clear then RM.clear, RM.sum, RM.n, RM.max = false, 0, 0, 0 end
+		RM.sum, RM.n, RM.last = RM.sum + v, RM.n + 1, v
+		if v > RM.max then RM.max = v end
+	end
+end
+local function model() return string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", RM.last, RM.sum / RM.n, RM.max) end
+local function pickInf() MENUS[3].click(0); RM.clear = true end
+run(10, 600)
 eq(P.Snapshot().onBar, 508, "the bar holds 508 frames")
-check(U.readout.s:find("^Time%[ 10%.00%] Avg%[ 10%.00%]") ~= nil, "600 frames of 10 ms -> Avg 10.00: " .. U.readout.s)
+eq(P.Snapshot().averaged, s0.recorded + 600, "Avg counts all " .. (s0.recorded + 600) .. " frames, not only the 508 on the bar")
+eq(U.readout.s, model(), "600 frames of 10 ms: the 16.67 ms frames that left the bar still count")
+check(U.readout.s:find("^Time%[ 10%.00%] Avg%[ 10%.0[1-9]%]") ~= nil, "...so Avg is a bit above 10.00: " .. U.readout.s)
 near(P.Snapshot().max, 1000 / 60, 1e-6, "Max still holds the 16.67 ms frames from before")
-stepMs(50)
-stepMs(10, 3)
-eq(U.readout.s, "Time[ 50.00] Avg[ 10.08] Max[ 50.00]", "spike (on the bar three frames later): Avg = (507*10+50)/508")
-stepMs(10, 507)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.08] Max[ 50.00]", "507 frames later the spike is the oldest bar, still averaged")
-stepMs(10)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 50.00]", "the spike left the bar: Avg drops, Max stays")
-stepMs(10, 700)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 50.00]", "Max stays indefinitely")
+run(50)
+run(10, 3)
+eq(U.readout.s, model(), "spike (joins three frames later)")
+check(U.readout.s:find("^Time%[ 50%.00%]") ~= nil and U.readout.s:find("Max%[ 50%.00%]$") ~= nil, "Time and Max = the 50 ms spike: " .. U.readout.s)
+run(10, 508)
+eq(U.readout.s, model(), "508 frames later the spike has left the bar: still in Avg, Max stays")
+check(U.readout.s ~= "Time[ 10.00] Avg[ 10.00] Max[ 50.00]", "Avg is not the average of the bar alone (10.00)")
+run(10, 700)
+eq(U.readout.s, model(), "Max stays indefinitely")
+check(U.readout.s:find("Max%[ 50%.00%]$") ~= nil, "Max still 50")
 eq(U.items[3].t.s, "Aggregate[60]", "label shows Aggregate[60]")
 
-section("the Aggregate setting does not change Time / Avg / Max")
-local r1 = U.readout.s
+section("the Aggregate setting does not change how Time / Avg / Max work")
+local n1 = P.Snapshot().averaged
 MENUS[3].click(5) -- 120
-stepMs(10)
-eq(U.readout.s, r1, "Aggregate 120: same readout")
+run(10)
+eq(U.readout.s, model(), "Aggregate 120: same readout")
 MENUS[3].click(1) -- 10
-stepMs(10)
-eq(U.readout.s, r1, "Aggregate 10: same readout")
+run(10)
+eq(U.readout.s, model(), "Aggregate 10: same readout")
 eq(U.items[3].t.s, "Aggregate[10]", "label shows the window size")
 MENUS[3].click(4) -- 60
-stepMs(10)
-eq(U.readout.s, r1, "Aggregate 60: same readout")
+run(10)
+eq(U.readout.s, model(), "Aggregate 60: same readout")
+eq(P.Snapshot().averaged, n1 + 3, "switching between windows doesn't start the count again")
 
-section("Infinite: the label counts every frame, picking it resets Max")
-MENUS[3].click(0) -- Infinite
+section("Infinite: the label counts every frame, picking it starts Aggregate[N], Avg and Max again")
+pickInf()
 eq(P.Config().aggregate, 0, "Infinite selected")
-stepMs(10)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 10.00]", "picking Infinite resets Max to the biggest frame on the bar")
+run(10)
+eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 10.00]", "picking Infinite starts Avg and Max again (the 50 ms spike leaves Max)")
+eq(P.Snapshot().averaged, 1, "Avg counts from the first frame after picking it")
 eq(P.Snapshot().count, 0, "the count restarts (nAggregateClear)")
 eq(U.items[3].t.s, "Aggregate[0]", "label after the restart")
-stepMs(10)
+run(10)
 eq(U.items[3].t.s, "Aggregate[1]", "Aggregate[1]")
-stepMs(10)
+run(10)
 eq(U.items[3].t.s, "Aggregate[2]", "Aggregate[2]")
-stepMs(10, 3)
+run(10, 3)
 eq(U.items[3].t.s, "Aggregate[5]", "Aggregate[5]")
-stepMs(120)
-stepMs(10, 3)
-eq(U.readout.s, "Time[120.00] Avg[ 10.22] Max[120.00]", "spike: Avg = (507*10+120)/508")
-stepMs(10, 97)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.22] Max[120.00]", "Infinite gives the same Avg / Max as 60")
+run(120)
+run(10, 3)
+eq(U.readout.s, "Time[120.00] Avg[ 21.00] Max[120.00]", "spike: Avg = (9*10+120)/10, the frames since Infinite was picked")
+eq(U.readout.s, model(), "(the model agrees)")
+run(10, 97)
+eq(U.readout.s, "Time[ 10.00] Avg[ 11.03] Max[120.00]", "97 frames later: Avg = (106*10+120)/107")
 eq(U.items[3].t.s, "Aggregate[106]", "label counts every frame")
 check(I.menuX[4] == I.menuX[3] + (#"Aggregate[106]" + 1) * 6, "menu items after Aggregate move with the label")
-stepMs(200)
-stepMs(10, 3)
+run(200)
+run(10, 3)
 eq(U.readout.s:match("Max%[(.-)%]"), "200.00", "only a bigger frame replaces Max")
-stepMs(10, 520)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[200.00]", "spikes gone from the bar, Max still 200")
-MENUS[3].click(0) -- Infinite again = reset
-stepMs(10)
-eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 10.00]", "picking Infinite again resets Max")
+run(10, 520)
+eq(U.readout.s, "Time[ 10.00] Avg[ 10.48] Max[200.00]", "both spikes left the bar, still in Avg: (629*10+120+200)/631, Max still 200")
+eq(U.readout.s, model(), "(the model agrees)")
+pickInf() -- again = start again
+run(10)
+eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[ 10.00]", "picking Infinite again starts Avg and Max again")
 
 section("Hidden mode works the same, the bar is just invisible")
 check(P.SetMode("Hidden"), "Hidden mode")
 check(not U.graph.f.Visible and not U.close.f.Visible, "graph and close box hidden")
 check(U.menu.Visible ~= false and U.root.Visible, "menu bar still shown")
 local c0 = P.Snapshot().count
-stepMs(20, 10)
+run(20, 10)
 eq(P.Snapshot().count, c0 + 10, "frames still counted in Hidden")
 eq(U.items[3].t.s, "Aggregate[" .. (c0 + 10) .. "]", "label still counts in Hidden")
-stepMs(20, 3)
-eq(U.readout.s, "Time[ 20.00] Avg[ 10.20] Max[ 20.00]", "Avg = the 508 frames that would be on the bar (498*10+10*20)/508")
-stepMs(20, 600)
-eq(U.readout.s, "Time[ 20.00] Avg[ 20.00] Max[ 20.00]", "the hidden bar keeps scrolling")
+run(20, 3)
+eq(U.readout.s, "Time[ 20.00] Avg[ 17.14] Max[ 20.00]", "Avg = every frame since Infinite was picked: (4*10+10*20)/14")
+run(20, 600)
+eq(U.readout.s, "Time[ 20.00] Avg[ 19.93] Max[ 20.00]", "the hidden bar keeps scrolling, Avg keeps every frame: (4*10+610*20)/614")
+eq(U.readout.s, model(), "(the model agrees)")
 P.SetMode("Frame")
 check(U.graph.f.Visible, "graph back in Frame mode")
+end
 
 section("Pause / Unpause / Force Enable")
 local snap = P.Snapshot()
@@ -185,7 +212,10 @@ stepMs(16)
 eq(U.items[10].t.s, "Pause", "Pause again")
 check(P.Snapshot().recorded == snap.recorded + 4, "recording resumed")
 
-section("Avg stays exact over a long session (running sum is recounted)")
+section("Avg over a long session = the exact average of every frame since the count started")
+do
+stepMs(16, 10)    -- every frame on its way to the history is 16 ms
+MENUS[3].click(0) -- Infinite: start the count again
 local vals = {}
 local seed2 = 11
 for i = 1, 5000 do
@@ -194,12 +224,18 @@ for i = 1, 5000 do
 	vals[i] = v
 	M.step(v / 1000)
 end
-local sum = 0
-for i = 5000 - 3 - 507, 5000 - 3 do sum = sum + vals[i] end
-near(P.Snapshot().avg, sum / 508, 1e-9, "Avg = exact average of the 508 frames on the bar after 5000 frames")
-local big = 0
-for i = 1, 5000 - 3 do if vals[i] > big then big = vals[i] end end
-check(P.Snapshot().max >= big - 1e-9, "Max is at least the biggest of these frames")
+-- joined since the pick: the three 16 ms frames that were on their way, then vals[1 .. 4997]
+local sum, big = 3 * 16, 16
+for i = 1, 5000 - 3 do
+	sum = sum + vals[i]
+	if vals[i] > big then big = vals[i] end
+end
+local sL = P.Snapshot()
+eq(sL.averaged, 5000, "5000 frames averaged (" .. sL.onBar .. " of them on the bar)")
+near(sL.avg, sum / 5000, 1e-9, "Avg = exact average of all 5000 frames since Infinite was picked")
+near(sL.max, big, 1e-9, "Max = the biggest of them")
+eq(U.readout.s, string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", vals[4997], sum / 5000, big), "readout of the long session")
+end
 
 section("frame bars: height, colour (Jobs vs Render), strip position")
 local function newestBar()
@@ -649,8 +685,8 @@ MENUS[3].click(0) -- Infinite
 M.step(16 / 1000)
 eq(U.items[3].t.s, "Aggregate[600]", "Infinite in TAS view counts TAS frames")
 eq(I.tas.a, 245, "the TAS bar starts at frame 245 (current frame at 70%)")
-eq(U.readout.s, string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", 16, (447 * 16 + 9 * 50) / 456, 50),
-	"TAS view: Time = current frame, Avg = the TAS frames on the bar (245-700), Max = the whole TAS")
+eq(U.readout.s, string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", 16, (588 * 16 + 12 * 50) / 600, 50),
+	"TAS view: Time = current frame, Avg / Max = TAS frames 1-600 (also the 244 before the bar)")
 curF = 601
 M.step(16 / 1000)
 eq(U.items[3].t.s, "Aggregate[601]", "advances with the TAS frame")
@@ -668,6 +704,53 @@ M.step(16 / 1000)
 M.click(1)
 M.step(16 / 1000)
 eq(scrubbed, 700, "a click after the end of the TAS scrubs to its last frame")
+do
+-- Avg / Max of TAS frames 1 .. f, worked out here
+local function tasExpect(f)
+	local sm, mx = 0, 0
+	for k = 1, f do
+		local v = data[k].FrameTime * 1000
+		sm = sm + v
+		if v > mx then mx = v end
+	end
+	return string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", data[f].FrameTime * 1000, sm / f, mx), sm / f, mx
+end
+curF = 20
+M.step(16 / 1000)
+eq(U.readout.s, "Time[ 16.00] Avg[ 16.00] Max[ 16.00]", "frame 20: no spike in frames 1-20 yet, so Max is 16 (not the whole TAS's 50)")
+curF = 700
+M.step(16 / 1000)
+eq(U.readout.s, string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", 16, (686 * 16 + 14 * 50) / 700, 50), "the last frame: every TAS frame")
+eq(I.tas.pn, 699, "running sums kept up to the frame before the last one")
+data[701] = { FrameTime = 0.2, TotalTime = 701 * 0.016 }
+curF = 701
+M.step(16 / 1000)
+eq(U.readout.s, (tasExpect(701)), "a frame added (same version) is read fresh: " .. U.readout.s)
+data[701].FrameTime = 0.03 -- the frame being recorded can still change
+M.step(16 / 1000)
+eq(U.readout.s, (tasExpect(701)), "the last frame is never kept, so a change to it shows")
+data[10].FrameTime = 0.1
+ver = ver + 1 -- an edit bumps the version
+curF = 20
+M.step(16 / 1000)
+eq(U.readout.s, "Time[ 16.00] Avg[ 20.20] Max[100.00]", "after an edit (new version): (19*16+100)/20")
+data[701] = nil
+curF = 700
+M.step(16 / 1000)
+eq(U.readout.s, (tasExpect(700)), "the TAS got shorter: still right")
+local _, tAvg, tMax = tasExpect(700)
+local had = {}
+for path in pairs(M.fs) do had[path] = true end
+MENUS[8].click(0) -- a dump of the TAS frames
+local tasDump
+for path, c in pairs(M.fs) do
+	if not had[path] and path:find("microprofile") then tasDump = c; M.fs[path] = nil end
+end
+check(tasDump ~= nil and tasDump:find(string.format("<p>32 frames, Avg %.2f ms, Max %.2f ms", tAvg, tMax), 1, true) ~= nil,
+	"a dump in the TAS view writes the readout's Avg / Max")
+data[10].FrameTime = 0.016
+ver = ver + 1
+end
 away()
 M.step(16 / 1000)
 MENUS[7].click(0)
