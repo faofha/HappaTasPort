@@ -1,10 +1,29 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38
+	Version: V2.38.1
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.1 changes (short): the MicroProfiler's numbers checked against Roblox's own, frame by frame
+		- Roblox's MicroProfiler dumps (read with Roblox's open-source LibMP) show how it colours a bar:
+		  Jobs Wall Time = from the frame's start to the end of its PreRender step, Render Wall Time = its
+		  Prepare + Perform steps (Roblox's dump viewer does exactly this, and so did every bar of the
+		  client's own graph).
+		- Stats.RenderCPUFrameTime is exactly that Render Wall Time three frames later, and
+		  Stats.RenderGPUFrameTime exactly the GPU device time one frame later. They are now paired with
+		  the right frame (before, with the wrong one), so a frame joins the graph three frames after it
+		  ran, like in Roblox's profiler.
+		- CPU Time (the bar's height) = PreAnimation to the next PreAnimation, within 0.1 ms of Roblox's.
+		- Jobs Wall Time = PreAnimation to the end of HappaTAS's PreRender work + 0.37 ms: the two pieces
+		  no script can time, measured in Roblox's dumps with HappaTAS running.
+		- In the real client, both profilers paused on the same frame: the same 503 frames, every bar the
+		  same height, 501 of them the same colour.
+		- The frame tooltip has Roblox's rows: CPU Time, GPU Time, GPU Time (device), Render / Jobs Wall
+		  Time and Mem Used (the same value as Roblox's). GPU Wait Time, CPU Freq and Mem Free have no API.
+		- Detailed: the Engine lane draws each frame like Roblox's (the jobs from the frame's start, then
+		  the render).
 
 	V2.38 changes (short): the MicroProfiler compared side by side with Roblox's own, in the real client
 		- The close box (X) turns grey under the mouse, with Roblox's hint box ("Press F6 to close",
@@ -68,7 +87,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38"
+local VERSION = "V2.38.1"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

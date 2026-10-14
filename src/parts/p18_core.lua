@@ -965,6 +965,7 @@ do
 			Profiler.End("Playback")
 		end
 		Profiler.End("HappaTAS")
+		Profiler.FrameEnd() -- the end of this frame's jobs as far as a script can see (Jobs Wall Time)
 	end
 
 	-- ---------------------------------------------------------------------------------------- PreSimulation

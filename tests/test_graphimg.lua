@@ -52,8 +52,9 @@ local function column(k)
 end
 
 section("bars: height, colour, scrolling")
+-- (a frame joins the graph three frames after it ran, so 6 frames fill the pipeline with these values)
 M.jobMs, M.stats.RenderCPUFrameTime = 4, 0.001
-stepMs(33.33 / 2, 3)
+stepMs(33.33 / 2, 6)
 local K = P.Snapshot().recorded
 local h, top, bottom = column(K)
 eq(h, 25, "half the reference = 25 px")
@@ -65,7 +66,7 @@ local r, g, b, a = img:Pixel(x0, 50 - h - 1)
 eq(a, 0, "transparent above the bar (the graph's 0x474747 shows through)")
 eq(lab.ImageRectOffset, Vector2.new(K % 508, 0), "the label starts at the first frame's slot (K - 507)")
 M.jobMs, M.stats.RenderCPUFrameTime = 1, 0.0039
-stepMs(100, 3)
+stepMs(100, 6)
 K = P.Snapshot().recorded
 h, top, bottom = column(K)
 eq(h, 50, "longer than the reference = full height")
@@ -126,7 +127,7 @@ section("green selection sits on the graph")
 local hl = U.hl.f
 check(hl.Parent == U.graph.f, "selection is a child of the graph (the image does not move)")
 check(hl.Visible, "selection visible")
-near(hl.Position.X.Scale, 504 / 508, 1e-6, "default window starts 3 frames behind the newest")
+near(hl.Position.X.Scale, 507 / 508, 1e-6, "default window starts at the newest frame on the graph (nFrameCurrent)")
 local hlWrites = 0
 M.writeLog = {}
 stepMs(5, 3)
@@ -149,7 +150,7 @@ local tas = I.tas
 eq(lab.ImageRectOffset, Vector2.new((tas.a - 1) % 508, 0), "the label starts at the window's first TAS frame")
 near(hl.Position.X.Scale, (curF - tas.a) / 508, 1e-9, "selection on the current TAS frame")
 MENUS[7].click(0)
-M.step(16 / 1000)
+stepMs(16, 4)
 check(P.Config().custom == false, "back to the live graph")
 K = P.Snapshot().recorded
 eq(column(K), 25, "live bars drawn again (16 ms)")

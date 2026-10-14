@@ -86,6 +86,8 @@ eq(U.readout.x + #s * 6, 1920, "readout is right-aligned")
 section("Avg = the frames on the bar, Max = the biggest frame (any Aggregate)")
 local MENUS = P.Menus
 eq(P.Config().aggregate, 60, "default aggregate is 60")
+-- a frame joins the history (and the bar) three frames after it ran, like Roblox's (its render time arrives then)
+stepMs(1000 / 60, 4)
 local s0 = P.Snapshot()
 check(s0.onBar > 0 and s0.onBar < 508, "only a few frames on the bar so far (" .. s0.onBar .. ")")
 near(s0.avg, 1000 / 60, 1e-6, "before the bar is full, Avg = the frames recorded so far")
@@ -94,7 +96,8 @@ eq(P.Snapshot().onBar, 508, "the bar holds 508 frames")
 check(U.readout.s:find("^Time%[ 10%.00%] Avg%[ 10%.00%]") ~= nil, "600 frames of 10 ms -> Avg 10.00: " .. U.readout.s)
 near(P.Snapshot().max, 1000 / 60, 1e-6, "Max still holds the 16.67 ms frames from before")
 stepMs(50)
-eq(U.readout.s, "Time[ 50.00] Avg[ 10.08] Max[ 50.00]", "spike: Avg = (507*10+50)/508")
+stepMs(10, 3)
+eq(U.readout.s, "Time[ 50.00] Avg[ 10.08] Max[ 50.00]", "spike (on the bar three frames later): Avg = (507*10+50)/508")
 stepMs(10, 507)
 eq(U.readout.s, "Time[ 10.00] Avg[ 10.08] Max[ 50.00]", "507 frames later the spike is the oldest bar, still averaged")
 stepMs(10)
@@ -130,12 +133,14 @@ eq(U.items[3].t.s, "Aggregate[2]", "Aggregate[2]")
 stepMs(10, 3)
 eq(U.items[3].t.s, "Aggregate[5]", "Aggregate[5]")
 stepMs(120)
+stepMs(10, 3)
 eq(U.readout.s, "Time[120.00] Avg[ 10.22] Max[120.00]", "spike: Avg = (507*10+120)/508")
-stepMs(10, 100)
+stepMs(10, 97)
 eq(U.readout.s, "Time[ 10.00] Avg[ 10.22] Max[120.00]", "Infinite gives the same Avg / Max as 60")
 eq(U.items[3].t.s, "Aggregate[106]", "label counts every frame")
 check(I.menuX[4] == I.menuX[3] + (#"Aggregate[106]" + 1) * 6, "menu items after Aggregate move with the label")
 stepMs(200)
+stepMs(10, 3)
 eq(U.readout.s:match("Max%[(.-)%]"), "200.00", "only a bigger frame replaces Max")
 stepMs(10, 520)
 eq(U.readout.s, "Time[ 10.00] Avg[ 10.00] Max[200.00]", "spikes gone from the bar, Max still 200")
@@ -151,6 +156,7 @@ local c0 = P.Snapshot().count
 stepMs(20, 10)
 eq(P.Snapshot().count, c0 + 10, "frames still counted in Hidden")
 eq(U.items[3].t.s, "Aggregate[" .. (c0 + 10) .. "]", "label still counts in Hidden")
+stepMs(20, 3)
 eq(U.readout.s, "Time[ 20.00] Avg[ 10.20] Max[ 20.00]", "Avg = the 508 frames that would be on the bar (498*10+10*20)/508")
 stepMs(20, 600)
 eq(U.readout.s, "Time[ 20.00] Avg[ 20.00] Max[ 20.00]", "the hidden bar keeps scrolling")
@@ -169,8 +175,8 @@ eq(U.items[10].t.s, "Unpause", "menu shows Unpause")
 eq(I.menuX[11], I.menuX[10] + (#"Unpause" + 1) * 6, "Help moves after Unpause")
 MENUS[1].click(7)     -- Force Enable
 check(P.Config().force == true, "Force Enable on")
-stepMs(30, 3)
-eq(P.Snapshot().recorded, snap.recorded + 3, "Force Enable records while paused")
+stepMs(30, 6)
+eq(P.Snapshot().recorded, snap.recorded + 3, "Force Enable records while paused (frames join three frames late)")
 eq(P.Snapshot().count, snap.count, "...but does not aggregate")
 check(U.readout.s:find("^Time%[ 30%.00%]") ~= nil, "forced frames are on the bar and in the readout: " .. U.readout.s)
 MENUS[1].click(7)
@@ -189,21 +195,24 @@ for i = 1, 5000 do
 	M.step(v / 1000)
 end
 local sum = 0
-for i = 5000 - 507, 5000 do sum = sum + vals[i] end
-near(P.Snapshot().avg, sum / 508, 1e-9, "Avg = exact average of the last 508 frames after 5000 frames")
+for i = 5000 - 3 - 507, 5000 - 3 do sum = sum + vals[i] end
+near(P.Snapshot().avg, sum / 508, 1e-9, "Avg = exact average of the 508 frames on the bar after 5000 frames")
 local big = 0
-for i = 1, 5000 do if vals[i] > big then big = vals[i] end end
-check(P.Snapshot().max >= big, "Max is at least the biggest of these frames")
+for i = 1, 5000 - 3 do if vals[i] > big then big = vals[i] end end
+check(P.Snapshot().max >= big - 1e-9, "Max is at least the biggest of these frames")
 
 section("frame bars: height, colour (Jobs vs Render), strip position")
 local function newestBar()
 	local K = P.Snapshot().recorded
 	return U.bars[(K - 1) % 508 + 1], K
 end
--- jobs = PreAnimation .. the next PreRender (M.jobMs), render = Stats.RenderCPUFrameTime. A bar pairs the
--- render that started at its first PreRender with the jobs that ended there (measured the frame before)
+-- Roblox's frame colours: Jobs Wall Time = frame start .. end of the PreRender step = FRAME_LEAD (0.22) +
+-- PreAnimation .. the end of HappaTAS's PreRender work (M.jobMs) + PRERENDER_TAIL (0.15); Render Wall Time =
+-- Stats.RenderCPUFrameTime, which holds a frame's value three frames later; the bar height = the time from the
+-- frame's PreAnimation to the next. A frame joins the graph three frames after it ran (the pipeline holds 3).
+M.clockStep = 0 -- no simulated CPU time per os.clock() call: the jobs are exactly M.jobMs
 M.jobMs, M.stats.RenderCPUFrameTime = 4, 0.001
-stepMs(33.33 / 2, 3)
+stepMs(33.33 / 2, 6)
 local b = newestBar()
 eq(b.f.Size.Y.Offset, 25, "half the reference = 25 px")
 local top, bottom = seqEnds(b.g.Color)
@@ -212,31 +221,35 @@ eq(bottom, "147,83,39", "orange bottom colour ((c+min)/2)")
 eq(b.g.Rotation, 90, "gradient runs top to bottom")
 local HIS = I.his
 local iK = (P.Snapshot().recorded - 1) % 512 + 1
-near(HIS.job[iK], 4.3, 0.01, "Jobs Wall Time = PreAnimation .. PreRender (4 ms) + 0.3 ms of unseen engine jobs")
+near(HIS.job[iK], 0.22 + 4 + 0.15, 1e-6, "Jobs Wall Time = 0.22 + PreAnimation .. end of HappaTAS's PreRender (4 ms) + 0.15")
 near(HIS.ren[iK], 1, 1e-9, "Render Wall Time = Stats.RenderCPUFrameTime")
+near(HIS.ms[iK], 33.33 / 2, 1e-6, "CPU Time = PreAnimation to the next PreAnimation")
+local K0 = P.Snapshot().recorded
 M.jobMs, M.stats.RenderCPUFrameTime = 1, 0.0039
-stepMs(100)
+stepMs(100, 3)
+eq(P.Snapshot().recorded, K0 + 3, "one frame joins the history per frame")
 b = newestBar()
 top = seqEnds(b.g.Color)
-eq(top, "255,191,147", "the first slow frame still pairs the 4 ms jobs that ended at its start: orange")
-stepMs(100, 2)
+eq(top, "255,191,147", "frames that ran before the change are still orange (they join three frames late)")
+stepMs(100, 3)
 b = newestBar()
 eq(b.f.Size.Y.Offset, 50, "longer than the reference = full height")
 top, bottom = seqEnds(b.g.Color)
-eq(top, "146,199,238", "blue top colour")
+eq(top, "146,199,238", "blue top colour (render 3.9 ms > jobs 1.37 ms)")
 eq(bottom, "55,107,146", "blue bottom colour")
 local K = P.Snapshot().recorded
 near(b.f.Position.X.Scale + 1 / 508 + U.strip.Position.X.Scale, 1, 1e-6, "newest bar ends at the right edge")
 local prev = U.bars[(K - 2) % 508 + 1]
 near(prev.f.Position.X.Scale + 1 / 508, b.f.Position.X.Scale, 1e-9, "bars are contiguous")
-stepMs(5)
+stepMs(5, 4)
 eq(newestBar().f.Size.Y.Offset, 8, "5 ms = ceil(5/33.33*50) = 8 px")
 M.jobMs, M.stats.RenderCPUFrameTime = nil, 0.0021
+M.clockStep = 1e-6
 
 section("Options: reference time")
 MENUS[5].click(6)     -- 66.66ms (Reference header is line 0)
 eq(P.Config().ref, 66.66, "reference 66.66 ms")
-stepMs(33.33)
+stepMs(33.33, 5) -- (the first frame after M.jobMs changed has PreAnimation moved inside it)
 eq(newestBar().f.Size.Y.Offset, 25, "33.33 ms is half of 66.66")
 MENUS[5].click(5)
 eq(P.Config().ref, 33.33, "reference back to 33.33")
@@ -246,8 +259,8 @@ stepMs(16, 40)
 local hl = U.hl.f
 check(hl.Visible, "selection visible")
 K = P.Snapshot().recorded
-near(hl.Position.X.Scale, 504 / 508, 1e-6, "default window starts at nFrameCurrent (3 frames behind)")
-near(hl.Size.X.Scale, 4 / 508, 1e-9, "50 ms = the last 4 frames at 16 ms")
+near(hl.Position.X.Scale, 507 / 508, 1e-6, "default window starts at nFrameCurrent: the newest frame on the graph")
+near(hl.Size.X.Scale, 1 / 508, 1e-9, "the frames after it are not on the graph yet")
 eq(rgb(hl.BackgroundColor3), "39,144,53", "selection colour (39, 144, 53), measured in the client")
 near(hl.BackgroundTransparency, 0.4, 1e-6, "60 % opaque")
 -- click a bar 20 frames back: the 50 ms window is centred on it
@@ -259,7 +272,7 @@ M.mouseDown(1)
 M.step(16 / 1000)   -- the held left button centres the view during this frame
 M.mouseUp(1)
 local v = P.Snapshot()
-near(v.offset, -(20 - 3) * 16 + 8 - 25, 0.01, "left click centres the 50 ms window on that frame")
+near(v.offset, -20 * 16 + 8 - 25, 0.01, "left click centres the 50 ms window on that frame")
 near(v.range, 50, 1e-9, "range stays 50 ms")
 local clickedK = P.Snapshot().recorded - 20
 local cbar = U.bars[(clickedK - 1) % 508 + 1].f.Position.X.Scale + U.strip.Position.X.Scale
@@ -272,6 +285,7 @@ near(P.Snapshot().range, 16, 0.6, "right click zooms to exactly that frame")
 section("hover tooltip on a frame")
 away()
 M.step(16 / 1000)
+M.clockStep = 0
 M.stats.RenderGPUFrameTime = 0.00173
 stepMs(4.37, 5)
 mouse(barX(0), 40)
@@ -280,17 +294,21 @@ local tip = U.tip
 check(tip.outer.f.Visible, "tooltip visible over a bar")
 local labels, values = {}, {}
 for i = 1, tip.n do labels[i] = tip.rows[i].l.s; values[i] = tip.rows[i].v.s end
+-- Roblox's rows; GPU Wait Time, CPU Freq and Mem Free have no script API and are left out
 check(labels[1]:match("^Frame %d+$") ~= nil, "row 1 'Frame N'")
 eq(labels[2], "CPU Time", "row 2 CPU Time")
 eq(values[2], "  4.37ms", "CPU Time = that frame's time")
-eq(labels[3], "GPU Time (device)", "row 3 GPU Time (device)")
-eq(values[3], "  1.73ms", "GPU from Stats.RenderGPUFrameTime")
-eq(labels[5], "Render Wall Time", "Render Wall Time")
-eq(labels[6], "Jobs Wall Time", "Jobs Wall Time")
-check(tip.rows[6].sq.f.Visible and rgb(tip.rows[6].sq.f.BackgroundColor3) == "255,0,0", "red square next to Jobs Wall Time (the jobs are longer)")
-check(not tip.rows[5].sq.f.Visible, "no square next to Render Wall Time")
-eq(labels[8], "Mem Used", "Mem Used")
-eq(values[8], "1234.5MB", "memory from Stats:GetTotalMemoryUsageMb")
+eq(labels[3], "GPU Time", "row 3 GPU Time")
+eq(values[3], " 16.67ms", "GPU Time from Stats.FrameTime (read three frames later)")
+eq(labels[4], "GPU Time (device)", "row 4 GPU Time (device)")
+eq(values[4], "  1.73ms", "GPU device time from Stats.RenderGPUFrameTime (read one frame later)")
+eq(labels[6], "Render Wall Time", "Render Wall Time")
+eq(labels[7], "Jobs Wall Time", "Jobs Wall Time")
+check(tip.rows[7].sq.f.Visible and rgb(tip.rows[7].sq.f.BackgroundColor3) == "255,0,0", "red square next to Jobs Wall Time (the jobs are longer)")
+check(not tip.rows[6].sq.f.Visible, "no square next to Render Wall Time")
+eq(labels[9], "Mem Used", "Mem Used")
+eq(values[9], "1234.5MB", "memory from Stats:GetTotalMemoryUsageMb")
+eq(labels[10], "HappaTAS", "HappaTAS's own time last")
 eq(rgb(tip.outer.f.BackgroundColor3), "255,255,255", "white border")
 eq(rgb(tip.inner.f.BackgroundColor3), "0,0,0", "black box")
 local hov = P.Snapshot().hover
@@ -306,15 +324,16 @@ top = seqEnds(hb.g.Color)
 check(top ~= "255,255,255", "hovered colour restored")
 -- render longer than the jobs: the square moves up to Render Wall Time
 M.jobMs, M.stats.RenderCPUFrameTime = 0.5, 0.003
-stepMs(4.37, 3)
+stepMs(4.37, 6)
 mouse(barX(0), 40)
 M.step(4.37 / 1000)
-check(tip.outer.f.Visible and tip.rows[5].sq.f.Visible and not tip.rows[6].sq.f.Visible, "render longer: the square is next to Render Wall Time")
-eq(tip.rows[6].v.s, "  0.80ms", "Jobs Wall Time 0.50 ms + 0.3 ms unseen")
-eq(tip.rows[5].v.s, "  3.00ms", "Render Wall Time 3.00 ms")
+check(tip.outer.f.Visible and tip.rows[6].sq.f.Visible and not tip.rows[7].sq.f.Visible, "render longer: the square is next to Render Wall Time")
+eq(tip.rows[7].v.s, "  0.87ms", "Jobs Wall Time 0.22 + 0.50 + 0.15 ms")
+eq(tip.rows[6].v.s, "  3.00ms", "Render Wall Time 3.00 ms")
 away()
 M.step(4.37 / 1000)
 M.jobMs, M.stats.RenderCPUFrameTime = nil, 0.0021
+M.clockStep = 1e-6
 
 section("menus open on hover, stay open inside, close outside")
 local function ddTexts()
@@ -500,7 +519,7 @@ MENUS[12].click(2)
 
 section("Detailed mode: engine phases and HappaTAS scopes on a timeline")
 P.SetMode("Detailed")
-P.SetView(0, 50)
+P.SetView(-34, 50) -- from two frames before the newest frame on the graph
 check(U.det.f.Visible and U.graph.f.Visible, "detailed panel under the graph")
 check(U.det.f.Position == UDim2.fromOffset(0, 59) and U.det.f.Size == UDim2.new(1, 0, 1, -59), "the detailed view fills the screen from y 59")
 MENUS[3].click(4) -- 60
@@ -548,7 +567,7 @@ for i = 1, det.nBars do
 	local b = det.bars[i]
 	if b.t.vis and b.t.s == "Jobs" then rj = b.b.w end
 end
-near(rj, 3 * 1920 / 50, 2, "the Jobs scope is 3 ms wide at 50 ms per screen")
+near(rj, (0.22 + 3 + 0.15) * 1920 / 50, 2, "the Jobs scope = Jobs Wall Time (0.22 + 3 + 0.15 ms) at 50 ms per screen")
 -- hovering a scope: the timer tooltip with the timer's colour as the border
 local jb
 for i = 1, det.nBars do if det.bars[i].t.vis and det.bars[i].t.s == "Jobs" then jb = det.bars[i] end end
@@ -788,7 +807,7 @@ near(rc.time, M.stats.RenderCPUFrameTime * 1000, 1e-9, "Render CPU timer = Stats
 local hb = P.TimerStats("Heartbeat")
 check(hb.time > 15.9 and hb.time <= 16 + 1e-9, "Heartbeat timer = Heartbeat to the next PreRender (" .. hb.time .. ")")
 local jt = P.TimerStats("Jobs")
-check(jt.time >= hb.time and jt.time <= 16 + 1e-9, "Jobs timer = PreAnimation to the next PreRender")
+check(jt.time >= hb.time and jt.time <= 16 + 0.37 + 0.5, "Jobs timer = Jobs Wall Time (0.22 + PreAnimation .. end of HappaTAS's PreRender + 0.15)")
 local ph = P.TimerStats("Physics")
 near(ph.time, M.stats.PhysicsStepTime * 1000, 1e-9, "Physics timer = Stats.PhysicsStepTime")
 check(jt.exclusive <= jt.time + 1e-12 and P.TimerStats("Animations").time >= 0, "Jobs exclusive = minus Animations, Simulation, Heartbeat")
