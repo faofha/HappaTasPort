@@ -50,9 +50,19 @@ elseif SCENE == "menu" then
 	M.step(34.1 / 1000)
 elseif SCENE == "detailed" then
 	M.clockStep = 4e-5
+	M.jobMs = 1.4
+	M.stats.RenderCPUFrameTime = 0.00105
 	P.SetMode("Detailed")
 	P.SetView(-60, 80)
 	for i = 1, 8 do M.step(16.6 / 1000) end
+	M.jobMs = nil
+elseif SCENE == "counters" then
+	P.SetMode("Counters")
+	for i = 1, 16 do M.step(16.6 / 1000) end
+elseif SCENE == "closehover" then
+	M.mouse = Vector2.new(1920 - 25, 35)
+	M.step(34.1 / 1000)
+	M.step(34.1 / 1000)
 elseif SCENE == "timers" then
 	P.SetMode("Timers")
 	for i = 1, 12 do M.step(16.6 / 1000) end

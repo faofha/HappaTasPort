@@ -16,8 +16,8 @@ check(sc ~= nil and sc.Scale == 2, "UIScale 2 on the root")
 local as = U.root.AbsoluteSize
 check(as.X == 1920 and as.Y == 1080, "root still covers the screen (" .. tostring(as) .. ")")
 local gp, gs = U.graph.f.AbsolutePosition, U.graph.f.AbsoluteSize
--- AbsolutePosition is measured from the bottom of the top bar, so screen y 20 is 20 - inset
-check(gp.Y == 20 - M.inset and gs.Y == 100 and gs.X == 1820, "graph doubled: y 20, 1820 x 100 (" .. tostring(gp) .. " / " .. tostring(gs) .. ")")
+-- AbsolutePosition is measured from the bottom of the top bar, so screen y 18 is 18 - inset
+check(gp.Y == 18 - M.inset and gs.Y == 100 and gs.X == 1820, "graph doubled: y 18, 1820 x 100 (" .. tostring(gp) .. " / " .. tostring(gs) .. ")")
 eq(U.menu.AbsoluteSize.Y, 20, "menu bar 20 px")
 -- hover the Mode item at screen position (menuX * 2)
 M.mouse = Vector2.new(I.menuX[1] * 2 + 6, 8)

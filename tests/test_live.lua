@@ -76,8 +76,8 @@ check(ov ~= nil, "overlay created")
 if ov then eq(ov.AutoLocalize, false, "overlay (profiler / cursor): AutoLocalize off"); ov:Destroy() end
 S.Set("Show MicroProfiler", 1)
 M.steps(3)
-local prof = hui:FindFirstChild("HappaProfiler")
-check(prof ~= nil and prof.AutoLocalize == false, "MicroProfiler overlay: AutoLocalize off")
+local prof = M.services.CoreGui:FindFirstChild("HappaProfiler")
+check(prof ~= nil and prof.AutoLocalize == false, "MicroProfiler overlay (in CoreGui, above the top bar): AutoLocalize off")
 S.Set("Show MicroProfiler", 0)
 
 section("default sounds are sound assets")
