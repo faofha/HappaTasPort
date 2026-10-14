@@ -55,6 +55,7 @@ local SettingsTable = {
 	{ name = "Show MicroProfiler",       default = 0, section = "Interface" },
 	{ name = "MicroProfiler Scale",      default = 1, section = "Interface", kind = "number", label = "MicroProfiler Size (1 = Roblox)", min = 0.5, max = 4 },
 	{ name = "MicroProfiler Text Offset", default = 0, section = "Interface", kind = "number", label = "MicroProfiler Text Offset (px, - = up)", min = -6, max = 6, integer = true },
+	{ name = "Allow PlayerGui Interface", default = 0, section = "Interface", label = "Allow Visible Interface (PlayerGui)" },
 
 	{ name = "Enable Keyboard Sounds",   default = 0, section = "Sounds", label = "Keyboard Sounds" },
 	{ name = "Enable Click Sounds",      default = 0, section = "Sounds", label = "Mouse Click Sounds" },

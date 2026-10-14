@@ -17,6 +17,28 @@ local zc2 = setmetatable({ currentSubjectDistance = 20 }, ctrlClass)
 local lockCtrl = { isMouseLocked = false }
 M.gcTables = { zc1, { currentSubjectDistance = "not a controller" }, zc2, { activeMouseLockController = lockCtrl }, lockCtrl }
 
+-- a PlayerModule whose camera script has BaseCamera and ZoomController (patched with hookfunction)
+local baseCalls = 0
+local BaseCamera = {}
+function BaseCamera.UpdateMouseBehavior(self) baseCalls = baseCalls + 1 return "base" end
+local ZoomController = {}
+function ZoomController.Update(dt) return dt end
+local origUMB, origZU = BaseCamera.UpdateMouseBehavior, ZoomController.Update
+do
+	local pm = Instance.new("ModuleScript"); pm.Name = "PlayerModule"; pm.Parent = M.player:FindFirstChild("PlayerScripts")
+	local cm = Instance.new("ModuleScript"); cm.Name = "CameraModule"; cm.Parent = pm
+	local bc = Instance.new("ModuleScript"); bc.Name = "BaseCamera"; bc.Parent = cm
+	local zc = Instance.new("ModuleScript"); zc.Name = "ZoomController"; zc.Parent = cm
+	local camCtrl = setmetatable({ currentSubjectDistance = 12.5 }, ctrlClass)
+	local cams = { activeCameraController = camCtrl, activeMouseLockController = lockCtrl }
+	local mods = { [pm] = { GetCameras = function() return cams end }, [bc] = BaseCamera, [zc] = ZoomController }
+	local realRequire = require
+	require = function(x)
+		if mods[x] then return mods[x] end
+		return realRequire(x)
+	end
+end
+
 check(boot(5), "boots")
 local IS, S = __T.InputSys, __T.Settings
 
@@ -181,6 +203,22 @@ do
 	check(not after.x.ok and after.x.n == 0, "measured again after a resize")
 	IS.ReplayEnd()
 	M.viewport = vp
+end
+
+section("the camera script is patched with hookfunction: its functions stay the same values")
+do
+	M.steps(70) -- (the bridge looks for the PlayerModule every 0.5 s)
+	eq(BaseCamera.UpdateMouseBehavior, origUMB, "BaseCamera.UpdateMouseBehavior is still the same function")
+	eq(ZoomController.Update, origZU, "ZoomController.Update too")
+	check(M.hooks[origUMB] ~= nil and M.hooks[origZU] ~= nil, "both hooked")
+	baseCalls = 0
+	eq(M.callHooked(origUMB, {}), "base", "the hooked function still runs the original (through the copy)")
+	eq(baseCalls, 1, "once")
+	eq(M.callHooked(origZU, 0.5), 0.5, "ZoomController.Update passes its value through")
+	rawget(getgenv(), "__HappaTAS").Unload()
+	M.steps(2)
+	check(M.hooks[origUMB] == nil and M.hooks[origZU] == nil, "Unload restores them (restorefunction)")
+	eq(BaseCamera.UpdateMouseBehavior, origUMB, "and the table still holds the original")
 end
 
 finish()

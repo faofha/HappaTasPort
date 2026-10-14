@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.2 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.3 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.2"
+local VERSION = "V2.38.3"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -76,6 +76,8 @@ do
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
 	Env.filtergc    = fn(filtergc)
+	Env.hookfunction    = fn(hookfunction, replaceclosure)
+	Env.restorefunction = fn(restorefunction)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 	Env.keypress     = fn(keypress, keydown)
 	Env.keyrelease   = fn(keyrelease, keyup)
@@ -230,6 +232,7 @@ local SettingsTable = {
 	{ name = "Show MicroProfiler",       default = 0, section = "Interface" },
 	{ name = "MicroProfiler Scale",      default = 1, section = "Interface", kind = "number", label = "MicroProfiler Size (1 = Roblox)", min = 0.5, max = 4 },
 	{ name = "MicroProfiler Text Offset", default = 0, section = "Interface", kind = "number", label = "MicroProfiler Text Offset (px, - = up)", min = -6, max = 6, integer = true },
+	{ name = "Allow PlayerGui Interface", default = 0, section = "Interface", label = "Allow Visible Interface (PlayerGui)" },
 	{ name = "Enable Keyboard Sounds",   default = 0, section = "Sounds", label = "Keyboard Sounds" },
 	{ name = "Enable Click Sounds",      default = 0, section = "Sounds", label = "Mouse Click Sounds" },
 	{ name = "Sound Trigger Mode",       default = 0, section = "Sounds", kind = "number", label = "Sound Mode (0 Live 1 Play 2 Both)", min = 0, max = 2, integer = true },
@@ -634,7 +637,10 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2840)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2910)},{
+						LV("974", " 10/14/26 - 2.38.3"),
+						LI("974_1", "   -   Camera script hooked in place (hookfunction)"),
+						LI("974_2", "   -   No visible PlayerGui interface unless you allow it"),
 						LV("975", " 10/14/26 - 2.38.2"),
 						LI("975_1", "   -   Every Real executor function checked for HappaTAS"),
 						LI("975_2", "   -   Arrow keys, Home, End, PgUp/PgDn, right Ctrl/Alt fixed"),
@@ -1035,6 +1041,10 @@ do
 				UI.ParentName = "CoreGui"
 				return true
 			end
+		end
+		if not Settings.On("Allow PlayerGui Interface") then
+			UI.Refused = true
+			return false
 		end
 		local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
 		if pg then
@@ -2077,6 +2087,17 @@ do
 		local ok = pcall(function()
 			local orig = rawget(tbl, key) or tbl[key]
 			if type(orig) ~= "function" then error("missing " .. tostring(key)) end
+			if Env.hookfunction and Env.restorefunction then
+				local copy
+				local okH = pcall(function()
+					copy = Env.hookfunction(orig, makeWrapper(function(...) return copy(...) end))
+				end)
+				if okH and type(copy) == "function" then
+					originals[#originals + 1] = { hooked = orig }
+					return
+				end
+				pcall(Env.restorefunction, orig)
+			end
 			local wrapper = makeWrapper(orig)
 			tbl[key] = wrapper
 			originals[#originals + 1] = { tbl, key, orig, wrapper }
@@ -2423,7 +2444,8 @@ do
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()
-				if o[1][o[2]] == o[4] then o[1][o[2]] = o[3] end
+				if o.hooked then Env.restorefunction(o.hooked)
+				elseif o[1][o[2]] == o[4] then o[1][o[2]] = o[3] end
 			end)
 		end
 		originals = {}
@@ -9572,6 +9594,11 @@ UI.RemoveStale()
 local Gui = UI.Create()
 if not UI.Attach(Gui, true) then
 	Gui:Destroy()
+	if UI.Refused then
+		error("[HappaTAS] this executor gives no hidden place for the interface (gethui / CoreGui), and PlayerGui"
+			.. " would let game scripts see it. To allow that anyway, set \"Allow PlayerGui Interface\" to 1 in"
+			.. " HappaTasPort/Settings.json.", 0)
+	end
 	error("[HappaTAS] could not parent the interface anywhere (gethui / CoreGui / PlayerGui)")
 end
 Janitor.add(Gui)

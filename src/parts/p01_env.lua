@@ -65,6 +65,8 @@ do
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
 	Env.filtergc    = fn(filtergc)
+	Env.hookfunction    = fn(hookfunction, replaceclosure)
+	Env.restorefunction = fn(restorefunction)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 
 	Env.keypress     = fn(keypress, keydown)
