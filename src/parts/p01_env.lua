@@ -64,6 +64,7 @@ do
 	Env.gethui      = fn(gethui)
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
+	Env.filtergc    = fn(filtergc)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 
 	Env.keypress     = fn(keypress, keydown)
@@ -73,7 +74,11 @@ do
 	Env.mouse2press  = fn(mouse2press, mouse2down)
 	Env.mouse2release= fn(mouse2release, mouse2up)
 	Env.mousemoveabs = fn(mousemoveabs)
+	Env.mousemoverel = fn(mousemoverel)
 	Env.mousescroll  = fn(mousescroll)
+	-- Roblox's VirtualInputManager hands a key to Roblox's input with its exact KeyCode (used for the keys
+	-- the executor's keypress gets wrong, see the replay in InputSys)
+	Env.VirtualInput = svc("VirtualInputManager")
 
 	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
 		and Env.listfiles and Env.delfile and true or false

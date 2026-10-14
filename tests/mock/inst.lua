@@ -284,7 +284,7 @@ class("AnimationTrack", "Instance", { IsPlaying = false, Length = 1, Looped = fa
 class("Sound", "Instance", { SoundId = "", Volume = 0.5, Playing = false, Looped = false, PlaybackSpeed = 1, TimePosition = 0,
 	TimeLength = 0, IsLoaded = true, IsPlaying = false, RollOffMaxDistance = 10000, PlayOnRemove = false }, {}, { "Ended", "Loaded", "Played", "Stopped" })
 class("Camera", "PVInstance", { CFrame = CFrame.new(0, 10, 20), Focus = CFrame.new(), FieldOfView = 70, CameraType = Enum.CameraType.Custom,
-	CameraSubject = nil, ViewportSize = M.viewport, NearPlaneZ = -0.1, HeadLocked = true, HeadScale = 1, DiagonalFieldOfView = 0, MaxAxisFieldOfView = 0 })
+	CameraSubject = nil, NearPlaneZ = -0.1, HeadLocked = true, HeadScale = 1, DiagonalFieldOfView = 0, MaxAxisFieldOfView = 0 })
 class("Player", "Instance", { UserId = 1, DisplayName = "Player1", Character = nil, Team = nil, CameraMaxZoomDistance = 128,
 	CameraMinZoomDistance = 0.5, CameraMode = Enum.CameraMode.Classic, DevComputerCameraMode = Enum.DevComputerCameraMovementMode.UserChoice,
 	DevEnableMouseLock = true, AccountAge = 100, MembershipType = nil, AutoJumpEnabled = true }, {}, { "CharacterAdded", "CharacterRemoving", "Idled", "Chatted" })
@@ -431,7 +431,7 @@ instMt.__index = function(self, k)
 	local dv, known = findDefault(d.class, k)
 	if known then return dv end
 	if NIL_PROPS[k] then return nil end
-	if d.class.Name == "Camera" and k == "ViewportSize" then return M.viewport end
+	if d.class.Name == "Camera" and k == "ViewportSize" then return M.viewport end -- follows M.viewport (a resize)
 	error(tostring(k) .. " is not a valid member of " .. d.class.Name .. " \"" .. tostring(d.props.Name) .. "\"", 2)
 end
 

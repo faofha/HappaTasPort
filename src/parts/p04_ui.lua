@@ -269,7 +269,14 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2690)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2840)},{
+						LV("975", " 10/14/26 - 2.38.2"),
+						LI("975_1", "   -   Every Real executor function checked for HappaTAS"),
+						LI("975_2", "   -   Arrow keys, Home, End, PgUp/PgDn, right Ctrl/Alt fixed"),
+						LI("975_3", "   -   Mouse replay within 1 px (Real's moves were up to 11 off)"),
+						LI("975_4", "   -   Mouse moves no longer arrive one move late"),
+						LI("975_5", "   -   Held keys pressed again when Roblox gets focus back"),
+						LI("975_6", "   -   Camera scripts found with filtergc, no full memory scan"),
 						LV("976", " 10/14/26 - 2.38.1"),
 						LI("976_1", "   -   Frame colours checked against Roblox's own profiler"),
 						LI("976_2", "   -   Render time taken from the right frame (exact)"),
@@ -492,7 +499,7 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
 					H("37", "Frustum Culling & Sandboxing", 135, true, {
 						{ 48, "Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag." },
-						{ 67, "Metatable sandboxing with cloneref prevents game scripts from intercepting TAS operations. UI isolation mounts via gethui/syn.protect_gui, and native LZ4 provides instant file compression." } })
+						{ 67, "Roblox services are reached through cloneref (a second reference to the same object, not the game's own). The interface sits in gethui or syn.protect_gui; native LZ4 compresses files." } })
 				}}
 			}},
 			ST(17)

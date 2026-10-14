@@ -1,10 +1,26 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.1
+	Version: V2.38.2
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.2 changes (short): every function in Real's documentation checked against HappaTAS, the ones
+	that help are used now (measured in the Roblox client)
+		- Keys: Real's keypress sends a key's scancode without the "extended key" flag, so Up arrived as
+		  Keypad 8, Left as Keypad 4, Home as Keypad 7, Right Ctrl as Left Ctrl and so on. These keys are
+		  replayed through Roblox's VirtualInputManager, which gives Roblox the exact key.
+		- Mouse: Roblox showed an injected move only when the next mouse event came (every move one move
+		  late, the last one never). Each move is followed by a 1 pixel step right and back.
+		- Mouse: Real's mousemoveabs scales with whole-number maths, so the cursor landed up to 0.4 % (x) /
+		  1.2 % (y) short, 8 / 11 px at the edges of a 1920x1080 screen. HappaTAS measures where its moves
+		  land and aims through that: within 1 px.
+		- Keys the TAS holds while the Roblox window isn't focused (Real sends no input then) are pressed
+		  as soon as it is focused again.
+		- The game's camera scripts are found with filtergc instead of getgc(true), which put every object
+		  of the game's memory in one table (Real's own tools refuse to run it: it can freeze the client).
+		- Help: the cloneref sentence was wrong (cloneref only makes a second reference).
 
 	V2.38.1 changes (short): the MicroProfiler's numbers checked against Roblox's own, frame by frame
 		- Roblox's MicroProfiler dumps (read with Roblox's open-source LibMP) show how it colours a bar:
@@ -87,7 +103,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.1"
+local VERSION = "V2.38.2"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

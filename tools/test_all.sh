@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 LUAU="${LUAU:-/home/claude/tools/luau/luau}"
 bash tools/assemble.sh >/dev/null || exit 1
 fail=0
-for s in smoke profiler graphimg core scale perf textline typing live; do
+for s in smoke profiler graphimg core scale perf textline typing live realinput; do
   bash tools/build_test.sh "$s" >/dev/null
   out=$(cd tests && "$LUAU" "run_$s.lua" 2>&1)
   res=$(echo "$out" | grep -E "^RESULT" | tail -1)
