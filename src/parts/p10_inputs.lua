@@ -48,7 +48,7 @@ do
 	local ID_M1, ID_M2 = 96, 97
 	InputSys.ID_M1, InputSys.ID_M2 = ID_M1, ID_M2
 
-	local KEY_BY_ENUM, KEY_VK, KEY_SHORT = {}, {}, {}
+	local KEY_BY_ENUM, KEY_VK, KEY_SHORT, KEY_KC = {}, {}, {}, {}
 	for id, k in ipairs(KEYLIST) do
 		KEY_SHORT[id] = k[3]
 		if k[1] then
@@ -56,9 +56,16 @@ do
 			if ok and item then
 				KEY_BY_ENUM[item] = id
 				KEY_VK[id] = k[2]
+				KEY_KC[id] = item
 			end
 		end
 	end
+	-- Windows "extended" keys: their scancode needs the extended-key flag. Real's keypress sends the key's
+	-- scancode with KEYEVENTF_SCANCODE only (Real docs), so in the Roblox client Up came out as KeypadEight,
+	-- Left as KeypadFour, Home as KeypadSeven, RightControl as LeftControl, ... (tested). These keys are
+	-- replayed through VirtualInputManager:SendKeyEvent, which gives Roblox the exact KeyCode (tested too).
+	local EXTENDED = { [0x21] = true, [0x22] = true, [0x23] = true, [0x24] = true, [0x25] = true, [0x26] = true,
+		[0x27] = true, [0x28] = true, [0x2D] = true, [0x2E] = true, [0x6F] = true, [0xA3] = true, [0xA5] = true }
 
 	local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
 
@@ -240,14 +247,22 @@ do
 		return InputSys.Available.Keys and Settings.On("Replay Keyboard") and KEY_VK[id] ~= nil
 	end
 
+	-- an extended key through VirtualInputManager (false: not one, or no VirtualInputManager)
+	local function vimKey(id, down)
+		local vim, kc = Env.VirtualInput, KEY_KC[id]
+		if not (vim and kc and EXTENDED[KEY_VK[id]]) then return false end
+		return (pcall(vim.SendKeyEvent, vim, down, kc, false, game))
+	end
 	local function sendDown(id)
 		return (pcall(function()
-			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press() else Env.keypress(KEY_VK[id]) end
+			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press()
+			elseif not vimKey(id, true) then Env.keypress(KEY_VK[id]) end
 		end))
 	end
 	local function sendUp(id)
 		pcall(function()
-			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release() else Env.keyrelease(KEY_VK[id]) end
+			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release()
+			elseif not vimKey(id, false) then Env.keyrelease(KEY_VK[id]) end
 		end)
 	end
 
@@ -315,6 +330,13 @@ do
 			syncTo(InputSys.HeldAt(data, frame))
 		end
 		replay.applied = frame
+		-- keys the TAS holds that weren't pressed because the Roblox window wasn't active (Real's input
+		-- functions send nothing then, Real docs): pressed as soon as the window is active again
+		if next(replay.state) ~= nil and Env.WindowActive() then
+			for id in pairs(replay.state) do
+				if not replay.injected[id] then press(id) end
+			end
+		end
 	end
 
 	-- true when the camera had the mouse locked on this recorded frame (shift lock, first person, right click)
@@ -336,12 +358,79 @@ do
 		return fr.MX, fr.MY
 	end
 
+	-- ------------------------------------------------------------------------------------ real mouse
+	-- Found in the Roblox client with Real's mousemoveabs:
+	--  * Roblox takes an injected move only when the next mouse event comes (every move showed up one move
+	--    late, and the last one never), so each move is followed by a 1 px step right and back.
+	--  * Real scales the client point to the screen with integer maths (Real docs: GetSystemMetrics(SM_CXSCREEN)
+	--    - 1); the factor 65535 / (width - 1) is cut to a whole number (34 instead of 34.15 at 1920 px, 60
+	--    instead of 60.74 at 1080), so the cursor landed up to 0.4 % (x) / 1.2 % (y) short: 8 / 11 px at the
+	--    far edges. Where a move really landed (UserInputService:GetMouseLocation, read before the next move)
+	--    is fitted with a straight line per axis and the moves are aimed through it: within 1 px (tested).
+	local function newAxis() return { n = 0, st = 0, sr = 0, stt = 0, str = 0, lo = math.huge, hi = -math.huge, a = 1, b = 0, ok = false } end
+	local cal = { x = newAxis(), y = newAxis(), vx = 0, vy = 0, pend = nil }
+	local CAL_SPREAD = 150   -- px between the lowest and highest sample before the fit is used
+	local function calExpect(ax, t) return ax.ok and (ax.a * t + ax.b) or t end
+	-- t = where a move was sent, r = where the cursor was read, prev = the move before (nil: none)
+	local function calAdd(ax, t, r, prev)
+		local expect = calExpect(ax, t)
+		local tol = ax.ok and 3 or (math.abs(t) * 0.04 + 4)
+		if math.abs(r - expect) > tol then return end -- not landed yet, or the mouse was moved by hand
+		if prev and prev ~= t and math.abs(r - calExpect(ax, prev)) < math.abs(r - expect) then return end -- still the move before
+		if ax.n >= 240 then -- forget the older half slowly (the window can move)
+			ax.n, ax.st, ax.sr, ax.stt, ax.str = ax.n / 2, ax.st / 2, ax.sr / 2, ax.stt / 2, ax.str / 2
+		end
+		ax.n = ax.n + 1
+		ax.st, ax.sr, ax.stt, ax.str = ax.st + t, ax.sr + r, ax.stt + t * t, ax.str + t * r
+		if t < ax.lo then ax.lo = t end
+		if t > ax.hi then ax.hi = t end
+		if ax.n >= 6 and ax.hi - ax.lo >= CAL_SPREAD then
+			local d = ax.n * ax.stt - ax.st * ax.st
+			if d > 0 then
+				local a = (ax.n * ax.str - ax.st * ax.sr) / d
+				local b = (ax.sr - a * ax.st) / ax.n
+				if a >= 0.9 and a <= 1.1 and math.abs(b) <= 64 then ax.a, ax.b, ax.ok = a, b, true end
+			end
+		end
+	end
+	local function calRead()
+		local p = cal.pend
+		if not p then return end
+		cal.pend = nil
+		if os.clock() - p[3] > 0.25 or UIS.MouseBehavior ~= Enum.MouseBehavior.Default then return end
+		local okM, m = pcall(UIS.GetMouseLocation, UIS)
+		if not okM then return end
+		calAdd(cal.x, p[1], m.X, p[4])
+		calAdd(cal.y, p[2], m.Y, p[5])
+	end
+	local function calAim(ax, v)
+		if not ax.ok then return v end
+		return floor((v - ax.b) / ax.a + 0.5)
+	end
+	function InputSys.MouseCalibration()
+		return { x = { a = cal.x.a, b = cal.x.b, ok = cal.x.ok, n = cal.x.n }, y = { a = cal.y.a, b = cal.y.b, ok = cal.y.ok, n = cal.y.n } }
+	end
+
 	function InputSys.MoveRealMouse(x, y)
 		if not InputSys.Available.Move or not Env.WindowActive() then return end
+		local cam = workspace.CurrentCamera
+		local vp = cam and cam.ViewportSize
+		if vp and (vp.X ~= cal.vx or vp.Y ~= cal.vy) then -- window resized: measure again
+			cal.x, cal.y, cal.vx, cal.vy, cal.pend, cal.sentX, cal.sentY = newAxis(), newAxis(), vp.X, vp.Y, nil, nil, nil
+		end
+		calRead()
 		x, y = floor(x + 0.5), floor(y + 0.5)
 		if x == replay.lastMX and y == replay.lastMY then return end
 		replay.lastMX, replay.lastMY = x, y
-		pcall(Env.mousemoveabs, x, y)
+		local sx, sy = calAim(cal.x, x), calAim(cal.y, y)
+		if pcall(Env.mousemoveabs, sx, sy) then
+			if Env.mousemoverel then
+				pcall(Env.mousemoverel, 1, 0)
+				pcall(Env.mousemoverel, -1, 0)
+			end
+			cal.pend = { sx, sy, os.clock(), cal.sentX, cal.sentY }
+			cal.sentX, cal.sentY = sx, sy
+		end
 	end
 
 	function InputSys.ReplayMouse(fr)
@@ -360,6 +449,7 @@ do
 		replay.active = false
 		replay.applied = 0
 		replay.lastMX, replay.lastMY = nil, nil
+		cal.pend, cal.sentX, cal.sentY = nil, nil, nil
 		return had
 	end
 

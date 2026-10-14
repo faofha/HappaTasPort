@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.1 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.2 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.1"
+local VERSION = "V2.38.2"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -75,6 +75,7 @@ do
 	Env.gethui      = fn(gethui)
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
+	Env.filtergc    = fn(filtergc)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 	Env.keypress     = fn(keypress, keydown)
 	Env.keyrelease   = fn(keyrelease, keyup)
@@ -83,7 +84,9 @@ do
 	Env.mouse2press  = fn(mouse2press, mouse2down)
 	Env.mouse2release= fn(mouse2release, mouse2up)
 	Env.mousemoveabs = fn(mousemoveabs)
+	Env.mousemoverel = fn(mousemoverel)
 	Env.mousescroll  = fn(mousescroll)
+	Env.VirtualInput = svc("VirtualInputManager")
 	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
 		and Env.listfiles and Env.delfile and true or false
 	Env.HasLZ4 = (Env.lz4compress ~= nil and Env.lz4decompress ~= nil)
@@ -631,7 +634,14 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2690)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2840)},{
+						LV("975", " 10/14/26 - 2.38.2"),
+						LI("975_1", "   -   Every Real executor function checked for HappaTAS"),
+						LI("975_2", "   -   Arrow keys, Home, End, PgUp/PgDn, right Ctrl/Alt fixed"),
+						LI("975_3", "   -   Mouse replay within 1 px (Real's moves were up to 11 off)"),
+						LI("975_4", "   -   Mouse moves no longer arrive one move late"),
+						LI("975_5", "   -   Held keys pressed again when Roblox gets focus back"),
+						LI("975_6", "   -   Camera scripts found with filtergc, no full memory scan"),
 						LV("976", " 10/14/26 - 2.38.1"),
 						LI("976_1", "   -   Frame colours checked against Roblox's own profiler"),
 						LI("976_2", "   -   Render time taken from the right frame (exact)"),
@@ -854,7 +864,7 @@ do
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
 					H("37", "Frustum Culling & Sandboxing", 135, true, {
 						{ 48, "Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag." },
-						{ 67, "Metatable sandboxing with cloneref prevents game scripts from intercepting TAS operations. UI isolation mounts via gethui/syn.protect_gui, and native LZ4 provides instant file compression." } })
+						{ 67, "Roblox services are reached through cloneref (a second reference to the same object, not the game's own). The interface sits in gethui or syn.protect_gui; native LZ4 compresses files." } })
 				}}
 			}},
 			ST(17)
@@ -2119,30 +2129,49 @@ do
 			end
 		end
 	end
+	local function checkTable(t)
+		if type(rawget(t, "currentSubjectDistance")) == "number"
+			and type(t.SetCameraToSubjectDistance) == "function"
+			and type(t.GetCameraToSubjectDistance) == "function"
+			and not table.find(zoomControllers, t) then
+			zoomControllers[#zoomControllers + 1] = t
+		end
+		if not mouseLockCtrl then
+			local amc = rawget(t, "activeMouseLockController")
+			if type(amc) == "table" then
+				mouseLockCtrl = amc
+			elseif type(t.GetIsMouseLocked) == "function" and type(t.DoMouseLockSwitch) == "function"
+				and rawget(t, "isMouseLocked") ~= nil then
+				mouseLockCtrl = t
+			end
+		end
+	end
+	local GC_KEYS = { "currentSubjectDistance", "activeMouseLockController", "isMouseLocked" }
+	local function scanFiltered()
+		for _, key in ipairs(GC_KEYS) do
+			local found = Env.filtergc("table", { Keys = { key } })
+			if type(found) ~= "table" then return false end
+			for _, t in ipairs(found) do
+				if type(t) == "table" then pcall(checkTable, t) end
+			end
+		end
+		return true
+	end
 	local function scanGC()
-		if gcDone or not Env.getgc then gcDone = true return end
+		if gcDone then return end
 		gcDone = true
+		if Env.filtergc then
+			local ok, done = pcall(scanFiltered)
+			if ok and done then
+				log(#zoomControllers .. " zoom controller(s) found (filtergc)")
+				return
+			end
+		end
+		if not Env.getgc then return end
 		pcall(function()
 			local n = 0
 			for _, t in ipairs(Env.getgc(true)) do
-				if type(t) == "table" then
-					pcall(function()
-						if type(rawget(t, "currentSubjectDistance")) == "number"
-							and type(t.SetCameraToSubjectDistance) == "function"
-							and type(t.GetCameraToSubjectDistance) == "function" then
-							zoomControllers[#zoomControllers + 1] = t
-						end
-						if not mouseLockCtrl then
-							local amc = rawget(t, "activeMouseLockController")
-							if type(amc) == "table" then
-								mouseLockCtrl = amc
-							elseif type(t.GetIsMouseLocked) == "function" and type(t.DoMouseLockSwitch) == "function"
-								and rawget(t, "isMouseLocked") ~= nil then
-								mouseLockCtrl = t
-							end
-						end
-					end)
-				end
+				if type(t) == "table" then pcall(checkTable, t) end
 				n = n + 1
 				if n % 20000 == 0 then task.wait() end
 				if Janitor.unloading then break end
@@ -2445,7 +2474,7 @@ do
 	}
 	local ID_M1, ID_M2 = 96, 97
 	InputSys.ID_M1, InputSys.ID_M2 = ID_M1, ID_M2
-	local KEY_BY_ENUM, KEY_VK, KEY_SHORT = {}, {}, {}
+	local KEY_BY_ENUM, KEY_VK, KEY_SHORT, KEY_KC = {}, {}, {}, {}
 	for id, k in ipairs(KEYLIST) do
 		KEY_SHORT[id] = k[3]
 		if k[1] then
@@ -2453,9 +2482,12 @@ do
 			if ok and item then
 				KEY_BY_ENUM[item] = id
 				KEY_VK[id] = k[2]
+				KEY_KC[id] = item
 			end
 		end
 	end
+	local EXTENDED = { [0x21] = true, [0x22] = true, [0x23] = true, [0x24] = true, [0x25] = true, [0x26] = true,
+		[0x27] = true, [0x28] = true, [0x2D] = true, [0x2E] = true, [0x6F] = true, [0xA3] = true, [0xA5] = true }
 	local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
 	local controlIds, controlDirty = {}, true
 	Controls.Changed("*", function() controlDirty = true end)
@@ -2608,14 +2640,21 @@ do
 		if isMouseId(id) then return InputSys.Available.Clicks and Settings.On("Replay Mouse Clicks") end
 		return InputSys.Available.Keys and Settings.On("Replay Keyboard") and KEY_VK[id] ~= nil
 	end
+	local function vimKey(id, down)
+		local vim, kc = Env.VirtualInput, KEY_KC[id]
+		if not (vim and kc and EXTENDED[KEY_VK[id]]) then return false end
+		return (pcall(vim.SendKeyEvent, vim, down, kc, false, game))
+	end
 	local function sendDown(id)
 		return (pcall(function()
-			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press() else Env.keypress(KEY_VK[id]) end
+			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press()
+			elseif not vimKey(id, true) then Env.keypress(KEY_VK[id]) end
 		end))
 	end
 	local function sendUp(id)
 		pcall(function()
-			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release() else Env.keyrelease(KEY_VK[id]) end
+			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release()
+			elseif not vimKey(id, false) then Env.keyrelease(KEY_VK[id]) end
 		end)
 	end
 	local function press(id)
@@ -2677,6 +2716,11 @@ do
 			syncTo(InputSys.HeldAt(data, frame))
 		end
 		replay.applied = frame
+		if next(replay.state) ~= nil and Env.WindowActive() then
+			for id in pairs(replay.state) do
+				if not replay.injected[id] then press(id) end
+			end
+		end
 	end
 	function InputSys.FrameLocked(fr)
 		if not fr then return false end
@@ -2693,12 +2737,68 @@ do
 		end
 		return fr.MX, fr.MY
 	end
+	local function newAxis() return { n = 0, st = 0, sr = 0, stt = 0, str = 0, lo = math.huge, hi = -math.huge, a = 1, b = 0, ok = false } end
+	local cal = { x = newAxis(), y = newAxis(), vx = 0, vy = 0, pend = nil }
+	local CAL_SPREAD = 150
+	local function calExpect(ax, t) return ax.ok and (ax.a * t + ax.b) or t end
+	local function calAdd(ax, t, r, prev)
+		local expect = calExpect(ax, t)
+		local tol = ax.ok and 3 or (math.abs(t) * 0.04 + 4)
+		if math.abs(r - expect) > tol then return end
+		if prev and prev ~= t and math.abs(r - calExpect(ax, prev)) < math.abs(r - expect) then return end
+		if ax.n >= 240 then
+			ax.n, ax.st, ax.sr, ax.stt, ax.str = ax.n / 2, ax.st / 2, ax.sr / 2, ax.stt / 2, ax.str / 2
+		end
+		ax.n = ax.n + 1
+		ax.st, ax.sr, ax.stt, ax.str = ax.st + t, ax.sr + r, ax.stt + t * t, ax.str + t * r
+		if t < ax.lo then ax.lo = t end
+		if t > ax.hi then ax.hi = t end
+		if ax.n >= 6 and ax.hi - ax.lo >= CAL_SPREAD then
+			local d = ax.n * ax.stt - ax.st * ax.st
+			if d > 0 then
+				local a = (ax.n * ax.str - ax.st * ax.sr) / d
+				local b = (ax.sr - a * ax.st) / ax.n
+				if a >= 0.9 and a <= 1.1 and math.abs(b) <= 64 then ax.a, ax.b, ax.ok = a, b, true end
+			end
+		end
+	end
+	local function calRead()
+		local p = cal.pend
+		if not p then return end
+		cal.pend = nil
+		if os.clock() - p[3] > 0.25 or UIS.MouseBehavior ~= Enum.MouseBehavior.Default then return end
+		local okM, m = pcall(UIS.GetMouseLocation, UIS)
+		if not okM then return end
+		calAdd(cal.x, p[1], m.X, p[4])
+		calAdd(cal.y, p[2], m.Y, p[5])
+	end
+	local function calAim(ax, v)
+		if not ax.ok then return v end
+		return floor((v - ax.b) / ax.a + 0.5)
+	end
+	function InputSys.MouseCalibration()
+		return { x = { a = cal.x.a, b = cal.x.b, ok = cal.x.ok, n = cal.x.n }, y = { a = cal.y.a, b = cal.y.b, ok = cal.y.ok, n = cal.y.n } }
+	end
 	function InputSys.MoveRealMouse(x, y)
 		if not InputSys.Available.Move or not Env.WindowActive() then return end
+		local cam = workspace.CurrentCamera
+		local vp = cam and cam.ViewportSize
+		if vp and (vp.X ~= cal.vx or vp.Y ~= cal.vy) then
+			cal.x, cal.y, cal.vx, cal.vy, cal.pend, cal.sentX, cal.sentY = newAxis(), newAxis(), vp.X, vp.Y, nil, nil, nil
+		end
+		calRead()
 		x, y = floor(x + 0.5), floor(y + 0.5)
 		if x == replay.lastMX and y == replay.lastMY then return end
 		replay.lastMX, replay.lastMY = x, y
-		pcall(Env.mousemoveabs, x, y)
+		local sx, sy = calAim(cal.x, x), calAim(cal.y, y)
+		if pcall(Env.mousemoveabs, sx, sy) then
+			if Env.mousemoverel then
+				pcall(Env.mousemoverel, 1, 0)
+				pcall(Env.mousemoverel, -1, 0)
+			end
+			cal.pend = { sx, sy, os.clock(), cal.sentX, cal.sentY }
+			cal.sentX, cal.sentY = sx, sy
+		end
 	end
 	function InputSys.ReplayMouse(fr)
 		if not replay.active or not fr or fr.MX == nil then return end
@@ -2715,6 +2815,7 @@ do
 		replay.active = false
 		replay.applied = 0
 		replay.lastMX, replay.lastMY = nil, nil
+		cal.pend, cal.sentX, cal.sentY = nil, nil, nil
 		return had
 	end
 	function InputSys.Start(gui)

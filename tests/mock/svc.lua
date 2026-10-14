@@ -109,6 +109,15 @@ cls("AssetService", "Instance", {}, {
 		return img
 	end,
 })
+-- VirtualInputManager:SendKeyEvent hands Roblox a key with its exact KeyCode (seen in the client: InputBegan /
+-- InputEnded fire with it). M.vimFail makes it error (like a client where it isn't allowed)
+cls("VirtualInputManager", "Instance", {}, {
+	SendKeyEvent = function(_, down, keyCode, isRepeat, layer)
+		if M.vimFail then error("VirtualInputManager:SendKeyEvent is not allowed (mock)", 2) end
+		M.inputLog[#M.inputLog + 1] = { "vimkey", down, keyCode.Name }
+		if down then M.pressKey(keyCode) else M.releaseKey(keyCode) end
+	end,
+})
 Content = {
 	none = { SourceType = "None" },
 	fromObject = function(o) return { SourceType = "Object", Object = o } end,
@@ -126,7 +135,8 @@ local SERVICE_CLASS = { Workspace = "Workspace", Players = "Players", RunService
 	ContextActionService = "ContextActionService", Teams = "Teams", Chat = "Chat", TextChatService = "TextChatService",
 	StarterPlayer = "StarterPlayer", StarterPack = "StarterPack", CollectionService = "CollectionService",
 	PhysicsService = "PhysicsService", UserGameSettings = "UserGameSettings", MarketplaceService = "MarketplaceService",
-	VirtualUser = "VirtualUser", Debris = "Debris", LogService = "LogService", AssetService = "AssetService" }
+	VirtualUser = "VirtualUser", Debris = "Debris", LogService = "LogService", AssetService = "AssetService",
+	VirtualInputManager = "VirtualInputManager" }
 local function getService(name)
 	local s = services[name]
 	if s then return s end
@@ -631,10 +641,56 @@ mouse1press = logInput("mouse1press")
 mouse1release = logInput("mouse1release")
 mouse2press = logInput("mouse2press")
 mouse2release = logInput("mouse2release")
-mousemoveabs = function(x, y) M.inputLog[#M.inputLog + 1] = { "mousemoveabs", x, y }; M.mouse = Vector2.new(x, y) end
-mousemoverel = logInput("mousemoverel")
+-- Real's mouse as measured in the client, when M.realMouse = { w = screen width, h = height, ox, oy = client
+-- origin on the screen }: mousemoveabs scales with integer maths (the factor 65535 / (size - 1) cut to a whole
+-- number), and Roblox reports where the cursor was before the latest mouse event (a move shows up when the
+-- next event comes; a 1 px relative step back and forth moves nothing at that speed)
+M.realMouse, M.osMouse = nil, nil
+local function realAxis(v, o, size)
+	local n = (v + o) * math.floor(65535 / (size - 1))
+	return math.floor(n * size / 65536) - o
+end
+mousemoveabs = function(x, y)
+	M.inputLog[#M.inputLog + 1] = { "mousemoveabs", x, y }
+	local r = M.realMouse
+	if not r then M.mouse = Vector2.new(x, y) return end
+	local nx, ny = realAxis(x, r.ox, r.w), realAxis(y, r.oy, r.h)
+	local cur = M.osMouse or M.mouse
+	if cur.X ~= nx or cur.Y ~= ny then -- a mouse event: Roblox now shows where the cursor was before it
+		M.mouse = cur
+		M.osMouse = Vector2.new(nx, ny)
+	end
+end
+mousemoverel = function(dx, dy)
+	M.inputLog[#M.inputLog + 1] = { "mousemoverel", dx, dy }
+	if M.realMouse and M.osMouse then M.mouse = M.osMouse end
+end
 mousescroll = logInput("mousescroll")
-getgc = function() return {} end
+-- the garbage collector: M.gcTables (tests add tables); getgc(true) returns them all, filtergc the ones with
+-- every key in options.Keys (Real docs)
+M.gcTables, M.gcCalls = {}, { getgc = 0, filtergc = 0 }
+getgc = function(includeTables)
+	M.gcCalls.getgc = M.gcCalls.getgc + 1
+	return includeTables and table.clone(M.gcTables) or {}
+end
+filtergc = function(kind, options, one)
+	M.gcCalls.filtergc = M.gcCalls.filtergc + 1
+	local out = {}
+	if kind == "table" then
+		for _, t in ipairs(M.gcTables) do
+			local match = true
+			for _, k in ipairs(options.Keys or {}) do
+				if rawget(t, k) == nil then match = false break end
+			end
+			if match then
+				if one then return t end
+				out[#out + 1] = t
+			end
+		end
+	end
+	if one then return nil end
+	return out
+end
 identifyexecutor = function() return "MockExec", "1.0" end
 
 -- print / warn capture
