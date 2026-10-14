@@ -269,7 +269,10 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2840)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,2910)},{
+						LV("974", " 10/14/26 - 2.38.3"),
+						LI("974_1", "   -   Camera script hooked in place (hookfunction)"),
+						LI("974_2", "   -   No visible PlayerGui interface unless you allow it"),
 						LV("975", " 10/14/26 - 2.38.2"),
 						LI("975_1", "   -   Every Real executor function checked for HappaTAS"),
 						LI("975_2", "   -   Arrow keys, Home, End, PgUp/PgDn, right Ctrl/Alt fixed"),
@@ -663,7 +666,8 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 		return gui
 	end
 
-	-- parents a ScreenGui where game scripts can't read it (gethui -> CoreGui -> PlayerGui).
+	-- parents a ScreenGui where game scripts can't read it (gethui -> CoreGui -> PlayerGui, the last one
+	-- only when the player allows it).
 	-- mayWait: when neither hidden place takes it, both are tried again a frame later before PlayerGui
 	-- (gethui() can be nil for the rest of a frame, see gameCall in the bridge)
 	local function tryParent(gui, parent)
@@ -686,6 +690,11 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 				UI.ParentName = "CoreGui"
 				return true
 			end
+		end
+		-- PlayerGui is where game scripts can see it: only with "Allow PlayerGui Interface" on
+		if not Settings.On("Allow PlayerGui Interface") then
+			UI.Refused = true
+			return false
 		end
 		local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
 		if pg then

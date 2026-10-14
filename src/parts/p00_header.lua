@@ -1,10 +1,17 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.2
+	Version: V2.38.3
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.3 changes (short): harder for game scripts to notice
+		- The game's camera script is changed with the executor's hookfunction when it has one: its functions
+		  stay the same function values (before, they were swapped for HappaTAS's own in the script's tables,
+		  which a game script could notice). Unload undoes it with restorefunction.
+		- The interface only goes to PlayerGui, where game scripts can see it, when "Allow Visible Interface
+		  (PlayerGui)" is on (off by default). It is only needed on an executor without gethui() or CoreGui.
 
 	V2.38.2 changes (short): every function in Real's documentation checked against HappaTAS, the ones
 	that help are used now (measured in the Roblox client)
@@ -103,7 +110,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.2"
+local VERSION = "V2.38.3"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

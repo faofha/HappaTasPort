@@ -148,7 +148,11 @@ local function getService(name)
 	services[name] = s
 	return s
 end
-C.DataModel.Methods.GetService = function(self, name) return getService(name) end
+-- M.coreGuiLocked: CoreGui can't be had (like an executor without the access)
+C.DataModel.Methods.GetService = function(self, name)
+	if name == "CoreGui" and M.coreGuiLocked then error("The current thread cannot access 'CoreGui' (mock)", 2) end
+	return getService(name)
+end
 C.DataModel.Methods.FindService = function(self, name) return services[name] end
 C.DataModel.Methods.IsLoaded = function() return true end
 C.DataModel.Methods.BindToClose = function() end
@@ -629,7 +633,19 @@ cloneref = function(x) return x end
 local hui = Instance.new("Folder")
 hui.Name = "HiddenUI"
 hui.Parent = services.CoreGui
-gethui = function() return hui end
+gethui = function() if M.noHui then return nil end return hui end
+-- hookfunction / restorefunction (Real docs: the target keeps its identity and runs the replacement, the
+-- returned copy runs the original). Plain Lua can't change a function in place, so the mock keeps the
+-- replacement in M.hooks[target] (M.callHooked runs a function the way the hooked client would);
+-- M.hookFail makes hookfunction error
+M.hooks = {}
+hookfunction = function(target, replacement)
+	if M.hookFail then error("hookfunction failed (mock)", 2) end
+	M.hooks[target] = replacement
+	return function(...) return target(...) end
+end
+restorefunction = function(target) M.hooks[target] = nil end
+function M.callHooked(f, ...) return (M.hooks[f] or f)(...) end
 M.hui = hui
 M.windowActive = true
 isrbxactive = function() return M.windowActive end

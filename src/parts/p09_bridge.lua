@@ -21,7 +21,7 @@ do
 
 	local cameras                 -- CameraModule (PlayerModule:GetCameras())
 	local patchedModule = nil
-	local originals = {}          -- { table, key, original, wrapper }
+	local originals = {}          -- { table, key, original, wrapper } or { hooked = function }
 	local rotate = true
 	local shiftlockBlocked = false
 	local freeMouse = false
@@ -44,11 +44,26 @@ do
 		task.spawn(pcall, f, ...)
 	end
 
+	-- Changes the behaviour of one of the camera script's functions. With the executor's hookfunction the
+	-- function itself is changed and stays the same function value (Real docs: it "returns a callable copy
+	-- of the original"), so a game script that keeps or compares the function sees nothing new; undone with
+	-- restorefunction. Without them the table field is swapped for the wrapper (as before V2.38.3).
 	local function patch(tbl, key, makeWrapper)
 		if type(tbl) ~= "table" then return false end
 		local ok = pcall(function()
 			local orig = rawget(tbl, key) or tbl[key]
 			if type(orig) ~= "function" then error("missing " .. tostring(key)) end
+			if Env.hookfunction and Env.restorefunction then
+				local copy
+				local okH = pcall(function()
+					copy = Env.hookfunction(orig, makeWrapper(function(...) return copy(...) end))
+				end)
+				if okH and type(copy) == "function" then
+					originals[#originals + 1] = { hooked = orig }
+					return
+				end
+				pcall(Env.restorefunction, orig) -- a half-done hook
+			end
 			local wrapper = makeWrapper(orig)
 			tbl[key] = wrapper
 			originals[#originals + 1] = { tbl, key, orig, wrapper }
@@ -434,7 +449,8 @@ do
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()
-				if o[1][o[2]] == o[4] then o[1][o[2]] = o[3] end
+				if o.hooked then Env.restorefunction(o.hooked)
+				elseif o[1][o[2]] == o[4] then o[1][o[2]] = o[3] end
 			end)
 		end
 		originals = {}

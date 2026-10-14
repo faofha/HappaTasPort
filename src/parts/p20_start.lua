@@ -27,6 +27,11 @@ UI.RemoveStale()
 local Gui = UI.Create()
 if not UI.Attach(Gui, true) then
 	Gui:Destroy()
+	if UI.Refused then
+		error("[HappaTAS] this executor gives no hidden place for the interface (gethui / CoreGui), and PlayerGui"
+			.. " would let game scripts see it. To allow that anyway, set \"Allow PlayerGui Interface\" to 1 in"
+			.. " HappaTasPort/Settings.json.", 0)
+	end
 	error("[HappaTAS] could not parent the interface anywhere (gethui / CoreGui / PlayerGui)")
 end
 Janitor.add(Gui)
