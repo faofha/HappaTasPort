@@ -7,8 +7,10 @@
 --    v1 columns: FA FB DT TA PX PY PZ ROT LV AV ST CR CP ZM PO JT SP AN MS IN MB
 --    v2 adds:    CO OB                      (client objects + object table)
 --    v3 adds:    FC VP TL TS BE BK          (extra flags, viewport, tools, tool names, buttons, button table)
+--    v4:         the v3 columns; the client object frames use their v3 layout (clocks + screw motion), so
+--                older versions refuse the file instead of playing its client objects wrong
 --  FC bits: 1 viewport changed, 2 tool events, 4 died this frame, 8 button events
---  Old v1 / v2 files load exactly like before.
+--  Old v1 / v2 / v3 files load exactly like before.
 -- ================================================================================================
 local Codec = {}
 do
@@ -21,7 +23,7 @@ do
 	for i, n in ipairs(COLUMNS_V1) do COLUMNS_V2[i] = n; COLUMNS_V3[i] = n end
 	for _, n in ipairs({ "CO", "OB" }) do COLUMNS_V2[#COLUMNS_V2 + 1] = n; COLUMNS_V3[#COLUMNS_V3 + 1] = n end
 	for _, n in ipairs({ "FC", "VP", "TL", "TS", "BE", "BK" }) do COLUMNS_V3[#COLUMNS_V3 + 1] = n end
-	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3 }
+	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3 }
 
 	local TOOL_CODE = { Equip = 1, Unequip = 2, Activate = 3, Deactivate = 4 }
 	local TOOL_NAME = { "Equip", "Unequip", "Activate", "Deactivate" }
@@ -161,7 +163,7 @@ do
 		local cols = {}
 		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
 		local coParts = {}
-		local hasCO = false
+		local hasCO, coV3 = false, false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
 		local ROT, LV, AV, ST, CR, CP, ZM = cols.ROT, cols.LV, cols.AV, cols.ST, cols.CR, cols.CP, cols.ZM
 		local PO, JT, SP, AN, MS, IN, MB = cols.PO, cols.JT, cols.SP, cols.AN, cols.MS, cols.IN, cols.MB
@@ -351,6 +353,7 @@ do
 
 			if f.CO then
 				hasCO = true
+				if not coV3 and byte(f.CO, 1) >= 4 then coV3 = true end
 				fb = fb + 128
 				local hdr = {}
 				putVar(hdr, #f.CO)
@@ -412,6 +415,7 @@ do
 		local version = 1
 		if hasCO or (objects and #objects > 0) then version = 2 end
 		if v3 then version = 3 end
+		if coV3 then version = 4 end
 		if version >= 2 then
 			local OB = cols.OB
 			putVar(OB, #(objects or {}))
@@ -473,7 +477,7 @@ do
 		if not Codec.IsCompact(data) then error("not a HappaTAS binary file", 0) end
 		if #data > CONFIG.MaxFileBytes then error("file is too big", 0) end
 		local version, flags = byte(data, 5), byte(data, 6)
-		if version ~= 1 and version ~= 2 and version ~= 3 then error("unsupported file version " .. tostring(version), 0) end
+		if version ~= 1 and version ~= 2 and version ~= 3 and version ~= 4 then error("unsupported file version " .. tostring(version), 0) end
 		local rd = newReader(data, 7)
 		local total = getVar(rd)
 		local rawLen = getVar(rd)

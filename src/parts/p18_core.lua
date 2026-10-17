@@ -661,7 +661,7 @@ do
 		local data = C.data
 		C.lastVX, C.lastVY = nil, nil
 		InputSys.BeginRecording(data, C.merge and C.mergeBaseHeld or nil)
-		ClientObjects.BeginRecording()
+		ClientObjects.BeginRecording(data[#data])
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
 		Lighting.Resume(data, #data)
@@ -1046,6 +1046,8 @@ do
 				local vpChanged = (n == 0 or vx ~= C.lastVX or vy ~= C.lastVY)
 				if vpChanged then C.lastVX, C.lastVY = vx, vy end
 				local curZoom = r(Bridge.GetZoom(), 1000)
+				-- the simulation and wall clocks of this frame: client objects move on them (see ClientObjects)
+				C.recSim, C.recWall = time(), os.clock()
 				data[n + 1] = {
 					Velocity = { Linear = C.Vector3ToTable(HRP.AssemblyLinearVelocity), Angular = C.Vector3ToTable(HRP.AssemblyAngularVelocity) },
 					CamCframe = C.CFrameToTable(workspace.CurrentCamera.CFrame),
@@ -1079,29 +1081,36 @@ do
 	end
 
 	-- ---------------------------------------------------------------------------------------- PreSimulation
+	-- the frame made in the last render step gets the character's state, client objects, tools and buttons.
+	-- Normally in PreSimulation (before the frame's physics). Roblox steps physics at 240 Hz and a frame
+	-- without a physics step has no PreSimulation (measured: at 240 FPS one frame in five), so then it is
+	-- done in Heartbeat (nothing has moved since)
+	local function fillFrame(data)
+		local fd = data[#data]
+		if not (fd and fd.Cframe == nil) then return end
+		Profiler.Begin("Record")
+		local HRP, hum = C.HRP, C.Humanoid
+		local state = hum:GetState()
+		fd.Cframe = C.CFrameToTable(HRP.CFrame)
+		fd.State = state.Value
+		fd.Anim = Bridge.GetAnimation(#data == 2)
+		Profiler.End("Record")
+		Profiler.Begin("Client Objects")
+		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd)
+		Profiler.End("Client Objects")
+		fd.Tools = ToolSync.Take()
+		Profiler.Begin("Buttons")
+		fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
+		Profiler.End("Buttons")
+		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
+		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
+	end
+
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
 		local data = C.data
 		if C.mode == 2 and C.CharLoaded() and not C.paused and not C.FirstFrameRecord and C.NotDead() then
-			local fd = data[#data]
-			if fd and fd.Cframe == nil then
-				Profiler.Begin("Record")
-				local HRP, hum = C.HRP, C.Humanoid
-				local state = hum:GetState()
-				fd.Cframe = C.CFrameToTable(HRP.CFrame)
-				fd.State = state.Value
-				fd.Anim = Bridge.GetAnimation(#data == 2)
-				Profiler.End("Record")
-				Profiler.Begin("Client Objects")
-				fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime)
-				Profiler.End("Client Objects")
-				fd.Tools = ToolSync.Take()
-				Profiler.Begin("Buttons")
-				fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
-				Profiler.End("Buttons")
-				fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
-				if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
-			end
+			fillFrame(data)
 		elseif C.mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
 			if Settings.On("Interpolate Playback") then
 				local p = C.PlaybackPose()
@@ -1224,6 +1233,9 @@ do
 						data[1].FrameTime = r(C.LastFrameTime, 1000000)
 						data[1].TotalTime = r(C.LastFrameTime, 1000000)
 					end
+					-- a frame without a physics step had no PreSimulation: filled here (it used to be dropped,
+					-- with its time and inputs: a TAS recorded at 240 FPS replayed about 12 % too fast)
+					if #data > 0 and data[#data].Cframe == nil and not C.FirstFrameRecord and C.NotDead() then fillFrame(data) end
 					if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 					C.frame = #data
 					Buttons.Step(data[#data] and data[#data].TotalTime or 0)

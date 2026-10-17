@@ -362,7 +362,13 @@ C.BasePart.Methods.ApplyImpulse = function() end
 C.BasePart.Methods.SetNetworkOwner = function() end
 C.BasePart.Methods.GetNetworkOwner = function() return nil end
 C.BasePart.Methods.CanSetNetworkOwnership = function() return false end
-C.BasePart.Methods.GetVelocityAtPosition = function(self) return self.AssemblyLinearVelocity end
+-- Roblox: "the linear velocity of the part's assembly at the given position" = the centre of mass's velocity
+-- + angular velocity x (position - centre of mass)
+C.BasePart.Methods.GetVelocityAtPosition = function(self, pos)
+	local v, w = self.AssemblyLinearVelocity, self.AssemblyAngularVelocity
+	if not pos or w.Magnitude == 0 then return v end
+	return v + w:Cross(pos - self.AssemblyCenterOfMass)
+end
 C.BasePart.Events = { "Touched", "TouchEnded" }
 local function project(cam, v)
 	local cf = cam.CFrame
@@ -731,14 +737,22 @@ end
 
 -- ------------------------------------------------------------------------------------------------ frame driver
 local RS = services.RunService
+-- M.simDt: nil = the simulation moves on with the frame's dt, or a function(dt) -> the simulated time of the
+-- frame (Roblox steps physics in 1/240 s steps, so at high frame rates a frame simulates 0, 1 or 2 steps).
+-- time() returns the simulation clock M.simNow
+M.simNow = 0
 function M.step(dt)
 	dt = dt or (1 / 60)
+	local sdt = dt
+	if M.simDt then sdt = M.simDt(dt) end
 	M.clockTicks = 0
 	M.clockOff = 0
 	M.now = M.now + dt
+	M.simNow = M.simNow + sdt
 	M.frame = M.frame + 1
-	RS.PreRender:Fire(dt)
+	-- (measured in the Roblox client: RenderStepped, its waiting threads first, then PreRender)
 	RS.RenderStepped:Fire(dt)
+	RS.PreRender:Fire(dt)
 	for _, b in ipairs(table.clone(binds)) do
 		local ok, err = pcall(b.fn, dt)
 		if not ok then M.logs[#M.logs + 1] = "BIND ERROR " .. b.name .. ": " .. tostring(err) end
@@ -748,10 +762,13 @@ function M.step(dt)
 	M.clockOff = M.jobMs and math.max(0, dt - M.jobMs / 1000) or 0
 	M.clockTicks = 0
 	RS.PreAnimation:Fire(dt)
-	RS.PreSimulation:Fire(dt)
-	RS.Stepped:Fire(M.now, dt)
-	M.physics(dt)
-	RS.PostSimulation:Fire(dt)
+	-- (measured in the Roblox client: a frame without a physics step has no PreSimulation / Stepped)
+	if sdt > 0 then
+		RS.PreSimulation:Fire(sdt)
+		RS.Stepped:Fire(M.simNow, sdt)
+		M.physics(sdt)
+		RS.PostSimulation:Fire(sdt)
+	end
 	RS.Heartbeat:Fire(dt)
 	M.resumeDue()
 end
