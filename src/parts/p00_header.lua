@@ -120,7 +120,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.4"
+local VERSION = "V2.38.12"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

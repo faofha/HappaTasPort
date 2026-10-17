@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.4 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.12 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.4"
+local VERSION = "V2.38.12"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -184,7 +184,7 @@ local function clampn(v, lo, hi)
 end
 local ZERO3 = Vector3.zero
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
-local ClientObjects, Buttons, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}
+local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
 local Core, Menu = {}, {}
 local ControlsTable = {
 	{ "Idle", "1" },
@@ -225,6 +225,7 @@ local SettingsTable = {
 	{ name = "Smooth Client Objects",    default = 1, section = "World Sync" },
 	{ name = "Frustum Culling CO",       default = 1, section = "World Sync" },
 	{ name = "Sync Button Timers",       default = 1, section = "World Sync" },
+	{ name = "Sync Lighting",            default = 1, section = "World Sync" },
 	{ name = "Show Stats (Idle)",        default = 1, section = "Interface" },
 	{ name = "Show Stats (Create)",      default = 1, section = "Interface" },
 	{ name = "Show Stats (Test)",        default = 1, section = "Interface" },
@@ -637,7 +638,50 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,3000)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,3960)},{
+						LV("965", " 10/17/26 - 2.38.12"),
+						LI("965_1", "   -   Synced exact button timer decimal places (e.g. 0.90) from live game UI & configs"),
+						LV("966", " 10/17/26 - 2.38.11"),
+						LI("966_1", "   -   Eliminated lag with many buttons (event-indexed seek & cached scans)"),
+						LI("966_2", "   -   Fixed shiftlock cursor & mouse lock state after Test replay ends"),
+						LI("966_3", "   -   Fixed first-person zoom resetting to Frame 1 zoom after Test ends"),
+						LI("966_4", "   -   Synced part timer SurfaceGui/BillboardGui with top screen timer UI"),
+						LV("967", " 10/16/26 - 2.38.10"),
+						LI("967_1", "   -   Create mode rewind fix: buttons un-glow & reset before press"),
+						LI("967_2", "   -   Locked mouse cursor in FP & shiftlock while paused/rewinding"),
+						LI("967_3", "   -   Cloned EToH v6.1.3 timer UI with UIStroke & zero duplicates"),
+						LI("967_4", "   -   Paused/unpaused button lock: no timer restart when near end"),
+						LI("967_5", "   -   Fixed first-person character body visibility (Test -> Create)"),
+						LI("967_6", "   -   FPS boost: event-driven lighting & CO props, cached CFrames"),
+						LI("967_7", "   -   Smaller files & lower RAM: compact v2/v3 encoding & table reuse"),
+						LV("968", " 10/16/26 - 2.38.9"),
+						LI("968_1", "   -   3-digit number and Digits/NeedDigits part property support"),
+						LI("968_2", "   -   Duplicate timer prevention: re-touching after rewind starts 1 clean timer"),
+						LI("968_3", "   -   Matched timer sizing: restored timers dynamically match other timers' size"),
+						LV("969", " 10/16/26 - 2.38.8"),
+						LI("969_1", "   -   Top screen timer UI direct sync & restoration across all ScreenGuis"),
+						LI("969_2", "   -   Screen countdown freezes strictly on pause without advancing"),
+						LI("969_3", "   -   Scrubbing backwards accurately restores and reverses top timer UI"),
+						LI("969_4", "   -   ModuleScript & Attribute config support for EToH kits"),
+						LI("969_5", "   -   All legacy references migrated to EToH"),
+						LV("970", " 10/16/26 - 2.38.7"),
+						LI("970_1", "   -   Timed buttons: PlayerGui EffectGui.TimerList synchronized"),
+						LI("970_2", "   -   Screen timer freezes while paused and follows TAS frame scrubbing"),
+						LI("970_3", "   -   Fixed stale index cache preventing newly recorded button presses"),
+						LI("970_4", "   -   ModuleScript & Attribute config support for EToH kits"),
+						LI("970_5", "   -   Infinite restart loop suppressed via pause debounce"),
+						LV("971", " 10/16/26 - 2.38.6"),
+						LI("971_1", "   -   EToH kit v6 Lighting Changers: all properties and effects synced"),
+						LI("971_2", "   -   Lighting timeline trimming fixes corrupted scrub/rewind searches"),
+						LI("971_3", "   -   Timed buttons: stopped infinite restart loop when paused"),
+						LI("971_4", "   -   Button timer UI locked at RenderPriority.Last to prevent overrides"),
+						LI("971_5", "   -   Vanishers (fading platforms): tracked, paused, and restored"),
+						LV("972", " 10/16/26 - 2.38.5"),
+						LI("972_1", "   -   Timed buttons fixed: timer freezes while paused, reverses cleanly"),
+						LI("972_2", "   -   EToH Kit v6.1.3 button detection for Configurations & models"),
+						LI("972_3", "   -   Beat Blocks synced and frozen while paused without script overrides"),
+						LI("972_4", "   -   Morph buttons and morphing part (Base) shape/size tracked"),
+						LI("972_5", "   -   Lighting Changers: game.Lighting properties & effects synced"),
 						LV("973", " 10/14/26 - 2.38.4"),
 						LI("973_1", "   -   MicroProfiler Avg = every frame since the count started"),
 						LI("973_2", "   -   Picking Aggregate Infinite starts Avg and Max again"),
@@ -847,7 +891,7 @@ do
 					HD("29", "Keyboard and Mouse Inputs"),
 					PA("29a", 147, "Your keys, right click, mouse wheel and mouse position are recorded together with every frame and replayed while testing, using the executor's input functions (keypress, mouse2press, mousemoveabs, mousescroll). The keys you use for the TAS menu are never recorded. Typing in a text box or clicking this menu is ignored. Keep the Roblox window focused during playback and keep your hands off the keyboard and mouse. The three Replay switches in Settings turn each part off."),
 					HD("29b", "Client Objects"),
-					PA("29c", 184, "Turn on 'Sync Client Objects' in Settings (off by default) to record the objects only your game client shows: moving, falling and swinging platforms, balloons, pushboxes, turret bullets, vanishers, beat blocks and other parts that move or change while you play (EToH kit objects). They are saved with the TAS and put back while testing and scrubbing. 'Smooth Client Objects' blends between recorded keyframes so they move smoothly at any FPS. Sounds, particles, lighting and GUIs are not synced."),
+					PA("29c", 184, "Turn on 'Sync Client Objects' in Settings (off by default) to record the objects only your game client shows: moving, falling and swinging platforms, balloons, pushboxes, turret bullets, vanishers, beat blocks, morph buttons and other parts that move or change while you play (EToH kit objects). They are saved with the TAS and put back while testing and scrubbing. 'Smooth Client Objects' blends between recorded keyframes so they move smoothly at any FPS. Timed buttons and lighting changes are also synced. Sounds, particles and GUIs are not synced."),
 	                    HD("PortSettingsHeader", "Executor Port Settings"),
 	                    PA("PortSettingsDescription", 225, "Show Completion Message controls the end-of-playback notice. Ignore Game Processed lets HappaTAS controls respond when Roblox marks an input as processed (the Menu key always does). No HappaTAS key does anything while you type in chat or a text box. NohBoard Cursor draws a fake cursor that stays still while the camera is locked (right click, shift lock, first person) and moves the hidden real cursor like the camera while testing. Invisible Mouse Speed scales that movement."),
 					HD("FeaturesHeader", "Feature Modules & Tools"),
@@ -1232,8 +1276,9 @@ do
 	end
 	Codec.Lz4Decompress = lz4Decompress
 	function Codec.Encode(frames, progress, objects, buttons)
+		local total = #frames
 		local cols = {}
-		for _, name in ipairs(COLUMNS_V3) do cols[name] = {} end
+		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
 		local coParts = {}
 		local hasCO = false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
@@ -1241,7 +1286,6 @@ do
 		local PO, JT, SP, AN, MS, IN, MB = cols.PO, cols.JT, cols.SP, cols.AN, cols.MS, cols.IN, cols.MB
 		local FC, VP, TL, BE = cols.FC, cols.VP, cols.TL, cols.BE
 		local v3 = (buttons and #buttons > 0) or false
-		local total = #frames
 		local hasMouse, mouse0x, mouse0y = false, 0, 0
 		for i = 1, total do
 			local f = frames[i]
@@ -1419,7 +1463,7 @@ do
 				coParts[#coParts + 1] = bufToString(hdr)
 				coParts[#coParts + 1] = f.CO
 			end
-			if f.VX then
+			if hasMouse and f.VX then
 				local vx, vy = q(f.VX, 10), q(f.VY or 0, 10)
 				if vx ~= pVX or vy ~= pVY then
 					fc = fc + 1
@@ -1562,7 +1606,7 @@ do
 			if cnt > colLen(R.TS) then error("tool table is broken", 0) end
 			for k = 1, cnt do toolNames[k] = getStr(R.TS) end
 		end
-		local frames = {}
+		local frames = table.create(total)
 		local FA, FB, FC, DT, TA, PX, PY, PZ = R.FA, R.FB, R.FC, R.DT, R.TA, R.PX, R.PY, R.PZ
 		local pPos = { 0, 0, 0 }
 		local pRot = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }
@@ -2069,14 +2113,21 @@ do
 	local Default = Enum.MouseBehavior.Default
 	local LockCenter = Enum.MouseBehavior.LockCenter
 	local Scriptable = Enum.CameraType.Scriptable
-	local FIRST_PERSON = 1.0
+	local FIRST_PERSON = 0.55
 	local cameras
+	local activeCamCtrl = nil
+	local zoomModTbl = nil
+	local transparencyCtrl = nil
 	local patchedModule = nil
 	local originals = {}
 	local rotate = true
 	local shiftlockBlocked = false
 	local freeMouse = false
-	local snapUntil = 0
+	local camFreeze = false
+	local camFreezeZoom = false
+	local forceLockCenter = false
+	local snapZoom = false
+	local pendingRestore = nil
 	local mouseLockCtrl = nil
 	local zoomControllers = {}
 	local gcDone = false
@@ -2117,21 +2168,121 @@ do
 		patchedModule = playerModule
 		local camMod = playerModule:FindFirstChild("CameraModule")
 		if not camMod then return end
+		local camInp = camMod:FindFirstChild("CameraInput")
+		if camInp then
+			local okI, CameraInput = pcall(require, camInp)
+			if okI and type(CameraInput) == "table" then
+				if type(CameraInput.getRotation) == "function" then
+					patch(CameraInput, "getRotation", function(orig)
+						return function(...)
+							local rot = orig(...)
+							if camFreeze then return Vector2.zero end
+							return rot
+						end
+					end)
+				end
+				if type(CameraInput.getZoomDelta) == "function" then
+					patch(CameraInput, "getZoomDelta", function(orig)
+						return function(...)
+							local dz = orig(...)
+							if camFreezeZoom then return 0 end
+							return dz
+						end
+					end)
+				end
+			end
+		end
 		local baseCam = camMod:FindFirstChild("BaseCamera")
 		if baseCam then
 			local okR, BaseCamera = pcall(require, baseCam)
 			if okR and type(BaseCamera) == "table" then
 				patch(BaseCamera, "UpdateMouseBehavior", function(orig)
 					return function(self, ...)
+						if type(self) == "table" then
+							activeCamCtrl = self
+							if pendingRestore then
+								local pr = pendingRestore
+								pendingRestore = nil
+								pcall(function()
+									if type(pr.zoom) == "number" and pr.zoom > 0 then
+										self.currentSubjectDistance = pr.zoom < FIRST_PERSON and 0.5 or pr.zoom
+										if type(self.SetCameraToSubjectDistance) == "function" then
+											self:SetCameraToSubjectDistance(pr.zoom)
+										end
+										if pr.zoom < FIRST_PERSON then
+											if type(self.EnterFirstPerson) == "function" then self:EnterFirstPerson() else self.inFirstPerson = true end
+										elseif self.inFirstPerson then
+											if type(self.LeaveFirstPerson) == "function" then self:LeaveFirstPerson() else self.inFirstPerson = false end
+										end
+									end
+								end)
+							end
+							if not freeMouse and not camFreeze then
+								local isShift = Bridge.IsShiftlocked()
+								if self.inMouseLockedMode ~= isShift then
+									pcall(function()
+										if type(self.SetIsMouseLocked) == "function" then
+											self:SetIsMouseLocked(isShift)
+										else
+											self.inMouseLockedMode = isShift
+										end
+										if type(self.SetMouseLockOffset) == "function" then
+											self:SetMouseLockOffset(isShift and Vector3.new(1.75, 0, 0) or Vector3.zero)
+										end
+									end)
+								end
+							end
+						end
 						if freeMouse then
 							setMouseBehavior(Default)
 							return
 						end
+						if forceLockCenter or (camFreeze and (self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked())) then
+							setMouseBehavior(LockCenter)
+							if (not rotate or camFreeze) and UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
+							return
+						end
+						if camFreeze then
+							setMouseBehavior(Default)
+							return
+						end
 						local res = orig(self, ...)
-						if not rotate and UserGameSettings and (self.inFirstPerson or self.inMouseLockedMode) then
-							pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+						local lockedNow = self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+						if lockedNow then
+							setMouseBehavior(LockCenter)
+							if UserGameSettings then
+								local wantRot = (rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+								pcall(function() UserGameSettings.RotationType = wantRot end)
+							end
+						elseif UIS.MouseBehavior == LockCenter then
+							setMouseBehavior(Default)
+							if UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
 						end
 						return res
+					end
+				end)
+				if type(BaseCamera.CalculateNewLookCFrameFromArg) == "function" then
+					patch(BaseCamera, "CalculateNewLookCFrameFromArg", function(orig)
+						return function(self, suppliedLookVector, rotateInput, ...)
+							if camFreeze then rotateInput = Vector2.zero end
+							return orig(self, suppliedLookVector, rotateInput, ...)
+						end
+					end)
+				end
+			end
+		end
+		local classicCam = camMod:FindFirstChild("ClassicCamera")
+		if classicCam then
+			local okC, ClassicCamera = pcall(require, classicCam)
+			if okC and type(ClassicCamera) == "table" and type(ClassicCamera.Update) == "function" then
+				patch(ClassicCamera, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then activeCamCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -2140,15 +2291,30 @@ do
 		if zoomMod then
 			local okR, Zoom = pcall(require, zoomMod)
 			if okR and type(Zoom) == "table" then
+				zoomModTbl = Zoom
 				patch(Zoom, "Update", function(orig)
 					return function(renderDt, ...)
-						if snapUntil > 0 then
-							if os.clock() <= snapUntil and type(renderDt) == "number" then
-								renderDt = renderDt * 1000000
+						if snapZoom then
+							snapZoom = false
+							local res = orig(100, ...)
+							if type(Zoom.ReleaseSpring) == "function" then
+								pcall(Zoom.ReleaseSpring)
 							end
-							snapUntil = 0
+							return res
 						end
 						return orig(renderDt, ...)
+					end
+				end)
+			end
+		end
+		local transMod = camMod:FindFirstChild("TransparencyController")
+		if transMod then
+			local okT, TC = pcall(require, transMod)
+			if okT and type(TC) == "table" and type(TC.Update) == "function" then
+				patch(TC, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then transparencyCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -2161,6 +2327,17 @@ do
 			and not table.find(zoomControllers, t) then
 			zoomControllers[#zoomControllers + 1] = t
 		end
+		if type(rawget(t, "activeCameraController")) == "table"
+			or type(rawget(t, "activeTransparencyController")) == "table"
+			or type(rawget(t, "activeMouseLockController")) == "table" then
+			cameras = t
+			if type(rawget(t, "activeTransparencyController")) == "table" then
+				transparencyCtrl = rawget(t, "activeTransparencyController")
+			end
+		end
+		if not transparencyCtrl and rawget(t, "transparencyDirty") ~= nil and type(rawget(t, "cachedParts")) == "table" then
+			transparencyCtrl = t
+		end
 		if not mouseLockCtrl then
 			local amc = rawget(t, "activeMouseLockController")
 			if type(amc) == "table" then
@@ -2171,7 +2348,7 @@ do
 			end
 		end
 	end
-	local GC_KEYS = { "currentSubjectDistance", "activeMouseLockController", "isMouseLocked" }
+	local GC_KEYS = { "currentSubjectDistance", "activeCameraController", "activeTransparencyController", "activeMouseLockController", "isMouseLocked", "transparencyDirty" }
 	local function scanFiltered()
 		for _, key in ipairs(GC_KEYS) do
 			local found = Env.filtergc("table", { Keys = { key } })
@@ -2205,57 +2382,81 @@ do
 		log(#zoomControllers .. " zoom controller(s) found")
 	end
 	local function resolve()
-		if cameras then return cameras end
+		if cameras and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil) then
+			return cameras
+		end
 		local now = os.clock()
-		if now - lastResolveTry < 1 then return nil end
+		if now - lastResolveTry < 1 then return cameras end
 		lastResolveTry = now
 		local ps = LocalPlayer:FindFirstChild("PlayerScripts")
 		local pm = ps and ps:FindFirstChild("PlayerModule")
-		if not pm then return nil end
+		if not pm then return cameras end
+		applyPatches(pm)
 		local ok, mod = pcall(require, pm)
-		if not ok or type(mod) ~= "table" then return nil end
+		if not ok or type(mod) ~= "table" then return cameras end
 		local cams
 		pcall(function()
 			if type(mod.GetCameras) == "function" then cams = mod:GetCameras() end
 			if not cams and type(mod.cameras) == "table" then cams = mod.cameras end
 		end)
-		if cams then
+		if type(cams) == "table" and (rawget(cams, "activeCameraController") ~= nil or rawget(cams, "activeTransparencyController") ~= nil or rawget(cams, "activeMouseLockController") ~= nil) then
 			cameras = cams
-			applyPatches(pm)
 			if not mouseLockCtrl and type(cams.activeMouseLockController) == "table" then
 				mouseLockCtrl = cams.activeMouseLockController
+			end
+			if not transparencyCtrl and type(cams.activeTransparencyController) == "table" then
+				transparencyCtrl = cams.activeTransparencyController
 			end
 		end
 		return cameras
 	end
 	local function activeController()
 		local cams = resolve()
-		local ctrl = cams and cams.activeCameraController
+		local ctrl = activeCamCtrl or (cams and cams.activeCameraController)
 		if type(ctrl) == "table" then return ctrl end
-		return nil
+		for _, zc in ipairs(zoomControllers) do
+			if rawget(zc, "enabled") == true then return zc end
+		end
+		return zoomControllers[1]
+	end
+	local function getTransparencyController()
+		if transparencyCtrl then return transparencyCtrl end
+		local cams = resolve()
+		if cams and type(cams.activeTransparencyController) == "table" then
+			transparencyCtrl = cams.activeTransparencyController
+		end
+		return transparencyCtrl
 	end
 	Bridge.Controller = activeController
 	function Bridge.Init()
+		on(UIS:GetPropertyChangedSignal("MouseBehavior"), function()
+			if forceLockCenter and not freeMouse and not (GuiService and GuiService.MenuIsOpen) and UIS.MouseBehavior ~= LockCenter then
+				pcall(function() UIS.MouseBehavior = LockCenter end)
+			end
+		end)
 		task.spawn(scanGC)
 		task.spawn(function()
 			local t0 = os.clock()
-			while not Janitor.unloading and not resolve() and os.clock() - t0 < 120 do
+			while not Janitor.unloading and not activeController() and os.clock() - t0 < 120 do
 				task.wait(0.5)
 			end
-			if not cameras and not Janitor.unloading then
+			if not activeController() and not Janitor.unloading then
 				warnf("Could not find the game's PlayerModule, zoom/shiftlock syncing is limited.")
 			end
 		end)
 	end
 	function Bridge.GetZoom()
 		local ctrl = activeController()
+		if ctrl and ctrl.inFirstPerson == true then
+			return 0.5
+		end
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local ok, z = pcall(zoomModTbl.GetZoomRadius)
+			if ok and type(z) == "number" and z == z and z > 0 then return z end
+		end
 		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
 			local ok, z = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
 			if ok and type(z) == "number" and z == z then return z end
-		end
-		for _, zc in ipairs(zoomControllers) do
-			local ok, z = pcall(zc.GetCameraToSubjectDistance, zc)
-			if ok and type(z) == "number" and z == z and z ~= 12.5 then return z end
 		end
 		local cam = workspace.CurrentCamera
 		if cam then
@@ -2263,27 +2464,73 @@ do
 		end
 		return 12.5
 	end
+	local function forEachCamController(fn)
+		local seen = {}
+		local function visit(c)
+			if type(c) == "table" and not seen[c] then
+				seen[c] = true
+				pcall(fn, c)
+			end
+		end
+		visit(activeCamCtrl)
+		local cams = resolve()
+		if cams then visit(cams.activeCameraController) end
+		for _, zc in ipairs(zoomControllers) do visit(zc) end
+	end
 	function Bridge.RemoveZoomSpring()
-		snapUntil = os.clock() + 0.25
+		snapZoom = true
+		if zoomModTbl and type(zoomModTbl.Update) == "function" then
+			local cam = workspace.CurrentCamera
+			pcall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
+		end
 	end
 	function Bridge.SetZoom(zoom, static)
 		if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
-		if static then Bridge.RemoveZoomSpring() end
+		local targetZ = zoom < FIRST_PERSON and 0.5 or zoom
 		local ctrl = activeController()
-		if ctrl and type(ctrl.SetCameraToSubjectDistance) == "function" then
-			local okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
-			local same = okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4
-				and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
-			if not same then gameCall(ctrl.SetCameraToSubjectDistance, ctrl, zoom) end
+		local curR
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local okR, r = pcall(zoomModTbl.GetZoomRadius)
+			if okR and type(r) == "number" and r == r then curR = r end
 		end
-		for _, zc in ipairs(zoomControllers) do
-			if zc ~= ctrl then
-				local okG, cur = pcall(zc.GetCameraToSubjectDistance, zc)
-				if not (okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4) then
-					gameCall(zc.SetCameraToSubjectDistance, zc, zoom)
+		local okG, cur = false, nil
+		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
+			okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
+		end
+		local checkDist = curR or (okG and cur)
+		local same = not static and type(checkDist) == "number" and math.abs(checkDist - targetZ) < 1e-3
+			and ctrl ~= nil
+			and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
+			and not (zoom >= FIRST_PERSON and ctrl.inFirstPerson == true)
+		if same then return end
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
+		end
+		forEachCamController(function(c)
+			if rawget(c, "currentSubjectDistance") ~= nil then
+				c.currentSubjectDistance = targetZ
+			end
+			if type(c.SetCameraToSubjectDistance) == "function" then
+				c:SetCameraToSubjectDistance(targetZ)
+			end
+			if zoom < FIRST_PERSON then
+				if type(c.EnterFirstPerson) == "function" then
+					c:EnterFirstPerson()
+				elseif rawget(c, "inFirstPerson") ~= nil then
+					c.inFirstPerson = true
+				end
+			elseif c.inFirstPerson then
+				if type(c.LeaveFirstPerson) == "function" then
+					c:LeaveFirstPerson()
+				else
+					c.inFirstPerson = false
 				end
 			end
+		end)
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
 		end
+		if static then Bridge.RemoveZoomSpring() end
 	end
 	local function collectGhostParts(char)
 		local list = {}
@@ -2294,46 +2541,67 @@ do
 		end
 		return list
 	end
-	function Bridge.UpdateGhost(zoom, dt)
+	function Bridge.UpdateGhost(zoom, dt, snap)
 		local char = LocalPlayer.Character
 		if not char then return end
-		zoom = tonumber(zoom) or 12.5
+		local dist = tonumber(zoom) or 12.5
+		local cam = workspace.CurrentCamera
+		if cam then
+			local head = char:FindFirstChild("Head")
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			local focusPos = (head and head.Position) or (hrp and (hrp.Position + Vector3.new(0, 1.5, 0))) or cam.Focus.Position
+			local camDist = (cam.CFrame.Position - focusPos).Magnitude
+			if camDist < dist then dist = camDist end
+		end
 		local target = 0
-		if zoom < 2 then target = 1 - (zoom - 0.5) / 1.5 end
-		if target < 0.5 then target = 0 end
+		if dist < 2 then
+			target = 1 - (dist - 0.5) / 1.5
+			if target < 0.5 then target = 0 end
+		end
 		local value = target
-		if ghost.last ~= nil then
+		if not snap and ghost.last ~= nil and not (target == 1 and ghost.last >= 0.95) then
 			local maxDelta = 2.8 * (dt or 0.016)
 			value = ghost.last + clampn(target - ghost.last, -maxDelta, maxDelta)
 		end
 		value = clampn(math.floor(value * 100 + 0.5) / 100, 0, 1)
 		ghost.tick = ghost.tick + 1
-		local rebuild = ghost.char ~= char or ghost.tick % 60 == 1
+		local rebuild = snap or ghost.char ~= char or ghost.tick % 60 == 1
 		if rebuild then
 			ghost.char = char
 			ghost.parts = collectGhostParts(char)
 		end
-		if rebuild or value ~= ghost.last then
-			for _, part in ipairs(ghost.parts) do
-				if part.Parent then part.LocalTransparencyModifier = value end
+		for _, part in ipairs(ghost.parts) do
+			if part.Parent and part.LocalTransparencyModifier ~= value then
+				part.LocalTransparencyModifier = value
 			end
+		end
+		local tc = getTransparencyController()
+		if tc then
+			tc.lastTransparency = value
+			tc.transparencyDirty = false
 		end
 		ghost.last = value
 		ghost.active = true
 	end
-	function Bridge.ResetGhost()
-		if not ghost.active then return end
+	function Bridge.ResetGhost(keepCurrent)
+		if not ghost.active then
+			local tc = getTransparencyController()
+			if tc then tc.transparencyDirty = true end
+			return
+		end
 		ghost.active = false
+		local lastVal = ghost.last
 		ghost.last = nil
-		for _, part in ipairs(ghost.parts) do
-			if part.Parent then part.LocalTransparencyModifier = 0 end
+		if not keepCurrent then
+			for _, part in ipairs(ghost.parts) do
+				if part.Parent then part.LocalTransparencyModifier = 0 end
+			end
 		end
 		ghost.parts = {}
 		pcall(function()
-			local cams = resolve()
-			local tc = cams and cams.activeTransparencyController
+			local tc = getTransparencyController()
 			if tc then
-				tc.lastTransparency = nil
+				tc.lastTransparency = keepCurrent and lastVal or nil
 				tc.transparencyDirty = true
 			end
 		end)
@@ -2359,17 +2627,67 @@ do
 		if not mouseObj then pcall(function() mouseObj = LocalPlayer:GetMouse() end) end
 		return mouseObj ~= nil and mouseObj.Icon == "rbxasset://textures/MouseLockedCursor.png"
 	end
+	function Bridge.SyncShiftlockToCamera()
+		local lctrl = lockController()
+		local isLocked = Bridge.IsShiftlocked()
+		local off = Vector3.zero
+		if isLocked then
+			if lctrl and type(lctrl.GetMouseLockOffset) == "function" then
+				local okO, v = pcall(lctrl.GetMouseLockOffset, lctrl)
+				if okO and typeof(v) == "Vector3" then off = v else off = Vector3.new(1.75, 0, 0) end
+			else
+				off = Vector3.new(1.75, 0, 0)
+			end
+		end
+		forEachCamController(function(cctrl)
+			if type(cctrl.SetIsMouseLocked) == "function" then
+				cctrl:SetIsMouseLocked(isLocked)
+			elseif rawget(cctrl, "inMouseLockedMode") ~= nil then
+				cctrl.inMouseLockedMode = isLocked
+			end
+			if type(cctrl.SetMouseLockOffset) == "function" then
+				cctrl:SetMouseLockOffset(off)
+			end
+		end)
+	end
 	function Bridge.ShiftlockSwitch()
 		local ctrl = lockController()
 		if not ctrl then return end
-		if type(ctrl.OnMouseLockToggled) == "function" then
-			gameCall(ctrl.OnMouseLockToggled, ctrl)
-		elseif type(ctrl.DoMouseLockSwitch) == "function" then
+		if type(ctrl.DoMouseLockSwitch) == "function" then
 			local wasBlocked = shiftlockBlocked
 			shiftlockBlocked = false
-			gameCall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
+			pcall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
 			shiftlockBlocked = wasBlocked
+		elseif type(ctrl.OnMouseLockToggled) == "function" then
+			pcall(ctrl.OnMouseLockToggled, ctrl)
 		end
+		Bridge.SyncShiftlockToCamera()
+	end
+	function Bridge.RestoreCameraAfterTest(zoom, wantShiftlock)
+		pendingRestore = { zoom = zoom, shiftlock = wantShiftlock }
+		local function applyRestore()
+			if wantShiftlock ~= nil then
+				local curShift = Bridge.IsShiftlocked() and 1 or 0
+				if curShift ~= wantShiftlock then Bridge.ShiftlockSwitch() end
+			end
+			Bridge.SyncShiftlockToCamera()
+			if type(zoom) == "number" and zoom > 0 then
+				Bridge.SetZoom(zoom, true)
+			end
+			Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		end
+		applyRestore()
+		task.defer(function()
+			if Core.GetMode and Core.GetMode() == 1 then
+				applyRestore()
+				task.delay(0.05, function()
+					if Core.GetMode and Core.GetMode() == 1 then
+						pendingRestore = nil
+						applyRestore()
+					end
+				end)
+			end
+		end)
 	end
 	function Bridge.LockShiftlock(lock)
 		shiftlockBlocked = lock and true or false
@@ -2393,6 +2711,11 @@ do
 		end
 		return Bridge.GetZoom() < FIRST_PERSON
 	end
+	function Bridge.SetCameraFreeze(freeze, forceLock, freezeZoom)
+		camFreeze = freeze and true or false
+		camFreezeZoom = freezeZoom and true or false
+		forceLockCenter = forceLock and true or false
+	end
 	function Bridge.SetFreeMouse(free)
 		free = free and true or false
 		if freeMouse == free then return end
@@ -2406,23 +2729,29 @@ do
 	function Bridge.IsMouseFree() return freeMouse end
 	local function rotationFor(locked)
 		if not UserGameSettings then return end
-		local want = (locked and rotate) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+		local want = (locked and rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
 		if UserGameSettings.RotationType ~= want then
 			pcall(function() UserGameSettings.RotationType = want end)
 		end
 	end
-	function Bridge.GuardMouse(modalOpen)
-		if freeMouse then
-			setMouseBehavior(Default)
+	function Bridge.GuardMouse(modalOpen, forceLocked)
+		if freeMouse or modalOpen or (GuiService and GuiService.MenuIsOpen) then
+			if freeMouse or modalOpen then setMouseBehavior(Default) end
 			return
 		end
-		if modalOpen or (GuiService and GuiService.MenuIsOpen) then return end
 		local cam = workspace.CurrentCamera
 		if not cam or cam.CameraType == Scriptable then return end
-		local locked = Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
-		if locked and UIS.MouseBehavior == Default then
-			setMouseBehavior(LockCenter)
+		local locked = forceLocked or forceLockCenter or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+		if locked then
+			if UIS.MouseBehavior ~= LockCenter then setMouseBehavior(LockCenter) end
 			rotationFor(true)
+		else
+			rotationFor(false)
+			if camFreeze then
+				if UIS.MouseBehavior ~= Default then setMouseBehavior(Default) end
+			elseif UIS.MouseBehavior == LockCenter then
+				setMouseBehavior(Default)
+			end
 		end
 	end
 	function Bridge.RefreshMouse(modalOpen)
@@ -2442,9 +2771,11 @@ do
 	function Bridge.Restore()
 		pcall(Bridge.ResetGhost)
 		shiftlockBlocked = false
-		snapUntil = 0
+		snapZoom = false; camFreezeZoom = false
 		rotate = true
 		freeMouse = false
+		camFreeze = false
+		forceLockCenter = false
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()
@@ -2650,14 +2981,15 @@ do
 		table.sort(ids, function(a, b) return math.abs(a) < math.abs(b) end)
 		for _, e in ipairs(ids) do queue[#queue + 1] = e end
 	end
+	local descIds, descNames = {}, {}
 	function InputSys.Describe(set)
-		local ids = {}
-		for id in pairs(set) do ids[#ids + 1] = id end
-		if #ids == 0 then return "-" end
-		table.sort(ids)
-		local names = {}
-		for i, id in ipairs(ids) do names[i] = KEY_SHORT[id] or "?" end
-		return table.concat(names, " ")
+		if not set or next(set) == nil then return "-" end
+		table.clear(descIds)
+		for id in pairs(set) do descIds[#descIds + 1] = id end
+		table.sort(descIds)
+		table.clear(descNames)
+		for i, id in ipairs(descIds) do descNames[i] = KEY_SHORT[id] or "?" end
+		return table.concat(descNames, " ")
 	end
 	local replay = { active = false, applied = 0, injected = {}, state = {}, recent = {}, lastMX = nil, lastMY = nil }
 	InputSys.Replay = replay
@@ -2751,7 +3083,7 @@ do
 	function InputSys.FrameLocked(fr)
 		if not fr then return false end
 		if fr.ShiftLock == 1 then return true end
-		if (fr.Zoom or 99) < 1 then return true end
+		if (fr.Zoom or 99) <= 0.55 then return true end
 		return replay.state[ID_M2] == true
 	end
 	function InputSys.FramePoint(fr)
@@ -2954,7 +3286,7 @@ do
 		local cx, cy, vp = viewportCenter()
 		local px, py = InputSys.FramePoint(fr)
 		local locked = InputSys.FrameLocked(fr)
-		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) < 1
+		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) <= 0.55
 		if locked then
 			if not st.wasLocked then
 				if centered then st.anchorX, st.anchorY = cx, cy
@@ -3007,24 +3339,40 @@ do
 			if st.fake or st.realHidden then Cursor.Reset() end
 			return
 		end
+		local isShift = (fr and fr.ShiftLock == 1) or Bridge.IsShiftlocked()
+		local isFP = (fr and (tonumber(fr.Zoom) or 99) <= 0.55) or Bridge.IsInFirstPerson()
 		local mb = UIS.MouseBehavior
-		local locked = mb ~= Default and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
+		local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
+		local locked = (centered or mb ~= Default) and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
 		if locked then
 			if not ensure() then return end
-			local m = UIS:GetMouseLocation()
-			setIcon(Bridge.IsShiftlocked() and LOCKED or ARROW)
-			if not st.fake then
+			if centered then
+				local cx, cy = viewportCenter()
+				st.anchorX, st.anchorY = cx, cy
+			elseif not st.wasLocked then
+				local m = UIS:GetMouseLocation()
+				st.anchorX, st.anchorY = m.X, m.Y
+			end
+			st.wasLocked = true
+			setIcon(isShift and LOCKED or ARROW)
+			if centered then
+				st.hideAt = nil
+				hideReal()
+			elseif not st.fake then
 				st.hideAt = frameNo + HIDE_DELAY
 			end
-			showFakeAt(m.X, m.Y)
+			showFakeAt(st.anchorX, st.anchorY)
 			if st.hideAt and frameNo >= st.hideAt then
 				st.hideAt = nil
 				hideReal()
 			end
-		elseif st.fake or st.realHidden then
-			showReal()
-			hideFake()
-			st.hideAt = nil
+		else
+			st.wasLocked = false
+			if st.fake or st.realHidden then
+				showReal()
+				hideFake()
+				st.hideAt = nil
+			end
 		end
 	end
 	Janitor.add(function() Cursor.Reset() end)
@@ -3437,16 +3785,14 @@ do
 			pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, was) end)
 		end
 	end
-	local EMPTY_ANIM_FRAME = function()
-		return { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
-	end
+	local EMPTY_ANIM = { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
 	function Bridge.GetAnimation(startOfTAS)
 		local e = AnimEngine.current
 		if e then
 			local d = e.Get(startOfTAS)
 			if d then return d end
 		end
-		return EMPTY_ANIM_FRAME()
+		return EMPTY_ANIM
 	end
 	function Bridge.SetAnimation(animData, anim, playbackSpeed, timeDifference)
 		local e = AnimEngine.current
@@ -3579,12 +3925,26 @@ do
 		Spinners = true, Spinner = true, Spinning = true, SpinningParts = true,
 		Conveyors = true, Conveyor = true, Obstacles = true, Traps = true, Hazards = true,
 		KillBricks = true, KillParts = true, BeatBlocks = true, ["Beat Blocks"] = true,
-		BeatBlock = true, ["Beat Block"] = true, Buttons = true, ButtonPlatforms = true,
-		ButtonDeactivator = true, Morpher = true, Client = true,
+		BeatBlock = true, ["Beat Block"] = true, BeatParts = true, ["Beat Parts"] = true, Beats = true,
+		Buttons = true, ButtonPlatforms = true, ButtonDeactivator = true,
+		Morpher = true, Morphers = true, Morph = true, Morphs = true,
+		MorphButton = true, MorphButtons = true, ["Morph Button"] = true, ["Morph Buttons"] = true,
+		MorphPart = true, MorphParts = true, ["Morph Part"] = true, ["Morph Parts"] = true,
+		LightChanger = true, LightChangers = true, ["Light Changer"] = true, ["Light Changers"] = true,
+		LightingChanger = true, LightingChangers = true, ["Lighting Changer"] = true, ["Lighting Changers"] = true,
+		LightingReverter = true, ["Lighting Reverter"] = true, LightReverter = true, ["Light Reverter"] = true,
+		Vanishers = true, Vanisher = true, ["VanisherGroup"] = true, Vanish = true,
+		FadingParts = true, FadingPart = true, ["Fading Parts"] = true, ["Fading Part"] = true,
+		FadingPlatforms = true, FadingPlatform = true, ["Fading Platforms"] = true, ["Fading Platform"] = true,
+		Fading = true, Disappearing = true, DisappearingPlatforms = true, ["Disappearing Platforms"] = true,
+		Client = true,
 	}
 	local function nameHint(n)
 		return n:find("[Pp]usher") or n:find("[Ss]pinner") or n:find("[Cc]onveyor")
-			or n:find("[Mm]oving") or n:find("[Bb]eat[Bb]lock")
+			or n:find("[Mm]oving") or n:find("[Bb]eat") or n:find("[Mm]orph")
+			or n:find("[Ll]ight.*[Cc]hanger") or n:find("[Ll]ighting.*[Cc]hanger")
+			or n:find("[Ll]ight.*[Rr]everter")
+			or n:find("[Vv]anish") or n:find("[Ff]ad") or n:find("[Dd]isappear")
 	end
 	local function isCandidate(part)
 		if not part or not part:IsA("BasePart") then return false end
@@ -3594,6 +3954,17 @@ do
 		if CFG.Groups and CFG.Groups[part.CollisionGroup] == true then return true end
 		if conParts[part] then return true end
 		if part:FindFirstChildWhichIsA("Constraint") or part:FindFirstChildWhichIsA("BodyMover") then return true end
+		if part:GetAttribute("Beat") or part:GetAttribute("OnTransparency") or part:GetAttribute("OffTransparency")
+			or part:FindFirstChild("OnTransparency") or part:FindFirstChild("OffTransparency")
+			or part:FindFirstChild("Beat") then
+			return true
+		end
+		if part:FindFirstChild("VanisherConfiguration")
+			or (part.Parent and part.Parent:FindFirstChild("VanisherConfiguration"))
+			or part:GetAttribute("VanishMode") or part:GetAttribute("FadeTime") or part:GetAttribute("RespawnTime")
+			or part:FindFirstChild("VanisherSelectionBox") then
+			return true
+		end
 		if nameHint(part.Name) then return true end
 		local parent = part.Parent
 		while parent and parent ~= workspace do
@@ -3808,6 +4179,18 @@ do
 	local function releasePart(id)
 		local part = parts[id]
 		if part then
+			local s = S[id]
+			if s and s.rcf and s.rv and play.active then
+				pcall(function()
+					part.CFrame = s.rcf
+					part.Transparency = s.rv[1] / 1000
+					part.CanCollide = s.rv[2] == 1
+					part.Color = Color3.fromRGB(s.rv[3], s.rv[4], s.rv[5])
+					part.Size = V3(s.rv[6] / 1000, s.rv[7] / 1000, s.rv[8] / 1000)
+					local okM, mat = pcall(function() return Enum.Material:FromValue(s.rv[9]) end)
+					if okM and mat then part.Material = mat end
+				end)
+			end
 			if orig[part] ~= nil then restorePart(part, orig[part]) end
 			orig[part], origVel[part] = nil, nil
 		end
@@ -3845,16 +4228,19 @@ do
 			s.tr = part.Transparency
 		end
 		local pos = part.Position
-		local d = (pos - ppos).Magnitude
+		local dx, dy, dz = pos.X - ppos.X, pos.Y - ppos.Y, pos.Z - ppos.Z
+		local d2 = dx * dx + dy * dy + dz * dz
 		local rad = s.rad
-		if d - rad > RADIUS then return false end
+		local maxR = RADIUS + rad
+		if d2 > maxR * maxR then return false end
 		if strict then
-			if d <= 25 then return true end
+			if d2 <= 625 then return true end
 			if s.tr >= 1 and part.LocalTransparencyModifier >= 1 then return false end
 			if not cam then return true end
 			local sp, onScreen = cam:WorldToViewportPoint(pos)
 			return onScreen and sp.Z > 0
 		end
+		local d = sqrt(d2)
 		if d - rad <= ALWAYS then return true end
 		if not cam then return true end
 		if (pos - camPos).Magnitude <= rad * 1.2 + 6 then return true end
@@ -3928,7 +4314,7 @@ do
 		end
 		local cf = part.CFrame
 		local cp = s.cp
-		if (frameNo + id) % 2 == 0 and (s.pd or (frameNo + id) % 16 == 0) then
+		if s.pd then
 			s.pd = false
 			readProps(part, cp)
 			local rvv, off = s.rv, false
@@ -4152,16 +4538,8 @@ do
 		return p
 	end
 	local verN = 0
-	local function newState()
-		local t = {}
-		for i = 1, 50 do t[i] = 0 end
-		return t
-	end
-	local function copyState(s)
-		local t = {}
-		for i = 1, 50 do t[i] = s[i] end
-		return t
-	end
+	local function newState() return table.create(50, 0) end
+	local function copyState(s) return table.clone(s) end
 	local function skipPayload(isV2, flags, str, p)
 		if isV2 then
 			if hasMask(flags, K_DROP) then return p end
@@ -4425,8 +4803,12 @@ do
 			end
 			sh.cf, sh.t, sh.v = cf, t, v
 		end
-		if not renderPass and sh.pv ~= v then
+		if (not renderPass and sh.pv ~= v) or rs.pd then
+			if rs.pd then
+				sh[I_TR], sh[I_CC], sh[I_COL], sh[I_SZ], sh[I_MAT] = nil, nil, nil, nil, nil
+			end
 			writeProps(part, s, sh)
+			rs.pd = false
 			sh.pv = v
 		end
 	end
@@ -4602,6 +4984,8 @@ do
 		local fr = data[frame]
 		return fr and fr.TotalTime or 0
 	end
+	local touchedScratch = {}
+	local function cleanTouched() table.clear(touchedScratch); return touchedScratch end
 	function CO.PlaybackBegin(data, startFrame)
 		if not (enabled and scanDone) then return false end
 		play.active = false
@@ -4612,20 +4996,19 @@ do
 		play.data = nil
 		play.nextFor = nil
 		play.t = frameTime(data, startFrame)
-		advanceTo(data, startFrame, {})
+		advanceTo(data, startFrame, cleanTouched())
 		writeAll(play.t, false)
 		return true
 	end
 	function CO.PlaybackTo(data, frame, t)
 		if not play.active then return end
 		play.t = t or frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		writeAll(play.t, false)
 		sweepAnchors()
 	end
 	function CO.Tick()
 		if not (play.active and play.kind == "show") then return end
-		writeAll(play.t, false)
 		sweepAnchors()
 	end
 	function CO.RenderStep()
@@ -4644,7 +5027,7 @@ do
 		play.kind = "show"
 		play.active = true
 		play.t = frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		play.next, play.nextFor = {}, nil
 		writeAll(play.t, false)
 		sweepAnchors()
@@ -4653,7 +5036,7 @@ do
 		if not (enabled and scanDone) then return end
 		if hasCOData(data) and frame and data[frame] then
 			play.kind = "show"
-			advanceTo(data, frame, {})
+			advanceTo(data, frame, cleanTouched())
 			local t = frameTime(data, frame)
 			for id, s in pairs(play.cur) do
 				local part = parts[id]
@@ -4749,12 +5132,21 @@ do
 	local enabled = false
 	local descConn
 	local conns = setmetatable({}, { __mode = "k" })
+	local timerStartConns = setmetatable({}, { __mode = "k" })
 	local pending = {}
 	local recording = false
 	local pressAt = {}
 	local control = "none"
 	local suppress = {}
-	local idx, idxData, idxVer = nil, nil, -1
+	local suppressTimerStart = {}
+	local sharedRealTemplate = nil
+	local cachedContainers = nil
+	local lastContainerScan = 0
+	local cachedAdorneeGuis = nil
+	local lastAdorneeScan = 0
+	local lastCanTouchState = nil
+	local dirtyButtons = {}
+	local idx, idxData, idxVer, idxCount = nil, nil, -1, -1
 	local dataVersion = 0
 	local applied = 0
 	local tNowCache = 0
@@ -4770,41 +5162,1331 @@ do
 		reg.byKey[key], reg.byId[id] = b, b
 		return id
 	end
-	local function timerOf(b)
-		local t = b.timer
-		if t and t.Parent == b.parent then return t end
-		t = b.parent and b.parent:FindFirstChild("TimerStart")
-		if t and t:IsA("NumberValue") then b.timer = t return t end
+	local function findConfig(inst)
+		if not inst then return nil end
+		return inst:FindFirstChild("ButtonConfiguration")
+			or inst:FindFirstChild("Configurations")
+			or inst:FindFirstChild("Configuration")
+			or inst:FindFirstChildWhichIsA("Configuration")
+			or inst:FindFirstChildWhichIsA("ModuleScript")
+	end
+	local function isGroupContainer(inst)
+		if not inst or inst == workspace then return true end
+		local n = inst.Name:lower()
+		if n == "buttons" or n == "clientobjects" or n == "clientparts" or n == "mechanics" or n == "obstacles" then
+			return true
+		end
+		if inst:IsA("Folder") then
+			if inst:FindFirstChild("ButtonPart") or inst:FindFirstChild("ButtonConfiguration") or inst:FindFirstChild("Configuration") or inst:FindFirstChild("Pressed") then
+				return false
+			end
+			return true
+		end
+		return false
+	end
+	local function getButtonInfo(v)
+		if not (v and v:IsA("BoolValue") and v.Name == "Pressed") then return nil end
+		local p = v.Parent
+		if not p then return nil end
+		if p:IsA("BasePart") then
+			local m = (p.Parent and not isGroupContainer(p.Parent)) and p.Parent or p
+			return m, p, findConfig(p) or (m ~= p and findConfig(m)) or nil
+		end
+		local bp = p:FindFirstChild("ButtonPart") or p:FindFirstChild("Button") or p:FindFirstChildWhichIsA("BasePart")
+		if bp and bp:IsA("BasePart") then
+			return p, bp, findConfig(p) or findConfig(bp)
+		end
+		local pp = p.Parent
+		if pp and not isGroupContainer(pp) then
+			bp = pp:FindFirstChild("ButtonPart") or pp:FindFirstChild("Button") or pp:FindFirstChildWhichIsA("BasePart")
+			if bp and bp:IsA("BasePart") then
+				return pp, bp, p
+			end
+			local bpNested = pp:FindFirstChild("ButtonPart", true) or pp:FindFirstChild("Button", true)
+			if bpNested and bpNested:IsA("BasePart") then
+				return pp, bpNested, p
+			end
+		end
 		return nil
 	end
 	local function isButtonValue(v)
-		if not v:IsA("BoolValue") or v.Name ~= "Pressed" then return false end
-		local p = v.Parent
-		local bp = p and p:FindFirstChild("ButtonPart")
-		return bp ~= nil and bp:IsA("BasePart")
+		local model, bp = getButtonInfo(v)
+		return model ~= nil and bp ~= nil
+	end
+	local function hookTimerStart(b, ts)
+		if not ts or timerStartConns[ts] then return end
+		timerStartConns[ts] = ts:GetPropertyChangedSignal("Value"):Connect(function()
+			if suppressTimerStart[b.id] then return end
+			if control ~= "none" and pressAt[b.id] ~= nil and b.currentPressed then
+				local rawEl = tNowCache - pressAt[b.id]
+				if rawEl >= -0.001 then
+					local want = os.clock() - math.max(0, rawEl)
+					if math.abs(ts.Value - want) > 0.005 then
+						suppressTimerStart[b.id] = true
+						pcall(function() ts.Value = want end)
+						suppressTimerStart[b.id] = nil
+					end
+				end
+			end
+		end)
+	end
+	local function setTimerStartValue(b, timerStart, val)
+		if not timerStart then return end
+		if math.abs(timerStart.Value - val) <= 0.001 then return end
+		suppressTimerStart[b.id] = true
+		pcall(function() timerStart.Value = val end)
+		suppressTimerStart[b.id] = nil
+	end
+	local function getTimerValues(b)
+		if b.timerValuesChecked and not b.needTimerStartRecheck then
+			local ts = b.timerStart
+			local dv = b.durationVal
+			if (not ts or ts.Parent) and (not dv or dv.Parent) then
+				return ts, dv, b.config
+			end
+		end
+		b.timerValuesChecked = true
+		b.needTimerStartRecheck = false
+		local model = b.model or b.parent
+		local config = b.config or findConfig(model)
+		b.config = config
+		local timerStart = b.timerStart
+		if not (timerStart and timerStart.Parent) then
+			timerStart = (config and config:FindFirstChild("TimerStart"))
+				or (model and model:FindFirstChild("TimerStart"))
+				or (b.parent and b.parent:FindFirstChild("TimerStart"))
+				or (b.bp and b.bp:FindFirstChild("TimerStart"))
+			if timerStart and timerStart:IsA("NumberValue") then
+				b.timerStart = timerStart
+				hookTimerStart(b, timerStart)
+			else
+				b.timerStart = nil
+				timerStart = nil
+			end
+		end
+		local durationVal = b.durationVal
+		if not (durationVal and durationVal.Parent) then
+			durationVal = (config and (config:FindFirstChild("Timer") or config:FindFirstChild("Duration") or config:FindFirstChild("Time")))
+				or (model and (model:FindFirstChild("Timer") or model:FindFirstChild("Duration") or model:FindFirstChild("Time")))
+				or (b.parent and (b.parent:FindFirstChild("Timer") or b.parent:FindFirstChild("Duration") or b.parent:FindFirstChild("Time")))
+			if durationVal and (durationVal:IsA("NumberValue") or durationVal:IsA("IntValue")) then
+				b.durationVal = durationVal
+			else
+				b.durationVal = nil
+				durationVal = nil
+			end
+		end
+		return timerStart, durationVal, config
+	end
+	local function isHideGUI(b)
+		if b.hideGUI ~= nil then return b.hideGUI end
+		local _, _, config = getTimerValues(b)
+		local model = b.model or b.parent
+		local h = (config and config:GetAttribute("HideGUI"))
+			or (model and model:GetAttribute("HideGUI"))
+			or (b.bp and b.bp:GetAttribute("HideGUI"))
+		if h == true then
+			b.hideGUI = true
+			return true
+		end
+		local hv = (config and config:FindFirstChild("HideGUI")) or (model and model:FindFirstChild("HideGUI"))
+		if hv and hv:IsA("BoolValue") and hv.Value == true then
+			b.hideGUI = true
+			return true
+		end
+		b.hideGUI = false
+		return false
+	end
+	local function getButtonDuration(b)
+		if b.cachedDuration ~= nil then return b.cachedDuration end
+		local _, durationVal, config = getTimerValues(b)
+		if durationVal and durationVal.Value > 0 then
+			b.cachedDuration = durationVal.Value
+			return durationVal.Value
+		end
+		local model = b.model or b.parent
+		local attr = (config and (config:GetAttribute("Timer") or config:GetAttribute("Duration") or config:GetAttribute("Time")))
+			or (model and (model:GetAttribute("Timer") or model:GetAttribute("Duration") or model:GetAttribute("Time")))
+			or (b.parent and (b.parent:GetAttribute("Timer") or b.parent:GetAttribute("Duration") or b.parent:GetAttribute("Time")))
+			or (b.bp and (b.bp:GetAttribute("Timer") or b.bp:GetAttribute("Duration") or b.bp:GetAttribute("Time")))
+		if type(attr) == "number" and attr > 0 then
+			b.cachedDuration = attr
+			return attr
+		end
+		local mod = (config and config:IsA("ModuleScript") and config)
+			or (model and model:FindFirstChildWhichIsA("ModuleScript"))
+		if mod then
+			local ok, res = pcall(require, mod)
+			if ok and type(res) == "table" then
+				local tm = res.Timer or res.Duration or res.Time
+				if type(tm) == "number" and tm > 0 then
+					b.cachedDuration = tm
+					return tm
+				end
+			end
+		end
+		local tl = (config and config:FindFirstChildWhichIsA("TextLabel", true))
+			or (model and model:FindFirstChildWhichIsA("TextLabel", true))
+		if tl and tl.Text ~= "" then
+			local num = tonumber(tl.Text:match("%d+%.?%d*"))
+			if num and num > 0 and num <= 300 then
+				b.cachedDuration = num
+				return num
+			end
+		end
+		b.cachedDuration = 0
+		return 0
+	end
+	local CollectionService = svc("CollectionService")
+	local function parseDigitKV(k, v)
+		local nk = tostring(k):lower():gsub("[%s_%-]", "")
+		if nk == "needdigits" or nk == "needsdigits" or nk == "needdigit" or nk == "threedigits" or nk == "3digits" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 3 end
+			return tonumber(v)
+		elseif nk == "twodigits" or nk == "2digits" or nk == "hundredths" or nk == "showhundredths" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 2 end
+			return tonumber(v)
+		elseif nk == "onedigit" or nk == "1digit" or nk == "tenths" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 1 end
+			return tonumber(v)
+		elseif nk == "nodecimals" or nk == "nodigits" or nk == "wholenumbers" or nk == "integer" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 0 end
+		elseif nk:find("digit") or nk:find("decimal") or nk == "precision" or nk == "places" or nk == "rounding" then
+			if v == true or tostring(v):lower() == "true" then return 2 end
+			if type(v) == "number" then return v end
+			if type(v) == "string" then
+				local fmtD = v:match("%%%.(%d+)f")
+				if fmtD then return tonumber(fmtD) end
+				local dotD = v:match("^%d*%.(%d+)$")
+				if dotD then return #dotD end
+				return tonumber(v)
+			end
+		end
+		return nil
+	end
+	local function learnFormatFromGameText(b, txt)
+		if type(txt) ~= "string" or txt == "" then return false end
+		local intStr, decStr = txt:match("(%d+)%.(%d+)")
+		if not decStr then return false end
+		local nDec = #decStr
+		if nDec < 1 or nDec > 4 then return false end
+		local intVal = tonumber(intStr) or 0
+		local changed = false
+		if intVal == 0 then
+			if b.subSecDecimals ~= nDec then
+				b.subSecDecimals = nDec
+				changed = true
+			end
+		else
+			if b.aboveSecDecimals ~= nDec then
+				b.aboveSecDecimals = nDec
+				changed = true
+			end
+		end
+		if b.liveDecimals ~= nDec then
+			b.liveDecimals = nDec
+			changed = true
+		end
+		if changed then
+			b.lastRemQ = nil
+			b.lastFormatted = nil
+		end
+		return changed
+	end
+	local function getDigitsProperty(b)
+		if b.configDecimals ~= nil then return b.configDecimals ~= false and b.configDecimals or nil end
+		local bp, model = b.bp, b.model or b.parent
+		local config = b.config or findConfig(model)
+		local function checkInstance(inst, deep)
+			if not inst then return nil end
+			local decAttr = inst:GetAttribute("TimerDecimalPlaces") or inst:GetAttribute("DecimalPlaces") or inst:GetAttribute("Digits") or inst:GetAttribute("Decimals")
+			if type(decAttr) == "number" then return decAttr end
+			local okAttr, attrs = pcall(inst.GetAttributes, inst)
+			if okAttr and type(attrs) == "table" then
+				for k, v in pairs(attrs) do
+					local d = parseDigitKV(k, v)
+					if d ~= nil then return d end
+				end
+			end
+			local list = deep and inst:GetDescendants() or inst:GetChildren()
+			for _, ch in ipairs(list) do
+				if ch:IsA("ValueBase") then
+					local d = parseDigitKV(ch.Name, ch.Value)
+					if d ~= nil then return d end
+				end
+			end
+			if CollectionService then
+				for _, tag in ipairs({ "NeedDigits", "NeedsDigits", "3Digits", "ThreeDigits", "Digits" }) do
+					local ok, has = pcall(CollectionService.HasTag, CollectionService, inst, tag)
+					if ok and has then return 3 end
+				end
+				for _, tag in ipairs({ "2Digits", "TwoDigits", "Hundredths" }) do
+					local ok, has = pcall(CollectionService.HasTag, CollectionService, inst, tag)
+					if ok and has then return 2 end
+				end
+			end
+			return nil
+		end
+		local d = checkInstance(b.pressed, false)
+			or checkInstance(config, true)
+			or checkInstance(bp, true)
+			or (model and not isGroupContainer(model) and checkInstance(model, true))
+		if d == nil and b.parent and b.parent ~= model and b.parent ~= config and not isGroupContainer(b.parent) then
+			d = checkInstance(b.parent, true)
+		end
+		if d == nil and model and model.Parent and model.Parent ~= workspace then
+			d = checkInstance(model.Parent, false)
+		end
+		if d ~= nil then
+			b.configDecimals = d
+			return d
+		end
+		local mod = (config and config:IsA("ModuleScript") and config) or (model and not isGroupContainer(model) and model:FindFirstChildWhichIsA("ModuleScript", true))
+		if mod then
+			local ok, res = pcall(require, mod)
+			if ok and type(res) == "table" then
+				for k, v in pairs(res) do
+					local dv = parseDigitKV(k, v)
+					if dv ~= nil then
+						b.configDecimals = dv
+						return dv
+					end
+				end
+			end
+		end
+		local dur = getButtonDuration(b)
+		if dur and dur > 0 then
+			local s = string.format("%.4f", dur):gsub("0+$", ""):gsub("%.$", "")
+			local frac = s:match("%.(%d+)")
+			if frac and #frac >= 2 then
+				b.configDecimals = #frac
+				return #frac
+			end
+		end
+		local bestTlDec = nil
+		local function scanLabelsForDec(root)
+			if not root or isGroupContainer(root) then return end
+			for _, dInst in ipairs(root:GetDescendants()) do
+				if dInst:IsA("TextLabel") and dInst.Text ~= "" then
+					local decs = dInst.Text:match("%d+%.(%d+)")
+					if decs and #decs >= 2 and #decs <= 4 then
+						if not bestTlDec or #decs > bestTlDec then bestTlDec = #decs end
+					end
+				end
+			end
+		end
+		scanLabelsForDec(config)
+		scanLabelsForDec(bp)
+		if model ~= bp then scanLabelsForDec(model) end
+		if bestTlDec then
+			b.configDecimals = bestTlDec
+			return bestTlDec
+		end
+		b.configDecimals = false
+		return nil
+	end
+	local function getEffectiveDecimals(b, remaining)
+		if remaining ~= nil then
+			if remaining < 1 and b.subSecDecimals ~= nil then return b.subSecDecimals end
+			if remaining >= 1 and b.aboveSecDecimals ~= nil then return b.aboveSecDecimals end
+		end
+		if b.liveDecimals ~= nil then return b.liveDecimals end
+		local cfgD = getDigitsProperty(b)
+		if cfgD ~= nil then return math.max(0, math.floor(cfgD)) end
+		if remaining ~= nil and remaining < 1 and b.subSecDecimals ~= nil then return b.subSecDecimals end
+		return 1
+	end
+	local function formatTimer(b, remaining, forceDec)
+		local dec = forceDec or getEffectiveDecimals(b, remaining)
+		local strVal = b.timerText
+		if strVal == nil then
+			local model = b.model or b.parent
+			local config = b.config or findConfig(model)
+			local attr = (config and config:GetAttribute("TimerText"))
+				or (model and model:GetAttribute("TimerText"))
+				or (b.bp and b.bp:GetAttribute("TimerText"))
+			if type(attr) == "string" then
+				strVal = attr
+			else
+				local tv = (config and config:FindFirstChild("TimerText")) or (model and model:FindFirstChild("TimerText"))
+				if tv and tv:IsA("StringValue") then
+					strVal = tv.Value
+				else
+					local mod = (config and config:IsA("ModuleScript") and config) or (model and model:FindFirstChildWhichIsA("ModuleScript"))
+					if mod then
+						local ok, res = pcall(require, mod)
+						if ok and type(res) == "table" and type(res.TimerText) == "string" then
+							strVal = res.TimerText
+						end
+					end
+				end
+			end
+			strVal = strVal or "{T}"
+			b.timerText = strVal
+		end
+		local rem = math.max(0, remaining)
+		local displayTime = (dec == 0) and tostring(math.ceil(rem)) or string.format("%." .. tostring(dec) .. "f", rem)
+		if strVal == "" or strVal == "{T}" then
+			return displayTime
+		end
+		local flooredSeconds = math.floor(rem)
+		local mins = math.floor(flooredSeconds / 60)
+		local secs = flooredSeconds % 60
+		local ms = math.floor(rem * 100) % 100
+		local lp = Players.LocalPlayer
+		local pName = lp and lp.Name or ""
+		local pDisp = lp and lp.DisplayName or pName
+		local pUid = lp and tostring(lp.UserId) or "0"
+		local res = strVal:gsub("{T}", displayTime)
+			:gsub("{M}", tostring(mins))
+			:gsub("{SM}", (tostring(mins) == "1") and "" or "s")
+			:gsub("{S}", string.format("%02i", secs))
+			:gsub("{MS}", string.format("%02i", ms))
+			:gsub("{SS}", (displayTime == "1") and "" or "s")
+			:gsub("{pn}", pName:lower())
+			:gsub("{Pn}", pName)
+			:gsub("{PN}", pName:upper())
+			:gsub("{dn}", pDisp:lower())
+			:gsub("{Dn}", pDisp)
+			:gsub("{DN}", pDisp:upper())
+			:gsub("{UID}", pUid)
+		return res
+	end
+	local function colorClose(c1, c2, tol)
+		if not c1 or not c2 then return false end
+		local t = tol or 0.08
+		return math.abs(c1.R - c2.R) < t and math.abs(c1.G - c2.G) < t and math.abs(c1.B - c2.B) < t
+	end
+	local function applyRealButtonColors(lbl, bpColor, isAlreadyStyledForButton)
+		if not (lbl and bpColor) or isAlreadyStyledForButton then return end
+		local okTag, special = pcall(function() return lbl:HasTag("UseSpecialColor") end)
+		if okTag and special then return end
+		local invColor = Color3.new(1 - bpColor.R, 1 - bpColor.G, 1 - bpColor.B)
+		local oldColor = lbl.TextColor3
+		local oldInv = oldColor and Color3.new(1 - oldColor.R, 1 - oldColor.G, 1 - oldColor.B)
+		lbl.TextColor3 = bpColor
+		lbl.TextStrokeColor3 = invColor
+		local stroke = lbl:FindFirstChildWhichIsA("UIStroke")
+		if stroke then
+			if oldInv and colorClose(stroke.Color, oldInv, 0.08) then
+				stroke.Color = invColor
+			elseif oldColor and colorClose(stroke.Color, oldColor, 0.08) then
+				stroke.Color = bpColor
+			end
+		end
+	end
+	local function stripScripts(inst)
+		if not inst then return end
+		for _, d in ipairs(inst:GetDescendants()) do
+			if d:IsA("LuaSourceContainer") then pcall(function() d:Destroy() end) end
+		end
+	end
+	local function cacheTemplateFromLabel(b, lbl, isLiveForThisButton)
+		if not (lbl and lbl:IsA("TextLabel")) then return end
+		if lbl:GetAttribute("HappaTASFake") then return end
+		if b.realTemplate and (b.realTemplateFromLive or not isLiveForThisButton) then return end
+		pcall(function()
+			local cl = lbl:Clone()
+			stripScripts(cl)
+			cl:SetAttribute("HappaTASButton", nil)
+			cl:SetAttribute("HappaTASFake", nil)
+			b.realTemplate = cl
+			b.realTemplateFromLive = isLiveForThisButton and true or false
+			if not sharedRealTemplate then
+				local scl = cl:Clone()
+				sharedRealTemplate = scl
+			end
+		end)
+	end
+	local function getAllTimerContainers()
+		if cachedContainers and #cachedContainers > 0 then
+			local allValid = true
+			for i = 1, #cachedContainers do
+				if not cachedContainers[i].Parent then
+					allValid = false
+					break
+				end
+			end
+			if allValid then return cachedContainers end
+		end
+		local now = os.clock()
+		if cachedContainers and now - lastContainerScan < 0.5 then
+			return cachedContainers
+		end
+		lastContainerScan = now
+		local containers = {}
+		local lp = Players.LocalPlayer
+		local pg = lp and lp:FindFirstChild("PlayerGui")
+		if not pg then
+			cachedContainers = containers
+			return containers
+		end
+		local function addContainer(c)
+			if not (c and c:IsA("GuiObject")) then return end
+			for i = 1, #containers do
+				if containers[i] == c then return end
+			end
+			containers[#containers + 1] = c
+		end
+		local function checkGuiDirect(gui)
+			if not (gui and gui.Parent) then return end
+			addContainer(gui:FindFirstChild("TimerList"))
+			addContainer(gui:FindFirstChild("Timers"))
+			addContainer(gui:FindFirstChild("TimerContainer"))
+			addContainer(gui:FindFirstChild("TimerFrame"))
+		end
+		for _, name in ipairs({ "EffectGUI", "EffectGui", "EffectsGui", "EffectsGUI" }) do
+			local eg = pg:FindFirstChild(name)
+			if eg then checkGuiDirect(eg) end
+		end
+		if #containers == 0 then
+			for _, ch in ipairs(pg:GetChildren()) do
+				if ch:IsA("ScreenGui") and ch.Name ~= "TASUserInterface" and ch.Name ~= "HappaProfiler" and ch.Name ~= "HappaCursor" then
+					checkGuiDirect(ch)
+					if #containers == 0 then
+						local tl = ch:FindFirstChild("TimerList", true) or ch:FindFirstChild("Timers", true)
+						if tl then addContainer(tl) end
+					end
+				end
+			end
+		end
+		cachedContainers = containers
+		return containers
+	end
+	local function getTimerList(createIfMissing)
+		local containers = getAllTimerContainers()
+		if #containers > 0 then return containers[1] end
+		if not createIfMissing then return nil end
+		local lp = Players.LocalPlayer
+		local pg = lp and lp:FindFirstChild("PlayerGui")
+		if not pg then return nil end
+		local eg = pg:FindFirstChild("EffectGUI") or pg:FindFirstChild("EffectGui") or pg:FindFirstChild("EffectsGui")
+		if eg then
+			local newTl = eg:FindFirstChild("TimerList")
+			if not newTl then
+				newTl = Instance.new("Frame")
+				newTl.Name = "TimerList"
+				newTl.BackgroundTransparency = 1
+				newTl.Size = UDim2.new(0, 300, 0, 80)
+				newTl.Position = UDim2.new(0.5, -150, 0, 15)
+				newTl.Parent = eg
+			end
+			cachedContainers = { newTl }
+			return newTl
+		end
+		return nil
+	end
+	local function findTemplateForButton(b)
+		if b.realTemplate then return b.realTemplate, b.realTemplateFromLive end
+		local model = b.model or b.parent
+		local config = b.config or findConfig(model)
+		local tl = (config and config:FindFirstChildWhichIsA("TextLabel", true))
+			or (model and model:FindFirstChildWhichIsA("TextLabel", true))
+		if tl then
+			cacheTemplateFromLabel(b, tl, false)
+			return b.realTemplate or tl, false
+		end
+		local bp = b.bp
+		if bp and bp.Parent then
+			for _, ch in ipairs(bp:GetChildren()) do
+				if ch:IsA("SurfaceGui") or ch:IsA("BillboardGui") then
+					local gtl = ch:FindFirstChildWhichIsA("TextLabel")
+					if gtl and not gtl:GetAttribute("HappaTASFake") then
+						cacheTemplateFromLabel(b, gtl, true)
+						return b.realTemplate or gtl, true
+					end
+				end
+			end
+		end
+		if sharedRealTemplate then return sharedRealTemplate, false end
+		for _, otherB in pairs(reg.byId) do
+			if otherB.realTemplate then
+				sharedRealTemplate = otherB.realTemplate
+				return otherB.realTemplate, false
+			end
+			local oc = otherB.config or findConfig(otherB.model or otherB.parent)
+			local otl = oc and oc:FindFirstChildWhichIsA("TextLabel", true)
+			if otl then
+				cacheTemplateFromLabel(otherB, otl, false)
+				return otherB.realTemplate or otl, false
+			end
+		end
+		return nil, false
+	end
+	local function matchesOtherActiveButton(b, lblColor, candidateLbl)
+		if not lblColor then return false end
+		for otherId, _ in pairs(pressAt) do
+			if otherId ~= b.id then
+				local otherB = reg.byId[otherId]
+				if otherB and (otherB.currentPressed or (otherB.pressed and otherB.pressed.Value)) then
+					local oc = otherB.unpressedColor or (otherB.bp and otherB.bp.Color)
+					if oc and colorClose(lblColor, oc, 0.08) then
+						local oLbl = otherB.screenLabel
+						if not (oLbl and oLbl.Parent and oLbl ~= candidateLbl and not oLbl:GetAttribute("HappaTASFake")) then
+							return true
+						end
+					end
+				end
+			end
+		end
+		return false
+	end
+	local function getScreenLabel(b, createIfMissing)
+		if isHideGUI(b) then return nil end
+		if control == "none" then
+			createIfMissing = false
+		end
+		local now = os.clock()
+		local cur = b.screenLabel
+		local recentRealPress = b.realPressClock and (now - b.realPressClock) < 0.35
+		if cur and cur.Parent then
+			local interval = (cur == b.ourScreenLabel) and (recentRealPress and 0.08 or 0.25) or 0.2
+			if b.lastScreenScan and (now - b.lastScreenScan) < interval then
+				return cur
+			end
+		elseif b.lastScreenScan and (now - b.lastScreenScan) < (recentRealPress and 0.05 or 0.2) then
+			return nil
+		end
+		b.lastScreenScan = now
+		local bp = b.bp
+		local bpColor = b.unpressedColor or (bp and bp.Color)
+		local curBpColor = bp and bp.Color
+		local invColor = bpColor and Color3.new(1 - bpColor.R, 1 - bpColor.G, 1 - bpColor.B)
+		local containers = getAllTimerContainers()
+		local bestReal = nil
+		local bestRealScore = 0
+		local realMatches = {}
+		local fakeDuplicates = {}
+		local otherTimerInList = nil
+		local function scoreLabel(lbl, containerEntry)
+			if not (lbl and lbl:IsA("TextLabel") and lbl.Parent) then return end
+			local isFake = lbl:GetAttribute("HappaTASFake") == true
+			local attrId = lbl:GetAttribute("HappaTASButton") or (containerEntry and containerEntry:GetAttribute("HappaTASButton"))
+			if attrId ~= nil and attrId ~= b.id then
+				if not isFake then otherTimerInList = otherTimerInList or lbl end
+				return
+			end
+			if isFake then
+				if attrId == b.id or lbl == b.ourScreenLabel then
+					fakeDuplicates[#fakeDuplicates + 1] = lbl
+				end
+				return
+			end
+			otherTimerInList = otherTimerInList or lbl
+			local colorMatched = false
+			local score = 0
+			if bpColor then
+				if colorClose(lbl.TextColor3, bpColor, 0.08) or (curBpColor and colorClose(lbl.TextColor3, curBpColor, 0.08)) then
+					colorMatched = true
+					score = score + 300
+					if invColor and colorClose(lbl.TextStrokeColor3, invColor, 0.08) then
+						score = score + 100
+					end
+				elseif invColor and colorClose(lbl.TextStrokeColor3, invColor, 0.08) then
+					colorMatched = true
+					score = score + 200
+				elseif not matchesOtherActiveButton(b, lbl.TextColor3, lbl) then
+					score = score + 80
+				end
+			else
+				colorMatched = true
+				score = score + 100
+			end
+			local ownedByB = (attrId == b.id) or (attrId == nil and colorMatched and not matchesOtherActiveButton(b, lbl.TextColor3, lbl))
+			if ownedByB then
+				realMatches[#realMatches + 1] = { lbl = lbl, entry = containerEntry }
+				score = score + 1000 + #realMatches * 10
+				if lbl.TextTransparency < 0.5 then
+					score = score + 500
+				end
+			elseif lbl == b.screenLabel then
+				score = score + 600
+			end
+			if score >= bestRealScore and score > 0 then
+				bestRealScore = score
+				bestReal = lbl
+			end
+		end
+		for _, container in ipairs(containers) do
+			for _, ch in ipairs(container:GetChildren()) do
+				if ch:IsA("TextLabel") then
+					scoreLabel(ch, ch)
+				elseif ch:IsA("GuiObject") then
+					local nested = ch:FindFirstChildWhichIsA("TextLabel")
+					if nested then scoreLabel(nested, ch) end
+				end
+			end
+		end
+		if bestReal then
+			for _, m in ipairs(realMatches) do
+				if m.lbl ~= bestReal and m.lbl.Parent then
+					pcall(function()
+						if m.entry and m.entry ~= m.lbl and m.entry.Parent and m.entry.Name ~= "TimerList" and m.entry.Name ~= "Timers" then
+							m.entry:Destroy()
+						else
+							m.lbl:Destroy()
+						end
+					end)
+				end
+			end
+			for _, fk in ipairs(fakeDuplicates) do
+				if fk.Parent then pcall(function() fk:Destroy() end) end
+			end
+			if b.ourScreenLabel and b.ourScreenLabel.Parent then
+				pcall(function() b.ourScreenLabel:Destroy() end)
+			end
+			b.ourScreenLabel = nil
+			cacheTemplateFromLabel(b, bestReal, true)
+			if (b.currentPressed or (b.pressed and b.pressed.Value)) and bestReal.Text ~= "" and bestReal.Text ~= b.lastFormatted then
+				learnFormatFromGameText(b, bestReal.Text)
+			end
+			if bestReal:GetAttribute("HappaTASButton") ~= b.id then
+				pcall(function()
+					bestReal:SetAttribute("HappaTASButton", b.id)
+					if bestReal.Parent and bestReal.Parent:IsA("GuiObject") and bestReal.Parent.Name ~= "TimerList" and bestReal.Parent.Name ~= "Timers" then
+						bestReal.Parent:SetAttribute("HappaTASButton", b.id)
+					end
+				end)
+			end
+			b.screenLabel = bestReal
+			return bestReal
+		end
+		if b.ourScreenLabel and b.ourScreenLabel.Parent then
+			for _, fk in ipairs(fakeDuplicates) do
+				if fk ~= b.ourScreenLabel and fk.Parent then
+					pcall(function() fk:Destroy() end)
+				end
+			end
+			b.screenLabel = b.ourScreenLabel
+			return b.ourScreenLabel
+		end
+		b.ourScreenLabel = nil
+		b.screenLabel = nil
+		if not createIfMissing or control == "none" then
+			return nil
+		end
+		if b.reasserting or (b.pressed and b.pressed.Value and b.realPressClock and (now - b.realPressClock) < 0.2) then
+			return nil
+		end
+		local tList = getTimerList(true)
+		if not tList then return nil end
+		local template, isLiveForThisButton = findTemplateForButton(b)
+		if not template and otherTimerInList then
+			template = otherTimerInList
+			isLiveForThisButton = false
+		end
+		local newLabel
+		if template then
+			newLabel = template:Clone()
+			newLabel.Visible = true
+			applyRealButtonColors(newLabel, bpColor, isLiveForThisButton)
+		else
+			newLabel = Instance.new("TextLabel")
+			newLabel.Name = "TimerLabel"
+			newLabel.BackgroundTransparency = 1
+			newLabel.Size = UDim2.new(1, 0, 0.2, 0)
+			pcall(function()
+				newLabel.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+			end)
+			newLabel.TextScaled = true
+			newLabel.TextSize = 42
+			newLabel.TextStrokeTransparency = 0
+			applyRealButtonColors(newLabel, bpColor, false)
+		end
+		newLabel:SetAttribute("HappaTASButton", b.id)
+		newLabel:SetAttribute("HappaTASFake", true)
+		newLabel.Parent = tList
+		b.screenLabel = newLabel
+		b.ourScreenLabel = newLabel
+		return newLabel
+	end
+	local labelTextConns = setmetatable({}, { __mode = "k" })
+	local suppressLabelText = setmetatable({}, { __mode = "k" })
+	local function syncPartLabelVisual(lbl, formatted)
+		if not (lbl and lbl.Parent) then return end
+		if lbl.Text ~= formatted then
+			suppressLabelText[lbl] = true
+			pcall(function() lbl.Text = formatted end)
+			suppressLabelText[lbl] = nil
+		end
+		if not lbl.Visible then pcall(function() lbl.Visible = true end) end
+		if lbl.TextTransparency > 0.5 then pcall(function() lbl.TextTransparency = 0 end) end
+		local gui = lbl:FindFirstAncestorWhichIsA("LayerCollector")
+		if gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) and not gui.Enabled then
+			pcall(function() gui.Enabled = true end)
+		end
+	end
+	local function hookLabelText(b, lbl)
+		if not lbl or labelTextConns[lbl] then return end
+		if not lbl:GetAttribute("HappaTASFake") and (b.currentPressed or (b.pressed and b.pressed.Value)) and lbl.Text ~= "" and lbl.Text ~= b.lastFormatted then
+			learnFormatFromGameText(b, lbl.Text)
+		end
+		labelTextConns[lbl] = lbl:GetPropertyChangedSignal("Text"):Connect(function()
+			if suppressLabelText[lbl] then return end
+			local gameTxt = lbl.Text
+			if not lbl:GetAttribute("HappaTASFake") and (b.currentPressed or (b.pressed and b.pressed.Value) or control == "none") then
+				if learnFormatFromGameText(b, gameTxt) and control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
+					local dur = getButtonDuration(b)
+					if dur > 0 then
+						local rem = math.max(0, dur - math.max(0, tNowCache - pressAt[b.id]))
+						local dec = getEffectiveDecimals(b, rem)
+						b.lastUsedDec = dec
+						b.lastRemQ = math.floor(rem * (10 ^ dec) + 0.5)
+						b.lastFormatted = formatTimer(b, rem, dec)
+						local sLbl = b.screenLabel
+						if sLbl and sLbl.Parent and sLbl ~= lbl then
+							suppressLabelText[sLbl] = true
+							pcall(function() sLbl.Text = b.lastFormatted end)
+							suppressLabelText[sLbl] = nil
+						end
+						local pLbls = b.partLabels
+						if pLbls then
+							for i = 1, #pLbls do
+								if pLbls[i] ~= lbl then syncPartLabelVisual(pLbls[i], b.lastFormatted) end
+							end
+						end
+					end
+				end
+			end
+			if control ~= "none" then
+				if b.currentPressed and b.lastFormatted then
+					if lbl.Text ~= b.lastFormatted then
+						suppressLabelText[lbl] = true
+						pcall(function() lbl.Text = b.lastFormatted end)
+						suppressLabelText[lbl] = nil
+					end
+					if not lbl.Visible then pcall(function() lbl.Visible = true end) end
+				elseif not b.currentPressed and lbl ~= b.screenLabel then
+					if lbl.Visible then pcall(function() lbl.Visible = false end) end
+				end
+			end
+		end)
+	end
+	local function getAdorneeGuis()
+		local now = os.clock()
+		if cachedAdorneeGuis and (now - lastAdorneeScan) < 0.5 then
+			return cachedAdorneeGuis
+		end
+		lastAdorneeScan = now
+		local list = {}
+		local lp = Players.LocalPlayer
+		local pg = lp and lp:FindFirstChild("PlayerGui")
+		if pg then
+			for _, d in ipairs(pg:GetDescendants()) do
+				if (d:IsA("SurfaceGui") or d:IsA("BillboardGui")) and d.Adornee ~= nil then
+					list[#list + 1] = d
+				end
+			end
+		end
+		cachedAdorneeGuis = list
+		return list
+	end
+	local function getPartLabels(b, createIfMissing)
+		local now = os.clock()
+		local cached = b.partLabels
+		local recentP = b.realPressClock and (now - b.realPressClock) < 0.35
+		if cached and #cached > 0 then
+			local allValid = true
+			for i = 1, #cached do
+				if not cached[i].Parent then
+					allValid = false
+					break
+				end
+			end
+			if allValid then
+				local interval = b.ourPartGui and (recentP and 0.08 or 0.25) or 0.25
+				if b.lastPartScan and (now - b.lastPartScan) < interval then
+					return cached
+				end
+			end
+		elseif cached and #cached == 0 and b.lastPartScan and (now - b.lastPartScan) < (recentP and 0.05 or 0.25) then
+			return cached
+		end
+		b.lastPartScan = now
+		local list = {}
+		local seen = {}
+		local realGuis = {}
+		local seenGuis = {}
+		local bp = b.bp
+		local model = b.model or b.parent
+		local config = b.config
+		local function isConfigTemplate(inst)
+			if not inst or not config or config == bp or config == model then return false end
+			return inst:IsDescendantOf(config)
+		end
+		local function addLabel(lbl)
+			if lbl and lbl:IsA("TextLabel") and not seen[lbl] and lbl.Parent then
+				if lbl:GetAttribute("HappaTASFake") or isConfigTemplate(lbl) then return end
+				seen[lbl] = true
+				list[#list + 1] = lbl
+				hookLabelText(b, lbl)
+				cacheTemplateFromLabel(b, lbl, true)
+			end
+		end
+		local function addGui(gui)
+			if not (gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) and gui.Parent) then return end
+			if gui:GetAttribute("HappaTASFake") or seenGuis[gui] or isConfigTemplate(gui) then return end
+			seenGuis[gui] = true
+			realGuis[#realGuis + 1] = gui
+			if not b.realPartGuiTemplate then
+				pcall(function()
+					local cl = gui:Clone()
+					stripScripts(cl)
+					b.realPartGuiTemplate = cl
+				end)
+			end
+			for _, d in ipairs(gui:GetDescendants()) do
+				if d:IsA("TextLabel") then addLabel(d) end
+			end
+		end
+		local function scanRoot(root)
+			if not (root and root.Parent) or isGroupContainer(root) then return end
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("SurfaceGui") or d:IsA("BillboardGui") then
+					addGui(d)
+				elseif d:IsA("TextLabel") then
+					addLabel(d)
+				end
+			end
+		end
+		scanRoot(bp)
+		if model and model ~= bp and not isGroupContainer(model) then scanRoot(model) end
+		if b.parent and b.parent ~= model and b.parent ~= bp and b.parent ~= config and not isGroupContainer(b.parent) then
+			scanRoot(b.parent)
+		end
+		if bp or (model and not isGroupContainer(model)) then
+			for _, gui in ipairs(getAdorneeGuis()) do
+				if gui.Parent then
+					local ad = gui.Adornee
+					if ad and (ad == bp or ad == model or (model and not isGroupContainer(model) and ad:IsDescendantOf(model))) then
+						addGui(gui)
+					end
+				end
+			end
+		end
+		if #list > 0 then
+			if b.ourPartGui and b.ourPartGui.Parent then
+				pcall(function() b.ourPartGui:Destroy() end)
+			end
+			b.ourPartGui = nil
+			b.partLabels = list
+			return list
+		end
+		if b.ourPartGui and b.ourPartGui.Parent then
+			local fakeLabels = {}
+			for _, d in ipairs(b.ourPartGui:GetDescendants()) do
+				if d:IsA("TextLabel") then
+					hookLabelText(b, d)
+					fakeLabels[#fakeLabels + 1] = d
+				end
+			end
+			if #fakeLabels > 0 then
+				b.partLabels = fakeLabels
+				return b.partLabels
+			end
+		end
+		b.ourPartGui = nil
+		if not b.realPartGuiTemplate and config and config ~= bp then
+			local cfgGui = config:FindFirstChildWhichIsA("SurfaceGui", true) or config:FindFirstChildWhichIsA("BillboardGui", true)
+			if cfgGui then
+				pcall(function()
+					local cl = cfgGui:Clone()
+					stripScripts(cl)
+					b.realPartGuiTemplate = cl
+				end)
+			end
+		end
+		if createIfMissing and control ~= "none" and bp and bp.Parent and b.realPartGuiTemplate then
+			if not (b.reasserting or (b.pressed and b.pressed.Value and b.realPressClock and (now - b.realPressClock) < 0.2)) then
+				local sgui = b.realPartGuiTemplate:Clone()
+				stripScripts(sgui)
+				sgui.Enabled = true
+				sgui:SetAttribute("HappaTASFake", true)
+				sgui:SetAttribute("HappaTASButton", b.id)
+				local fakeLabels = {}
+				for _, d in ipairs(sgui:GetDescendants()) do
+					if d:IsA("TextLabel") then
+						d.Visible = true
+						d:SetAttribute("HappaTASFake", true)
+						d:SetAttribute("HappaTASButton", b.id)
+						hookLabelText(b, d)
+						fakeLabels[#fakeLabels + 1] = d
+					end
+				end
+				sgui.Parent = bp
+				b.ourPartGui = sgui
+				b.partLabels = fakeLabels
+				return b.partLabels
+			end
+		end
+		b.partLabels = list
+		return list
+	end
+	local function updateTimerUI(b, remaining, allowCreate)
+		if control == "none" then return end
+		local canCreate = allowCreate == true and control ~= "none"
+		local sLabel = (not isHideGUI(b)) and getScreenLabel(b, canCreate) or nil
+		if sLabel and sLabel.Parent then hookLabelText(b, sLabel) end
+		local pLabels = getPartLabels(b, canCreate)
+		local dec = getEffectiveDecimals(b, remaining)
+		local scale = 10 ^ dec
+		local remQ = math.floor(math.max(0, remaining) * scale + 0.5)
+		local formatted = b.lastFormatted
+		if remQ ~= b.lastRemQ or dec ~= b.lastUsedDec or not formatted then
+			b.lastRemQ = remQ
+			b.lastUsedDec = dec
+			formatted = formatTimer(b, remaining, dec)
+			b.lastFormatted = formatted
+		end
+		if sLabel and sLabel.Parent then
+			if sLabel.Text ~= formatted then
+				suppressLabelText[sLabel] = true
+				pcall(function() sLabel.Text = formatted end)
+				suppressLabelText[sLabel] = nil
+			end
+			if not sLabel.Visible then pcall(function() sLabel.Visible = true end) end
+		end
+		for i = 1, #pLabels do
+			syncPartLabelVisual(pLabels[i], formatted)
+		end
+	end
+	local function hideTimerUI(b)
+		if b.ourScreenLabel and b.ourScreenLabel.Parent then
+			pcall(function() b.ourScreenLabel:Destroy() end)
+		end
+		b.ourScreenLabel = nil
+		if b.ourPartGui and b.ourPartGui.Parent then
+			pcall(function() b.ourPartGui:Destroy() end)
+		end
+		b.ourPartGui = nil
+		local bp = b.bp
+		local bpColor = b.unpressedColor or (bp and bp.Color)
+		local containers = getAllTimerContainers()
+		for _, c in ipairs(containers) do
+			for _, ch in ipairs(c:GetChildren()) do
+				if ch:GetAttribute("HappaTASFake") and (ch:GetAttribute("HappaTASButton") == b.id or (bpColor and colorClose(ch.TextColor3, bpColor, 0.08))) then
+					pcall(function() ch:Destroy() end)
+				elseif ch:GetAttribute("HappaTASButton") == b.id or ch == b.screenLabel or (ch:IsA("TextLabel") and bpColor and colorClose(ch.TextColor3, bpColor, 0.08) and not matchesOtherActiveButton(b, ch.TextColor3)) then
+					if ch.Visible then pcall(function() ch.Visible = false end) end
+				elseif ch:IsA("GuiObject") then
+					local lbl = ch:FindFirstChildWhichIsA("TextLabel")
+					if lbl and (lbl:GetAttribute("HappaTASButton") == b.id or (bpColor and colorClose(lbl.TextColor3, bpColor, 0.08) and not matchesOtherActiveButton(b, lbl.TextColor3))) then
+						if lbl:GetAttribute("HappaTASFake") then
+							pcall(function() ch:Destroy() end)
+						elseif lbl.Visible then
+							pcall(function() lbl.Visible = false end)
+						end
+					end
+				end
+			end
+		end
+		b.screenLabel = nil
+		local pLabels = b.partLabels
+		if pLabels then
+			for i = 1, #pLabels do
+				local lbl = pLabels[i]
+				if lbl and lbl.Parent then
+					if lbl.Visible then pcall(function() lbl.Visible = false end) end
+				end
+			end
+		end
+		if bp and bp.Parent then
+			for _, ch in ipairs(bp:GetChildren()) do
+				if ch:IsA("SurfaceGui") or ch:IsA("BillboardGui") then
+					if ch:GetAttribute("HappaTASFake") then
+						pcall(function() ch:Destroy() end)
+					else
+						for _, gch in ipairs(ch:GetChildren()) do
+							if gch:IsA("TextLabel") and gch.Visible then
+								pcall(function() gch.Visible = false end)
+							end
+						end
+					end
+				end
+			end
+		end
+		b.partLabels = nil
+	end
+	local function getPressedMaterial(b)
+		if b.pressedMaterial then return b.pressedMaterial end
+		local config = b.config
+		local pm = config and config:GetAttribute("PressedMaterial")
+		if typeof(pm) == "EnumItem" and pm.EnumType == Enum.Material then
+			b.pressedMaterial = pm
+			return pm
+		elseif type(pm) == "string" then
+			local ok, mat = pcall(function() return Enum.Material[pm] end)
+			if ok and mat then
+				b.pressedMaterial = mat
+				return mat
+			end
+		end
+		b.pressedMaterial = Enum.Material.Neon
+		return Enum.Material.Neon
+	end
+	local function restoreButtonVisual(b, isPressed)
+		local bp = b.bp
+		if bp and bp.Parent then
+			if isPressed then
+				local wantMat = getPressedMaterial(b)
+				if wantMat and bp.Material ~= wantMat then
+					pcall(function() bp.Material = wantMat end)
+				end
+				if b.pressedCF and not (b.pressed and b.pressed.Value) then
+					if (bp.Position - b.pressedCF.Position).Magnitude > 0.01 then
+						pcall(function() bp.CFrame = b.pressedCF end)
+					end
+				end
+			else
+				local wantMat = b.unpressedMaterial or Enum.Material.SmoothPlastic
+				if bp.Material ~= wantMat then
+					pcall(function() bp.Material = wantMat end)
+				end
+				local cf = b.unpressedCF
+				if cf and (bp.Position - cf.Position).Magnitude > 0.01 then
+					pcall(function() bp.CFrame = cf end)
+				end
+			end
+		end
+		if not isPressed then
+			hideTimerUI(b)
+		end
+	end
+	local function setPressed(b, value, silent)
+		local v = b.pressed
+		if not v or not v.Parent then return end
+		if v.Value == value then return end
+		if value then
+			local now = os.clock()
+			b.realPressClock = now
+			if not silent then b.pressClock = now end
+		end
+		local snd = silent and b.bp and b.bp:FindFirstChild("Press")
+		local oldVol
+		if snd and snd:IsA("Sound") then
+			oldVol = snd.Volume
+			pcall(function() snd.Volume = 0 end)
+		end
+		suppress[b.id] = value
+		pcall(function() v.Value = value end)
+		if snd and oldVol ~= nil then
+			task.defer(function()
+				pcall(function()
+					snd:Stop()
+					snd.Volume = oldVol
+				end)
+			end)
+		end
+	end
+	local function setAllCanTouch(canTouch)
+		if lastCanTouchState == canTouch then return end
+		lastCanTouchState = canTouch
+		for _, b in pairs(reg.byId) do
+			local bp = b.bp
+			if bp and bp.Parent and bp.CanTouch ~= canTouch then
+				pcall(function() bp.CanTouch = canTouch end)
+			end
+		end
+	end
+	local function reassertPressed(b)
+		if b.reasserting then return end
+		b.reasserting = true
+		b.realPressClock = os.clock()
+		local dur0 = getButtonDuration(b)
+		local rawEl0 = pressAt[b.id] and (tNowCache - pressAt[b.id]) or 0
+		if rawEl0 >= -0.001 and (dur0 == 0 or rawEl0 < dur0) then
+			local el0 = math.max(0, rawEl0)
+			if b.pressed and b.pressed.Parent and not b.pressed.Value then
+				setPressed(b, true, true)
+				local ts0 = getTimerValues(b)
+				if ts0 then setTimerStartValue(b, ts0, os.clock() - el0) end
+			end
+		end
+		restoreButtonVisual(b, true)
+		task.defer(function()
+			b.reasserting = false
+			if control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - pressAt[b.id]
+				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
+					local elapsedTAS = math.max(0, rawEl)
+					if b.pressed and b.pressed.Parent and not b.pressed.Value then
+						setPressed(b, true, true)
+						local timerStart = getTimerValues(b)
+						if timerStart then
+							setTimerStartValue(b, timerStart, os.clock() - elapsedTAS)
+						end
+					end
+					restoreButtonVisual(b, true)
+					if dur > 0 then
+						updateTimerUI(b, math.max(0, dur - elapsedTAS), true)
+						task.defer(function()
+							if control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
+								local curEl = math.max(0, tNowCache - pressAt[b.id])
+								updateTimerUI(b, math.max(0, dur - curEl), true)
+							end
+						end)
+					end
+				end
+			end
+		end)
+	end
+	local function reassertUnpressed(b)
+		if b.reassertingUnpress then return end
+		b.reassertingUnpress = true
+		local timerStart = getTimerValues(b)
+		setPressed(b, false, true)
+		setTimerStartValue(b, timerStart, 0)
+		restoreButtonVisual(b, false)
+		task.defer(function()
+			b.reassertingUnpress = false
+			if control ~= "none" and not b.currentPressed then
+				if b.pressed and b.pressed.Parent and b.pressed.Value then
+					setPressed(b, false, true)
+				end
+				setTimerStartValue(b, timerStart, 0)
+				restoreButtonVisual(b, false)
+			end
+		end)
+	end
+	local function clearOurLabels(b)
+		if b.ourScreenLabel and b.ourScreenLabel.Parent then pcall(function() b.ourScreenLabel:Destroy() end) end
+		if b.ourPartGui and b.ourPartGui.Parent then pcall(function() b.ourPartGui:Destroy() end) end
+		b.ourScreenLabel, b.ourPartGui, b.screenLabel, b.partLabels = nil, nil, nil, nil
+		b.lastRemQ, b.lastFormatted = nil, nil
+	end
+	local function getLiveElapsed(b, clock)
+		local timerStart = getTimerValues(b)
+		local dur = getButtonDuration(b)
+		if b.pausedElapsed ~= nil then
+			return b.pausedElapsed, dur
+		end
+		local el = (timerStart and timerStart.Value > 0 and math.max(0, clock - timerStart.Value))
+			or (b.pressClock and math.max(0, clock - b.pressClock)) or 0
+		return el, dur
+	end
+	local function applyPressedState(b, id, t0, el, silent, clock)
+		local dur = getButtonDuration(b)
+		if dur > 0 and el >= dur then return false end
+		b.currentPressed, b.pressedInIdle, b.pausedElapsed = true, nil, el
+		dirtyButtons[id] = true
+		pressAt[id] = t0
+		local nowClock = clock or os.clock()
+		b.pressClock = nowClock - el
+		setPressed(b, true, silent)
+		local timerStart = getTimerValues(b)
+		setTimerStartValue(b, timerStart, nowClock - el)
+		if dur > 0 then
+			updateTimerUI(b, math.max(0, dur - el), control ~= "none")
+			task.defer(function()
+				if b.currentPressed and pressAt[id] then
+					local curEl = math.max(0, tNowCache - pressAt[id])
+					setTimerStartValue(b, timerStart, os.clock() - curEl)
+					updateTimerUI(b, math.max(0, dur - curEl), control ~= "none")
+				end
+			end)
+		end
+		restoreButtonVisual(b, true)
+		return true
 	end
 	local function onPressedChanged(b)
 		local v = b.pressed
 		if not v or not v.Parent then return end
 		local now = v.Value
+		if now then
+			b.realPressClock = os.clock()
+			b.needTimerStartRecheck = true
+			if b.bp and b.bp.Parent and b.bp.Material ~= b.unpressedMaterial then b.pressedMaterial = b.bp.Material end
+		end
 		local s = suppress[b.id]
 		if s ~= nil then
 			suppress[b.id] = nil
 			if s == now then return end
 		end
-		if recording then
-			pending[#pending + 1] = { b.id, now and 1 or 0 }
+		if control ~= "none" then
+			if not now and b.currentPressed and pressAt[b.id] ~= nil then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - pressAt[b.id]
+				local tol = (control == "record") and 0.05 or 0
+				if rawEl >= -0.001 and ((dur == 0 and control ~= "record") or (dur > 0 and rawEl < dur - tol)) then
+					reassertPressed(b)
+					return
+				end
+			elseif now and not b.currentPressed and control == "paused" then
+				reassertUnpressed(b)
+				return
+			elseif now and b.currentPressed and pressAt[b.id] ~= nil then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - pressAt[b.id]
+				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
+					local elapsedTAS = math.max(0, rawEl)
+					local timerStart = getTimerValues(b)
+					if timerStart then setTimerStartValue(b, timerStart, os.clock() - elapsedTAS) end
+					if dur > 0 then updateTimerUI(b, math.max(0, dur - elapsedTAS), true) end
+					return
+				end
+			end
+			if control == "paused" then return end
 		end
-		if not now then pressAt[b.id] = nil end
+		if recording then pending[#pending + 1] = { b.id, now and 1 or 0 } end
+		if now then
+			b.pressClock = os.clock()
+			b.currentPressed = true
+			dirtyButtons[b.id] = true
+			b.pausedElapsed = nil
+			clearOurLabels(b)
+			pressAt[b.id] = tNowCache
+			b.pressedInIdle = (control == "none")
+			local function hookLiveLabels()
+				if not b.currentPressed then return end
+				local sLbl = getScreenLabel(b, false)
+				if sLbl then hookLabelText(b, sLbl) end
+				getPartLabels(b, false)
+			end
+			task.defer(hookLiveLabels)
+			task.delay(0.05, hookLiveLabels)
+		else
+			b.currentPressed, b.pressedInIdle, b.pausedElapsed, pressAt[b.id] = false, nil, nil, nil
+			hideTimerUI(b)
+		end
 	end
 	local function bind(v)
 		if conns[v] then return end
+		local model, bp, config = getButtonInfo(v)
+		if not (model and bp) then return end
 		local parent = v.Parent
-		local key = keyOf(parent)
+		local key = keyOf(parent) or keyOf(model)
 		if not key then return end
 		local id = idForKey(key)
 		local b = reg.byId[id]
-		b.parent, b.pressed, b.timer = parent, v, nil
+		b.model, b.bp, b.config, b.parent, b.pressed = model, bp, config, parent, v
+		b.timerStart, b.durationVal, b.cachedDuration = nil, nil, nil
+		b.timerValuesChecked, b.needTimerStartRecheck, b.hideGUI = false, false, nil
+		b.partLabels, b.screenLabel, b.ourScreenLabel, b.ourPartGui = nil, nil, nil, nil
+		b.timerText, b.decimalPlaces, b.configDecimals, b.liveDecimals, b.subSecDecimals, b.aboveSecDecimals = nil, nil, nil, nil, nil, nil
+		b.decScale, b.lastUsedDec, b.lastRemQ, b.lastFormatted = nil, nil, nil, nil
+		b.currentPressed = v.Value
+		b.pressClock = v.Value and os.clock() or nil
+		b.realPressClock = b.pressClock
+		if not v.Value or not b.unpressedColor then b.unpressedColor = bp.Color end
+		local pm = getPressedMaterial(b)
+		if not v.Value and bp.Material ~= pm then
+			b.unpressedMaterial = bp.Material
+		elseif not b.unpressedMaterial then
+			b.unpressedMaterial = (bp.Material == pm) and Enum.Material.SmoothPlastic or bp.Material
+		end
+		local pressOffset = config and config:GetAttribute("PressOffset")
+		if typeof(pressOffset) == "Vector3" then pressOffset = CFrame.new(pressOffset)
+		elseif typeof(pressOffset) ~= "CFrame" then pressOffset = CFrame.new(0, 0.75, 0) end
+		if not v.Value then
+			b.unpressedCF, b.pressedCF = bp.CFrame, bp.CFrame * pressOffset
+		else
+			b.pressedCF, b.unpressedCF = bp.CFrame, bp.CFrame * pressOffset:Inverse()
+			dirtyButtons[id] = true
+			if pressAt[id] == nil then pressAt[id] = tNowCache; b.pressedInIdle = (control == "none") end
+		end
+		getPartLabels(b, false)
+		if control == "paused" and bp.CanTouch then pcall(function() bp.CanTouch = false end) end
 		conns[v] = v:GetPropertyChangedSignal("Value"):Connect(function() onPressedChanged(b) end)
 	end
 	local function unbind(v)
@@ -4815,9 +6497,9 @@ do
 		if enabled then return end
 		enabled = true
 		descConn = workspace.DescendantAdded:Connect(function(inst)
-			if inst.Name == "Pressed" then
+			if inst.Name == "Pressed" and inst:IsA("BoolValue") then
 				task.defer(function()
-					if enabled and inst.Parent and isButtonValue(inst) then bind(inst) end
+					if enabled and inst.Parent and inst.Name == "Pressed" and isButtonValue(inst) then bind(inst) end
 				end)
 			end
 		end)
@@ -4835,9 +6517,13 @@ do
 		if not enabled then return end
 		enabled = false
 		if descConn then descConn:Disconnect(); descConn = nil end
+		for _, b in pairs(reg.byId) do clearOurLabels(b) end
+		for ts, cn in pairs(timerStartConns) do pcall(function() cn:Disconnect() end); timerStartConns[ts] = nil end
 		for v in pairs(conns) do unbind(v) end
-		pressAt, pending, suppress = {}, {}, {}
+		pressAt, pending, suppress, suppressTimerStart, dirtyButtons = {}, {}, {}, {}, {}
+		cachedContainers, cachedAdorneeGuis, lastCanTouchState = nil, nil, nil
 		control, recording = "none", false
+		idx = nil
 	end
 	function B.IsEnabled() return enabled end
 	function B.Count()
@@ -4845,59 +6531,103 @@ do
 		for _ in pairs(conns) do n = n + 1 end
 		return n
 	end
-	local function setPressed(b, value)
-		local v = b.pressed
-		if not v or not v.Parent or v.Value == value then return end
-		suppress[b.id] = value
-		pcall(function() v.Value = value end)
-	end
 	function B.Step(tNow)
 		if not enabled or control == "none" then return end
 		tNowCache = tNow or tNowCache
+		if next(pressAt) == nil then return end
 		local clock = os.clock()
 		for id, t0 in pairs(pressAt) do
 			local b = reg.byId[id]
 			local v = b and b.pressed
-			if v and v.Parent and v.Value then
-				local timer = timerOf(b)
-				if timer then
-					local want = clock - (tNowCache - t0)
-					if math.abs(timer.Value - want) > 0.0005 then
-						pcall(function() timer.Value = want end)
+			if v and v.Parent and (v.Value or control ~= "none" or b.currentPressed) then
+				local timerStart = getTimerValues(b)
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - t0
+				if rawEl < -0.001 or (dur > 0 and rawEl >= dur) then
+					if recording and b.currentPressed then
+						pending[#pending + 1] = { id, 0 }
 					end
+					b.currentPressed, b.pausedElapsed, pressAt[id] = false, nil, nil
+					reassertUnpressed(b)
+				else
+					local elapsedTAS = math.max(0, rawEl)
+					b.currentPressed = true
+					dirtyButtons[id] = true
+					if not v.Value and (control ~= "record" or dur > 0) then reassertPressed(b) end
+					if timerStart then setTimerStartValue(b, timerStart, clock - elapsedTAS) end
+					if dur > 0 then updateTimerUI(b, math.max(0, dur - elapsedTAS), true) end
+					restoreButtonVisual(b, true)
 				end
 			else
 				pressAt[id] = nil
 			end
 		end
 	end
-	function B.RecordFrame(tNow, first)
-		if not enabled or not recording then
-			pending = {}
-			return nil
-		end
-		local out, seen = nil, nil
-		if first then
-			out = { { 0, 0, 0 } }
-			local clock = os.clock()
-			for v, _ in pairs(conns) do
-				if v.Parent and v.Value then
-					local key = keyOf(v.Parent)
-					local id = key and reg.byKey[key] and reg.byKey[key].id
-					if id then
-						local b = reg.byId[id]
-						local timer = timerOf(b)
-						local el = 0
-						if timer and timer.Value > 0 then el = math.max(0, clock - timer.Value) end
-						out[#out + 1] = { id, 1, el }
-						pressAt[id] = tNow - el
+	function B.RenderStep()
+		if not enabled or control == "none" or next(pressAt) == nil then return end
+		local clock = os.clock()
+		for id, t0 in pairs(pressAt) do
+			local b = reg.byId[id]
+			if b and b.currentPressed then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - t0
+				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
+					local elapsedTAS = math.max(0, rawEl)
+					local ts = b.timerStart
+					if ts and ts.Parent then setTimerStartValue(b, ts, clock - elapsedTAS) end
+					if dur > 0 then
+						local formatted = b.lastFormatted or formatTimer(b, math.max(0, dur - elapsedTAS))
+						local sLabel = b.screenLabel or (not isHideGUI(b) and getScreenLabel(b, false)) or nil
+						if sLabel and sLabel.Parent then
+							if sLabel.Text ~= formatted then
+								suppressLabelText[sLabel] = true
+								pcall(function() sLabel.Text = formatted end)
+								suppressLabelText[sLabel] = nil
+							end
+							if not sLabel.Visible then pcall(function() sLabel.Visible = true end) end
+						end
+						local pLabels = b.partLabels or getPartLabels(b, false)
+						if pLabels then
+							for i = 1, #pLabels do
+								syncPartLabelVisual(pLabels[i], formatted)
+							end
+						end
 					end
 				end
 			end
 		end
+	end
+	function B.RecordFrame(tNow, first)
+		if not enabled or not recording then
+			if #pending > 0 then table.clear(pending) end
+			return nil
+		end
+		tNowCache = tNow or tNowCache
+		local out
+		if first then
+			local clock = os.clock()
+			for v in pairs(conns) do
+				if v.Parent and v.Value then
+					local model = getButtonInfo(v)
+					local key = keyOf(v.Parent) or (model and keyOf(model))
+					local id = key and reg.byKey[key] and reg.byKey[key].id
+					if id then
+						local b = reg.byId[id]
+						local el, dur = getLiveElapsed(b, clock)
+						if dur == 0 or el < dur then
+							out = out or {}
+							out[#out + 1] = { id, 1, el }
+							b.currentPressed, b.pressedInIdle = true, nil
+							pressAt[id] = tNow - el
+						end
+					end
+				end
+			end
+			if out then dataVersion = dataVersion + 1; idx = nil end
+		end
 		if #pending > 0 then
 			out = out or {}
-			seen = {}
+			local seen = {}
 			for i = #pending, 1, -1 do
 				local e = pending[i]
 				if not seen[e[1]] then
@@ -4906,21 +6636,24 @@ do
 					if e[2] == 1 then pressAt[e[1]] = tNow else pressAt[e[1]] = nil end
 				end
 			end
-			pending = {}
+			table.clear(pending)
+			dataVersion = dataVersion + 1
+			idx = nil
 		end
 		return out
 	end
-	function B.Invalidate() dataVersion = dataVersion + 1 end
+	function B.Invalidate()
+		dataVersion = dataVersion + 1
+		idx = nil
+	end
 	local function buildIndex(data)
-		if idx and idxData == data and idxVer == dataVersion then return idx end
-		idx = { snapshot = false, byId = {} }
+		if idx and idxData == data and idxVer == dataVersion and idxCount == #data then return idx end
+		idx = { byId = {} }
 		for f = 1, #data do
 			local bt = data[f].BT
 			if bt then
 				for _, e in ipairs(bt) do
-					if e[1] == 0 then
-						idx.snapshot = true
-					else
+					if e[1] ~= 0 then
 						local list = idx.byId[e[1]]
 						if not list then list = {}; idx.byId[e[1]] = list end
 						list[#list + 1] = { f, e[2], e[3] or 0 }
@@ -4928,16 +6661,23 @@ do
 				end
 			end
 		end
-		idxData, idxVer = data, dataVersion
+		idxData, idxVer, idxCount = data, dataVersion, #data
 		return idx
 	end
+	local seekCandidates = {}
 	local function seekTo(data, f)
 		if not enabled then return end
 		local ix = buildIndex(data)
-		if not ix.snapshot and next(ix.byId) == nil then return end
 		local tF = data[f] and data[f].TotalTime or 0
-		for id, b in pairs(reg.byId) do
-			if b.pressed and b.pressed.Parent then
+		tNowCache = tF
+		local clock = os.clock()
+		table.clear(seekCandidates)
+		for id in pairs(ix.byId) do seekCandidates[id] = true end
+		for id in pairs(pressAt) do seekCandidates[id] = true end
+		for id in pairs(dirtyButtons) do seekCandidates[id] = true end
+		for id in pairs(seekCandidates) do
+			local b = reg.byId[id]
+			if b and b.pressed and b.pressed.Parent then
 				local list = ix.byId[id]
 				local pressed, el = false, 0
 				if list then
@@ -4946,61 +6686,125 @@ do
 						local mid = math.floor((lo + hi) / 2)
 						if list[mid][1] <= f then best = mid; lo = mid + 1 else hi = mid - 1 end
 					end
-					if best then
+					if best and list[best][2] == 1 then
 						local e = list[best]
-						if e[2] == 1 then
-							pressed = true
-							el = e[3] + (tF - (data[e[1]] and data[e[1]].TotalTime or tF))
-						end
+						pressed = true
+						el = e[3] + (tF - (data[e[1]] and data[e[1]].TotalTime or tF))
 					end
-				elseif not ix.snapshot then
-					pressed = nil
 				end
-				if pressed == true then
-					setPressed(b, true)
-					pressAt[id] = tF - el
-				elseif pressed == false then
-					setPressed(b, false)
-					pressAt[id] = nil
+				if pressed and not applyPressedState(b, id, tF - el, el, control == "paused" or control == "record", clock) then
+					pressed = false
+				end
+				if not pressed then
+					if b.currentPressed or b.pressed.Value or pressAt[id] ~= nil or b.screenLabel ~= nil or b.ourScreenLabel ~= nil or b.ourPartGui ~= nil then
+						b.currentPressed, b.pressedInIdle, b.pausedElapsed, pressAt[id] = false, nil, nil, nil
+						reassertUnpressed(b)
+					elseif list == nil then
+						dirtyButtons[id] = nil
+					end
 				end
 			end
 		end
-		tNowCache = tF
+	end
+	local function flushPending(data, tNow)
+		if #pending > 0 and data and #data > 0 then
+			local idxFrame = #data
+			while idxFrame > 1 and data[idxFrame] and data[idxFrame].Cframe == nil do idxFrame = idxFrame - 1 end
+			local fd = data[idxFrame]
+			if fd then
+				local fTime = fd.TotalTime or tNow or tNowCache
+				local out, seen = fd.BT or {}, {}
+				for i = #pending, 1, -1 do
+					local e = pending[i]
+					if not seen[e[1]] then
+						seen[e[1]] = true
+						out[#out + 1] = { e[1], e[2], 0 }
+						if e[2] == 1 then pressAt[e[1]] = fTime else pressAt[e[1]] = nil end
+					end
+				end
+				fd.BT = out
+			end
+			table.clear(pending)
+			dataVersion = dataVersion + 1
+			idx = nil
+		end
 	end
 	function B.ShowFrame(data, f)
 		if not enabled then return end
-		recording = false
-		pending = {}
-		control = "paused"
+		flushPending(data, data[f] and data[f].TotalTime or tNowCache)
+		recording, control = false, "paused"
+		setAllCanTouch(false)
 		seekTo(data, f)
 	end
 	function B.Resume(data, f)
 		if not enabled then return end
-		if f and f > 0 and data[f] then seekTo(data, f) end
-		pending = {}
-		recording = true
-		control = "record"
+		control, recording = "record", true
+		if f and f > 0 and data[f] then
+			seekTo(data, f)
+		else
+			tNowCache = 0
+			local clock = os.clock()
+			for id, b in pairs(reg.byId) do
+				if b.currentPressed and pressAt[id] ~= nil then
+					local el = b.pausedElapsed or math.max(0, -pressAt[id])
+					applyPressedState(b, id, -el, el, true, clock)
+				end
+			end
+		end
+		for _, b in pairs(reg.byId) do
+			if b.bp and b.bp.Parent then pcall(function() b.bp.CanTouch = true end) end
+			if not b.currentPressed then clearOurLabels(b) end
+		end
+		table.clear(pending)
+		dataVersion = dataVersion + 1
+		idx = nil
 	end
 	function B.Pause(tNow)
 		if not enabled then return end
-		recording = false
-		pending = {}
-		control = "paused"
+		recording, control = false, "paused"
 		tNowCache = tNow or tNowCache
+		local data = Core and Core.State and Core.State.data
+		if data and #data > 0 then flushPending(data, tNowCache) end
+		dataVersion = dataVersion + 1
+		idx = nil
+		setAllCanTouch(false)
+		if not data or #data == 0 then
+			local clock = os.clock()
+			for id, b in pairs(reg.byId) do
+				if b.pressed and b.pressed.Parent and b.pressed.Value and (pressAt[id] == nil or b.pressedInIdle) then
+					local el, dur = getLiveElapsed(b, clock)
+					if dur == 0 or el < dur then
+						b.currentPressed, b.pressedInIdle, b.pausedElapsed = true, nil, el
+						pressAt[id] = tNowCache - el
+					end
+				elseif b.currentPressed and pressAt[id] ~= nil then
+					b.pausedElapsed = math.max(0, tNowCache - pressAt[id])
+				end
+			end
+		else
+			for id, t0 in pairs(pressAt) do
+				local b = reg.byId[id]
+				if b and b.currentPressed then
+					b.pausedElapsed = math.max(0, tNowCache - t0)
+				end
+			end
+		end
+		B.Step(tNowCache)
 	end
 	function B.PlaybackBegin(data, f)
 		if not enabled then return end
-		recording = false
-		pending = {}
-		control = "test"
-		applied = f
+		recording, control, applied = false, "test", f
+		table.clear(pending)
+		setAllCanTouch(true)
 		seekTo(data, f)
 	end
 	function B.PlaybackTo(data, f, t)
 		if not enabled or control ~= "test" then return end
+		tNowCache = t or tNowCache
 		if f < applied or f - applied > 600 then
 			seekTo(data, f)
 		else
+			local clock = os.clock()
 			for i = applied + 1, f do
 				local bt = data[i] and data[i].BT
 				if bt then
@@ -5009,11 +6813,10 @@ do
 						local b = e[1] ~= 0 and reg.byId[e[1]]
 						if b then
 							if e[2] == 1 then
-								setPressed(b, true)
-								pressAt[e[1]] = tI - (e[3] or 0)
+								applyPressedState(b, e[1], tI - (e[3] or 0), e[3] or 0, false, clock)
 							else
-								setPressed(b, false)
-								pressAt[e[1]] = nil
+								b.currentPressed, pressAt[e[1]] = false, nil
+								reassertUnpressed(b)
 							end
 						end
 					end
@@ -5023,9 +6826,29 @@ do
 		applied = f
 		B.Step(t)
 	end
+	function B.Reset()
+		for id, b in pairs(reg.byId) do
+			b.currentPressed, b.pressedInIdle, pressAt[id] = false, nil, nil
+			if b.pressed and b.pressed.Parent and b.pressed.Value then setPressed(b, false, true) end
+			local timerStart = getTimerValues(b)
+			setTimerStartValue(b, timerStart, 0)
+			restoreButtonVisual(b, false)
+		end
+		table.clear(pending)
+		table.clear(pressAt)
+		dataVersion = dataVersion + 1
+		idx = nil
+	end
 	function B.Release()
+		setAllCanTouch(true)
+		for _, b in pairs(reg.byId) do
+			clearOurLabels(b)
+			b.pressedInIdle = nil
+		end
 		control, recording = "none", false
-		pending, pressAt = {}, {}
+		table.clear(pending)
+		table.clear(pressAt)
+		idx = nil
 	end
 	function B.ExportKeys(frames)
 		local set = {}
@@ -5068,6 +6891,244 @@ do
 			if v ~= 0 then B.Enable() else B.Disable() end
 		end)
 		Janitor.add(function() B.Disable() end)
+	end
+end
+do
+	local L = Lighting
+	local lighting = game:GetService("Lighting")
+	local enabled, dirty, applying = false, true, false
+	local initialSnap, lastSnap, curSnap = nil, nil, nil
+	local timeline, lConns = {}, {}
+	local effConns = setmetatable({}, { __mode = "k" })
+	local control, curFrame = "none", 0
+	local L_NUM = { "Brightness", "EnvironmentDiffuseScale", "EnvironmentSpecularScale", "ExposureCompensation", "FogStart", "FogEnd", "GeographicLatitude", "ShadowSoftness", "ClockTime" }
+	local L_COL = { "Ambient", "OutdoorAmbient", "ColorShift_Bottom", "ColorShift_Top", "FogColor" }
+	local EFF_DEF = {
+		ColorCorrectionEffect = { n = { "Brightness", "Contrast", "Saturation" }, c = { "TintColor" }, b = { "Enabled" } },
+		BloomEffect = { n = { "Intensity", "Size", "Threshold" }, b = { "Enabled" } },
+		BlurEffect = { n = { "Size" }, b = { "Enabled" } },
+		SunRaysEffect = { n = { "Intensity", "Spread" }, b = { "Enabled" } },
+		DepthOfFieldEffect = { n = { "FarIntensity", "FocusDistance", "InFocusRadius", "NearIntensity" }, b = { "Enabled" } },
+		Atmosphere = { n = { "Density", "Offset", "Glare", "Haze" }, c = { "Color", "Decay" } },
+		Sky = { n = { "MoonAngularSize", "StarCount", "SunAngularSize" }, s = { "MoonTextureId", "SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp", "SunTextureId" } },
+	}
+	local function numEq(n1, n2, tol)
+		if n1 == n2 then return true end
+		if not n1 or not n2 then return false end
+		return math.abs(n1 - n2) < (tol or 0.001)
+	end
+	local function colorEq(c1, c2)
+		if c1 == c2 then return true end
+		if not c1 or not c2 then return false end
+		return math.abs(c1.R - c2.R) < 0.002 and math.abs(c1.G - c2.G) < 0.002 and math.abs(c1.B - c2.B) < 0.002
+	end
+	local function markDirty()
+		if not applying then dirty = true end
+	end
+	local function watchEffect(ch)
+		if effConns[ch] or not EFF_DEF[ch.ClassName] then return end
+		effConns[ch] = ch.Changed:Connect(markDirty)
+	end
+	local function capture()
+		local snap = { GlobalShadows = lighting.GlobalShadows }
+		for _, k in ipairs(L_NUM) do snap[k] = lighting[k] end
+		for _, k in ipairs(L_COL) do snap[k] = lighting[k] end
+		local effs = {}
+		for _, ch in ipairs(lighting:GetChildren()) do
+			local def = EFF_DEF[ch.ClassName]
+			if def then
+				watchEffect(ch)
+				local e = { type = ch.ClassName, name = ch.Name }
+				if def.b then for _, k in ipairs(def.b) do e[k] = ch[k] end end
+				if def.n then for _, k in ipairs(def.n) do e[k] = ch[k] end end
+				if def.c then for _, k in ipairs(def.c) do e[k] = ch[k] end end
+				if def.s then for _, k in ipairs(def.s) do e[k] = ch[k] end end
+				effs[#effs + 1] = e
+			end
+		end
+		snap.effs = effs
+		dirty = false
+		return snap
+	end
+	local function apply(snap)
+		if not snap then return end
+		applying = true
+		pcall(function()
+			if snap.GlobalShadows ~= nil and lighting.GlobalShadows ~= snap.GlobalShadows then lighting.GlobalShadows = snap.GlobalShadows end
+			for _, k in ipairs(L_NUM) do
+				local v = snap[k]
+				if v ~= nil and not numEq(lighting[k], v, 0.0005) then lighting[k] = v end
+			end
+			for _, k in ipairs(L_COL) do
+				local v = snap[k]
+				if v ~= nil and not colorEq(lighting[k], v) then lighting[k] = v end
+			end
+		end)
+		if snap.effs then
+			for _, e in ipairs(snap.effs) do
+				local inst = lighting:FindFirstChild(e.name)
+				local def = EFF_DEF[e.type]
+				if inst and def and inst.ClassName == e.type then
+					pcall(function()
+						if def.b then for _, k in ipairs(def.b) do if e[k] ~= nil and inst[k] ~= e[k] then inst[k] = e[k] end end end
+						if def.n then for _, k in ipairs(def.n) do if e[k] ~= nil and not numEq(inst[k], e[k], 0.0005) then inst[k] = e[k] end end end
+						if def.c then for _, k in ipairs(def.c) do if e[k] ~= nil and not colorEq(inst[k], e[k]) then inst[k] = e[k] end end end
+						if def.s then for _, k in ipairs(def.s) do if e[k] ~= nil and inst[k] ~= e[k] then inst[k] = e[k] end end end
+					end)
+				end
+			end
+		end
+		applying = false
+		dirty = false
+	end
+	local function diff(a, b)
+		if not a or not b or a.GlobalShadows ~= b.GlobalShadows then return true end
+		for _, k in ipairs(L_NUM) do
+			local tol = (k == "FogStart" or k == "FogEnd") and 0.1 or ((k == "ClockTime") and 0.005 or 0.001)
+			if not numEq(a[k], b[k], tol) then return true end
+		end
+		for _, k in ipairs(L_COL) do if not colorEq(a[k], b[k]) then return true end end
+		local ea, eb = a.effs or {}, b.effs or {}
+		if #ea ~= #eb then return true end
+		for i = 1, #ea do
+			local x, y = ea[i], eb[i]
+			local def = EFF_DEF[x.type]
+			if not def or x.name ~= y.name or x.type ~= y.type then return true end
+			if def.b then for _, k in ipairs(def.b) do if x[k] ~= y[k] then return true end end end
+			if def.n then for _, k in ipairs(def.n) do if not numEq(x[k], y[k]) then return true end end end
+			if def.c then for _, k in ipairs(def.c) do if not colorEq(x[k], y[k]) then return true end end end
+			if def.s then for _, k in ipairs(def.s) do if x[k] ~= y[k] then return true end end end
+		end
+		return false
+	end
+	local function findSnap(f)
+		if #timeline == 0 then return initialSnap end
+		local lo, hi, best = 1, #timeline, nil
+		while lo <= hi do
+			local mid = math.floor((lo + hi) / 2)
+			if timeline[mid].f <= f then best = timeline[mid]; lo = mid + 1 else hi = mid - 1 end
+		end
+		return best and best.snap or initialSnap
+	end
+	function L.Enable()
+		if enabled then return end
+		enabled = true
+		lConns[#lConns + 1] = lighting.Changed:Connect(markDirty)
+		lConns[#lConns + 1] = lighting.ChildAdded:Connect(function(ch) watchEffect(ch); markDirty() end)
+		lConns[#lConns + 1] = lighting.ChildRemoved:Connect(markDirty)
+		for _, ch in ipairs(lighting:GetChildren()) do watchEffect(ch) end
+		if not initialSnap then initialSnap = capture() end
+		lastSnap = initialSnap
+	end
+	function L.Disable()
+		if not enabled then return end
+		enabled = false
+		for _, cn in ipairs(lConns) do pcall(function() cn:Disconnect() end) end
+		lConns = {}
+		for ch, cn in pairs(effConns) do pcall(function() cn:Disconnect() end); effConns[ch] = nil end
+		if initialSnap then apply(initialSnap) end
+		timeline = {}
+		control = "none"
+		curSnap = nil
+	end
+	function L.Trim(f)
+		if not f then return end
+		while #timeline > 0 and timeline[#timeline].f > f do timeline[#timeline] = nil end
+		lastSnap = findSnap(f)
+		if curFrame > f then curFrame = f end
+		if control == "paused" or control == "test" then
+			curSnap = findSnap(curFrame)
+			if curSnap then apply(curSnap) end
+		end
+	end
+	function L.Clear()
+		timeline = {}
+		curFrame = 0
+		curSnap = nil
+		lastSnap = initialSnap
+	end
+	function L.LoadFromData(data)
+		timeline = {}
+		if not data then return end
+		for f = 1, #data do
+			local fd = data[f]
+			if fd and fd.LT then timeline[#timeline + 1] = { f = f, t = fd.TotalTime or 0, snap = fd.LT } end
+		end
+		if #timeline > 0 then lastSnap = timeline[#timeline].snap end
+	end
+	function L.RecordFrame(frame, tNow, first)
+		if not enabled or control ~= "record" then return end
+		if first or #timeline == 0 then
+			initialSnap = initialSnap or capture()
+			lastSnap = capture()
+			timeline = { { f = 1, t = tNow, snap = lastSnap } }
+			return lastSnap
+		end
+		while #timeline > 0 and timeline[#timeline].f >= frame do timeline[#timeline] = nil end
+		if not dirty then return nil end
+		local cur = capture()
+		if diff(cur, lastSnap) then
+			lastSnap = cur
+			timeline[#timeline + 1] = { f = frame, t = tNow, snap = cur }
+			return cur
+		end
+		return nil
+	end
+	function L.ShowFrame(data, f)
+		if not enabled then return end
+		control = "paused"
+		curFrame = f
+		curSnap = findSnap(f)
+		if curSnap then apply(curSnap) end
+	end
+	function L.PlaybackBegin(data, f)
+		if not enabled then return end
+		control = "test"
+		curFrame = f
+		if #timeline == 0 and data then L.LoadFromData(data) end
+		curSnap = findSnap(f)
+		if curSnap then apply(curSnap) end
+	end
+	function L.PlaybackTo(data, f)
+		if not enabled or control ~= "test" then return end
+		if f ~= curFrame then
+			curFrame = f
+			local s = findSnap(f)
+			if s ~= curSnap or dirty then
+				curSnap = s
+				if curSnap then apply(curSnap) end
+			end
+		end
+	end
+	function L.RenderStep()
+		if not enabled or not dirty then return end
+		if (control == "paused" or control == "test") and curSnap then apply(curSnap) end
+	end
+	function L.Pause()
+		if not enabled then return end
+		control = "paused"
+		curSnap = findSnap(curFrame)
+		if curSnap then apply(curSnap) end
+	end
+	function L.Resume(data, f)
+		if not enabled then return end
+		control = "record"
+		curFrame = f or curFrame
+		curSnap = nil
+		dirty = true
+		if f and f > 0 then L.Trim(f) end
+	end
+	function L.Release()
+		control = "none"
+		curSnap = nil
+		if initialSnap then apply(initialSnap) end
+	end
+	function L.Start()
+		if Settings.On("Sync Lighting") then L.Enable() end
+		Settings.Changed("Sync Lighting", function(v)
+			if v ~= 0 then L.Enable() else L.Disable() end
+		end)
+		Janitor.add(function() L.Disable() end)
 	end
 end
 do
@@ -5503,8 +7564,8 @@ do
 		end
 		function P.Heartbeat() end
 		local function clearAcc()
-			for k in pairs(tAcc) do tAcc[k] = nil end
-			for k in pairs(tCnt) do tCnt[k] = nil end
+			table.clear(tAcc)
+			table.clear(tCnt)
 			slog.depthNow = 0
 		end
 		local function aggregate(ms)
@@ -7670,10 +9731,7 @@ do
 		end
 		function P.FrameBegin(dt)
 			frameNo = frameNo + 1
-			if not P.active then
-				clearAcc()
-				return
-			end
+			if not P.active then return end
 			local t0 = clock()
 			local recorded = flip(dt, t0)
 			if U.built and U.root.Visible then
@@ -8117,7 +10175,7 @@ do
 		liveRows(f, root, IDLE_ROWS)
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
-	local lastBT = nil
+	local lastBT, lastStatFD, lastStatFN, lastStatPaused = nil, nil, nil, nil
 	function SS.Create(pausedNow, frameNo, FrameData)
 		local panel = C.CreateStatsF
 		showPanel(panel)
@@ -8125,6 +10183,10 @@ do
 		if lastBT == nil then lastBT = panel.BackgroundTransparency end
 		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
 		local f = labels(panel)
+		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo then
+			return
+		end
+		lastStatPaused, lastStatFD, lastStatFN = pausedNow, FrameData, frameNo
 		setText(f["1"], " Frame: " .. frameNo)
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
@@ -8220,18 +10282,28 @@ do
 		else
 			cam.CFrame = C.TableToCFrame(FrameData.CamCframe)
 		end
+		local hrp, hum = C.HRP, C.Humanoid
+		if hrp and hrp.Parent then
+			local off = hum and hum.CameraOffset or ZERO3
+			cam.Focus = CFrame.new(hrp.CFrame.Position + hrp.CFrame:VectorToWorldSpace(Vector3.new(0, 1.5, 0) + off))
+		end
 		if not UnlockShift then
 			local IsShiftLock = Bridge.IsShiftlocked() and 1 or 0
 			if IsShiftLock ~= FrameData.ShiftLock then Bridge.ShiftlockSwitch() end
 		end
-		Bridge.SetZoom(tonumber(FrameData.Zoom) or 12.5, true)
+		local z = tonumber(FrameData.Zoom) or 12.5
+		Bridge.SetZoom(z, true)
 	end
 	function C.SyncFrame(fr)
 		C.SyncCharacter(C.TableToCFrame(fr.Cframe), C.TableToVector3(fr.Velocity.Linear), C.TableToVector3(fr.Velocity.Angular))
 	end
 	function C.anchor(value)
 		if C.HRP then C.HRP.Anchored = value end
-		Bridge.ShiftlockRotation(not value)
+		local allowAutoRotate = (not value) and (C.mode ~= 3)
+		if C.Humanoid then
+			pcall(function() C.Humanoid.AutoRotate = allowAutoRotate end)
+		end
+		Bridge.ShiftlockRotation(allowAutoRotate)
 	end
 	function C.LoadFrame(FrameData, unpausing, backtrack)
 		local data = C.data
@@ -8244,12 +10316,20 @@ do
 			C.SyncFrame(FrameData)
 			C.UpdateCamera(FrameData)
 			if C.mode == 2 then
+				if C.SetCam() and not C.LookAround then
+					Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+				end
 				ClientObjects.ShowFrame(data, C.frame)
 				Buttons.ShowFrame(data, C.frame)
+				Lighting.ShowFrame(data, C.frame)
 			end
 		else
 			ClientObjects.RestoreUnpause(data, C.frame)
-			if C.SetCam() then Bridge.SetZoom(FrameData.Zoom, true) end
+			if C.SetCam() then
+				Bridge.SetZoom(FrameData.Zoom, true)
+				Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+			end
+			Bridge.ResetGhost(true)
 			C.LastPause = C.frame
 			C.anchor(false)
 		end
@@ -8282,8 +10362,10 @@ do
 		if #data > C.frame then
 			for _ = C.frame + 1, #data do data[#data] = nil end
 			C.DataChanged()
+			Lighting.Trim(C.frame)
 		end
 	end
+	local af1, af2, afCF1, afCF2, afCam1, afCam2
 	function C.AveragedFrame(f1, f2, t)
 		if not f1 or not f2 or not f1.Cframe or not f2.Cframe then
 			local f = f1 or f2
@@ -8293,10 +10375,19 @@ do
 			end
 			return CFrame.new(), CFrame.new(), ZERO3, ZERO3, 12.5
 		end
+		if f1 ~= af1 or f2 ~= af2 then
+			if f1 == af2 then
+				afCF1, afCam1 = afCF2, afCam2
+			else
+				afCF1, afCam1 = C.TableToCFrame(f1.Cframe), C.TableToCFrame(f1.CamCframe)
+			end
+			afCF2, afCam2 = C.TableToCFrame(f2.Cframe), C.TableToCFrame(f2.CamCframe)
+			af1, af2 = f1, f2
+		end
 		local t1, t2 = f1.TotalTime or 0, f2.TotalTime or 0
 		local w = (t2 > t1) and clampn((t - t1) / (t2 - t1), 0, 1) or 0
-		local rootCF = C.TableToCFrame(f1.Cframe):Lerp(C.TableToCFrame(f2.Cframe), w)
-		local camCF = C.TableToCFrame(f1.CamCframe):Lerp(C.TableToCFrame(f2.CamCframe), w)
+		local rootCF = afCF1:Lerp(afCF2, w)
+		local camCF = afCam1:Lerp(afCam2, w)
 		local l1, l2 = f1.Velocity.Linear, f2.Velocity.Linear
 		local a1, a2 = f1.Velocity.Angular, f2.Velocity.Angular
 		local lin = Vector3.new(l1[1] + (l2[1] - l1[1]) * w, l1[2] + (l2[2] - l1[2]) * w, l1[3] + (l2[3] - l1[3]) * w)
@@ -8441,11 +10532,14 @@ do
 		Bridge.ResetGhost()
 		camType(Enum.CameraType.Custom)
 		C.mode, C.frame = 1, 1
+		C.pausedCamCF, C.pausedZoom = nil, nil
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
 		Buttons.Release()
+		Lighting.Release()
 		ToolSync.ReplayEnd()
 		Cursor.Reset()
 		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
@@ -8453,6 +10547,9 @@ do
 	end
 	function inputs.Create(force)
 		if C.DoubleInput() and not force then return end
+		if InputSys.IsReplaying() then InputSys.ReplayEnd() end
+		if ClientObjects.IsTesting() then ClientObjects.EndPlayback() end
+		ToolSync.ReplayEnd()
 		camType(Enum.CameraType.Custom)
 		local data = C.data
 		C.frame = #data
@@ -8460,13 +10557,21 @@ do
 		C.paused = true
 		C.LookAround = false
 		if #data > 0 and data[#data] then
-			C.LoadFrame(data[#data], false, true)
-			Bridge.SetZoom(data[#data].Zoom, true)
+			local last = data[#data]
+			C.LoadFrame(last, false, true)
+			Bridge.SetZoom(last.Zoom, true)
+			if C.SetCam() then
+				Bridge.UpdateGhost(last.Zoom, 0, true)
+			else
+				Bridge.ResetGhost(true)
+			end
 		else
+			Bridge.ResetGhost(true)
 			Buttons.Pause(0)
+			Lighting.Pause()
 		end
 		C.anchor(true)
-		Bridge.LockShiftlock(false)
+		Bridge.LockShiftlock(#data > 0)
 		Bridge.LockAnimations(true)
 	end
 	function inputs.Test()
@@ -8487,7 +10592,7 @@ do
 		camType(Settings.On("Lock Camera (Test)") and Enum.CameraType.Scriptable or Enum.CameraType.Custom)
 		C.mode = 3
 		if data[C.frame] then
-			C.UpdateCamera(data[C.frame], true)
+			C.UpdateCamera(data[C.frame], false)
 			Bridge.SetZoom(data[C.frame].Zoom, true)
 		end
 		C.anchor(false)
@@ -8499,14 +10604,17 @@ do
 			ClientObjects.PlaybackBegin(data, C.frame)
 		end
 		Buttons.PlaybackBegin(data, C.frame)
+		Lighting.PlaybackBegin(data, C.frame)
 		ToolSync.ReplayBegin(data, C.frame, C.Char)
 	end
 	local function beginRecordingAt()
 		local data = C.data
+		C.lastVX, C.lastVY = nil, nil
 		InputSys.BeginRecording(data, C.merge and C.mergeBaseHeld or nil)
 		ClientObjects.BeginRecording()
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
+		Lighting.Resume(data, #data)
 	end
 	local function unpauseFrom(data)
 		C.RemoveCutFrames()
@@ -8531,6 +10639,8 @@ do
 		unpauseFrom(data)
 		C.LoadFrame(data[#data], true)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.paused = false
@@ -8544,8 +10654,16 @@ do
 		if C.DoubleInput() then return end
 		Bridge.LockAnimations(true)
 		C.paused = true
-		C.LoadFrame(C.data[#C.data])
-		Buttons.Pause(frameTime(#C.data))
+		local cam = workspace.CurrentCamera
+		C.pausedCamCF = cam and cam.CFrame or C.pausedCamCF
+		C.pausedZoom = Bridge.GetZoom()
+		local data = C.data
+		if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
+		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
+		C.LoadFrame(data[#data])
+		Buttons.Pause(frameTime(#data))
+		Lighting.Pause()
 	end
 	function inputs.Unpause1F()
 		if C.DoubleInput() then return end
@@ -8555,21 +10673,28 @@ do
 		if #data > 1 and data[C.frame] and data[C.frame].State == Enum.HumanoidStateType.Landed.Value then FrameCount = 2 end
 		unpauseFrom(data)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.LoadFrame(data[#data], true)
 		noJumpOneFrame()
 		C.paused = false
+		Bridge.SetFreeMouse(false)
 		C.FirstFrameRecord = false
 		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
 		Buttons.Pause(frameTime(#C.data))
+		Lighting.Pause()
 	end
 	local function holdAt(f)
 		C.frame = f
 		C.paused = true
+		Bridge.LockShiftlock(#C.data > 0)
 		Bridge.LockAnimations(true)
 		C.LoadFrame(C.data[f], false, true)
 	end
@@ -8588,6 +10713,8 @@ do
 		if ConfirmDelete then
 			C.data = {}
 			C.DataChanged()
+			if Buttons.Reset then pcall(Buttons.Reset) end
+			Lighting.Clear()
 			C.LastPause = 1
 			C.frame = 0
 			task.spawn(C.SetStatus, "TAS Deleted")
@@ -8696,6 +10823,8 @@ do
 		else
 			C.data = LoadedTAS or {}
 			C.DataChanged()
+			Lighting.Clear()
+			Lighting.LoadFromData(C.data)
 			if C.mode == 2 then
 				C.frame = #C.data
 				if #C.data > 0 then
@@ -8719,6 +10848,7 @@ do
 		pcall(InputSys.ReplayEnd)
 		pcall(ClientObjects.EndPlayback)
 		pcall(Buttons.Release)
+		pcall(Lighting.Release)
 		pcall(Bridge.LockShiftlock, false)
 		pcall(Bridge.LockAnimations, false)
 		pcall(Bridge.SetFreeMouse, false)
@@ -8746,17 +10876,24 @@ do
 	local uis = UIS
 	local RENDER_BIND = "HappaTASLate"
 	local function finishTest()
+		local data = C.data
+		local lastFr = (#data > 0) and (data[#data] or data[C.frame]) or nil
+		local endZoom = (lastFr and tonumber(lastFr.Zoom)) or (C.pose and C.pose.Zoom) or Bridge.GetZoom()
+		local endShift = lastFr and lastFr.ShiftLock or nil
 		Bridge.ResetGhost()
 		pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
 		InputSys.ReplayEnd()
 		ClientObjects.EndPlayback()
 		Buttons.Release()
+		Lighting.Release()
 		ToolSync.ReplayEnd()
 		C.mode, C.frame = 1, 1
+		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
-		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		Bridge.RestoreCameraAfterTest(endZoom, endShift)
 		C.guardFrames = 45
 		Cursor.Reset()
 		local data = C.data
@@ -8773,55 +10910,86 @@ do
 	local function menuOpen()
 		return Menu.IsModalOpen ~= nil and Menu.IsModalOpen()
 	end
+	local function isMode2MouseLocked()
+		if C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+			local fr = C.data[C.frame]
+			if fr and fr.Cframe then
+				return fr.ShiftLock == 1 or (tonumber(fr.Zoom) or 99) <= 0.55
+			end
+		end
+		return Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+	end
+	local function holdPausedCamera()
+		if C.mode ~= 2 or not C.paused or C.FirstFrameRecord or C.LookAround or not C.SetCam() then return end
+		local fr = C.data[C.frame]
+		if fr and fr.CamCframe then
+			C.UpdateCamera(fr, false)
+		end
+	end
 	local function updateMouseMode()
+		local modal = menuOpen()
+		local camFreeze = (C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround)
+		local freezeZoom = camFreeze
+		local lockedView = (C.mode == 2 and not modal) and isMode2MouseLocked() or false
+		local forceLock = camFreeze and lockedView
+		Bridge.SetCameraFreeze(camFreeze, forceLock, freezeZoom)
 		local free = false
-		if C.mode == 2 and C.paused and C.SetCam() and not C.LookAround then free = true end
-		if C.mode == 3 and Settings.On("Lock Camera (Test)") then free = true end
+		if modal then
+			free = true
+		elseif C.mode == 3 and Settings.On("Lock Camera (Test)") then
+			free = true
+		elseif camFreeze and not lockedView then
+			free = true
+		end
 		Bridge.SetFreeMouse(free)
-		if C.guardFrames > 0 then
-			C.guardFrames = C.guardFrames - 1
-			if not free and C.mode ~= 3 then Bridge.GuardMouse(menuOpen()) end
+		if not free and C.mode ~= 3 then
+			if C.mode == 2 or C.guardFrames > 0 then
+				if C.guardFrames > 0 then C.guardFrames = C.guardFrames - 1 end
+				Bridge.GuardMouse(modal, forceLock)
+			end
 		end
 	end
 	local function preRender(dt)
 		Profiler.FrameBegin(dt)
 		Profiler.Begin("HappaTAS")
 		local data, mode = C.data, C.mode
-		if not (mode == 2 and not C.paused) then InputSys.Clear() end
+		if not (mode == 2 and (not C.paused or C.FirstFrameRecord)) then InputSys.Clear() end
 		if mode == 2 and C.CharLoaded() then
 			if not C.paused and C.NotDead() and not C.FirstFrameRecord then
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
 				local ft = r(C.LastFrameTime, 1000000)
-				local total = (n >= 2 and data[n].TotalTime) and r(data[n].TotalTime + C.LastFrameTime, 1000000) or ft
+				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + C.LastFrameTime, 1000000) or ft
 				local mx, my, uvx, uvy, vx, vy = InputSys.Mouse()
+				local vpChanged = (n == 0 or vx ~= C.lastVX or vy ~= C.lastVY)
+				if vpChanged then C.lastVX, C.lastVY = vx, vy end
+				local curZoom = r(Bridge.GetZoom(), 1000)
 				data[n + 1] = {
-					Cframe = nil,
 					Velocity = { Linear = C.Vector3ToTable(HRP.AssemblyLinearVelocity), Angular = C.Vector3ToTable(HRP.AssemblyAngularVelocity) },
-					State = nil,
 					CamCframe = C.CFrameToTable(workspace.CurrentCamera.CFrame),
 					ShiftLock = Bridge.IsShiftlocked() and 1 or 0,
-					Mobile = C.IsMobile and C.ReadMobile() or 0,
-					Anim = nil,
-					Zoom = r(Bridge.GetZoom(), 1000),
+					Mobile = C.IsMobile and C.ReadMobile() or nil,
+					Zoom = curZoom,
 					FrameTime = ft,
 					TotalTime = total,
 					Input = InputSys.Take(),
-					MX = mx, MY = my, UVX = uvx, UVY = uvy, VX = vx, VY = vy,
+					MX = mx, MY = my, UVX = uvx, UVY = uvy,
+					VX = vpChanged and vx or nil, VY = vpChanged and vy or nil,
 				}
 				Profiler.End("Record")
 			end
-			if C.paused and #data > 1 and not C.LookAround and data[C.frame] then
-				C.UpdateCamera(data[C.frame], true)
+			if C.paused then
+				holdPausedCamera()
 			end
+			updateMouseMode()
 		elseif mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
 			Profiler.Begin("Playback")
 			local p = C.PlaybackPose()
 			C.SyncCharacter(p.root, p.lin, p.ang)
 			C.UpdateCamera(p)
-			if C.SetCam() and workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then
-				Bridge.UpdateGhost(p.Zoom, dt)
+			if C.SetCam() then
+				Bridge.UpdateGhost(p.Zoom, dt, false)
 			end
 			Profiler.End("Playback")
 		end
@@ -8848,9 +11016,16 @@ do
 				Profiler.Begin("Buttons")
 				fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
 				Profiler.End("Buttons")
+				fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
 				if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 			end
 		elseif C.mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
+			if Settings.On("Interpolate Playback") then
+				local p = C.PlaybackPose()
+				C.SyncCharacter(p.root, p.lin, p.ang)
+			elseif data[C.frame] and data[C.frame].Cframe and data[C.frame].Velocity then
+				C.SyncFrame(data[C.frame])
+			end
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
 		Profiler.End("HappaTAS")
@@ -8878,6 +11053,7 @@ do
 			Profiler.Begin("Buttons")
 			Buttons.PlaybackTo(data, frame, C.TestingTimer)
 			Profiler.End("Buttons")
+			Lighting.PlaybackTo(data, frame)
 			if data[frame + 1].FrameTime and data[frame + 1].FrameTime > 0.1 then
 				holdPose(data[frame])
 				return
@@ -8909,6 +11085,7 @@ do
 			InputSys.ReplayMouse(fr)
 			ClientObjects.PlaybackTo(data, frame, nil)
 			Buttons.PlaybackTo(data, frame, fr.TotalTime)
+			Lighting.PlaybackTo(data, frame)
 			local FrameTime = fr.FrameTime or 0
 			if C.FreezeTimeRemaining > dt then
 				holdPose(fr)
@@ -8977,10 +11154,25 @@ do
 	end
 	local function lateRender()
 		Profiler.Begin("HappaTAS")
+		if C.mode == 2 then
+			if C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+				holdPausedCamera()
+				local fr = C.data[C.frame]
+				if fr then Bridge.UpdateGhost(fr.Zoom, C.LastFrameTime, true) end
+			else
+				Bridge.ResetGhost(true)
+			end
+		elseif C.mode == 3 and C.SetCam() then
+			local fr = C.data[C.frame]
+			local z = (C.pose and C.pose.Zoom) or (fr and fr.Zoom) or Bridge.GetZoom()
+			Bridge.UpdateGhost(z, C.LastFrameTime, false)
+		end
 		ClientObjects.RenderStep()
+		Buttons.RenderStep()
+		Lighting.RenderStep()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
-		Cursor.Update(C.mode, (C.mode == 3) and C.data[C.frame] or nil, menuOpen)
+		Cursor.Update(C.mode, (C.mode == 3 or (C.mode == 2 and C.paused and #C.data > 0 and C.SetCam() and not C.LookAround)) and C.data[C.frame] or nil, menuOpen)
 		Profiler.End("Cursor")
 		Profiler.End("HappaTAS")
 	end
@@ -9164,6 +11356,13 @@ do
 	end
 	Menu.SetStatus = SetStatus
 	local function autoCanvas(scroller, container, extra)
+		local ulog = container:FindFirstChild("3UpdateLog")
+		local ulogLayout = ulog and ulog:FindFirstChildOfClass("UIListLayout")
+		if ulog and ulogLayout then
+			local function fitLog() ulog.Size = UDim2.new(1, 0, 0, ulogLayout.AbsoluteContentSize.Y + 10) end
+			on(ulogLayout:GetPropertyChangedSignal("AbsoluteContentSize"), fitLog)
+			fitLog()
+		end
 		local layout = container:FindFirstChildOfClass("UIListLayout")
 		if not layout then return end
 		local function fit()
@@ -9598,6 +11797,7 @@ local function Unload()
 	pcall(Cursor.Reset)
 	pcall(ClientObjects.Disable)
 	pcall(Buttons.Disable)
+	pcall(Lighting.Disable)
 	pcall(ToolSync.ReplayEnd)
 	pcall(AnimEngine.Shutdown)
 	pcall(Bridge.Restore)
@@ -9620,6 +11820,7 @@ Sounds.Init(Gui)
 ClientObjects.OnStatus = function(text) Menu.SetStatus(text, true) end
 ClientObjects.Start()
 Buttons.Start()
+Lighting.Start()
 Profiler.Start()
 local function onCharacter(char)
 	task.spawn(function()

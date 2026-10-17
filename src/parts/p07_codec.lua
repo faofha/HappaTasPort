@@ -157,8 +157,9 @@ do
 
 	-- frames: list of frame tables, objects: { {id, key} } client objects, buttons: { {id, key} } buttons
 	function Codec.Encode(frames, progress, objects, buttons)
+		local total = #frames
 		local cols = {}
-		for _, name in ipairs(COLUMNS_V3) do cols[name] = {} end
+		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
 		local coParts = {}
 		local hasCO = false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
@@ -167,7 +168,6 @@ do
 		local FC, VP, TL, BE = cols.FC, cols.VP, cols.TL, cols.BE
 		local v3 = (buttons and #buttons > 0) or false
 
-		local total = #frames
 		local hasMouse, mouse0x, mouse0y = false, 0, 0
 		for i = 1, total do
 			local f = frames[i]
@@ -359,7 +359,7 @@ do
 			end
 
 			-- v3 extras
-			if f.VX then
+			if hasMouse and f.VX then
 				local vx, vy = q(f.VX, 10), q(f.VY or 0, 10)
 				if vx ~= pVX or vy ~= pVY then
 					fc = fc + 1
@@ -514,7 +514,7 @@ do
 			for k = 1, cnt do toolNames[k] = getStr(R.TS) end
 		end
 
-		local frames = {}
+		local frames = table.create(total)
 		local FA, FB, FC, DT, TA, PX, PY, PZ = R.FA, R.FB, R.FC, R.DT, R.TA, R.PX, R.PY, R.PZ
 		local pPos = { 0, 0, 0 }
 		local pRot = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }

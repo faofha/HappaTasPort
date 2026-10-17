@@ -339,8 +339,8 @@ do
 		function P.Heartbeat() end -- frame times come from PreRender, kept for the core
 
 		local function clearAcc()
-			for k in pairs(tAcc) do tAcc[k] = nil end
-			for k in pairs(tCnt) do tCnt[k] = nil end
+			table.clear(tAcc)
+			table.clear(tCnt)
 			slog.depthNow = 0
 		end
 
@@ -2709,10 +2709,7 @@ do
 		-- called at the start of every frame (PreRender) with the render delta
 		function P.FrameBegin(dt)
 			frameNo = frameNo + 1
-			if not P.active then
-				clearAcc()
-				return
-			end
+			if not P.active then return end
 			local t0 = clock()
 			local recorded = flip(dt, t0)
 			if U.built and U.root.Visible then

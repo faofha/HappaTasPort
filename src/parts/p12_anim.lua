@@ -459,16 +459,14 @@ do
 		end
 	end
 
-	local EMPTY_ANIM_FRAME = function()
-		return { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
-	end
+	local EMPTY_ANIM = { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
 	function Bridge.GetAnimation(startOfTAS)
 		local e = AnimEngine.current
 		if e then
 			local d = e.Get(startOfTAS)
 			if d then return d end
 		end
-		return EMPTY_ANIM_FRAME()
+		return EMPTY_ANIM
 	end
 	function Bridge.SetAnimation(animData, anim, playbackSpeed, timeDifference)
 		local e = AnimEngine.current

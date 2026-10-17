@@ -158,13 +158,27 @@ do
 		Spinners = true, Spinner = true, Spinning = true, SpinningParts = true,
 		Conveyors = true, Conveyor = true, Obstacles = true, Traps = true, Hazards = true,
 		KillBricks = true, KillParts = true, BeatBlocks = true, ["Beat Blocks"] = true,
-		BeatBlock = true, ["Beat Block"] = true, Buttons = true, ButtonPlatforms = true,
-		ButtonDeactivator = true, Morpher = true, Client = true,
+		BeatBlock = true, ["Beat Block"] = true, BeatParts = true, ["Beat Parts"] = true, Beats = true,
+		Buttons = true, ButtonPlatforms = true, ButtonDeactivator = true,
+		Morpher = true, Morphers = true, Morph = true, Morphs = true,
+		MorphButton = true, MorphButtons = true, ["Morph Button"] = true, ["Morph Buttons"] = true,
+		MorphPart = true, MorphParts = true, ["Morph Part"] = true, ["Morph Parts"] = true,
+		LightChanger = true, LightChangers = true, ["Light Changer"] = true, ["Light Changers"] = true,
+		LightingChanger = true, LightingChangers = true, ["Lighting Changer"] = true, ["Lighting Changers"] = true,
+		LightingReverter = true, ["Lighting Reverter"] = true, LightReverter = true, ["Light Reverter"] = true,
+		Vanishers = true, Vanisher = true, ["VanisherGroup"] = true, Vanish = true,
+		FadingParts = true, FadingPart = true, ["Fading Parts"] = true, ["Fading Part"] = true,
+		FadingPlatforms = true, FadingPlatform = true, ["Fading Platforms"] = true, ["Fading Platform"] = true,
+		Fading = true, Disappearing = true, DisappearingPlatforms = true, ["Disappearing Platforms"] = true,
+		Client = true,
 	}
 
 	local function nameHint(n)
 		return n:find("[Pp]usher") or n:find("[Ss]pinner") or n:find("[Cc]onveyor")
-			or n:find("[Mm]oving") or n:find("[Bb]eat[Bb]lock")
+			or n:find("[Mm]oving") or n:find("[Bb]eat") or n:find("[Mm]orph")
+			or n:find("[Ll]ight.*[Cc]hanger") or n:find("[Ll]ighting.*[Cc]hanger")
+			or n:find("[Ll]ight.*[Rr]everter")
+			or n:find("[Vv]anish") or n:find("[Ff]ad") or n:find("[Dd]isappear")
 	end
 
 	local function isCandidate(part)
@@ -175,6 +189,17 @@ do
 		if CFG.Groups and CFG.Groups[part.CollisionGroup] == true then return true end
 		if conParts[part] then return true end
 		if part:FindFirstChildWhichIsA("Constraint") or part:FindFirstChildWhichIsA("BodyMover") then return true end
+		if part:GetAttribute("Beat") or part:GetAttribute("OnTransparency") or part:GetAttribute("OffTransparency")
+			or part:FindFirstChild("OnTransparency") or part:FindFirstChild("OffTransparency")
+			or part:FindFirstChild("Beat") then
+			return true
+		end
+		if part:FindFirstChild("VanisherConfiguration")
+			or (part.Parent and part.Parent:FindFirstChild("VanisherConfiguration"))
+			or part:GetAttribute("VanishMode") or part:GetAttribute("FadeTime") or part:GetAttribute("RespawnTime")
+			or part:FindFirstChild("VanisherSelectionBox") then
+			return true
+		end
 		if nameHint(part.Name) then return true end
 		local parent = part.Parent
 		while parent and parent ~= workspace do
@@ -413,6 +438,18 @@ do
 	local function releasePart(id)
 		local part = parts[id]
 		if part then
+			local s = S[id]
+			if s and s.rcf and s.rv and play.active then
+				pcall(function()
+					part.CFrame = s.rcf
+					part.Transparency = s.rv[1] / 1000
+					part.CanCollide = s.rv[2] == 1
+					part.Color = Color3.fromRGB(s.rv[3], s.rv[4], s.rv[5])
+					part.Size = V3(s.rv[6] / 1000, s.rv[7] / 1000, s.rv[8] / 1000)
+					local okM, mat = pcall(function() return Enum.Material:FromValue(s.rv[9]) end)
+					if okM and mat then part.Material = mat end
+				end)
+			end
 			if orig[part] ~= nil then restorePart(part, orig[part]) end
 			orig[part], origVel[part] = nil, nil
 		end
@@ -454,17 +491,20 @@ do
 			s.tr = part.Transparency
 		end
 		local pos = part.Position
-		local d = (pos - ppos).Magnitude
+		local dx, dy, dz = pos.X - ppos.X, pos.Y - ppos.Y, pos.Z - ppos.Z
+		local d2 = dx * dx + dy * dy + dz * dz
 		local rad = s.rad
-		if d - rad > RADIUS then return false end
+		local maxR = RADIUS + rad
+		if d2 > maxR * maxR then return false end
 		if strict then
 			-- Frustum Culling CO: close parts always, otherwise only visible parts on screen
-			if d <= 25 then return true end
+			if d2 <= 625 then return true end
 			if s.tr >= 1 and part.LocalTransparencyModifier >= 1 then return false end
 			if not cam then return true end
 			local sp, onScreen = cam:WorldToViewportPoint(pos)
 			return onScreen and sp.Z > 0
 		end
+		local d = sqrt(d2)
 		if d - rad <= ALWAYS then return true end
 		if not cam then return true end
 		if (pos - camPos).Magnitude <= rad * 1.2 + 6 then return true end
@@ -550,7 +590,7 @@ do
 		local cp = s.cp
 		-- the properties are read on the same frames as always (every 2nd), but only when one of them
 		-- changed since the last read (or every 16th frame, in case a change was not reported)
-		if (frameNo + id) % 2 == 0 and (s.pd or (frameNo + id) % 16 == 0) then
+		if s.pd then
 			s.pd = false
 			readProps(part, cp)
 			local rvv, off = s.rv, false
@@ -801,16 +841,8 @@ do
 		return p
 	end
 	local verN = 0
-	local function newState()
-		local t = {}
-		for i = 1, 50 do t[i] = 0 end
-		return t
-	end
-	local function copyState(s)
-		local t = {}
-		for i = 1, 50 do t[i] = s[i] end
-		return t
-	end
+	local function newState() return table.create(50, 0) end
+	local function copyState(s) return table.clone(s) end
 
 	local function skipPayload(isV2, flags, str, p)
 		if isV2 then
@@ -1098,8 +1130,12 @@ do
 			end
 			sh.cf, sh.t, sh.v = cf, t, v
 		end
-		if not renderPass and sh.pv ~= v then
+		if (not renderPass and sh.pv ~= v) or rs.pd then
+			if rs.pd then
+				sh[I_TR], sh[I_CC], sh[I_COL], sh[I_SZ], sh[I_MAT] = nil, nil, nil, nil, nil
+			end
 			writeProps(part, s, sh)
+			rs.pd = false
 			sh.pv = v
 		end
 	end
@@ -1296,6 +1332,8 @@ do
 		local fr = data[frame]
 		return fr and fr.TotalTime or 0
 	end
+	local touchedScratch = {}
+	local function cleanTouched() table.clear(touchedScratch); return touchedScratch end
 
 	function CO.PlaybackBegin(data, startFrame)
 		if not (enabled and scanDone) then return false end
@@ -1307,7 +1345,7 @@ do
 		play.data = nil
 		play.nextFor = nil
 		play.t = frameTime(data, startFrame)
-		advanceTo(data, startFrame, {})
+		advanceTo(data, startFrame, cleanTouched())
 		writeAll(play.t, false)
 		return true
 	end
@@ -1316,7 +1354,7 @@ do
 	function CO.PlaybackTo(data, frame, t)
 		if not play.active then return end
 		play.t = t or frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		writeAll(play.t, false)
 		sweepAnchors()
 	end
@@ -1324,7 +1362,6 @@ do
 	-- every Heartbeat while paused in Create mode
 	function CO.Tick()
 		if not (play.active and play.kind == "show") then return end
-		writeAll(play.t, false)
 		sweepAnchors()
 	end
 
@@ -1347,7 +1384,7 @@ do
 		play.kind = "show"
 		play.active = true
 		play.t = frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		play.next, play.nextFor = {}, nil -- no blending while paused: show exactly the frame
 		writeAll(play.t, false)
 		sweepAnchors()
@@ -1358,7 +1395,7 @@ do
 		if not (enabled and scanDone) then return end
 		if hasCOData(data) and frame and data[frame] then
 			play.kind = "show"
-			advanceTo(data, frame, {})
+			advanceTo(data, frame, cleanTouched())
 			local t = frameTime(data, frame)
 			for id, s in pairs(play.cur) do
 				local part = parts[id]

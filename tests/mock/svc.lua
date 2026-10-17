@@ -43,7 +43,11 @@ cls("GuiService", "Instance", { MenuIsOpen = false, SelectedObject = nil, AutoSe
 	{}, { "MenuOpened", "MenuClosed", "UiMessageChanged" })
 cls("TextService", "Instance")
 cls("CoreGui", "Instance", { SelectionImageObject = nil, Version = 1 })
-cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2 })
+-- Lighting: the properties HappaTAS's Sync Lighting reads (Roblox's defaults for a new place)
+cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2, GlobalShadows = true, EnvironmentDiffuseScale = 1,
+	EnvironmentSpecularScale = 1, ExposureCompensation = 0, FogStart = 0, FogEnd = 100000, GeographicLatitude = 0,
+	ShadowSoftness = 0.2, Ambient = Color3.new(0, 0, 0), OutdoorAmbient = Color3.fromRGB(128, 128, 128),
+	ColorShift_Bottom = Color3.new(0, 0, 0), ColorShift_Top = Color3.new(0, 0, 0), FogColor = Color3.fromRGB(192, 192, 192) })
 cls("ReplicatedStorage", "Instance")
 cls("ReplicatedFirst", "Instance")
 cls("SoundService", "Instance", { RespectFilteringEnabled = true })

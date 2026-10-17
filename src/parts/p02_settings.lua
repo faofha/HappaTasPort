@@ -47,6 +47,7 @@ local SettingsTable = {
 	{ name = "Smooth Client Objects",    default = 1, section = "World Sync" },
 	{ name = "Frustum Culling CO",       default = 1, section = "World Sync" },
 	{ name = "Sync Button Timers",       default = 1, section = "World Sync" },
+	{ name = "Sync Lighting",            default = 1, section = "World Sync" },
 
 	{ name = "Show Stats (Idle)",        default = 1, section = "Interface" },
 	{ name = "Show Stats (Create)",      default = 1, section = "Interface" },
