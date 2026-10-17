@@ -50,6 +50,17 @@ do
 	local function gameCall(f, ...)
 		task.spawn(pcall, f, ...)
 	end
+	-- the same for a call whose result is needed (V2.38.13, checked in the client: even the getter
+	-- MouseLockController:GetMouseLockOffset takes the access away, like SetIsMouseLocked,
+	-- SetCameraToSubjectDistance and ZoomController.Update; GetCameraToSubjectDistance, GetIsMouseLocked,
+	-- SetMouseLockOffset and ZoomController.SetZoomParameters don't). ok is false if f errored or yielded.
+	local function gameGet(f, ...)
+		local ok, v = false, nil
+		task.spawn(function(...)
+			ok, v = pcall(f, ...)
+		end, ...)
+		return ok, v
+	end
 
 	-- Changes the behaviour of one of the camera script's functions. With the executor's hookfunction the
 	-- function itself is changed and stays the same function value (Real docs: it "returns a callable copy
@@ -398,7 +409,7 @@ do
 		local function visit(c)
 			if type(c) == "table" and not seen[c] then
 				seen[c] = true
-				pcall(fn, c)
+				gameCall(fn, c) -- fn calls the camera module (zoom, first person, mouse lock)
 			end
 		end
 		visit(activeCamCtrl)
@@ -411,7 +422,7 @@ do
 		snapZoom = true
 		if zoomModTbl and type(zoomModTbl.Update) == "function" then
 			local cam = workspace.CurrentCamera
-			pcall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
+			gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
 		end
 	end
 
@@ -577,7 +588,7 @@ do
 		local off = Vector3.zero
 		if isLocked then
 			if lctrl and type(lctrl.GetMouseLockOffset) == "function" then
-				local okO, v = pcall(lctrl.GetMouseLockOffset, lctrl)
+				local okO, v = gameGet(lctrl.GetMouseLockOffset, lctrl)
 				if okO and typeof(v) == "Vector3" then off = v else off = Vector3.new(1.75, 0, 0) end
 			else
 				off = Vector3.new(1.75, 0, 0)
@@ -601,10 +612,10 @@ do
 		if type(ctrl.DoMouseLockSwitch) == "function" then
 			local wasBlocked = shiftlockBlocked
 			shiftlockBlocked = false
-			pcall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
+			gameCall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
 			shiftlockBlocked = wasBlocked
 		elseif type(ctrl.OnMouseLockToggled) == "function" then
-			pcall(ctrl.OnMouseLockToggled, ctrl)
+			gameCall(ctrl.OnMouseLockToggled, ctrl)
 		end
 		Bridge.SyncShiftlockToCamera()
 	end
