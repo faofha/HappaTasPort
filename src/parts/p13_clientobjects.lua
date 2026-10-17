@@ -10,8 +10,10 @@
 --  Heartbeat (physics) and again at the end of the render step (so game scripts can't override them).
 --
 --  record layout (v3):  frame byte = 4 (delta) / 5 (full snapshot) + 8 / 16 / 32 when the frame carries
---      clock 1 / 2 / 3, then those clocks (zigzag, the change since the last frame that carried them; a full
---      snapshot starts again from 0), then records: varint id, varint flags, payload
+--      clock 1 / 2 / 3, + 64 on the full snapshot that starts a new recording (its clocks start again
+--      from 0: playback doesn't blend the clocks into it), then those clocks (zigzag, the change since the
+--      last frame that carried them; a full snapshot starts again from 0), then records: varint id, varint
+--      flags, payload
 --  clocks: 0 = TAS clock (TotalTime, never stored), 1 = simulation time without the pauses (whole 1/240 s
 --      steps; physics parts, HappaTAS holds them while paused), 2 = wall clock (20 us units, the change is
 --      stored minus the frame's FrameTime), 3 = simulation time with the pauses (steps; scripts that run on
@@ -81,6 +83,7 @@ do
 	local orig, origVel = {}, {}
 	local frozen = false
 	local frameNo, chainNo, forceFull = 0, 0, true
+	local newChain = true -- the next full snapshot starts new clocks (marked with + 64)
 	local recGen, visCursor = 0, 1
 	local lastFullF, lastFullT = 0, -1e9 -- frame number / TotalTime of the last full snapshot
 
@@ -939,6 +942,7 @@ do
 			base.skip = base.skip + (rawS - base.rawS)
 		else
 			forceFull = true
+			newChain = true
 			base.skip, base.real, base.wall = rawS, rawS, rawW
 		end
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
@@ -1004,7 +1008,11 @@ do
 		end
 		-- the clocks moving parts use now or used in the frame before (playback blends from that frame)
 		local b = full and 5 or 4
-		if full then run[1], run[2], run[3] = 0, 0, 0 end
+		if full then
+			run[1], run[2], run[3] = 0, 0, 0
+			if newChain then b = b + 64 end
+			newChain = false
+		end
 		local carry = {}
 		for i = 1, 3 do
 			carry[i] = usedNow[i] or usedPrev[i]
@@ -1456,14 +1464,25 @@ do
 		local np = 2
 		if nstr and byte(nstr, 1) >= 4 then np = readClocks(nstr, nr, nf.FrameTime) end
 		clockValues(nr, play.nv)
+		local nvReal = { play.nv[1], play.nv[2], play.nv[3] }
+		if nstr and byte(nstr, 1) >= 64 then
+			-- the next frame starts a new recording with new clocks: up to it, the clocks of this one go on
+			-- (at the TAS clock's rate) instead of being blended into the new numbers
+			local span = play.nextT - play.curT
+			for c = 1, 3 do play.nv[c] = play.cv[c] + span end
+		end
 		if not nstr or not Settings.On("Smooth Client Objects") then return end
 		local str = nstr
 		if byte(str, 1) < 2 then return end
 		local p, n = np, #str
 		local cvs = nil
-		if byte(str, 1) >= 4 then cvs = { play.nv[1], play.nv[2], play.nv[3] } end
+		if byte(str, 1) >= 4 then cvs = nvReal end
 		local cur = play.cur
 		local s = nextScratch -- (reused for every record: only dp / dr are kept)
+		-- a full snapshot's records are whole values, not changes: they start from nothing (applied to the
+		-- current state they made the "next keyframe" the sum of both, and a part near the origin jumped for
+		-- a frame at every full snapshot)
+		local nextFull = isFull(str)
 		local ok = pcall(function()
 			while p <= n do
 				local id, flags
@@ -1471,11 +1490,13 @@ do
 				flags, p = rv(str, p)
 				if not hasMask(flags, K_DROP) then
 					local base = cur[id]
-					for i = 1, 50 do s[i] = base and base[i] or 0 end
+					local from = (not nextFull) and base or nil
+					for i = 1, 50 do s[i] = from and from[i] or 0 end
 					p = applyPayloadV2(str, p, s, flags, play.nextT, cvs)
 					if base and hasPose(base) and hasPose(s) and hasMask(flags, K_KEY) then
-						-- where the current model would be vs. the next keyframe
-						local want = poseAt(s, play.nextT)
+						-- where the current model would be vs. the next keyframe (the keyframe's own pose: it is
+						-- the pose at the next frame)
+						local want = poseAt(s, nil)
 						local have = poseAt(base, play.nextT)
 						local dp = want.Position - have.Position
 						if dp.Magnitude < 25 then

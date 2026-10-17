@@ -85,12 +85,16 @@ local drive = RS.PreRender:Connect(function()
 	keyPart.CFrame = CFrame.new(KEYC) * CFrame.Angles(0, W_KEY * os.clock(), 0) * CFrame.new(3, 0, 0)
 	slide.CFrame = CFrame.new(SLIDE0 + Vector3.new(slideX, 0, 0))
 end)
--- where the parts really were when HappaTAS sampled them (it records in PreSimulation)
+-- where the parts really were when HappaTAS sampled them (it records in PreSimulation). Each frame once, right
+-- when it was filled (the step that ends an Unpause has no new frame: its last frame was logged before)
+local loggedFor = {}
 local log = RS.PreSimulation:Connect(function()
 	if not recording() then return end
-	local fd = C.data[#C.data]
-	if fd and fd.Cframe then
-		truth[#C.data] = { bar = bar.CFrame, arm = arm.CFrame, key = keyPart.CFrame, slide = slide.CFrame }
+	local n = #C.data
+	local fd = C.data[n]
+	if fd and fd.Cframe and loggedFor[n] ~= fd then
+		loggedFor[n] = fd
+		truth[n] = { bar = bar.CFrame, arm = arm.CFrame, key = keyPart.CFrame, slide = slide.CFrame }
 	end
 end)
 
@@ -296,6 +300,14 @@ key(Enum.KeyCode.V, 8)
 local cutFirst = C.data[f0 - 1]
 
 check(cutFirst ~= nil and cutFirst.CO ~= nil and parse(cutFirst.CO).kind == 5, "the first frame after the cut is a full snapshot")
+if DEBUG_PB then
+	for f = f0 - 3, #C.data do
+		local fr = C.data[f]
+		M.realPrint(string.format("   CUT f=%d byte=%s T=%.4f truthSlide=%s", f, fr.CO and tostring(string.byte(fr.CO, 1)) or "-", fr.TotalTime, truth[f] and string.format("%.3f", truth[f].slide.Position.X) or "-"))
+	end
+	CO.ShowFrame(C.data, f0 - 1)
+	M.realPrint(string.format("   CUT shown f0-1 slide=%.3f", slide.Position.X))
+end
 
 section("a long Unpause on the same frames: chains go on, the paused time is skipped")
 local n2 = #C.data
@@ -335,13 +347,90 @@ for i = n2 + 1, n3 do
 end
 check(big <= 4 and small > 400, "clock changes are small except after the pause (" .. big .. " big, " .. small .. " small)")
 
+section("speed hack: recorded at 0.5x, the parts' own clocks run twice as fast as the TAS clock")
+local n4 = #C.data
+S.Set("Speed Hack", 1)
+S.Set("Speed Hack Speed", 0.5)
+click()
+run(240)
+click()
+S.Set("Speed Hack", 0)
+local n5 = #C.data
+check(n5 > n4 + 200, "recorded " .. (n5 - n4) .. " frames at 0.5x")
+local tasT = C.data[n5].TotalTime - C.data[n4].TotalTime
+local simT = 0
+for i = n4 + 1, n5 do simT = simT + (C.data[i].FrameTime or 0) end
+near(tasT, simT, 1e-3, "TAS time adds up")
+local wP5, wR5 = accuracy(n4 + 1, n5)
+check(wP5 <= 0.02 and wR5 <= 0.003, string.format("paused on any slowed frame: every part where it was (%.4f, %.5f)", wP5, wR5))
+
+section("Test playback between frames: every part where it really was (new recording after a cut, full snapshots, 0.5x)")
+-- the playback blends towards the next frame's keyframes and clocks: checked half way between frames, against
+-- the real poses half way (the parts sit near the origin, so a wrong look-ahead would not be skipped)
+local function playbackAccuracy(from, to)
+	local worstP, worstR, n, worstF = 0, 0, 0, nil
+	CO.PlaybackBegin(C.data, from)
+	for f = from, to - 1 do
+		local t0, t1 = truth[f], truth[f + 1]
+		local fa, fb = C.data[f], C.data[f + 1]
+		if t0 and t1 and fa and fb then
+			local tm = (fa.TotalTime + fb.TotalTime) / 2
+			CO.PlaybackTo(C.data, f, tm)
+			for name, p in pairs({ bar = bar, arm = arm, key = keyPart, slide = slide }) do
+				local a, b = t0[name], t1[name]
+				-- (a jump between the two frames, like the bullet going back to its start: no half way pose)
+				if (a.Position - b.Position).Magnitude < 2 then
+					local want = a:Lerp(b, 0.5)
+					local d = (p.Position - want.Position).Magnitude
+					if d > 0.03 and DEBUG_PB then
+						local str = fb.CO
+						M.realPrint(string.format("   PB f=%d %s d=%.3f nextByte=%s curByte=%s T=%.4f/%.4f", f, name, d, str and tostring(string.byte(str, 1)) or "-", fa.CO and tostring(string.byte(fa.CO, 1)) or "-", fa.TotalTime, fb.TotalTime))
+						local pl = CO.play
+						local st = pl.cur[ids[name == "slide" and "Bullet" or (name == "key" and "Key Part" or "x")]]
+						local nx = pl.next[ids[name == "slide" and "Bullet" or (name == "key" and "Key Part" or "x")]]
+						if st then
+							M.realPrint(string.format("      key=(%.3f,%.3f,%.3f) v=(%.3f,%.3f,%.3f) w=(%.3f,%.3f,%.3f) kT=%.5f clk=%d mov=%d model=%d cv=%.5f/%.5f/%.5f nv=%.5f/%.5f/%.5f next=%s shown=(%.3f,%.3f,%.3f) want=(%.3f,%.3f,%.3f)",
+								st[1]/1000, st[2]/1000, st[3]/1000, st[36]/1000, st[37]/1000, st[38]/1000, st[39]/1000, st[40]/1000, st[41]/1000, st[45], st[47], st[48], st[49],
+								pl.cv[1], pl.cv[2], pl.cv[3], pl.nv[1], pl.nv[2], pl.nv[3], nx and string.format("(%.3f,%.3f,%.3f)", nx[1].X, nx[1].Y, nx[1].Z) or "-",
+								p.Position.X, p.Position.Y, p.Position.Z, want.Position.X, want.Position.Y, want.Position.Z))
+						end
+					end
+					if d > worstP then worstP, worstF = d, f end
+					worstR = math.max(worstR, rotErr(p.CFrame, want))
+				end
+			end
+			n = n + 1
+		end
+	end
+	CO.EndPlayback()
+	return worstP, worstR, n, worstF
+end
+local cutAt = nil
+for i = 2, #C.data do
+	local str = C.data[i].CO
+	if str and string.byte(str, 1) >= 64 then cutAt = cutAt or i end
+end
+check(cutAt ~= nil and cutAt > 2, "a full snapshot marks the new recording after the cut (frame " .. tostring(cutAt) .. ")")
+local wP6, wR6, nF6, wF6 = playbackAccuracy(1, #C.data)
+check(nF6 > 1300, "checked " .. nF6 .. " frames")
+check(wP6 <= 0.03, string.format("half way between frames within 0.03 studs (worst %.4f at frame %s)", wP6, tostring(wF6)))
+check(wR6 <= 0.004, string.format("and within 0.004 in rotation (worst %.5f)", wR6))
+
 section("save / load: file version 4, the client object data comes back the same")
-local okS, nfS, nbS, info = Store.SaveSlot("coclock", C.data)
+-- (saving / loading yields every 1500 frames: run it in a thread of its own while frames go on)
+local function runAsync(fn)
+	local done, res = false, nil
+	M.resume(coroutine.create(function() res = table.pack(fn()); done = true end))
+	local g = 0
+	while not done and g < 3000 do M.step(1 / 60); g = g + 1 end
+	return table.unpack(res or {})
+end
+local okS, nfS, nbS, info = runAsync(function() return Store.SaveSlot("coclock", C.data) end)
 check(okS, "saved")
 eq(info and info.version, 4, "file version 4 (v3 client object frames)")
 local raw = M.fs["HappaTasPort/1234567/coclock.tas"]
 check(raw ~= nil and string.byte(raw, 5) == 4, "version byte 4 in the file")
-local okL, back = Store.LoadSlot("coclock")
+local okL, back = runAsync(function() return Store.LoadSlot("coclock") end)
 check(okL and #back == #C.data, "loaded " .. tostring(okL and #back))
 local same = okL
 if okL then
