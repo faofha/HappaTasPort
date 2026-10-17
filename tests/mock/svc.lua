@@ -578,11 +578,63 @@ end
 M.makeCharacter()
 
 -- simple physics for the character root (so recording sees movement)
+-- M.humanoidPhysics = true: a small humanoid model (speed hack tests). On the floor (root at M.floorY + 3)
+-- the horizontal velocity is MoveDirection x WalkSpeed (Roblox's humanoid reaches it at once), the Running
+-- event reports the speed when it changes; M.jumpNow starts a jump with JumpPower (UseJumpPower) or
+-- sqrt(2 x Gravity x JumpHeight) (Roblox docs: the jump is worked out from JumpHeight and the gravity);
+-- workspace.Gravity pulls down (semi-implicit Euler)
+M.humanoidPhysics = false
+M.floorY = 0
+M.jumpNow = false
+local lastRunSpeed = nil
+function M.resetHumanoidModel() lastRunSpeed = nil; M.jumpNow = false end
+local function humanoidStep(hrp, hum, dt)
+	local g = workspace.Gravity
+	local v = hrp.AssemblyLinearVelocity
+	local pos = hrp.Position
+	local y0 = M.floorY + 3
+	local onFloor = pos.Y <= y0 + 1e-6 and v.Y <= 1e-9
+	local md = hum.MoveDirection
+	local hv = md * hum.WalkSpeed
+	local vy = v.Y
+	if onFloor then
+		vy = 0
+		if M.jumpNow then
+			M.jumpNow = false
+			vy = hum.UseJumpPower and hum.JumpPower or math.sqrt(2 * g * hum.JumpHeight)
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			hum.Jumping:Fire(true)
+			lastRunSpeed = nil
+		end
+	end
+	vy = vy - g * dt
+	local np = pos + Vector3.new(hv.X, vy, hv.Z) * dt
+	if np.Y <= y0 then
+		np = Vector3.new(np.X, y0, np.Z)
+		vy = 0
+		if hum:GetState() ~= Enum.HumanoidStateType.Running then hum:ChangeState(Enum.HumanoidStateType.Running) end
+		local sp = Vector3.new(hv.X, 0, hv.Z).Magnitude
+		if lastRunSpeed == nil or math.abs(sp - lastRunSpeed) > 1e-6 then
+			lastRunSpeed = sp
+			hum.Running:Fire(sp)
+		end
+	elseif hum:GetState() == Enum.HumanoidStateType.Jumping and vy < 0 then
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+		hum.FreeFalling:Fire(true)
+	end
+	hrp.CFrame = hrp.CFrame.Rotation + np
+	hrp.AssemblyLinearVelocity = Vector3.new(hv.X, vy, hv.Z)
+end
 function M.physics(dt)
 	local ch = player.Character
 	if not ch then return end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	if not hrp or hrp.Anchored then return end
+	if M.humanoidPhysics then
+		local hum = ch:FindFirstChildOfClass("Humanoid")
+		if hum then humanoidStep(hrp, hum, dt) end
+		return
+	end
 	local v = hrp.AssemblyLinearVelocity
 	if v.Magnitude > 0 then
 		hrp.CFrame = hrp.CFrame + v * dt

@@ -25,6 +25,7 @@ cat >> "$OUT" <<'EOF'
 rawset(genv, "__HappaTAS_T", { Core = Core, C = C, Settings = Settings, Controls = Controls, Store = Store,
 	Codec = Codec, Bridge = Bridge, InputSys = InputSys, Cursor = Cursor, AnimEngine = AnimEngine,
 	ClientObjects = ClientObjects, Buttons = Buttons, ToolSync = ToolSync, Sounds = Sounds, Profiler = Profiler,
-	Menu = Menu, Typing = Typing, Env = Env, Gui = Gui, CONFIG = CONFIG, Janitor = Janitor, UI = UI })
+	Menu = Menu, Typing = Typing, Env = Env, Gui = Gui, CONFIG = CONFIG, Janitor = Janitor, UI = UI,
+	Lighting = Lighting, SpeedHack = SpeedHack })
 EOF
 wc -lc "$OUT"

@@ -8,6 +8,9 @@
 --                          Heartbeat      bookkeeping, stats
 --  Playback: Heartbeat advances the timer and poses the character for physics, PreRender poses
 --  it again for rendering at the same time, the end of the render step re-asserts client objects.
+--  Speed hack (slow motion): a frame recorded while it is on stores its time x the factor and the
+--  velocity / the factor (C.recScale = the factor the frame's physics ran with), so the TAS is saved
+--  in normal time.
 -- ================================================================================================
 local C = {
 	data = {}, mode = 1, frame = 1, paused = true, back = false, forw = false,
@@ -16,7 +19,7 @@ local C = {
 	merge = false, mergeBefore = {}, mergeAfter = {}, oldTAS = {}, mergeReqDist = nil, mergeCFrame = nil,
 	mergeCanComplete = false, mergeBaseHeld = nil, hitboxes = {},
 	Humanoid = nil, Char = nil, HRP = nil, IsMobile = UIS.TouchEnabled, QuitTestEvent = nil,
-	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0,
+	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0, recScale = 1,
 }
 Core.State = C
 
@@ -188,7 +191,7 @@ do
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
 
-	local lastBT, lastStatFD, lastStatFN, lastStatPaused = nil, nil, nil, nil
+	local lastBT, lastStatFD, lastStatFN, lastStatPaused, lastStatSH = nil, nil, nil, nil, nil
 	function SS.Create(pausedNow, frameNo, FrameData)
 		local panel = C.CreateStatsF
 		showPanel(panel)
@@ -196,11 +199,12 @@ do
 		if lastBT == nil then lastBT = panel.BackgroundTransparency end
 		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
 		local f = labels(panel)
-		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo then
+		local sh = SpeedHack.Wanted()
+		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo and lastStatSH == sh then
 			return
 		end
-		lastStatPaused, lastStatFD, lastStatFN = pausedNow, FrameData, frameNo
-		setText(f["1"], " Frame: " .. frameNo)
+		lastStatPaused, lastStatFD, lastStatFN, lastStatSH = pausedNow, FrameData, frameNo, sh
+		setText(f["1"], " Frame: " .. frameNo .. ((sh < 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
@@ -1040,8 +1044,13 @@ do
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
-				local ft = r(C.LastFrameTime, 1000000)
-				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + C.LastFrameTime, 1000000) or ft
+				-- (speed hack: this frame's physics ran recScale times slower than normal)
+				local k = C.recScale
+				local dtN = C.LastFrameTime * k
+				local ft = r(dtN, 1000000)
+				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + dtN, 1000000) or ft
+				local lin, ang = HRP.AssemblyLinearVelocity, HRP.AssemblyAngularVelocity
+				if k ~= 1 then lin, ang = lin / k, ang / k end
 				local mx, my, uvx, uvy, vx, vy = InputSys.Mouse()
 				local vpChanged = (n == 0 or vx ~= C.lastVX or vy ~= C.lastVY)
 				if vpChanged then C.lastVX, C.lastVY = vx, vy end
@@ -1049,7 +1058,7 @@ do
 				-- the simulation and wall clocks of this frame: client objects move on them (see ClientObjects)
 				C.recSim, C.recWall = time(), os.clock()
 				data[n + 1] = {
-					Velocity = { Linear = C.Vector3ToTable(HRP.AssemblyLinearVelocity), Angular = C.Vector3ToTable(HRP.AssemblyAngularVelocity) },
+					Velocity = { Linear = C.Vector3ToTable(lin), Angular = C.Vector3ToTable(ang) },
 					CamCframe = C.CFrameToTable(workspace.CurrentCamera.CFrame),
 					ShiftLock = Bridge.IsShiftlocked() and 1 or 0,
 					Mobile = C.IsMobile and C.ReadMobile() or nil,
@@ -1076,6 +1085,11 @@ do
 			end
 			Profiler.End("Playback")
 		end
+		-- speed hack: on while the character records (Create, unpaused or the first frame of an unpause,
+		-- alive), for the physics step that comes next
+		local hum = C.Humanoid
+		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
+		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
 		Profiler.End("HappaTAS")
 		Profiler.FrameEnd() -- the end of this frame's jobs as far as a script can see (Jobs Wall Time)
 	end
@@ -1230,8 +1244,8 @@ do
 					Buttons.Step(data[C.frame] and data[C.frame].TotalTime or 0)
 				else
 					if C.FirstFrameRecord and #data == 1 then
-						data[1].FrameTime = r(C.LastFrameTime, 1000000)
-						data[1].TotalTime = r(C.LastFrameTime, 1000000)
+						data[1].FrameTime = r(C.LastFrameTime * C.recScale, 1000000)
+						data[1].TotalTime = r(C.LastFrameTime * C.recScale, 1000000)
 					end
 					-- a frame without a physics step had no PreSimulation: filled here (it used to be dropped,
 					-- with its time and inputs: a TAS recorded at 240 FPS replayed about 12 % too fast)
@@ -1364,7 +1378,8 @@ do
 			elseif CheckInput(inp, "Forward") and mode == 2 then inputs.Forward()
 			elseif CheckInput(inp, "Delete TAS") and not merge then inputs.Delete()
 			elseif CheckInput(inp, "Optimize TAS") then inputs.Optimize()
-			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround() end
+			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround()
+			elseif CheckInput(inp, "Toggle Speed Hack") then Settings.Set("Speed Hack", Settings.On("Speed Hack") and 0 or 1) end
 		end)
 
 		on(uis.InputEnded, function(inp)

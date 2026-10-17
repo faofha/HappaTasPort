@@ -45,6 +45,7 @@ local handle = { Version = VERSION }
 
 local function Unload()
 	if Janitor.unloading then return end
+	pcall(SpeedHack.Restore, true) -- normal gravity / walk speed again (a moving character keeps going)
 	pcall(Core.Shutdown)
 	pcall(Cursor.Reset)
 	pcall(ClientObjects.Disable)
@@ -75,6 +76,7 @@ ClientObjects.OnStatus = function(text) Menu.SetStatus(text, true) end
 ClientObjects.Start()
 Buttons.Start()
 Lighting.Start()
+SpeedHack.Start()
 Profiler.Start()
 
 local function onCharacter(char)

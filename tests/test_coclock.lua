@@ -1,5 +1,5 @@
 -- ================================================================================================
--- Client objects v3 (V2.38.5): each part's own clock (simulation / wall / TAS), the screw-motion model,
+-- Client objects v3 (V2.38.13): each part's own clock (simulation / wall / TAS), the screw-motion model,
 -- the velocity at the part's position, chains that go on after Unpause (1 Frame), old v2 data playing
 -- like before, save / load
 -- ================================================================================================
