@@ -43,7 +43,11 @@ cls("GuiService", "Instance", { MenuIsOpen = false, SelectedObject = nil, AutoSe
 	{}, { "MenuOpened", "MenuClosed", "UiMessageChanged" })
 cls("TextService", "Instance")
 cls("CoreGui", "Instance", { SelectionImageObject = nil, Version = 1 })
-cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2 })
+-- Lighting: the properties HappaTAS's Sync Lighting reads (Roblox's defaults for a new place)
+cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2, GlobalShadows = true, EnvironmentDiffuseScale = 1,
+	EnvironmentSpecularScale = 1, ExposureCompensation = 0, FogStart = 0, FogEnd = 100000, GeographicLatitude = 0,
+	ShadowSoftness = 0.2, Ambient = Color3.new(0, 0, 0), OutdoorAmbient = Color3.fromRGB(128, 128, 128),
+	ColorShift_Bottom = Color3.new(0, 0, 0), ColorShift_Top = Color3.new(0, 0, 0), FogColor = Color3.fromRGB(192, 192, 192) })
 cls("ReplicatedStorage", "Instance")
 cls("ReplicatedFirst", "Instance")
 cls("SoundService", "Instance", { RespectFilteringEnabled = true })
@@ -358,7 +362,13 @@ C.BasePart.Methods.ApplyImpulse = function() end
 C.BasePart.Methods.SetNetworkOwner = function() end
 C.BasePart.Methods.GetNetworkOwner = function() return nil end
 C.BasePart.Methods.CanSetNetworkOwnership = function() return false end
-C.BasePart.Methods.GetVelocityAtPosition = function(self) return self.AssemblyLinearVelocity end
+-- Roblox: "the linear velocity of the part's assembly at the given position" = the centre of mass's velocity
+-- + angular velocity x (position - centre of mass)
+C.BasePart.Methods.GetVelocityAtPosition = function(self, pos)
+	local v, w = self.AssemblyLinearVelocity, self.AssemblyAngularVelocity
+	if not pos or w.Magnitude == 0 then return v end
+	return v + w:Cross(pos - self.AssemblyCenterOfMass)
+end
 C.BasePart.Events = { "Touched", "TouchEnded" }
 local function project(cam, v)
 	local cf = cam.CFrame
@@ -568,11 +578,63 @@ end
 M.makeCharacter()
 
 -- simple physics for the character root (so recording sees movement)
+-- M.humanoidPhysics = true: a small humanoid model (speed hack tests). On the floor (root at M.floorY + 3)
+-- the horizontal velocity is MoveDirection x WalkSpeed (Roblox's humanoid reaches it at once), the Running
+-- event reports the speed when it changes; M.jumpNow starts a jump with JumpPower (UseJumpPower) or
+-- sqrt(2 x Gravity x JumpHeight) (Roblox docs: the jump is worked out from JumpHeight and the gravity);
+-- workspace.Gravity pulls down (semi-implicit Euler)
+M.humanoidPhysics = false
+M.floorY = 0
+M.jumpNow = false
+local lastRunSpeed = nil
+function M.resetHumanoidModel() lastRunSpeed = nil; M.jumpNow = false end
+local function humanoidStep(hrp, hum, dt)
+	local g = workspace.Gravity
+	local v = hrp.AssemblyLinearVelocity
+	local pos = hrp.Position
+	local y0 = M.floorY + 3
+	local onFloor = pos.Y <= y0 + 1e-6 and v.Y <= 1e-9
+	local md = hum.MoveDirection
+	local hv = md * hum.WalkSpeed
+	local vy = v.Y
+	if onFloor then
+		vy = 0
+		if M.jumpNow then
+			M.jumpNow = false
+			vy = hum.UseJumpPower and hum.JumpPower or math.sqrt(2 * g * hum.JumpHeight)
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			hum.Jumping:Fire(true)
+			lastRunSpeed = nil
+		end
+	end
+	vy = vy - g * dt
+	local np = pos + Vector3.new(hv.X, vy, hv.Z) * dt
+	if np.Y <= y0 then
+		np = Vector3.new(np.X, y0, np.Z)
+		vy = 0
+		if hum:GetState() ~= Enum.HumanoidStateType.Running then hum:ChangeState(Enum.HumanoidStateType.Running) end
+		local sp = Vector3.new(hv.X, 0, hv.Z).Magnitude
+		if lastRunSpeed == nil or math.abs(sp - lastRunSpeed) > 1e-6 then
+			lastRunSpeed = sp
+			hum.Running:Fire(sp)
+		end
+	elseif hum:GetState() == Enum.HumanoidStateType.Jumping and vy < 0 then
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+		hum.FreeFalling:Fire(true)
+	end
+	hrp.CFrame = hrp.CFrame.Rotation + np
+	hrp.AssemblyLinearVelocity = Vector3.new(hv.X, vy, hv.Z)
+end
 function M.physics(dt)
 	local ch = player.Character
 	if not ch then return end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	if not hrp or hrp.Anchored then return end
+	if M.humanoidPhysics then
+		local hum = ch:FindFirstChildOfClass("Humanoid")
+		if hum then humanoidStep(hrp, hum, dt) end
+		return
+	end
 	local v = hrp.AssemblyLinearVelocity
 	if v.Magnitude > 0 then
 		hrp.CFrame = hrp.CFrame + v * dt
@@ -727,14 +789,22 @@ end
 
 -- ------------------------------------------------------------------------------------------------ frame driver
 local RS = services.RunService
+-- M.simDt: nil = the simulation moves on with the frame's dt, or a function(dt) -> the simulated time of the
+-- frame (Roblox steps physics in 1/240 s steps, so at high frame rates a frame simulates 0, 1 or 2 steps).
+-- time() returns the simulation clock M.simNow
+M.simNow = 0
 function M.step(dt)
 	dt = dt or (1 / 60)
+	local sdt = dt
+	if M.simDt then sdt = M.simDt(dt) end
 	M.clockTicks = 0
 	M.clockOff = 0
 	M.now = M.now + dt
+	M.simNow = M.simNow + sdt
 	M.frame = M.frame + 1
-	RS.PreRender:Fire(dt)
+	-- (measured in the Roblox client: RenderStepped, its waiting threads first, then PreRender)
 	RS.RenderStepped:Fire(dt)
+	RS.PreRender:Fire(dt)
 	for _, b in ipairs(table.clone(binds)) do
 		local ok, err = pcall(b.fn, dt)
 		if not ok then M.logs[#M.logs + 1] = "BIND ERROR " .. b.name .. ": " .. tostring(err) end
@@ -744,10 +814,13 @@ function M.step(dt)
 	M.clockOff = M.jobMs and math.max(0, dt - M.jobMs / 1000) or 0
 	M.clockTicks = 0
 	RS.PreAnimation:Fire(dt)
-	RS.PreSimulation:Fire(dt)
-	RS.Stepped:Fire(M.now, dt)
-	M.physics(dt)
-	RS.PostSimulation:Fire(dt)
+	-- (measured in the Roblox client: a frame without a physics step has no PreSimulation / Stepped)
+	if sdt > 0 then
+		RS.PreSimulation:Fire(sdt)
+		RS.Stepped:Fire(M.simNow, sdt)
+		M.physics(sdt)
+		RS.PostSimulation:Fire(sdt)
+	end
 	RS.Heartbeat:Fire(dt)
 	M.resumeDue()
 end

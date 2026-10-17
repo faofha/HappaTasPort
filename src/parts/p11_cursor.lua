@@ -122,7 +122,7 @@ do
 		local cx, cy, vp = viewportCenter()
 		local px, py = InputSys.FramePoint(fr)
 		local locked = InputSys.FrameLocked(fr)
-		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) < 1
+		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) <= 0.55
 		if locked then
 			if not st.wasLocked then
 				if centered then st.anchorX, st.anchorY = cx, cy
@@ -179,25 +179,41 @@ do
 			if st.fake or st.realHidden then Cursor.Reset() end
 			return
 		end
+		local isShift = (fr and fr.ShiftLock == 1) or Bridge.IsShiftlocked()
+		local isFP = (fr and (tonumber(fr.Zoom) or 99) <= 0.55) or Bridge.IsInFirstPerson()
 		local mb = UIS.MouseBehavior
-		local locked = mb ~= Default and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
+		local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
+		local locked = (centered or mb ~= Default) and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
 		if locked then
 			if not ensure() then return end
-			local m = UIS:GetMouseLocation()
-			setIcon(Bridge.IsShiftlocked() and LOCKED or ARROW)
-			if not st.fake then
+			if centered then
+				local cx, cy = viewportCenter()
+				st.anchorX, st.anchorY = cx, cy
+			elseif not st.wasLocked then
+				local m = UIS:GetMouseLocation()
+				st.anchorX, st.anchorY = m.X, m.Y
+			end
+			st.wasLocked = true
+			setIcon(isShift and LOCKED or ARROW)
+			if centered then
+				st.hideAt = nil
+				hideReal()
+			elseif not st.fake then
 				st.hideAt = frameNo + HIDE_DELAY
 			end
-			showFakeAt(m.X, m.Y)
+			showFakeAt(st.anchorX, st.anchorY)
 			if st.hideAt and frameNo >= st.hideAt then
 				st.hideAt = nil
 				hideReal()
 			end
-		elseif st.fake or st.realHidden then
+		else
+			st.wasLocked = false
+			if st.fake or st.realHidden then
+				showReal()
+				hideFake()
+				st.hideAt = nil
+			end
 			-- the real cursor comes back instantly (OS), the fake one disappears a frame later on screen
-			showReal()
-			hideFake()
-			st.hideAt = nil
 		end
 	end
 

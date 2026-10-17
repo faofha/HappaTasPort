@@ -225,15 +225,16 @@ do
 		table.sort(ids, function(a, b) return math.abs(a) < math.abs(b) end)
 		for _, e in ipairs(ids) do queue[#queue + 1] = e end
 	end
+	local descIds, descNames = {}, {}
 
 	function InputSys.Describe(set)
-		local ids = {}
-		for id in pairs(set) do ids[#ids + 1] = id end
-		if #ids == 0 then return "-" end
-		table.sort(ids)
-		local names = {}
-		for i, id in ipairs(ids) do names[i] = KEY_SHORT[id] or "?" end
-		return table.concat(names, " ")
+		if not set or next(set) == nil then return "-" end
+		table.clear(descIds)
+		for id in pairs(set) do descIds[#descIds + 1] = id end
+		table.sort(descIds)
+		table.clear(descNames)
+		for i, id in ipairs(descIds) do descNames[i] = KEY_SHORT[id] or "?" end
+		return table.concat(descNames, " ")
 	end
 
 	-- ------------------------------------------------------------------------------------ replay
@@ -343,7 +344,7 @@ do
 	function InputSys.FrameLocked(fr)
 		if not fr then return false end
 		if fr.ShiftLock == 1 then return true end
-		if (fr.Zoom or 99) < 1 then return true end
+		if (fr.Zoom or 99) <= 0.55 then return true end
 		return replay.state[ID_M2] == true
 	end
 

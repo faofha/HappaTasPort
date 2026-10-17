@@ -79,6 +79,10 @@ do
 		local currentAnimTrack = nil
 		local currentAnimKeyframeHandler = nil
 		local currentAnimSpeed = 1.0
+		-- the speed hack's slow motion factor (1 = normal): the tracks play at their speed x this factor while
+		-- currentAnimSpeed, jumpAnimTime and the transition times stay in normal time (they are recorded)
+		local function hack() return SpeedHack.scale end
+		local animClock = 0 -- the game time of the animations (slows down with the speed hack)
 
 		local animTable = {}
 		for name, list in pairs(ANIM_DEFS) do
@@ -130,11 +134,12 @@ do
 			return oldAnim
 		end
 
-		-- (the track always runs at currentAnimSpeed, so an equal speed needs no AdjustSpeed call)
+		-- (the track always runs at currentAnimSpeed x hack(), so an equal speed needs no AdjustSpeed call;
+		-- a new factor is applied by self.Rescale)
 		function setAnimationSpeed(speed, TASanim)
 			if speed ~= currentAnimSpeed and (TASanim or LockAnimations == false) then
 				currentAnimSpeed = speed
-				if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed) end
+				if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed * hack()) end
 			end
 		end
 
@@ -171,14 +176,16 @@ do
 				if not TASanim and AnimToNumber[animName] then
 					table.insert(FrameAnims, { AnimToNumber[animName], transitionTime })
 				end
+				local k = hack()
 				if currentAnimTrack ~= nil then
-					currentAnimTrack:Stop(transitionTime)
+					currentAnimTrack:Stop(transitionTime / k)
 					currentAnimTrack:Destroy()
 				end
 				currentAnimSpeed = 1.0
 				currentAnimTrack = loaderOf(humanoid):LoadAnimation(anim)
 				currentAnimTrack.Priority = Enum.AnimationPriority.Core
-				currentAnimTrack:Play(transitionTime)
+				currentAnimTrack:Play(transitionTime / k)
+				if k ~= 1 then currentAnimTrack:AdjustSpeed(k) end
 				currentAnim = animName
 				currentAnimInstance = anim
 				if currentAnimKeyframeHandler ~= nil then
@@ -206,9 +213,11 @@ do
 					toolAnimTrack:Destroy()
 					transitionTime = 0
 				end
+				local k = hack()
 				toolAnimTrack = loaderOf(humanoid):LoadAnimation(anim)
 				if priority then toolAnimTrack.Priority = priority end
-				toolAnimTrack:Play(transitionTime)
+				toolAnimTrack:Play(transitionTime / k)
+				if k ~= 1 then toolAnimTrack:AdjustSpeed(k) end
 				toolAnimName = animName
 				toolAnimInstance = anim
 				if currentToolAnimKeyframeHandler ~= nil then currentToolAnimKeyframeHandler:Disconnect() end
@@ -232,8 +241,10 @@ do
 			return oldAnim
 		end
 
+		-- (the speeds Roblox reports are slowed by the speed hack too: back to normal time, so the recorded
+		-- animation speed is the normal one)
 		local function onRunning(speed)
-			speed = speed / getRigScale()
+			speed = speed / getRigScale() / hack()
 			if speed > 0.01 then
 				playAnimation("walk", 0.1, Humanoid)
 				if currentAnimInstance and currentAnimInstance.AnimationId == "http://www.roblox.com/asset/?id=180426354" then
@@ -250,7 +261,7 @@ do
 
 		local function onDied() pose = "Dead" end
 		local function onJumping() playAnimation("jump", 0.1, Humanoid); jumpAnimTime = jumpAnimDuration; pose = "Jumping" end
-		local function onClimbing(speed) speed = speed / getRigScale(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
+		local function onClimbing(speed) speed = speed / getRigScale() / hack(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
 		local function onGettingUp() pose = "GettingUp" end
 		local function onFreeFall() if jumpAnimTime <= 0 then playAnimation("fall", fallTransitionTime, Humanoid) end pose = "FreeFall" end
 		local function onFallingDown() pose = "FallingDown" end
@@ -366,6 +377,13 @@ do
 
 		function self.Lock(lock) LockAnimations = lock end
 
+		-- the speed hack's factor changed: the playing tracks take it on
+		function self.Rescale()
+			local k = hack()
+			if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed * k) end
+			if toolAnimTrack then toolAnimTrack:AdjustSpeed(k) end
+		end
+
 		function self.Destroy()
 			if not self.alive then return end
 			self.alive = false
@@ -391,14 +409,16 @@ do
 
 		connect(RunService.Heartbeat, function(deltaTime)
 			if handedOut or #FrameAnims > 0 then FrameAnims = {}; handedOut = false end
-			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - deltaTime end
+			local gdt = deltaTime * hack()
+			animClock = animClock + gdt
+			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - gdt end
 		end)
 
 		task.spawn(function()
 			while self.alive and Figure.Parent ~= nil do
 				task.wait(0.1)
 				if not self.alive then break end
-				pcall(move, os.clock())
+				pcall(move, animClock)
 			end
 		end)
 
@@ -459,16 +479,14 @@ do
 		end
 	end
 
-	local EMPTY_ANIM_FRAME = function()
-		return { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
-	end
+	local EMPTY_ANIM = { Pose = 0, JumpTime = 0, Speed = 1, Anims = {} }
 	function Bridge.GetAnimation(startOfTAS)
 		local e = AnimEngine.current
 		if e then
 			local d = e.Get(startOfTAS)
 			if d then return d end
 		end
-		return EMPTY_ANIM_FRAME()
+		return EMPTY_ANIM
 	end
 	function Bridge.SetAnimation(animData, anim, playbackSpeed, timeDifference)
 		local e = AnimEngine.current
