@@ -82,6 +82,18 @@ local flakyOff = false
 for _, d in ipairs(disabled) do if d == "flaky" then flakyOff = true end end
 check(not flakyOff, "a handler that fails twice then works is not switched off")
 
+section("switching off a failing module switches off all its handlers, in every stage")
+local recPost = 0
+pipe:add("PreRender", 40, "rec.capture", function() error("capture broke") end, "rec")
+pipe:add("PostSimulation", 40, "rec.fill", function() recPost = recPost + 1 end, "rec")
+local recOff = false
+bus:on("moduleDisabled", function(name) if name == "rec" then recOff = true end end)
+for _ = 1, 5 do M.step(1 / 60) end
+check(recOff, "moduleDisabled names the module")
+local recPostAt = recPost
+M.steps(3)
+eq(recPost, recPostAt, "the module's handler in another stage stopped too")
+
 section("a handler that yields")
 local afterYield = 0
 pipe:add("PreSimulation", 5, "yielder", function() task.wait() end)

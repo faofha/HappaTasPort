@@ -4,8 +4,9 @@
 --  PostSimulation, then LateRender (BindToRenderStep at Last + 1). A frame without a physics step has
 --  no PreSimulation / PostSimulation (Roblox steps physics at 240 Hz), so those handlers aren't called.
 --  Handlers run by ascending order number (ties in the order they were added), each on a thread of its
---  own: an error or a yield is reported and the next handler still runs; a handler whose last 5 calls
---  all failed is switched off (bus event "moduleDisabled"). Handlers must not yield.
+--  own: an error or a yield is reported and the next handler still runs; when a handler's last 5 calls
+--  all failed, every handler of its module (all stages) is switched off (bus event "moduleDisabled" with
+--  the module's name). Handlers must not yield.
 -- ================================================================================================
 local Env = import("platform/env")
 
@@ -27,17 +28,28 @@ local function removeEntry(list, e)
 	if i then table.remove(list, i) end
 end
 
-function Pipeline:add(stage, order, name, fn)
+-- module: the module the handler belongs to (defaults to its name); switched off together
+function Pipeline:add(stage, order, name, fn, module)
 	local list = self.stages[stage]
 	if not list then error("HappaTAS3: unknown pipeline stage " .. tostring(stage), 2) end
 	self.seq = self.seq + 1
-	local e = { order = order, seq = self.seq, name = name, fn = fn, fails = 0, on = true }
+	local e = { order = order, seq = self.seq, name = name, fn = fn, fails = 0, on = true, module = module or name }
 	local at = #list + 1
 	for i, other in ipairs(list) do
 		if other.order > order then at = i break end
 	end
 	table.insert(list, at, e)
 	return function() removeEntry(list, e) end
+end
+
+function Pipeline:disableModule(module, err)
+	for _, s in ipairs(STAGES) do
+		local list = self.stages[s]
+		for i = #list, 1, -1 do
+			if list[i].module == module then removeEntry(list, list[i]) end
+		end
+	end
+	self.bus:emit("moduleDisabled", module, err)
 end
 
 local function cancel(co)
@@ -80,10 +92,7 @@ function Pipeline:run(stage, dt)
 			else
 				e.fails = e.fails + 1
 				self.errs:report(e.name, err)
-				if e.fails >= MAX_FAILS then
-					removeEntry(list, e)
-					self.bus:emit("moduleDisabled", e.name, err)
-				end
+				if e.fails >= MAX_FAILS then self:disableModule(e.module, err) end
 			end
 		end
 	end
