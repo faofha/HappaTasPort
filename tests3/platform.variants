@@ -1,0 +1,5 @@
+VARIANT="plain"
+VARIANT="cloneref"; cloneCalls = 0; cloneref = function(x) cloneCalls = cloneCalls + 1; return x end
+VARIANT="signals"; getsignals = getconnections; getconnections = nil
+VARIANT="bare"; getgenv = nil; cloneref = nil; hookfunction = nil
+VARIANT="indexed"; hiddenFns = { getconnections = getconnections, hookfunction = hookfunction, restorefunction = restorefunction }; getconnections = nil; hookfunction = nil; restorefunction = nil

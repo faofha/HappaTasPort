@@ -1,2 +1,4 @@
 config
+platform/env
+platform/gamecall
 main
