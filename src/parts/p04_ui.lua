@@ -269,7 +269,11 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4260)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4350)},{
+						LV("962", " 10/18/26 - 2.38.15"),
+						LI("962_1", "   -   Speed Hack: bounce pads bounce as high as at normal speed"),
+						LI("962_2", "   -   Client objects saved from their start: morphs show up"),
+						LI("962_3", "   -   before their button is pressed when testing"),
 						LV("963", " 10/18/26 - 2.38.14"),
 						LI("963_1", "   -   Kit scripts on the TAS clock: pause / slow motion stop them"),
 						LI("963_2", "   -   Jump launcher push no longer cut short by a pause"),
@@ -561,11 +565,11 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
-					H("38", "Speed Hack (Slow Motion)", 231, true, {
+					H("38", "Speed Hack (Slow Motion)", 250, true, {
 						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
 						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
 						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
-						{ 67, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, pushers and the EToH kit's timers. Other players keep their speed." } }),
+						{ 86, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, bounce pads and the EToH kit's timers. Other players keep their speed. A platform you push yourself still moves too fast." } }),
 					H("39", "EToH Kit Objects", 226, true, {
 						{ 67, "Settings > World Sync > Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the TAS clock, so they stop while paused and slow down with the speed hack." },
 						{ 48, "A jump launcher's push, moving platforms, vanishers, falling platforms and spawner cooldowns keep the same timing whether you pause or not." },

@@ -1,10 +1,23 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.14
+	Version: V2.38.15
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.15 changes (short): bounce pads in slow motion, client objects saved from their start
+		- Speed hack: a bounce pad (EToH kit) sets your velocity to its Power itself, so with the slowed
+		  gravity a slowed bounce went 1 / speed^2 as high (4x at 0.5x). Its Power is slowed with the world now
+		  (x speed while recording, put back after): the same bounce height and timing at any speed (checked in
+		  the client: 30.1 studs at 1x, 30.4 at 0.5x, 30.5 at 0.25x).
+		- Client objects: a part that changes for the first time while recording (a morph growing when its
+		  button is pressed, a vanisher, a platform that starts to fall) gets the state it had before into the
+		  TAS. Before, a TAS had nothing for it until it changed, so playback left it as it was then: after
+		  running the script again or loading the TAS later the morph showed pressed from the first frame.
+		- Not slowed: a pushing platform you push yourself (the kit's Pushing Platform, the X pushers). The
+		  push comes from Roblox's own walking force inside the Humanoid, which no script can slow down, so
+		  the platform still moves too fast in slow motion. Record those parts at normal speed.
 
 	V2.38.14 changes (short): the EToH kit's objects on the TAS clock, the speed hack slows the world too
 		- Kit Clock (Settings > World Sync > Kit Scripts On TAS Clock, on): the kit's own scripts wait, delay,
@@ -167,7 +180,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.14"
+local VERSION = "V2.38.15"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

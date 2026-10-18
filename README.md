@@ -7,7 +7,7 @@ HappaTAS as **one client-side Luau script** for Roblox executors. It records and
 It started as the HappaTAS model pair (an initializer that `require()`s a MainModule); everything,
 including the old server scripts, now runs in one local script. No network code.
 
-**Latest version: V2.38.14.** Run `wow` (or `wow1`, the same file) in your executor.
+**Latest version: V2.38.15.** Run `wow` (or `wow1`, the same file) in your executor.
 
 ## Quick start
 
@@ -40,7 +40,8 @@ No HappaTAS key does anything while you type in chat or a text box.
   you want), at any playback speed.
 - **Client objects** (Settings > World Sync > Sync Client Objects, off by default): parts only your
   client shows (spinners, moving / falling / swinging platforms, pushboxes, vanishers...) are saved with
-  the TAS and put back while testing and scrubbing. Only the ones on screen are saved.
+  the TAS and put back while testing and scrubbing. Only the ones on screen are saved. A part that
+  changes for the first time while recording (a morph, a vanisher) also gets the state it had before.
 - **EToH kit** (Eternal Towers of Hell kit v6.1.3): timed buttons and their timers, lighting changers,
   beat blocks, turrets, pushboxes, morphs.
   - *Kit Scripts On TAS Clock*: the kit's own scripts wait, delay and tween on the TAS clock, so they
@@ -49,8 +50,10 @@ No HappaTAS key does anything while you type in chat or a text box.
   - *Sync Kit Objects*: beat blocks follow the TAS time, turret bullets are saved in the TAS (with
     their hits and damage), pushboxes are hidden on frames before they were spawned.
 - **Speed Hack** (Settings > Speed Hack): slow motion while recording, like a video played slower. The
-  character, gravity, animations and the world (constraints, conveyors, kit timers) slow down; the TAS
-  is still saved in normal time, so Test plays it at normal speed.
+  character, gravity, animations and the world (constraints, conveyors, bounce pads, kit timers) slow
+  down; the TAS is still saved in normal time, so Test plays it at normal speed. Not slowed: a platform
+  you push yourself (the kit's Pushing Platform), because Roblox's walking force can't be slowed by a
+  script.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
@@ -121,7 +124,7 @@ bash tools/build_test.sh bench && cd tests && luau run_bench.lua   # cost per fr
 ```
 
 Suites: smoke, profiler, graphimg, core, scale, perf, textline, typing, live, realinput, security,
-coclock, speedhack, kit. Passing tests do not prove it works in a real game: the mock is not Roblox.
+coclock, speedhack, kit, cobase. Passing tests do not prove it works in a real game: the mock is not Roblox.
 
 Testing in a real Roblox client (development only, never released):
 
@@ -161,6 +164,8 @@ slots) still load.
 
 ## Version history (short)
 
+- **V2.38.15**: bounce pads bounce as high in slow motion, client objects saved from their start state
+  (morphs show up before their button is pressed when testing).
 - **V2.38.14**: the EToH kit's scripts on the TAS clock (a pause no longer cuts a jump launcher's
   push), beat blocks / turret bullets / pushboxes from the TAS, the speed hack slows the world too,
   Idle leaves the lighting as it is, file format v5.
