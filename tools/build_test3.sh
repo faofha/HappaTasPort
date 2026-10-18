@@ -17,7 +17,7 @@ OUT="tests3/run_${NAME}.lua"
   echo 'local os = setmetatable({ clock = function() return M.clock() end }, { __index = os })'
   [ -n "$PRE" ] && echo "$PRE"
   echo 'local function __SCRIPT__()'
-  sed -e 's/Debug = false, -- (tests turn this on)/Debug = true, -- (tests turn this on)/' "$SCRIPT"
+  sed -e '0,/Debug = false,/s//Debug = true,/' "$SCRIPT"   # (config's first Debug line: the release has no comments)
   echo ''
   echo '__T3 = import'
   echo 'end'

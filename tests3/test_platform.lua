@@ -43,6 +43,13 @@ elseif VARIANT == "indexed" then
 	check(Env.has("hooks"), "hooks found behind the metatable")
 elseif VARIANT == "bare" then
 	eq(Env.genv, _G, "no getgenv: genv is _G")
+	-- (the CLI's _G is read-only: HappaTAS 3 still runs and warns once that it couldn't share its handle)
+	local warned, kept = false, {}
+	for _, l in ipairs(M.logs) do
+		if l:find("could not share __HappaTAS3", 1, true) then warned = true else kept[#kept + 1] = l end
+	end
+	check(warned, "a read-only global table: warned, not stopped")
+	M.logs = kept
 	eq(Env.has("hooks"), false, "no hookfunction: hooks off")
 	eq(Env.cloneref, nil, "no cloneref")
 	check(Env.svc("RunService") ~= nil, "svc works without cloneref")
