@@ -15,6 +15,8 @@
 --                    3 zigzag rotation (axis x angle) x100000, 3 zigzag velocity x1000, varint lifetime x1000
 --                  2 bullet ended: varint bullet number, varint damage x1000
 --                  3 pushbox spawner: varint spawner id, byte 1 spawned / 0 there when the TAS started
+--                  4 effect (bounce pad / jump launcher): varint object id, byte sound (1 BounceSound, 2 Tick,
+--                    3 Bounce)
 --                SK per frame: varint factor x10000 (frames recorded in slow motion)
 --                KK: varint rules version (1 = kit objects on the TAS clock), varint count, { varint id, key }
 --  FC bits: 1 viewport changed, 2 tool events, 4 died this frame, 8 button events, 16 kit events,
@@ -433,6 +435,8 @@ do
 						putVar(KE, e[2]); putVar(KE, math.max(0, q(e[3] or 0, 1000)))
 					elseif typ == 3 then
 						putVar(KE, e[2]); KE[#KE + 1] = (e[3] == 0) and 0 or 1
+					elseif typ == 4 then
+						putVar(KE, e[2]); KE[#KE + 1] = math.clamp(math.floor(tonumber(e[3]) or 0), 0, 255)
 					else
 						error("unknown kit event " .. tostring(typ), 0)
 					end
@@ -752,6 +756,8 @@ do
 							list[k] = { 2, getVar(R.KE), getVar(R.KE) / 1000 }
 						elseif typ == 3 then
 							list[k] = { 3, getVar(R.KE), getByte(R.KE) }
+						elseif typ == 4 then
+							list[k] = { 4, getVar(R.KE), getByte(R.KE) }
 						else
 							error("unknown kit event " .. tostring(typ), 0)
 						end

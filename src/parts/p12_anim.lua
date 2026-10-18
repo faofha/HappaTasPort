@@ -79,9 +79,9 @@ do
 		local currentAnimTrack = nil
 		local currentAnimKeyframeHandler = nil
 		local currentAnimSpeed = 1.0
-		-- the speed hack's slow motion factor (1 = normal): the tracks play at their speed x this factor while
-		-- currentAnimSpeed, jumpAnimTime and the transition times stay in normal time (they are recorded)
-		local function hack() return SpeedHack.scale end
+		-- the speed hack's factor (how fast the TAS clock runs, 1 = normal): the tracks play at their speed x this
+		-- factor while currentAnimSpeed, jumpAnimTime and the transition times stay in normal time (they are recorded)
+		local function hack() return SpeedHack.anim end
 		local animClock = 0 -- the game time of the animations (slows down with the speed hack)
 
 		local animTable = {}
@@ -241,10 +241,10 @@ do
 			return oldAnim
 		end
 
-		-- (the speeds Roblox reports are slowed by the speed hack too: back to normal time, so the recorded
-		-- animation speed is the normal one)
+		-- (the speeds Roblox reports are scaled by the speed hack's physics too (SpeedHack.scale; Frame Step runs
+		-- normal physics): back to normal time, so the recorded animation speed is the normal one)
 		local function onRunning(speed)
-			speed = speed / getRigScale() / hack()
+			speed = speed / getRigScale() / SpeedHack.scale
 			if speed > 0.01 then
 				playAnimation("walk", 0.1, Humanoid)
 				if currentAnimInstance and currentAnimInstance.AnimationId == "http://www.roblox.com/asset/?id=180426354" then
@@ -261,7 +261,7 @@ do
 
 		local function onDied() pose = "Dead" end
 		local function onJumping() playAnimation("jump", 0.1, Humanoid); jumpAnimTime = jumpAnimDuration; pose = "Jumping" end
-		local function onClimbing(speed) speed = speed / getRigScale() / hack(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
+		local function onClimbing(speed) speed = speed / getRigScale() / SpeedHack.scale; playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
 		local function onGettingUp() pose = "GettingUp" end
 		local function onFreeFall() if jumpAnimTime <= 0 then playAnimation("fall", fallTransitionTime, Humanoid) end pose = "FreeFall" end
 		local function onFallingDown() pose = "FallingDown" end
@@ -409,7 +409,7 @@ do
 
 		connect(RunService.Heartbeat, function(deltaTime)
 			if handedOut or #FrameAnims > 0 then FrameAnims = {}; handedOut = false end
-			local gdt = deltaTime * hack()
+			local gdt = SpeedHack.GameDt(deltaTime)
 			animClock = animClock + gdt
 			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - gdt end
 		end)

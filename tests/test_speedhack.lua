@@ -154,6 +154,133 @@ S.Set("Speed Hack", 1)
 sameTAS(plainQ, slowQ, "0.25x")
 S.Set("Speed Hack Speed", 0.5)
 
+section("fast motion (speeds above 1): the TAS a normal recording with longer frames makes")
+S.Set("Speed Hack Speed", 2)
+local evF = walkThenJump()
+local seenF = {}
+evF[30] = function()
+	seenF.walk, seenF.jump, seenF.grav, seenF.rate = hum.WalkSpeed, hum.JumpPower, workspace.Gravity, __T.Bridge.timeRate
+	local t = walkTrack()
+	seenF.track = t and t.Speed
+end
+local fast = record(DTS, 1, evF)
+S.Set("Speed Hack", 0)
+local plainF = record(DTS, 2, walkThenJump())
+S.Set("Speed Hack", 1)
+near(seenF.walk, 32, 1e-9, "2x: WalkSpeed x 2")
+near(seenF.jump, 100, 1e-9, "2x: JumpPower x 2")
+near(seenF.grav, G0 * 4, 1e-6, "2x: gravity x 4")
+near(seenF.track, (16 / 14.5) * 2, 1e-6, "2x: the walk animation plays twice as fast")
+near(seenF.rate, 2, 1e-9, "2x: the camera's zoom spring runs twice as fast")
+sameTAS(plainF, fast, "2x at real frames dt vs 1x at frames dt x 2")
+near(hum.WalkSpeed, 16, 1e-9, "2x: WalkSpeed back when paused")
+near(workspace.Gravity, G0, 1e-9, "2x: gravity back when paused")
+eq(__T.Bridge.timeRate, 1, "zoom spring at normal speed when paused")
+S.Set("Speed Hack Speed", 0.5)
+
+section("Frame Step: normal physics on every other frame, everything held on the others")
+eq(S.Get("Speed Hack Frame Step"), 0, "off by default")
+S.Set("Speed Hack Frame Step", 1)
+-- normal frame i (DTS[i]) <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt)
+local N2 = 120
+local fsDts, fsEv, wt2 = {}, {}, walkThenJump()
+for i = 1, N2 do
+	fsDts[2 * i - 1], fsDts[2 * i] = DTS[i], DTS[i]
+	if wt2[i] then fsEv[2 * i - 1] = wt2[i] end
+end
+-- (ends on a frame whose step runs: the held frame after it would record that step, which the normal run
+-- throws away when it pauses)
+fsDts[2 * N2] = nil
+local seenS = { betweenAnchored = 0 }
+fsEv[31] = function()
+	seenS.walk, seenS.grav, seenS.scale, seenS.rate = hum.WalkSpeed, workspace.Gravity, SH.scale, __T.Bridge.timeRate
+	local t = walkTrack()
+	seenS.track = t and t.Speed
+end
+local plog = nil
+for i = 1, 2 * N2 - 1 do
+	local prev = fsEv[i]
+	fsEv[i] = function()
+		if prev then prev() end
+		if i > 1 and hrp.Anchored then seenS.betweenAnchored = seenS.betweenAnchored + 1 end
+		if i == 1 then M.physicsLog = {} end
+		if i == 2 * N2 - 1 then plog = table.clone(M.physicsLog) end -- (the steps of frames 1 .. 2 x N2 - 2)
+	end
+end
+local stepped = record(fsDts, 1, fsEv)
+M.physicsLog = nil
+S.Set("Speed Hack", 0)
+local dtsN2 = {}
+for i = 1, N2 do dtsN2[i] = DTS[i] end
+local plainS = record(dtsN2, 1, walkThenJump())
+S.Set("Speed Hack", 1)
+near(seenS.walk, 16, 1e-9, "Frame Step: WalkSpeed untouched")
+near(seenS.grav, G0, 1e-9, "Frame Step: gravity untouched")
+eq(seenS.scale, 1, "Frame Step: the physics isn't scaled")
+near(seenS.track, (16 / 14.5) * 0.5, 1e-6, "Frame Step: the walk animation plays at half its speed")
+near(seenS.rate, 0.5, 1e-9, "Frame Step: the zoom spring runs at half speed")
+eq(seenS.betweenAnchored, 0, "Frame Step: the character is never held between frames")
+sameTAS(plainS, stepped, "Frame Step 0.5x at real frames dt vs 1x")
+local heldSteps, freeSteps = 0, 0
+for _, e in ipairs(plog) do
+	if e[1] == hrp then
+		if e[2] then heldSteps = heldSteps + 1 else freeSteps = freeSteps + 1 end
+	end
+end
+eq(heldSteps, N2 - 1, "Frame Step: the physics saw the character held on every other step")
+eq(freeSteps, N2 - 1, "Frame Step: and free on the others")
+
+-- 0.25x: one step in four runs
+S.Set("Speed Hack Speed", 0.25)
+local q4Dts, q4Ev, wt4 = {}, {}, walkThenJump()
+for i = 1, 60 do
+	for k = 0, 3 do q4Dts[4 * i - 3 + k] = DTS[i] end
+	if wt4[i] then q4Ev[4 * i - 3] = wt4[i] end
+end
+for k = 238, 240 do q4Dts[k] = nil end
+local steppedQ = record(q4Dts, 1, q4Ev)
+S.Set("Speed Hack", 0)
+local dts60 = {}
+for i = 1, 60 do dts60[i] = DTS[i] end
+local plainQ4 = record(dts60, 1, walkThenJump())
+S.Set("Speed Hack", 1)
+sameTAS(plainQ4, steppedQ, "Frame Step 0.25x")
+S.Set("Speed Hack Speed", 0.5)
+
+section("Frame Step: free parts and the kit's clock only move on the steps that run")
+local CPf = workspace:FindFirstChild("ClientParts")
+if not CPf then CPf = Instance.new("Folder"); CPf.Name = "ClientParts"; CPf.Parent = workspace end
+local boxF = Instance.new("Part")
+boxF.Name = "FreeBox"
+boxF.Anchored = false
+boxF.CFrame = CFrame.new(50, 10, 0)
+boxF.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+boxF.Parent = CPf
+M.freeParts = { boxF }
+local z0, z1, k0, k1, t0, t1
+local evB = {}
+local fixed = {}
+for i = 1, 40 do fixed[i] = 1 / 60 end
+evB[1] = function() z0, k0 = boxF.Position.Z, __T.KitClock.Now() end
+evB[40] = function() z1, k1 = boxF.Position.Z, __T.KitClock.Now() end
+local boxRec = record(fixed, 1, evB)
+near(z1 - z0, 6 * 20 / 60, 1e-6, "the box moved on the 20 steps that ran only")
+near(boxF.AssemblyLinearVelocity.Z, 6, 1e-9, "the box keeps its velocity")
+eq(boxF.Anchored, false, "the box isn't left anchored")
+near(k1 - k0, 20 / 60, 1e-6, "the kit's clock moved on by the 20 steps that ran")
+near(boxRec[#boxRec].TotalTime, 20 / 60, 1e-5, "TAS time = the time of the steps that ran (" .. boxRec[#boxRec].TotalTime .. ")")
+M.freeParts = {}
+boxF:Destroy()
+S.Set("Speed Hack Frame Step", 0)
+
+section("Frame Step only below 1x: above it the physics is scaled")
+S.Set("Speed Hack Frame Step", 1)
+S.Set("Speed Hack Speed", 2)
+local fastFS = record(DTS, 1, walkThenJump())
+S.Set("Speed Hack Frame Step", 0)
+sameTAS(fast, fastFS, "2x with Frame Step on = 2x scaled")
+S.Set("Speed Hack Speed", 0.5)
+
 section("JumpHeight jumps (UseJumpPower off) reach the same height")
 hum.UseJumpPower = false
 S.Set("Speed Hack", 0)
@@ -372,7 +499,10 @@ eq(box.Text, "0.5", "the box shows the speed")
 eq(S.Set("Speed Hack Speed", 0.05), true, "below 0.1 is allowed in...")
 eq(S.Get("Speed Hack Speed"), 0.1, "...and clamped to 0.1")
 S.Set("Speed Hack Speed", 3)
-eq(S.Get("Speed Hack Speed"), 1, "above 1 clamped to 1")
+eq(S.Get("Speed Hack Speed"), 3, "3x allowed")
+S.Set("Speed Hack Speed", 9)
+eq(S.Get("Speed Hack Speed"), 4, "above 4 clamped to 4")
+check(list:FindFirstChild("Speed Hack Frame Step") and list["Speed Hack Frame Step"]:FindFirstChild("Switch") ~= nil, "Settings: Frame Step switch")
 S.Set("Speed Hack Speed", 1)
 eq(SH.Wanted(), 1, "speed 1 = off")
 S.Set("Speed Hack Speed", 0.5)

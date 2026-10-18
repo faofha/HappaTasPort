@@ -36,9 +36,11 @@ local SettingsTable = {
 	{ name = "Record Tool Actions",      default = 1, section = "Create" },
 	{ name = "Ignore Game Processed",    default = 0, section = "Create" },
 
-	-- slow motion while recording (see SpeedHack): the TAS is still saved and replayed at normal speed
-	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow motion)" },
-	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 1, 0.5 = half)", min = 0.1, max = 1 },
+	-- slow (or fast) motion while recording (see SpeedHack): the TAS is still saved and replayed at normal speed
+	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow / fast motion)" },
+	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 4, 0.5 = half, 2 = double)", min = 0.1, max = 4 },
+	-- slow motion by whole physics steps (normal physics on some frames, everything held on the others)
+	{ name = "Speed Hack Frame Step",    default = 0, section = "Speed Hack", label = "Frame Step (normal physics, below 1x)" },
 
 	{ name = "Replay Keyboard",          default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Clicks",      default = 1, section = "Inputs" },

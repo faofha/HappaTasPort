@@ -1,8 +1,8 @@
 -- ================================================================================================
---  SPEED HACK  (slow motion while recording in Create mode)
+--  SPEED HACK  (slow / fast motion while recording in Create mode)
 --
 --  While a TAS is recorded (Create mode, unpaused) the character moves at s times its normal speed
---  (s = "Speed Hack Speed", 0.1 - 1), like a video played slower:
+--  (s = "Speed Hack Speed", 0.1 - 4; above 1 = fast motion, the same rules), like a video played slower:
 --    gravity x s^2, WalkSpeed and JumpPower x s, the character's velocity x s when the slow motion starts
 --    (and / s when it stops with the character still moving), HappaTAS's animations x s.
 --    JumpHeight is left alone: Roblox works the jump out from JumpHeight and the gravity, so with the
@@ -23,11 +23,14 @@
 --  ways were tried in the client and are not used: a counter-force from a model of Roblox's walking
 --  controller (0.5x far too slow, 0.25x too fast), and PhysicsSettings.PhysicsEnvironmentalThrottle (Skip2 /
 --  Skip4 slow every part but the character exactly, but a throttled platform pushed by the full-speed
---  character moved too slowly at Skip2 and not at all at Skip4).
+--  character moved too slowly at Skip2 and not at all at Skip4). Frame Step (V2.38.16, below) gets much closer:
+--  no scaling, Roblox's normal physics on some frames only.
+--  The camera's zoom spring follows the TAS clock (SH.anim -> Bridge.timeRate, p09).
 -- ================================================================================================
 do
 	local SH = SpeedHack
-	SH.scale = 1 -- the factor in effect for the next physics step (1 = normal speed)
+	SH.scale = 1 -- the factor the physics is scaled by for the next physics step (1 = normal speed)
+	SH.anim = 1  -- how fast the TAS clock runs against real time (animations, the camera's zoom spring)
 	local applied = false
 	local hum, root = nil, nil
 	local baseWalk, baseJump, lastWalk, lastJump = nil, nil, nil, nil
@@ -189,7 +192,8 @@ do
 	-- rewritten when the attribute changes), found with filtergc by its keys. Same rules as the constraints:
 	-- the value x s while slowed, a value the kit writes meanwhile is the new normal one, put back after.
 	-- (A booster's Power is a WalkSpeed / JumpPower: the character's values are slowed already.)
-	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 } }
+	-- (a swing sets its handle's velocity to Boost when you grab it: the same rule)
+	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 }, SwingConfiguration = { Boost = 1 } }
 	W.KIT_CONFIG = KIT_CONFIG
 	local knownCfg = setmetatable({}, { __mode = "k" }) -- config table -> its props (from the last scans)
 	local cfgEnts = {} -- the ones slowed now: config table -> { props, base, last }
@@ -364,8 +368,8 @@ do
 	-- the factor the settings ask for (1 = off)
 	function SH.Wanted()
 		if not Settings.On("Speed Hack") then return 1 end
-		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 1)
-		if s >= 0.999 then return 1 end
+		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 4)
+		if math.abs(s - 1) < 0.001 then return 1 end
 		return s
 	end
 
@@ -381,6 +385,123 @@ do
 	local function rescaleAnimations()
 		local e = AnimEngine.current
 		if e and e.Rescale then pcall(e.Rescale) end
+	end
+	local function setAnim(k)
+		if SH.anim == k then return end
+		SH.anim = k
+		rescaleAnimations()
+	end
+
+	-- ----------------------------------------------------------------------------------------- frame step
+	-- "Speed Hack Frame Step" (speeds below 1): no scaling at all. Roblox runs its normal physics on some
+	-- frames only, and everything that moves is held still for the physics step of the frames in between
+	-- (acc += s every physics step; a step runs when acc reaches 1), like Eternal Obbying's fixed steps fed by
+	-- its TAS pace. Only frames whose physics step ran are recorded, each with the simulated time of that step,
+	-- so walking, jumping and falling are exactly normal-speed physics (checked in the client: same heights,
+	-- states and times), and a platform you push yourself (the kit's Pushing Platform) speeds up at the normal
+	-- rate (~158 stud/s^2), which the scaling above can't do (Roblox's walking force can't be slowed). Not exact:
+	-- the moment the character bumps into it (anchoring breaks the contact each held step: the push starts a
+	-- little later, and now and then stalls - 3 of ~20 live runs).
+	-- Held = the character's root and every free assembly of the world's parts anchored from PreSimulation to
+	-- PostSimulation of that frame, then put back with the velocities they had: outside the physics step
+	-- nothing is held, so pausing, testing and Idle never see it. The kit's clock moves on by each step that ran
+	-- (KitClock.Advance), the client objects' physics clock skips the held steps (ClientObjects.SkipSim).
+	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
+		root = nil }
+	SH.FS = FS
+	local function collectStepParts()
+		local list, done = {}, {}
+		eachWorldPart(function(p)
+			if p.Anchored or charOf(p) then return end
+			local rootP = p.AssemblyRootPart or p
+			if done[rootP] or rootP.Anchored then return end
+			done[rootP] = true
+			list[#list + 1] = rootP
+		end)
+		FS.parts = list
+	end
+	local function hold(p)
+		local n = FS.n + 1
+		local e = FS.saved[n]
+		if not e then e = {}; FS.saved[n] = e end
+		e[1], e[2], e[3] = p, p.AssemblyLinearVelocity, p.AssemblyAngularVelocity
+		p.Anchored = true
+		FS.n = n
+	end
+	-- PreSimulation (after the frame was filled): true = this physics step runs, false = everything is held for
+	-- it. dt = the time the step simulates
+	function SH.StepBegin(dt)
+		if not FS.on then return true end
+		dt = tonumber(dt) or 0
+		FS.acc = FS.acc + FS.s
+		if FS.acc >= 1 - 1e-6 then
+			FS.acc = FS.acc - 1
+			FS.pending = FS.pending + dt
+			FS.ranDt = FS.ranDt + dt
+			FS.frameDt = dt
+			KitClock.Advance(dt)
+			return true
+		end
+		FS.scanIn = FS.scanIn - 1
+		if FS.scanIn <= 0 then
+			FS.scanIn = 30
+			local ok, err = pcall(collectStepParts)
+			if not ok then reportError("speed hack frame step", err) end
+		end
+		FS.n = 0
+		FS.held = true
+		local root = FS.root
+		if root and root.Parent and not root.Anchored then pcall(hold, root) end
+		local parts = FS.parts
+		for i = 1, #parts do
+			local p = parts[i]
+			if p.Parent and not p.Anchored then pcall(hold, p) end
+		end
+		ClientObjects.SkipSim(dt)
+		return false
+	end
+	-- PostSimulation: the held parts go on as they were
+	function SH.StepEnd()
+		if not FS.held then return end
+		FS.held = false
+		for i = 1, FS.n do
+			local e = FS.saved[i]
+			local p = e[1]
+			e[1] = nil
+			if p and p.Parent then
+				pcall(function()
+					p.Anchored = false
+					p.AssemblyLinearVelocity = e[2]
+					p.AssemblyAngularVelocity = e[3]
+				end)
+			end
+		end
+		FS.n = 0
+	end
+	-- the recording takes the simulated time of the steps that ran since its last frame (nil = not frame stepping)
+	function SH.StepTime()
+		if not FS.on then return nil end
+		local t = FS.pending
+		FS.pending = 0
+		return t
+	end
+	function SH.Stepping() return FS.on end
+	-- the time the physics step of this frame simulated while frame stepping (0 = held, or no step yet: the core
+	-- calls SH.FrameStart in PreRender)
+	function SH.StepDt() return FS.frameDt or 0 end
+	function SH.FrameStart() FS.frameDt = 0 end
+	-- the game time the animations move on by this frame (Heartbeat): the real dt x the factor, or with Frame Step
+	-- exactly the time of the physics step that ran (0 when everything was held)
+	function SH.GameDt(dt)
+		if not FS.on then return dt * SH.anim end
+		local d = FS.ranDt
+		FS.ranDt = 0
+		return d
+	end
+	local function stopStep()
+		if not FS.on then return end
+		SH.StepEnd()
+		FS.on, FS.pending, FS.ranDt, FS.root, FS.parts = false, 0, 0, nil, {}
 	end
 
 	local function applyValues(h, s)
@@ -417,14 +538,15 @@ do
 			if baseGravity and lastGravity and near(workspace.Gravity, lastGravity) then
 				pcall(function() workspace.Gravity = baseGravity end)
 			end
-			if keepMomentum and s < 1 then scaleMomentum(root, 1 / s) end
+			if keepMomentum and s ~= 1 then scaleMomentum(root, 1 / s) end
 		end
 		local okW, errW = pcall(W.SetFactor, 1)
 		if not okW then reportError("speed hack world", errW) end
 		applied, hum, root = false, nil, nil
 		baseWalk, baseJump, lastWalk, lastJump, baseGravity, lastGravity = nil, nil, nil, nil, nil, nil
 		SH.scale = 1
-		if s ~= 1 then rescaleAnimations() end
+		stopStep()
+		setAnim(1)
 	end
 
 	-- once a frame, at the end of PreRender (after the frame was recorded: the factor used now is the one
@@ -433,10 +555,22 @@ do
 	function SH.Update(active, h, part, keepMomentum)
 		local s = 1
 		if active and h and part then s = SH.Wanted() end
-		if s >= 1 then
-			if applied then SH.Restore(keepMomentum) end
+		if s == 1 then
+			if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 			return 1
 		end
+		if s < 1 and Settings.On("Speed Hack Frame Step") then
+			-- (from the scaled slow motion: its values off, the character's velocity back to normal)
+			if applied then SH.Restore(keepMomentum) end
+			if not FS.on then
+				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
+				FS.acc = 1 - s -- (the first step runs)
+			end
+			FS.s, FS.root = s, part
+			setAnim(s)
+			return 1
+		end
+		stopStep()
 		local ok, err = pcall(applyValues, h, s)
 		if not ok then
 			reportError("speed hack", err)
@@ -448,8 +582,8 @@ do
 		SH.scale = s
 		if prev ~= s then
 			scaleMomentum(part, s / prev) -- slow motion starts / the speed changed: same motion, slower
-			rescaleAnimations()
 		end
+		setAnim(s)
 		local okW, errW = pcall(function()
 			if W.Factor() ~= s then W.SetFactor(s) else W.Step() end
 		end)
@@ -460,7 +594,7 @@ do
 	function SH.Start()
 		local function announce()
 			local s = SH.Wanted()
-			local text = (s < 1) and ("Speed Hack: " .. tostring(r(s, 1000)) .. "x while recording") or "Speed Hack: Off"
+			local text = (s ~= 1) and ("Speed Hack: " .. tostring(r(s, 1000)) .. "x while recording") or "Speed Hack: Off"
 			task.spawn(Core.SetStatus, text, true)
 		end
 		Settings.Changed("Speed Hack", announce)

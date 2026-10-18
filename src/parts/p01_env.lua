@@ -70,6 +70,7 @@ do
 	Env.hookfunction    = fn(hookfunction, replaceclosure)
 	Env.iscclosure      = fn(iscclosure)
 	Env.getloadedmodules = fn(getloadedmodules)
+	Env.getconnections  = fn(getconnections, getsignals, get_signal_cons)
 	Env.setreadonly     = fn(setreadonly)
 	Env.isreadonly      = fn(isreadonly)
 	Env.restorefunction = fn(restorefunction)

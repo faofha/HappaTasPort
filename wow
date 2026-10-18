@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.15 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.16 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.15"
+local VERSION = "V2.38.16"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -82,6 +82,7 @@ do
 	Env.hookfunction    = fn(hookfunction, replaceclosure)
 	Env.iscclosure      = fn(iscclosure)
 	Env.getloadedmodules = fn(getloadedmodules)
+	Env.getconnections  = fn(getconnections, getsignals, get_signal_cons)
 	Env.setreadonly     = fn(setreadonly)
 	Env.isreadonly      = fn(isreadonly)
 	Env.restorefunction = fn(restorefunction)
@@ -222,8 +223,9 @@ local SettingsTable = {
 	{ name = "Record Death & Respawn",   default = 1, section = "Create" },
 	{ name = "Record Tool Actions",      default = 1, section = "Create" },
 	{ name = "Ignore Game Processed",    default = 0, section = "Create" },
-	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow motion)" },
-	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 1, 0.5 = half)", min = 0.1, max = 1 },
+	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow / fast motion)" },
+	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 4, 0.5 = half, 2 = double)", min = 0.1, max = 4 },
+	{ name = "Speed Hack Frame Step",    default = 0, section = "Speed Hack", label = "Frame Step (normal physics, below 1x)" },
 	{ name = "Replay Keyboard",          default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Clicks",      default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Movement",    default = 1, section = "Inputs" },
@@ -650,7 +652,14 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4350)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4508)},{
+						LV("961", " 10/18/26 - 2.38.16"),
+						LI("961_1", "   -   Speed Hack: speeds above 1 (fast motion, up to 4x)"),
+						LI("961_2", "   -   Speed Hack Frame Step: normal physics in slow motion"),
+						LI("961_3", "   -   Zoom plays back at normal speed after slow / fast motion"),
+						LI("961_4", "   -   Bounce pad / jump launcher effects shown when testing"),
+						LI("961_5", "   -   Zipline and Sequencer follow the TAS clock"),
+						LI("961_6", "   -   Camera script patches work again (zoom, mouse)"),
 						LV("962", " 10/18/26 - 2.38.15"),
 						LI("962_1", "   -   Speed Hack: bounce pads bounce as high as at normal speed"),
 						LI("962_2", "   -   Client objects saved from their start: morphs show up"),
@@ -946,11 +955,12 @@ do
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
-					H("38", "Speed Hack (Slow Motion)", 250, true, {
-						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
-						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
+					H("38", "Speed Hack (Slow / Fast Motion)", 336, true, {
+						{ 48, "Slows the game down (or speeds it up) while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
+						{ 48, "Speed 0.5 = half speed, 2 = double (0.1 to 4). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
 						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
-						{ 86, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, bounce pads and the EToH kit's timers. Other players keep their speed. A platform you push yourself still moves too fast." } }),
+						{ 86, "Gravity, walk speed, jump power, animations, the camera's zoom and the world change speed: spinners, moving platforms, swings, conveyors, bounce pads, ziplines and the EToH kit's timers. Other players keep their speed. A platform you push yourself moves too fast in slow motion." },
+						{ 86, "Frame Step (below 1x): instead of slowing things down, Roblox's normal physics runs on some frames only (one in two at 0.5x) and everything is held still in between. Only those frames are recorded: walking and jumping are exactly like normal speed, and platforms you push speed up normally." } }),
 					H("39", "EToH Kit Objects", 226, true, {
 						{ 67, "Settings > World Sync > Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the TAS clock, so they stop while paused and slow down with the speed hack." },
 						{ 48, "A jump launcher's push, moving platforms, vanishers, falling platforms and spawner cooldowns keep the same timing whether you pause or not." },
@@ -1565,6 +1575,8 @@ do
 						putVar(KE, e[2]); putVar(KE, math.max(0, q(e[3] or 0, 1000)))
 					elseif typ == 3 then
 						putVar(KE, e[2]); KE[#KE + 1] = (e[3] == 0) and 0 or 1
+					elseif typ == 4 then
+						putVar(KE, e[2]); KE[#KE + 1] = math.clamp(math.floor(tonumber(e[3]) or 0), 0, 255)
 					else
 						error("unknown kit event " .. tostring(typ), 0)
 					end
@@ -1859,6 +1871,8 @@ do
 							list[k] = { 2, getVar(R.KE), getVar(R.KE) / 1000 }
 						elseif typ == 3 then
 							list[k] = { 3, getVar(R.KE), getByte(R.KE) }
+						elseif typ == 4 then
+							list[k] = { 4, getVar(R.KE), getByte(R.KE) }
 						else
 							error("unknown kit event " .. tostring(typ), 0)
 						end
@@ -2241,6 +2255,7 @@ do
 	end
 end
 do
+	Bridge.timeRate = 1
 	local UserGameSettings
 	pcall(function() UserGameSettings = UserSettings():GetService("UserGameSettings") end)
 	local Default = Enum.MouseBehavior.Default
@@ -2303,8 +2318,9 @@ do
 	local function setMouseBehavior(b)
 		if UIS.MouseBehavior ~= b then pcall(function() UIS.MouseBehavior = b end) end
 	end
+	local restored = false
 	local function applyPatches(playerModule)
-		if patchedModule == playerModule then return end
+		if restored or patchedModule == playerModule then return end
 		patchedModule = playerModule
 		local camMod = playerModule:FindFirstChild("CameraModule")
 		if not camMod then return end
@@ -2442,6 +2458,8 @@ do
 							end
 							return res
 						end
+						local k = Bridge.timeRate
+						if k ~= 1 and type(renderDt) == "number" then renderDt = renderDt * k end
 						return orig(renderDt, ...)
 					end
 				end)
@@ -2522,9 +2540,9 @@ do
 		log(#zoomControllers .. " zoom controller(s) found")
 	end
 	local function resolve()
-		if cameras and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil) then
-			return cameras
-		end
+		local known = cameras ~= nil
+			and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil)
+		if known and (restored or (patchedModule ~= nil and patchedModule.Parent)) then return cameras end
 		local now = os.clock()
 		if now - lastResolveTry < 1 then return cameras end
 		lastResolveTry = now
@@ -2532,6 +2550,7 @@ do
 		local pm = ps and ps:FindFirstChild("PlayerModule")
 		if not pm then return cameras end
 		applyPatches(pm)
+		if known then return cameras end
 		local ok, mod = pcall(require, pm)
 		if not ok or type(mod) ~= "table" then return cameras end
 		local cams
@@ -2909,6 +2928,7 @@ do
 		Bridge.RefreshMouse()
 	end
 	function Bridge.Restore()
+		restored = true
 		pcall(Bridge.ResetGhost)
 		shiftlockBlocked = false
 		snapZoom = false; camFreezeZoom = false
@@ -3587,7 +3607,7 @@ do
 		local currentAnimTrack = nil
 		local currentAnimKeyframeHandler = nil
 		local currentAnimSpeed = 1.0
-		local function hack() return SpeedHack.scale end
+		local function hack() return SpeedHack.anim end
 		local animClock = 0
 		local animTable = {}
 		for name, list in pairs(ANIM_DEFS) do
@@ -3730,7 +3750,7 @@ do
 			return oldAnim
 		end
 		local function onRunning(speed)
-			speed = speed / getRigScale() / hack()
+			speed = speed / getRigScale() / SpeedHack.scale
 			if speed > 0.01 then
 				playAnimation("walk", 0.1, Humanoid)
 				if currentAnimInstance and currentAnimInstance.AnimationId == "http://www.roblox.com/asset/?id=180426354" then
@@ -3746,7 +3766,7 @@ do
 		end
 		local function onDied() pose = "Dead" end
 		local function onJumping() playAnimation("jump", 0.1, Humanoid); jumpAnimTime = jumpAnimDuration; pose = "Jumping" end
-		local function onClimbing(speed) speed = speed / getRigScale() / hack(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
+		local function onClimbing(speed) speed = speed / getRigScale() / SpeedHack.scale; playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
 		local function onGettingUp() pose = "GettingUp" end
 		local function onFreeFall() if jumpAnimTime <= 0 then playAnimation("fall", fallTransitionTime, Humanoid) end pose = "FreeFall" end
 		local function onFallingDown() pose = "FallingDown" end
@@ -3876,7 +3896,7 @@ do
 		end
 		connect(RunService.Heartbeat, function(deltaTime)
 			if handedOut or #FrameAnims > 0 then FrameAnims = {}; handedOut = false end
-			local gdt = deltaTime * hack()
+			local gdt = SpeedHack.GameDt(deltaTime)
 			animClock = animClock + gdt
 			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - gdt end
 		end)
@@ -4806,6 +4826,9 @@ do
 			base.skip, base.real, base.wall = rawS, rawS, rawW
 		end
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
+	end
+	function CO.SkipSim(dt)
+		base.skip = base.skip + (tonumber(dt) or 0)
 	end
 	function CO.Record(playerPos, tNow, simNow, wallNow, frame, data)
 		if not (enabled and scanDone) then return nil end
@@ -7773,6 +7796,7 @@ end
 do
 	local SH = SpeedHack
 	SH.scale = 1
+	SH.anim = 1
 	local applied = false
 	local hum, root = nil, nil
 	local baseWalk, baseJump, lastWalk, lastJump = nil, nil, nil, nil
@@ -7914,7 +7938,7 @@ do
 			end
 		end)
 	end
-	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 } }
+	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 }, SwingConfiguration = { Boost = 1 } }
 	W.KIT_CONFIG = KIT_CONFIG
 	local knownCfg = setmetatable({}, { __mode = "k" })
 	local cfgEnts = {}
@@ -8077,8 +8101,8 @@ do
 	end
 	function SH.Wanted()
 		if not Settings.On("Speed Hack") then return 1 end
-		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 1)
-		if s >= 0.999 then return 1 end
+		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 4)
+		if math.abs(s - 1) < 0.001 then return 1 end
 		return s
 	end
 	local function scaleMomentum(part, ratio)
@@ -8091,6 +8115,100 @@ do
 	local function rescaleAnimations()
 		local e = AnimEngine.current
 		if e and e.Rescale then pcall(e.Rescale) end
+	end
+	local function setAnim(k)
+		if SH.anim == k then return end
+		SH.anim = k
+		rescaleAnimations()
+	end
+	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
+		root = nil }
+	SH.FS = FS
+	local function collectStepParts()
+		local list, done = {}, {}
+		eachWorldPart(function(p)
+			if p.Anchored or charOf(p) then return end
+			local rootP = p.AssemblyRootPart or p
+			if done[rootP] or rootP.Anchored then return end
+			done[rootP] = true
+			list[#list + 1] = rootP
+		end)
+		FS.parts = list
+	end
+	local function hold(p)
+		local n = FS.n + 1
+		local e = FS.saved[n]
+		if not e then e = {}; FS.saved[n] = e end
+		e[1], e[2], e[3] = p, p.AssemblyLinearVelocity, p.AssemblyAngularVelocity
+		p.Anchored = true
+		FS.n = n
+	end
+	function SH.StepBegin(dt)
+		if not FS.on then return true end
+		dt = tonumber(dt) or 0
+		FS.acc = FS.acc + FS.s
+		if FS.acc >= 1 - 1e-6 then
+			FS.acc = FS.acc - 1
+			FS.pending = FS.pending + dt
+			FS.ranDt = FS.ranDt + dt
+			FS.frameDt = dt
+			KitClock.Advance(dt)
+			return true
+		end
+		FS.scanIn = FS.scanIn - 1
+		if FS.scanIn <= 0 then
+			FS.scanIn = 30
+			local ok, err = pcall(collectStepParts)
+			if not ok then reportError("speed hack frame step", err) end
+		end
+		FS.n = 0
+		FS.held = true
+		local root = FS.root
+		if root and root.Parent and not root.Anchored then pcall(hold, root) end
+		local parts = FS.parts
+		for i = 1, #parts do
+			local p = parts[i]
+			if p.Parent and not p.Anchored then pcall(hold, p) end
+		end
+		ClientObjects.SkipSim(dt)
+		return false
+	end
+	function SH.StepEnd()
+		if not FS.held then return end
+		FS.held = false
+		for i = 1, FS.n do
+			local e = FS.saved[i]
+			local p = e[1]
+			e[1] = nil
+			if p and p.Parent then
+				pcall(function()
+					p.Anchored = false
+					p.AssemblyLinearVelocity = e[2]
+					p.AssemblyAngularVelocity = e[3]
+				end)
+			end
+		end
+		FS.n = 0
+	end
+	function SH.StepTime()
+		if not FS.on then return nil end
+		local t = FS.pending
+		FS.pending = 0
+		return t
+	end
+	function SH.Stepping() return FS.on end
+	function SH.StepDt() return FS.frameDt or 0 end
+	function SH.FrameStart() FS.frameDt = 0 end
+	function SH.GameDt(dt)
+		if not FS.on then return dt * SH.anim end
+		local d = FS.ranDt
+		FS.ranDt = 0
+		return d
+	end
+	local function stopStep()
+		if not FS.on then return end
+		SH.StepEnd()
+		FS.on, FS.pending, FS.ranDt, FS.root, FS.parts = false, 0, 0, nil, {}
 	end
 	local function applyValues(h, s)
 		if h ~= hum then
@@ -8122,22 +8240,34 @@ do
 			if baseGravity and lastGravity and near(workspace.Gravity, lastGravity) then
 				pcall(function() workspace.Gravity = baseGravity end)
 			end
-			if keepMomentum and s < 1 then scaleMomentum(root, 1 / s) end
+			if keepMomentum and s ~= 1 then scaleMomentum(root, 1 / s) end
 		end
 		local okW, errW = pcall(W.SetFactor, 1)
 		if not okW then reportError("speed hack world", errW) end
 		applied, hum, root = false, nil, nil
 		baseWalk, baseJump, lastWalk, lastJump, baseGravity, lastGravity = nil, nil, nil, nil, nil, nil
 		SH.scale = 1
-		if s ~= 1 then rescaleAnimations() end
+		stopStep()
+		setAnim(1)
 	end
 	function SH.Update(active, h, part, keepMomentum)
 		local s = 1
 		if active and h and part then s = SH.Wanted() end
-		if s >= 1 then
-			if applied then SH.Restore(keepMomentum) end
+		if s == 1 then
+			if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 			return 1
 		end
+		if s < 1 and Settings.On("Speed Hack Frame Step") then
+			if applied then SH.Restore(keepMomentum) end
+			if not FS.on then
+				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
+				FS.acc = 1 - s
+			end
+			FS.s, FS.root = s, part
+			setAnim(s)
+			return 1
+		end
+		stopStep()
 		local ok, err = pcall(applyValues, h, s)
 		if not ok then
 			reportError("speed hack", err)
@@ -8149,8 +8279,8 @@ do
 		SH.scale = s
 		if prev ~= s then
 			scaleMomentum(part, s / prev)
-			rescaleAnimations()
 		end
+		setAnim(s)
 		local okW, errW = pcall(function()
 			if W.Factor() ~= s then W.SetFactor(s) else W.Step() end
 		end)
@@ -8160,7 +8290,7 @@ do
 	function SH.Start()
 		local function announce()
 			local s = SH.Wanted()
-			local text = (s < 1) and ("Speed Hack: " .. tostring(r(s, 1000)) .. "x while recording") or "Speed Hack: Off"
+			local text = (s ~= 1) and ("Speed Hack: " .. tostring(r(s, 1000)) .. "x while recording") or "Speed Hack: Off"
 			task.spawn(Core.SetStatus, text, true)
 		end
 		Settings.Changed("Speed Hack", announce)
@@ -8187,6 +8317,10 @@ do
 		R0 = now
 		rate = r
 		KC.rate = r
+	end
+	function KC.Advance(d)
+		d = tonumber(d) or 0
+		if d > 0 then K0 = K0 + d end
 	end
 	local marks = { {}, {} }
 	function KC.Mark(data, n)
@@ -8404,9 +8538,9 @@ do
 		if not okE or type(env) ~= "table" or rawget(env, "script") ~= ms then return nil end
 		return env
 	end
-	local function patchEnv(env, withClock)
+	local function patchEnv(env, withClock, name)
 		if patched[env] then return end
-		patched[env] = { task = rawget(env, "task"), os = rawget(env, "os") }
+		patched[env] = { task = rawget(env, "task"), os = rawget(env, "os"), name = name }
 		rawset(env, "task", fakeTask)
 		if withClock then rawset(env, "os", fakeOs) end
 		KC.patched = KC.patched + 1
@@ -8444,7 +8578,7 @@ do
 				if d:IsA("ModuleScript") and loaded[d] then
 					local env = envOf(d)
 					if env and not patched[env] then
-						patchEnv(env, not SKIP_CLOCK[d.Name])
+						patchEnv(env, not SKIP_CLOCK[d.Name], d.Name)
 						n = n + 1
 					end
 				end
@@ -8468,6 +8602,54 @@ do
 		end
 	end
 	local enabled = false
+	local SIGNALS = { "Heartbeat", "PostSimulation" }
+	local SKIP_FRAME = { Morpher = true, DistanceCulling = true }
+	local taken = { Heartbeat = {}, PostSimulation = {} }
+	local function kitFunction(f)
+		if type(f) ~= "function" or (Env.iscclosure and Env.iscclosure(f)) then return false end
+		local ok, env = pcall(getfenv, f)
+		local p = ok and patched[env]
+		return p ~= nil and p ~= false and not SKIP_FRAME[p.name]
+	end
+	function KC.FrameDt(dt)
+		if SpeedHack.Stepping() then return SpeedHack.StepDt() end
+		return (tonumber(dt) or 0) * rate
+	end
+	local function giveBack(name)
+		for _, c in pairs(taken[name]) do pcall(function() c:Enable() end) end
+		taken[name] = {}
+	end
+	local function runFrame(name, dt)
+		local mine = taken[name]
+		local wantNow = enabled and Env.getconnections ~= nil and (rate ~= 1 or SpeedHack.Stepping())
+		if not wantNow then
+			if next(mine) then giveBack(name) end
+			return
+		end
+		local okL, list = pcall(Env.getconnections, RunService[name])
+		if not okL or type(list) ~= "table" then return end
+		local seen = {}
+		for _, c in ipairs(list) do
+			local okF, f = pcall(function() return c.Function end)
+			if okF and f and (mine[f] or kitFunction(f)) then
+				if not mine[f] then
+					if not pcall(function() c:Disable() end) then f = nil end
+					if f then mine[f] = c end
+				end
+				if f then seen[f] = true end
+			end
+		end
+		local kdt = KC.FrameDt(dt)
+		for f in pairs(mine) do
+			if not seen[f] then
+				mine[f] = nil
+			else
+				local okS, err = pcall(realTask.spawn, f, kdt)
+				if not okS then reportError("kit clock", err) end
+			end
+		end
+	end
+	KC.FrameEvents = taken
 	function KC.Enable()
 		if enabled then return end
 		enabled = true
@@ -8483,6 +8665,7 @@ do
 		end
 		patched = {}
 		KC.patched = 0
+		for _, name in ipairs(SIGNALS) do giveBack(name) end
 		unpatchTween()
 		endTweens()
 		releaseWaits()
@@ -8524,8 +8707,14 @@ do
 		Settings.Changed("Kit Scripts On TAS Clock", function(v)
 			if v ~= 0 then KC.Enable() else KC.Disable() end
 		end)
-		on(RunService.Heartbeat, function()
+		on(RunService.Heartbeat, function(dt)
 			local ok, err = pcall(KC.Step)
+			if not ok then reportError("kit clock", err) end
+			ok, err = pcall(runFrame, "Heartbeat", dt)
+			if not ok then reportError("kit clock", err) end
+		end)
+		on(RunService.PostSimulation, function(dt)
+			local ok, err = pcall(runFrame, "PostSimulation", dt)
 			if not ok then reportError("kit clock", err) end
 		end)
 		task.spawn(function()
@@ -8598,6 +8787,7 @@ do
 		for snd, m in pairs(muted) do pcall(function() snd.Volume = m.vol end) end
 		muted = {}
 	end
+	local ownSounds = setmetatable({}, { __mode = "k" })
 	local function playCopy(snd, parent)
 		if not (snd and parent and parent.Parent) then return end
 		local m = muted[snd]
@@ -8605,6 +8795,7 @@ do
 		if vol <= 0 then return end
 		pcall(function()
 			local c = snd:Clone()
+			ownSounds[c] = true
 			c.Volume = vol
 			c.Parent = parent
 			c:Play()
@@ -9127,6 +9318,48 @@ do
 			end
 		end
 	end
+	local FX_SOUNDS = { "BounceSound", "Tick", "Bounce" }
+	local FX_CODE = { BounceSound = 1, Tick = 2, Bounce = 3 }
+	local FX_PARTICLE = { BounceSound = true, Bounce = true }
+	local fxObjects, fxOf = {}, {}
+	local function addFx(cfg)
+		local part = cfg.Parent
+		if not (part and part:IsA("BasePart")) or fxOf[part] then return end
+		local key = ClientObjects.KeyOf(part)
+		if not key then return end
+		local o = { part = part, cfg = cfg, key = key, id = idFor(key), conns = {} }
+		o.conns[1] = part.ChildAdded:Connect(function(child)
+			if not (FX_CODE[child.Name] and child:IsA("Sound")) or ownSounds[child] or not cur.on then return end
+			if cur.mode == 3 then
+				pcall(function() child.Volume = 0 end)
+			elseif cur.rec and cur.data and #cur.data > 0 then
+				addEvent(cur.data[#cur.data], { 4, o.id, FX_CODE[child.Name] })
+			end
+		end)
+		o.conns[2] = part.AncestryChanged:Connect(function()
+			if part:IsDescendantOf(workspace) then return end
+			for _, c in ipairs(o.conns) do c:Disconnect() end
+			fxOf[part] = nil
+			for i = #fxObjects, 1, -1 do if fxObjects[i] == o then table.remove(fxObjects, i) end end
+		end)
+		fxOf[part] = o
+		fxObjects[#fxObjects + 1] = o
+	end
+	local function playFx(id, code)
+		local key, name = reg.idToKey[id], FX_SOUNDS[code]
+		if not (key and name) then return end
+		for _, o in ipairs(fxObjects) do
+			if o.key == key and o.part.Parent then
+				local snd, burst = nil, nil
+				for _, d in ipairs(o.part:GetDescendants()) do
+					if not snd and d.Name == name and d:IsA("Sound") and d.Parent ~= o.part then snd = d end
+					if not burst and d.Name == "BounceParticle" and d:IsA("ParticleEmitter") then burst = d end
+				end
+				if snd then playCopy(snd, o.part) end
+				if burst and FX_PARTICLE[name] then pcall(function() burst:Emit(1) end) end
+			end
+		end
+	end
 	local replayedTo = nil
 	local function replayEvents(data, f)
 		if replayedTo == nil or f < replayedTo then replayedTo = f - 1 end
@@ -9140,6 +9373,8 @@ do
 						for _, t in ipairs(turrets) do if t.key == key then playCopy(t.fireSnd, t.part) end end
 					elseif e[1] == 2 and (e[3] or 0) > 0 then
 						dealDamage(e[3])
+					elseif e[1] == 4 then
+						playFx(e[2], e[3])
 					end
 				end
 			end
@@ -9224,9 +9459,11 @@ do
 			if cur.on and cur.mode == 3 then pcall(function() d.Enabled = false end) end
 		end)
 	end
-	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner }
+	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner,
+		BouncePadConfiguration = addFx, LauncherConfiguration = addFx }
 	local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
-		["CO_Interactables/PushboxSpawn"] = addSpawner }
+		["CO_Interactables/PushboxSpawn"] = addSpawner, ["CO_Interactables/BouncePad"] = addFx,
+		["CO_Interactables/JumpLauncher"] = addFx }
 	local function consider(inst, kitTables)
 		local add = CONFIGS[inst.Name]
 		if not add and CS then
@@ -9318,7 +9555,7 @@ do
 		for _, fr in ipairs(frames) do
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if e[1] == 1 or e[1] == 3 then used[e[2]] = true end
+					if e[1] == 1 or e[1] == 3 or e[1] == 4 then used[e[2]] = true end
 				end
 			end
 		end
@@ -9335,7 +9572,7 @@ do
 		for _, fr in ipairs(frames) do
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if (e[1] == 1 or e[1] == 3) and map[e[2]] then e[2] = map[e[2]] end
+					if (e[1] == 1 or e[1] == 3 or e[1] == 4) and map[e[2]] then e[2] = map[e[2]] end
 				end
 			end
 		end
@@ -9376,6 +9613,7 @@ do
 			for _, g in ipairs(beats) do for _, c in ipairs(g.conns) do c:Disconnect() end end
 			for _, t in ipairs(turrets) do for _, c in ipairs(t.conns) do c:Disconnect() end end
 			for _, s in ipairs(spawners) do for _, c in ipairs(s.conns) do c:Disconnect() end end
+			for _, o in ipairs(fxObjects) do for _, c in ipairs(o.conns) do c:Disconnect() end end
 			if holder then pcall(function() holder:Destroy() end) end
 		end)
 	end
@@ -12239,7 +12477,7 @@ do
 			return
 		end
 		lastStatPaused, lastStatFD, lastStatFN, lastStatSH = pausedNow, FrameData, frameNo, sh
-		setText(f["1"], " Frame: " .. frameNo .. ((sh < 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
+		setText(f["1"], " Frame: " .. frameNo .. ((sh ~= 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
@@ -13008,17 +13246,19 @@ do
 		end
 	end
 	local function preRender(dt)
+		SpeedHack.FrameStart()
 		Profiler.FrameBegin(dt)
 		Profiler.Begin("HappaTAS")
 		local data, mode = C.data, C.mode
 		if not (mode == 2 and (not C.paused or C.FirstFrameRecord)) then InputSys.Clear() end
 		if mode == 2 and C.CharLoaded() then
-			if not C.paused and C.NotDead() and not C.FirstFrameRecord then
+			local stepT = SpeedHack.StepTime()
+			if not C.paused and C.NotDead() and not C.FirstFrameRecord and (stepT == nil or stepT > 0) then
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
 				local k = C.recScale
-				local dtN = C.LastFrameTime * k
+				local dtN = stepT or C.LastFrameTime * k
 				local ft = r(dtN, 1000000)
 				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + dtN, 1000000) or ft
 				local lin, ang = HRP.AssemblyLinearVelocity, HRP.AssemblyAngularVelocity
@@ -13061,6 +13301,7 @@ do
 		local hum = C.Humanoid
 		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
 		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
+		Bridge.timeRate = SpeedHack.anim
 		Profiler.Begin("Kit")
 		local kitRate = 1
 		if mode == 2 then
@@ -13068,7 +13309,7 @@ do
 			local f = rec and #data or C.frame
 			local fr = data[f]
 			KitObjects.Frame(2, data, f, fr and fr.TotalTime or 0, rec and #data > 0)
-			kitRate = rec and C.recScale or 0
+			kitRate = (rec and not SpeedHack.Stepping()) and C.recScale or 0
 		elseif mode == 3 then
 			KitObjects.Frame(3, data, C.frame, C.TestingTimer, false)
 			kitRate = math.max(0, Settings.Get("Playback Speed"))
@@ -13100,7 +13341,7 @@ do
 		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
 		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 	end
-	local function preSimulation()
+	local function preSimulation(dt)
 		Profiler.Begin("HappaTAS")
 		KitObjects.Reassert()
 		local data = C.data
@@ -13115,6 +13356,7 @@ do
 			end
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
+		SpeedHack.StepBegin(dt)
 		Profiler.End("HappaTAS")
 	end
 	local function holdPose(fr)
@@ -13193,6 +13435,7 @@ do
 		if fr and type(fr.Mobile) == "table" and uis.TouchEnabled then C.ReplayMobile(fr.Mobile) end
 	end
 	local function heartbeat(dt)
+		SpeedHack.StepEnd()
 		Profiler.Heartbeat()
 		Profiler.Begin("HappaTAS")
 		local mode, data = C.mode, C.data
@@ -13278,9 +13521,13 @@ do
 			local ok, err = pcall(preRender, dt)
 			if not ok then reportError("PreRender", err) end
 		end)
-		on(rs.PreSimulation, function()
-			local ok, err = pcall(preSimulation)
+		on(rs.PreSimulation, function(dt)
+			local ok, err = pcall(preSimulation, dt)
 			if not ok then reportError("PreSimulation", err) end
+		end)
+		on(rs.PostSimulation, function()
+			local ok, err = pcall(SpeedHack.StepEnd)
+			if not ok then reportError("PostSimulation", err) end
 		end)
 		on(rs.Heartbeat, function(dt)
 			local ok, err = pcall(heartbeat, dt)
