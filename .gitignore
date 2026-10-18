@@ -6,3 +6,10 @@ tests/diff_*.txt
 CLAUDE.md
 claude/
 build/
+
+# HappaTAS 3 build outputs
+src2/HappaTAS3.lua
+src2/.check3.lua
+tests3/run_*.lua
+wow3
+tests3/fixtures/*/HappaTAS3.lua
