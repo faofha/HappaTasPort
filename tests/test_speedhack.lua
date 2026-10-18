@@ -250,6 +250,67 @@ near(workspace.Gravity, 100, 1e-6, "paused: the game's gravity 100 stays")
 workspace.Gravity = G0
 hum.WalkSpeed = 16
 
+section("bounce pads (EToH kit): the pad's Power is a velocity, x s while slowed")
+-- the kit keeps a pad's configuration as a plain table (Utility/Config GetConfig) and its Touched handler
+-- sets the character's velocity to Power itself: the same bounce in TAS time at any speed
+do
+	local padInst = Instance.new("Configuration")
+	padInst.Name = "BouncePadConfiguration"
+	local other = Instance.new("Configuration")
+	other.Name = "BoosterConfiguration" -- (a speed booster's Power is a WalkSpeed: left alone)
+	local padCfg = { __instance = padInst, __defaults = {}, Power = 100, Cooldown = 0.05, RelativeForce = false }
+	local boostCfg = { __instance = other, __defaults = {}, Power = 32 }
+	M.gcTables[#M.gcTables + 1] = padCfg
+	M.gcTables[#M.gcTables + 1] = boostCfg
+	local function bounceAt(k)
+		return { [k] = function()
+			local v = hrp.AssemblyLinearVelocity
+			hrp.AssemblyLinearVelocity = Vector3.new(v.X, padCfg.Power, v.Z)
+		end }
+	end
+	S.Set("Speed Hack", 0)
+	local plainB = record(DTS, 0.5, bounceAt(10))
+	S.Set("Speed Hack", 1)
+	local seenP, seenB
+	local evB = bounceAt(10)
+	evB[5] = function() seenP, seenB = padCfg.Power, boostCfg.Power end
+	local slowB = record(DTS, 1, evB)
+	near(seenP, 50, 1e-9, "recording at 0.5x: the pad's Power is 50")
+	eq(seenB, 32, "a booster's Power is not touched")
+	sameTAS(plainB, slowB, "bounce pad at 0.5x")
+	local topP, topS = 0, 0
+	for _, f in ipairs(plainB) do if f.Cframe then topP = math.max(topP, f.Cframe[2]) end end
+	for _, f in ipairs(slowB) do if f.Cframe then topS = math.max(topS, f.Cframe[2]) end end
+	check(topP > 20 and math.abs(topP - topS) < 0.002, "same bounce height (" .. topP .. " / " .. topS .. ")")
+	eq(padCfg.Power, 100, "paused: Power 100 again")
+	-- the kit writes a new Power while slowed (the pad's attribute changed): that is the new normal value
+	local seen2
+	local ev2b = {
+		[5] = function() padCfg.Power = 80 end,
+		[8] = function() seen2 = padCfg.Power end,
+	}
+	record({ table.unpack(DTS, 1, 20) }, 1, ev2b)
+	near(seen2, 40, 1e-9, "the kit's own Power 80 while slowed -> 40")
+	eq(padCfg.Power, 80, "paused: the kit's Power 80 stays")
+	padCfg.Power = 100
+	-- a pad the kit sets up while the speed hack is on is found too
+	local lateInst = Instance.new("Configuration")
+	lateInst.Name = "BouncePadConfiguration"
+	local lateCfg = { __instance = lateInst, __defaults = {}, Power = 60 }
+	local seen3
+	local ev3b = {
+		[3] = function()
+			M.gcTables[#M.gcTables + 1] = lateCfg
+			lateInst.Parent = workspace
+		end,
+		[100] = function() seen3 = lateCfg.Power end,
+	}
+	record({ table.unpack(DTS, 1, 110) }, 1, ev3b)
+	near(seen3, 30, 1e-9, "a pad added while recording: Power 60 -> 30")
+	eq(lateCfg.Power, 60, "paused: Power 60 again")
+	lateInst:Destroy()
+end
+
 section("Idle and Test: normal speed")
 key(Enum.KeyCode.One)
 hum.MoveDirection = Vector3.new(1, 0, 0)

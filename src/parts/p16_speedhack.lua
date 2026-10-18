@@ -14,9 +14,16 @@
 --  The world slows down with it (V2.38.14, "World"): every constraint and body mover gets its slowed values
 --  (velocities x s, forces / torques / stiffness / accelerations x s^2, damping and responsiveness x s), free
 --  client objects keep their motion (velocity x s when the slow motion starts, / s when it stops) and
---  conveyors move x s, so spinners, moving platforms, swings, pushers, pushboxes and the jump launcher's push
---  run in slow motion too. The kit's scripts follow the TAS clock through the Kit Clock (p16_kit), timed
---  buttons through Sync Button Timers. Roblox's own humanoid timers and other players keep their speed.
+--  conveyors move x s, so spinners, moving platforms, swings, pushboxes and the jump launcher's push run in
+--  slow motion too; a bounce pad's Power (a velocity the kit sets itself) is slowed the same way (V2.38.15).
+--  The kit's scripts follow the TAS clock through the Kit Clock (p16_kit), timed buttons through Sync Button
+--  Timers. Roblox's own humanoid timers and other players keep their speed, and so does the walking force your
+--  character pushes things with (measured in the client: about 658 x its mass, the same at any gravity or
+--  WalkSpeed): a platform you push yourself (the kit's Pushing Platform) still speeds up too fast. Two other
+--  ways were tried in the client and are not used: a counter-force from a model of Roblox's walking
+--  controller (0.5x far too slow, 0.25x too fast), and PhysicsSettings.PhysicsEnvironmentalThrottle (Skip2 /
+--  Skip4 slow every part but the character exactly, but a throttled platform pushed by the full-speed
+--  character moved too slowly at Skip2 and not at all at Skip4).
 -- ================================================================================================
 do
 	local SH = SpeedHack
@@ -175,6 +182,80 @@ do
 		end)
 	end
 
+	-- kit configuration values a kit script turns into a velocity itself, with no constraint to slow: the
+	-- bounce pad (Interactables/BouncePad) sets the character's velocity to its Power when touched, so with
+	-- the gravity x s^2 a slowed bounce went 1 / s^2 as high. The kit keeps each object's configuration as a
+	-- plain table (Utility/Config GetConfig: __instance = the Configuration, then one field per attribute,
+	-- rewritten when the attribute changes), found with filtergc by its keys. Same rules as the constraints:
+	-- the value x s while slowed, a value the kit writes meanwhile is the new normal one, put back after.
+	-- (A booster's Power is a WalkSpeed / JumpPower: the character's values are slowed already.)
+	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 } }
+	W.KIT_CONFIG = KIT_CONFIG
+	local knownCfg = setmetatable({}, { __mode = "k" }) -- config table -> its props (from the last scans)
+	local cfgEnts = {} -- the ones slowed now: config table -> { props, base, last }
+	local cfgScan, cfgScanIn = true, 0 -- look again (a kit object was added), in that many slowed frames
+	local function scanConfigs()
+		cfgScan = false
+		if not Env.filtergc then return end
+		local ok, found = pcall(Env.filtergc, "table", { Keys = { "__instance", "__defaults" } })
+		if not ok or type(found) ~= "table" then return end
+		for _, t in ipairs(found) do
+			if type(t) == "table" and not knownCfg[t] then
+				local inst = rawget(t, "__instance")
+				local props = typeof(inst) == "Instance" and KIT_CONFIG[inst.Name] or nil
+				if props then knownCfg[t] = props end
+			end
+		end
+	end
+	local function writeCfg(t, e, k)
+		local want = (wf == 1) and e.base[k] or scaled(e.base[k], e.props[k], wf)
+		rawset(t, k, want)
+		e.last[k] = want
+	end
+	local function addCfg(t, props)
+		local e = { props = props, base = {}, last = {} }
+		for k in pairs(props) do
+			local v = rawget(t, k)
+			if type(v) == "number" and v == v then e.base[k] = v end
+		end
+		if next(e.base) == nil then return end -- (a table the kit cleared: its object is gone)
+		cfgEnts[t] = e
+		for k in pairs(e.base) do writeCfg(t, e, k) end
+	end
+	local function restoreCfgs()
+		for t, e in pairs(cfgEnts) do
+			for k, b in pairs(e.base) do
+				-- (a value the kit wrote since is kept: it is already a normal value)
+				if rawget(t, k) == e.last[k] then rawset(t, k, b) end
+			end
+		end
+		cfgEnts = {}
+	end
+	-- while slowed: a value the kit wrote is the new normal one; new kit objects are looked for
+	local function stepCfgs()
+		for t, e in pairs(cfgEnts) do
+			for k in pairs(e.base) do
+				local now = rawget(t, k)
+				if now == nil then
+					cfgEnts[t] = nil
+					break
+				elseif now ~= e.last[k] then
+					e.base[k] = now
+					writeCfg(t, e, k)
+				end
+			end
+		end
+		if cfgScan then
+			cfgScanIn = cfgScanIn - 1
+			if cfgScanIn <= 0 then
+				scanConfigs()
+				for t, props in pairs(knownCfg) do
+					if not cfgEnts[t] then addCfg(t, props) end
+				end
+			end
+		end
+	end
+
 	function W.Track()
 		if tracking then return end
 		tracking = true
@@ -182,6 +263,9 @@ do
 			if TIME_PROPS[d.ClassName] then
 				known[d] = true
 				if wf ~= 1 then addEntry(d) end
+			elseif KIT_CONFIG[d.Name] then
+				-- (the kit makes the object's configuration table a little later)
+				cfgScan, cfgScanIn = true, 30
 			end
 		end)
 		on(workspace.DescendantRemoving, function(d)
@@ -208,7 +292,8 @@ do
 	-- the world's factor (1 = normal): constraints from their normal values, free parts' motion x the ratio
 	function W.SetFactor(f)
 		if f == wf then return end
-		local ratio = f / wf
+		local from = wf
+		local ratio = f / from
 		wf = f
 		if f ~= 1 then
 			for d in pairs(known) do
@@ -222,6 +307,16 @@ do
 			end
 			for _, v in pairs(vparts) do writeVel(v) end
 			collectVParts()
+			-- (every time the slow motion starts: about 1 ms in the EToH kit test place)
+			if cfgScan or from == 1 then scanConfigs() end
+			for t, props in pairs(knownCfg) do
+				local e = cfgEnts[t]
+				if e then
+					for k in pairs(e.base) do writeCfg(t, e, k) end
+				else
+					addCfg(t, props)
+				end
+			end
 		else
 			for _, e in pairs(ents) do restoreEntry(e) end
 			ents = {}
@@ -234,6 +329,7 @@ do
 				end
 			end
 			vparts = {}
+			restoreCfgs()
 		end
 		scaleFree(ratio)
 	end
@@ -254,13 +350,15 @@ do
 				vparts[p] = nil
 			end
 		end
+		stepCfgs()
 	end
 	function W.Factor() return wf end
 	function W.Count()
-		local n, m = 0, 0
+		local n, m, c = 0, 0, 0
 		for _ in pairs(ents) do n = n + 1 end
 		for _ in pairs(vparts) do m = m + 1 end
-		return n, m
+		for _ in pairs(cfgEnts) do c = c + 1 end
+		return n, m, c
 	end
 
 	-- the factor the settings ask for (1 = off)
