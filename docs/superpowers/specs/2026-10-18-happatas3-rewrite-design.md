@@ -1,0 +1,265 @@
+# HappaTAS 3: full rewrite, design
+
+Date: 2026-10-18. Status: draft for review.
+Visual reference: `2026-10-18-happatas3-ui-mockup.html` (the Settings window, final mockup).
+
+## 1. Goal
+
+Rewrite HappaTAS from scratch, engine included, as HappaTAS 3. It must be:
+
+- **easier to use**, above all saving and loading: every run shows its details, runs can be organised in
+  folders, searched, sorted and kept as numbered attempts;
+- **faster**: less work per frame, less memory and garbage-collection lag, smaller files, faster saving;
+- **more reliable**: one place that decides what runs when, explicit modes instead of flags that must
+  agree, everything undone on Unload;
+- **new to look at**: a "Studio" layout in a soft liquid-glass style, with far more ways to customise it.
+
+Every feature of V2.38.16 stays. Old `.tas` files and `Settings.json` keep working.
+
+### Success criteria
+
+1. Recording a run with the same inputs gives the same frames as V2.38.16 (frame-by-frame trace
+   comparison in the mock, plus spot checks in the real client), for the character, camera, inputs,
+   animations, client objects, buttons, lighting, the EToH kit and the speed hack (Smooth and Frame Step).
+2. Every `.tas` file V2.38.16 can open, HappaTAS 3 opens and plays the same way.
+3. `Settings.json` from V2.38.16 is converted: every setting and key binding carries over.
+4. Per-frame cost in each mode (Idle, Create paused, recording, Test) is no higher than V2.38.16's, measured
+   with the bench in the mock and the HappaTAS timer in the real client; saving a 10-minute TAS takes less
+   time than in V2.38.16.
+5. Unload leaves nothing behind: no GUI, no connections, no hooks, no changed properties.
+
+## 2. Scope
+
+**Kept:** recording / playback (keyboard, mouse buttons, wheel, mouse position, camera, zoom, animations,
+tools, death and respawn), Create / Test / Idle modes with every key control, TAS merge, client objects
+(Sync / Smooth / Frustum culling), timed buttons, lighting, the EToH kit (Kit Clock, frame listeners, beat
+blocks, turrets, pushboxes, bounce pad / launcher effects, morphers), the speed hack (0.1x to 4x, Smooth and
+Frame Step), the MicroProfiler copy, mobile support (touch buttons, thumbstick replay), the NohBoard cursor,
+keyboard / click sounds, real-mouse replay, the Real-specific input fixes (VirtualInputManager keys, mouse
+calibration).
+
+**Not included:** autosave, cloud sync, tags on runs, anything for games other than the ones HappaTAS
+already supports. Working around a game's anti-cheat is out of scope.
+
+**Executors:** Real first. Only functions in the sUNC standard where possible, each looked up with
+fallbacks (as V2.38.16 does), so Potassium and other sUNC executors mostly work. Executor function docs:
+docs.projectreal.gg, docs.potassium.pro, sunc.su only.
+
+## 3. Approach
+
+A new source folder `src2/`, built into one file like now. V2.38.16 stays the script in use until
+HappaTAS 3 catches up. Systems are rebuilt one by one on the new skeleton, each checked against V2.38.16 with
+the existing trace tools and then in the real client.
+
+## 4. Architecture
+
+Six layers; each uses only the ones above it.
+
+1. **Platform**: executor feature detection by sUNC name with fallbacks; services through `cloneref`;
+   file access; one safe way to call game code (`gameCall`: on its own thread, so the game's camera module
+   can't take HappaTAS's CoreGui access away).
+2. **Kernel**:
+   - **Pipeline**: the single place that says what runs in each Roblox event and in what order. Every
+     module registers its handlers with an explicit order number. Events, in the order measured in the
+     client: input, PreRender (+ RenderStepped), PreSimulation, physics, PostSimulation / Heartbeat,
+     end of render step (BindToRenderStep Last + 1).
+   - **State store**: mode, frame, paused, speed, selection, etc., with change events. The UI only listens.
+   - **Event bus**: module-to-module notifications.
+   - **Lifecycle**: every connection, hook, created instance and changed property is owned by a module and
+     undone on Unload, in reverse order.
+3. **Engine**: timeline, recorder, player, mode machine.
+4. **World plugins**: character, camera, inputs, animations, client objects, buttons, lighting, EToH kit,
+   time control (speed hack).
+5. **Persistence**: codec v6 plus readers for v1-v5, the library, settings.
+6. **UI**: component kit, windows, timeline bar, MicroProfiler.
+
+**Build:** each `src2/` module is its own function in the built file, so no function comes near Luau's
+200-locals limit. `tools/build3.sh` writes `src2/HappaTAS3.lua` (with comments, used by the tests) and the
+release (`wow3`, then `wow` / `wow1` at switch-over) without comments and blank lines.
+
+## 5. Engine core
+
+### 5.1 Mode machine
+
+States: **Idle**, **Paused** (on frame n), **Recording**, **Testing**. Transitions: Create, Unpause, Pause,
+Step one frame, Seek (back / forward / to a frame), Return, Test, Idle, Merge. Each transition is one function
+that checks it is allowed, then calls every plugin's leave / enter in a fixed order. Keys, buttons and the
+timeline all request transitions; nothing sets mode flags directly.
+
+### 5.2 One frame
+
+| Event | Recording | Testing |
+|---|---|---|
+| PreRender | start frame n: camera, inputs, mouse, time | pose the character for the screen |
+| PreSimulation | fill frame n: character, humanoid state, animation, every plugin's record; Frame Step decides run or hold | pose for physics |
+| PostSimulation | release a held step; fill the frame if there was no physics step (240 FPS) | advance the playback clock |
+| End of render | - | re-apply poses the game moved; cursor |
+
+### 5.3 Timeline
+
+Frames are stored as columns. Numbers live in Luau `buffer`s: TotalTime, FrameTime, root CFrame
+(position + rotation), linear / angular velocity, camera CFrame, zoom, humanoid state, mouse. Rare data
+(inputs, tool events, kit events, deaths, speed factor) is kept in sparse lists keyed by frame. Plugins
+register their own columns. Growth doubles the buffers; cutting frames truncates.
+
+### 5.4 Rules carried over from V2.38.x live testing (each one becomes a test)
+
+- A frame's time is the simulated step time; frames without a physics step at 240 FPS are kept.
+- Pausing throws away the step after the last frame; the kit clock goes back with it.
+- Unpausing puts velocities back and client objects on their recorded pose with their velocities.
+- No jump on the first recorded frame; coyote jump and ladder rules as in V2.38.16.
+- Game code (camera module, kit functions) is only ever called on its own thread.
+- The camera script is patched (hookfunction / restorefunction) once the PlayerModule is found, even when
+  the garbage-collector scan found the cameras first; never re-patched after Unload.
+
+## 6. Persistence
+
+### 6.1 File format v6
+
+`HTAS`, version byte 6, then a small uncompressed header (frame count, TAS length, created / saved time,
+script version, PlaceId, kit rules version, speed hack use) so the library never has to unpack a whole file,
+then the LZ4-compressed column blocks (buffers written directly). v1-v5 files load through readers ported from
+V2.38.16's codec and are converted in memory; a file is only rewritten as v6 when it is saved again.
+
+### 6.2 Library
+
+- Files stay in `HappaTasPort/<PlaceId>/`; folders are real subfolders.
+- `library.json` per place caches every file's header info; rebuilt from the headers when missing or stale.
+- Each run shows name, length, frames, saved date, size, script version, kit / speed hack use.
+- **Attempts:** "Save as new attempt" saves `Name (2)`, `(3)`...; attempts are grouped under the run, newest
+  first.
+- Sort by name / date / length; search filters as you type; rename, move to folder, delete (with confirm).
+- **Safe saving:** write `name.tas.tmp`, read it back and check its size, then write the real file and delete
+  the temporary one. A failed save never touches the old file.
+
+### 6.3 Settings
+
+One schema (name, type, default, range, section, description). `Settings.json` from V2.38.16 is converted
+on first load: every old name maps to a new key (table in the code, tested); the old file is kept as
+`Settings.v2.json`. "Show Stats (Idle / Create / Test)" and "Stats Text Size" become Inspector settings.
+
+## 7. World plugins
+
+Shared interface: `enter(mode)`, `leave(mode)`, `record(frame)`, `show(frame)` (paused), `playTo(frame, t)`
+(Test), `afterPhysics(frame)`, `save(columns)`, `load(columns)`.
+
+- **Time control** (the speed hack): the single source of "TAS time per real second" (0.1x to 4x).
+  Smooth mode scales gravity (x s^2), WalkSpeed / JumpPower (x s), momentum, the world's constraints and
+  body movers, conveyors, free assemblies and kit config velocities (bounce pad Power, swing Boost).
+  Frame Step (below 1x) runs normal physics on some steps and holds everything for the others (anchored from
+  PreSimulation to PostSimulation, velocities put back). It feeds the rate to the kit clock, animations, the
+  zoom spring and the kit frame listeners.
+- **Client objects:** same recording model as V2.38.16 (keyframes + screw motion on per-part clocks,
+  start states, on-screen only within a 25-stud radius), rewritten around one registry with fewer
+  change listeners per part; parts at rest cost nothing.
+- **EToH kit:** Kit Clock (module environments, tween helper, RunService frame listeners through
+  getconnections, Morpher / DistanceCulling left alone); kit objects as a table of kinds, each with how to find
+  it (configuration name or tag), what it records and how it plays back: beat blocks, turrets, pushbox spawners,
+  bounce pads, jump launchers (`LauncherConfiguration`), morphers.
+- **Buttons, lighting, tools, death:** same behaviour as V2.38.16, as plugins.
+
+**Known limits (documented, not promised):** other players; Roblox's own humanoid timers; the moment the
+character bumps into a platform it pushes in Frame Step (the push can start later or stall); kit listeners whose
+function the executor can't see.
+
+## 8. UI
+
+### 8.1 Look
+
+- **Windows:** soft frosted glass ("W2"): translucent fill, thin subtle rim, soft shadow, 16 px corners
+  (adjustable). No sheen band.
+- **Glass setting:** Clear / Tint (default) / Frost. Frost blurs the game behind the windows with Glass-material
+  parts in front of the camera plus a DepthOfField effect; it needs high graphics quality and falls back to Tint.
+  It must be proven in the real client in phase 5 before it ships.
+- **Controls:** pills. Solid accent fills; switch and slider knobs are clear, bright glass (white with a
+  crisp rim); the selected segment is a gentle glass bubble; buttons calm.
+- **Colours:** blue accent by default (changeable), red only for recording, amber for reset buttons.
+- **Fonts:** Builder Sans for text, Roboto Mono for numbers (both changeable).
+
+### 8.2 Layout
+
+Floating windows: drag by the title, resize from any edge or the corner grip, minimise, close, click to bring
+to front. Positions and sizes are remembered per screen size; a "Reset layout" puts them back. On mobile,
+windows open as full-width sheets.
+
+**Timeline bar** (bottom centre): a thin bar with a time ruler, ticks, markers, events and the playhead
+(drag to jump while paused, scrub in Test, wheel to zoom); ▾ opens lanes (Character, Inputs, Kit & objects,
+Buttons). Its left end shows the mode (● Recording / ❚❚ Paused / ▶ Test / Idle) and the speed; then the
+transport buttons (start, step back, record / pause, step forward, Test, marker); on the right the unsaved dot
+and the frame / time readout. Collapses to a slim strip in Idle.
+
+### 8.3 Windows
+
+- **Inspector:** collapsible sections: Frame (frame, frame time, total time, speed), Character (rig type,
+  state, position, rotation, velocity, angular velocity, move direction, walk / jump, health, floor),
+  Camera & input (camera rotation, zoom, keys, mouse), World (client objects, kit, buttons), Performance
+  (FPS, HappaTAS ms). Every row can be pinned or hidden. Every value from V2.38.16's stats panels is here.
+- **Library:** folder sidebar, search, list (name, length, frames, saved, attempts nested), info line, buttons
+  Load / Save / New attempt / Merge / Rename / Delete.
+- **Settings:**
+  - Search box (text vertically centred, magnifier icon on the right) and section chips.
+  - Each row: name (and a short explanation) on the left; the control flush right; when the value isn't the
+    default, an amber ↺ reset button right next to the control (just left of it). "Reset section" per section.
+  - Slider values are typeable (click the number). Colour swatches open a colour picker (colour square, hue,
+    transparency, old / new halves, HEX / RGB / HSV boxes with labels, recent colours). Dropdowns open a plain
+    list; for fonts each name is drawn in its font and hovering previews it live on the whole interface (click
+    keeps it, moving away reverts).
+  - Sections: Appearance, Playback, Create, Speed hack, Inputs, World sync, Interface, Sounds, UI sounds.
+- **Controls:** every action with its key, click to rebind, conflicts flagged. Default keys as V2.38.16.
+- **Help**, **Merge**. The **MicroProfiler** stays its own Roblox-style overlay.
+
+### 8.4 Settings list
+
+All 39 settings of V2.38.16 (Playback 5, Create 4, Speed hack 3, Inputs 7, World sync 7, Interface 8,
+Sounds 5), plus:
+
+- **Appearance:** Theme (saved looks, Save as…), Glass (Clear / Tint / Frost), Glass colour, Glass
+  transparency, Blur strength, Edge light, Accent colour, Text colour, Secondary text colour, Recording
+  colour, Font, Number font, Text size, Interface scale, Window corners, Button shape (Pill / Rounded /
+  Square), Shadows, Animations (Off / Smooth / Snappy / Bouncy), Animation length, Easing (Roblox easing
+  style + direction, or Custom cubic-bezier with a draggable curve, x1 y1 x2 y2, presets and Preview).
+- **UI sounds:** Interface sounds on / off, Click sound, Hover sound, Open / close sound, Volume.
+
+Custom bezier easing runs in HappaTAS's own tween code (TweenService has no bezier).
+
+## 9. MicroProfiler
+
+Rebuilt on the kernel with the same look and numbers as V2.38.16 (modes, groups, aggregate, timers, counters,
+dumps, TAS timeline, EditableImage graph).
+
+## 10. Error handling
+
+- The pipeline calls every handler protected; each distinct error is reported once; a plugin that keeps
+  failing is switched off with a toast and the frame goes on.
+- Saving never destroys the old file; the settings conversion keeps the old file.
+- Missing executor functions switch the matching feature off with a note in Help, never an error.
+
+## 11. Testing
+
+- The headless mock (`tests/mock/`) with a suite per module.
+- Trace comparison against V2.38.16 for the engine, client objects, kit and time control.
+- Mutation checks for each rule in 5.4 and each fix.
+- Bench of per-frame cost per mode against V2.38.16.
+- A live check in the EToH kit test place at the end of each phase, only when dzr says the Real MCP is
+  connected; Settings.json and the place's `.tas` files backed up and restored, the FPS cap recorded and put back.
+
+## 12. Phases
+
+Each phase has its own implementation plan, tests and PR.
+
+1. **Skeleton:** build tool, platform, pipeline, state, events, lifecycle, mock harness.
+2. **Engine core:** timeline, mode machine, recorder / player (character, camera, inputs, animations, tools,
+   death); trace parity with V2.38.16.
+3. **Saves:** codec v6, v1-v5 readers, library, settings conversion. First phase you can record and save with.
+4. **World plugins:** client objects, buttons, lighting, EToH kit, time control.
+5. **UI:** component kit, windows, timeline bar, Settings, Inspector, Library, Controls, Help, Merge, mobile;
+   Frost blur trial in the client.
+6. **MicroProfiler.**
+7. **Switch-over:** HappaTAS 3 becomes `wow` / `wow1`; README; V2.38.16 stays in history.
+
+## 13. Open questions (answered during the phases)
+
+- Does the Frost blur work well enough in Roblox (graphics levels, performance, look)? Phase 5.
+- Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
+  Merriweather, Roboto Mono and others available as Font families). Phase 5.
+- Exact v6 column encodings and how much smaller files get. Phase 3.
