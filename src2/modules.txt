@@ -3,4 +3,6 @@ platform/env
 platform/gamecall
 kernel/lifecycle
 kernel/errors
+kernel/state
+kernel/bus
 main
