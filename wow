@@ -78,14 +78,14 @@ do
 	Env.gethui      = fn(gethui)
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
-	Env.filtergc    = fn(filtergc)
-	Env.hookfunction    = fn(hookfunction, replaceclosure)
-	Env.iscclosure      = fn(iscclosure)
-	Env.getloadedmodules = fn(getloadedmodules)
-	Env.getconnections  = fn(getconnections, getsignals, get_signal_cons)
-	Env.setreadonly     = fn(setreadonly)
-	Env.isreadonly      = fn(isreadonly)
-	Env.restorefunction = fn(restorefunction)
+	Env.filtergc    = nil
+	Env.hookfunction    = nil
+	Env.iscclosure      = nil
+	Env.getloadedmodules = nil
+	Env.getconnections  = nil
+	Env.setreadonly     = nil
+	Env.isreadonly      = nil
+	Env.restorefunction = nil
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 	Env.keypress     = fn(keypress, keydown)
 	Env.keyrelease   = fn(keyrelease, keyup)
@@ -94,9 +94,9 @@ do
 	Env.mouse2press  = fn(mouse2press, mouse2down)
 	Env.mouse2release= fn(mouse2release, mouse2up)
 	Env.mousemoveabs = fn(mousemoveabs)
-	Env.mousemoverel = fn(mousemoverel)
+	Env.mousemoverel = nil
 	Env.mousescroll  = fn(mousescroll)
-	Env.VirtualInput = svc("VirtualInputManager")
+	Env.VirtualInput = nil
 	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
 		and Env.listfiles and Env.delfile and true or false
 	Env.HasLZ4 = (Env.lz4compress ~= nil and Env.lz4decompress ~= nil)
