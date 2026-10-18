@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")/.."
 OLD="$1"
 NEW="${2:-src/HappaTAS_Executor.lua}"
-LUAU="${LUAU:-/home/claude/tools/luau/luau}"
+LUAU="${LUAU:-$(command -v luau || echo /home/claude/tools/luau/luau)}"
 TEST="${TEST:-diff}"   # TEST=diffco: the client object edge cases (tests/test_diffco.lua)
 bash tools/build_test.sh "$TEST" "$OLD" >/dev/null
 (cd tests && "$LUAU" "run_$TEST.lua" > diff_old.txt 2>&1) || { echo "old build failed:"; tail -5 tests/diff_old.txt; exit 1; }
