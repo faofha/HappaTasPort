@@ -1,4 +1,6 @@
 config
 platform/env
 platform/gamecall
+kernel/lifecycle
+kernel/errors
 main
