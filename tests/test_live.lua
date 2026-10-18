@@ -33,6 +33,19 @@ local pmInst = Instance.new("ModuleScript")
 pmInst.Name = "PlayerModule"
 pmInst.Parent = M.player:FindFirstChild("PlayerScripts")
 local modules = { [pmInst] = { GetCameras = function() return cams end } }
+-- (V2.38.13) a ZoomController module (Bridge.RemoveZoomSpring runs its Update: in the client that takes the
+-- access away too) and the mouse lock offset getter (also takes it away in the client)
+local camModInst = Instance.new("ModuleScript")
+camModInst.Name = "CameraModule"
+camModInst.Parent = pmInst
+local zoomInst = Instance.new("ModuleScript")
+zoomInst.Name = "ZoomController"
+zoomInst.Parent = camModInst
+local zoomMod = {}
+function zoomMod.Update() callLog[#callLog + 1] = { "zoomUpdate", coroutine.running() }; return 12.5 end
+function zoomMod.SetZoomParameters() end
+modules[zoomInst] = zoomMod
+function mlc:GetMouseLockOffset() callLog[#callLog + 1] = { "lockOffset", coroutine.running() }; return Vector3.new(1.75, 0, 0) end
 local realRequire = require
 require = function(x)
 	local m = modules[x]
@@ -119,6 +132,7 @@ for _, e in ipairs(callLog) do
 	if e[2] == caller then sameThread = sameThread + 1 end
 end
 check(kinds.zoom and kinds.mouse and kinds.shift, "zoom, mouse lock refresh and shift lock toggle were called")
+check(kinds.zoomUpdate and kinds.lockOffset, "the zoom spring update and the mouse lock offset getter were called")
 eq(sameThread, 0, "none of them ran on the caller's thread")
 Bridge.ShiftlockSwitch()
 Bridge.SetZoom(12.5, true)

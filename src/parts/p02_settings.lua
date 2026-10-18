@@ -20,6 +20,7 @@ local ControlsTable = {
 	{ "Delete TAS", "Backspace" },
 	{ "Menu", "M" },
 	{ "MicroProfiler", "F6" },
+	{ "Toggle Speed Hack", "None" }, -- no key until one is picked in the Controls tab
 }
 
 -- kind: "toggle" (0/1) or "number". label = text in the Settings tab. section = heading it is listed under.
@@ -35,6 +36,10 @@ local SettingsTable = {
 	{ name = "Record Tool Actions",      default = 1, section = "Create" },
 	{ name = "Ignore Game Processed",    default = 0, section = "Create" },
 
+	-- slow motion while recording (see SpeedHack): the TAS is still saved and replayed at normal speed
+	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow motion)" },
+	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 1, 0.5 = half)", min = 0.1, max = 1 },
+
 	{ name = "Replay Keyboard",          default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Clicks",      default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Movement",    default = 1, section = "Inputs" },
@@ -47,6 +52,7 @@ local SettingsTable = {
 	{ name = "Smooth Client Objects",    default = 1, section = "World Sync" },
 	{ name = "Frustum Culling CO",       default = 1, section = "World Sync" },
 	{ name = "Sync Button Timers",       default = 1, section = "World Sync" },
+	{ name = "Sync Lighting",            default = 1, section = "World Sync" },
 
 	{ name = "Show Stats (Idle)",        default = 1, section = "Interface" },
 	{ name = "Show Stats (Create)",      default = 1, section = "Interface" },

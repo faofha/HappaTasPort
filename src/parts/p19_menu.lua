@@ -23,6 +23,13 @@ do
 	Menu.SetStatus = SetStatus
 
 	local function autoCanvas(scroller, container, extra)
+		local ulog = container:FindFirstChild("3UpdateLog")
+		local ulogLayout = ulog and ulog:FindFirstChildOfClass("UIListLayout")
+		if ulog and ulogLayout then
+			local function fitLog() ulog.Size = UDim2.new(1, 0, 0, ulogLayout.AbsoluteContentSize.Y + 10) end
+			on(ulogLayout:GetPropertyChangedSignal("AbsoluteContentSize"), fitLog)
+			fitLog()
+		end
 		local layout = container:FindFirstChildOfClass("UIListLayout")
 		if not layout then return end
 		local function fit()

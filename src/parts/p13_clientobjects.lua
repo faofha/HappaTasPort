@@ -9,11 +9,22 @@
 --  frame ("Smooth Client Objects", same idea as Tasability's render segments). Poses are written in
 --  Heartbeat (physics) and again at the end of the render step (so game scripts can't override them).
 --
---  record layout (v2):  frame byte 2 = delta, 3 = full snapshot, then records:
---      varint id, varint flags, payload
+--  record layout (v3):  frame byte = 4 (delta) / 5 (full snapshot) + 8 / 16 / 32 when the frame carries
+--      clock 1 / 2 / 3, + 64 on the full snapshot that starts a new recording (its clocks start again
+--      from 0: playback doesn't blend the clocks into it), then those clocks (zigzag, the change since the
+--      last frame that carried them; a full snapshot starts again from 0), then records: varint id, varint
+--      flags, payload
+--  clocks: 0 = TAS clock (TotalTime, never stored), 1 = simulation time without the pauses (whole 1/240 s
+--      steps; physics parts, HappaTAS holds them while paused), 2 = wall clock (20 us units, the change is
+--      stored minus the frame's FrameTime), 3 = simulation time with the pauses (steps; scripts that run on
+--      game time keep going while paused). A frame carries the clocks its moving parts use (or used in the
+--      frame before)
 --  flags: 1 key (pos), 2 rotation, 4 linear velocity, 8 angular velocity, 16 transparency,
---         32 can-collide (64 = its value), 128 colour, 256 size, 512 material, 1024 dropped
---  v1 data (frame byte 0 / 1) still plays.
+--         32 can-collide (64 = its value), 128 colour, 256 size, 512 material, 1024 dropped,
+--         2048 + 4096 the key's clock (2048 = 1, 4096 = 2, both = 3, none = 0)
+--  v3 keys move by a screw motion on their own clock, the velocity is the one at the part's position.
+--  v2 data (frame byte 2 / 3: no clocks, straight-line model on the TAS clock) and v1 data (0 / 1) still
+--  play the way they were recorded.
 -- ================================================================================================
 do
 	local CO = ClientObjects
@@ -27,7 +38,8 @@ do
 
 	local RADIUS         = CFG.Radius or 300
 	local ALWAYS         = CFG.AlwaysRadius or 30
-	local FULL_EVERY     = CFG.FullEvery or 600
+	local FULL_EVERY     = CFG.FullEvery or 2400
+	local FULL_SECS      = CFG.FullSeconds or 10
 	local VIS_EVERY      = CFG.VisEvery or 6
 	local POS_TOL        = CFG.PosTolerance or 0.015
 	local POS_TOL2       = POS_TOL * POS_TOL
@@ -43,13 +55,15 @@ do
 	-- playback state layout (shared by v1 and v2):
 	--   1-3 position (x1000)  4-12 rotation (x1000)  13 transparency  14 can-collide  15-17 colour
 	--   18-20 size  21 material  23 mask  36-38 linear vel (x1000)  39-41 angular vel (x1000)
-	--   42-44 v1 spin  45 keyframe time  46 v1 spin flag  48 "moves by velocity"  50 version (new number on
-	--   every change, so a pose / property write can be skipped while the state is the same)
+	--   42-44 v1 spin  45 keyframe time (on its clock)  46 v1 spin flag  47 clock (0 TAS, 1 simulation,
+	--   2 wall)  48 "moves by velocity"  49 model (3 = screw motion, v3)  50 version (new number on every
+	--   change, so a pose / property write can be skipped while the state is the same)
 	local I_TR, I_CC, I_COL, I_SZ, I_MAT, I_MASK, I_VER = 13, 14, 15, 18, 21, 23, 50
 	local F_CF, F_TR, F_CC, F_CCV, F_COL, F_SZ, F_MAT, F_ROT = 1, 2, 4, 8, 16, 32, 64, 128
 	local F_VEL, F_SPIN, F_SKIP = 256, 512, 1024
 	local K_KEY, K_ROT, K_LV, K_AV = 1, 2, 4, 8
 	local K_TR, K_CC, K_CCV, K_COL, K_SZ, K_MAT, K_DROP = 16, 32, 64, 128, 256, 512, 1024
+	local K_CK1, K_CK2 = 2048, 4096
 
 	local Reg = { keyToId = {}, idToKey = {}, nextId = 1, used = {} }
 	CO.Reg = Reg
@@ -69,13 +83,18 @@ do
 	local orig, origVel = {}, {}
 	local frozen = false
 	local frameNo, chainNo, forceFull = 0, 0, true
-	local recGen, lastT, visCursor = 0, nil, 1
+	local newChain = true -- the next full snapshot starts new clocks (marked with + 64)
+	local recGen, visCursor = 0, 1
+	local lastFullF, lastFullT = 0, -1e9 -- frame number / TotalTime of the last full snapshot
 
 	local play = {
 		cur = {}, dyn = {}, dropped = {}, active = false, kind = "test",
 		data = nil, version = -1, frame = nil, sweep = 0,
 		ck = {}, ckN = 0, ckData = nil, ckVer = -1,
 		t = 0, curT = 0, nextT = 0, next = {}, nextFor = nil,
+		-- v3 clocks: run = the stored values as of the current frame (like the recorder's), cv / nv = the
+		-- clocks of the current / next frame in seconds, ckRun = run at each checkpoint
+		run = { 0, 0, 0 }, cv = { 0, 0, 0 }, nv = { 0, 0, 0 }, ckRun = {},
 		lost = {}, -- held parts a game script let go since the last pass (see fixLost)
 	}
 	CO.play = play
@@ -158,13 +177,27 @@ do
 		Spinners = true, Spinner = true, Spinning = true, SpinningParts = true,
 		Conveyors = true, Conveyor = true, Obstacles = true, Traps = true, Hazards = true,
 		KillBricks = true, KillParts = true, BeatBlocks = true, ["Beat Blocks"] = true,
-		BeatBlock = true, ["Beat Block"] = true, Buttons = true, ButtonPlatforms = true,
-		ButtonDeactivator = true, Morpher = true, Client = true,
+		BeatBlock = true, ["Beat Block"] = true, BeatParts = true, ["Beat Parts"] = true, Beats = true,
+		Buttons = true, ButtonPlatforms = true, ButtonDeactivator = true,
+		Morpher = true, Morphers = true, Morph = true, Morphs = true,
+		MorphButton = true, MorphButtons = true, ["Morph Button"] = true, ["Morph Buttons"] = true,
+		MorphPart = true, MorphParts = true, ["Morph Part"] = true, ["Morph Parts"] = true,
+		LightChanger = true, LightChangers = true, ["Light Changer"] = true, ["Light Changers"] = true,
+		LightingChanger = true, LightingChangers = true, ["Lighting Changer"] = true, ["Lighting Changers"] = true,
+		LightingReverter = true, ["Lighting Reverter"] = true, LightReverter = true, ["Light Reverter"] = true,
+		Vanishers = true, Vanisher = true, ["VanisherGroup"] = true, Vanish = true,
+		FadingParts = true, FadingPart = true, ["Fading Parts"] = true, ["Fading Part"] = true,
+		FadingPlatforms = true, FadingPlatform = true, ["Fading Platforms"] = true, ["Fading Platform"] = true,
+		Fading = true, Disappearing = true, DisappearingPlatforms = true, ["Disappearing Platforms"] = true,
+		Client = true,
 	}
 
 	local function nameHint(n)
 		return n:find("[Pp]usher") or n:find("[Ss]pinner") or n:find("[Cc]onveyor")
-			or n:find("[Mm]oving") or n:find("[Bb]eat[Bb]lock")
+			or n:find("[Mm]oving") or n:find("[Bb]eat") or n:find("[Mm]orph")
+			or n:find("[Ll]ight.*[Cc]hanger") or n:find("[Ll]ighting.*[Cc]hanger")
+			or n:find("[Ll]ight.*[Rr]everter")
+			or n:find("[Vv]anish") or n:find("[Ff]ad") or n:find("[Dd]isappear")
 	end
 
 	local function isCandidate(part)
@@ -175,6 +208,17 @@ do
 		if CFG.Groups and CFG.Groups[part.CollisionGroup] == true then return true end
 		if conParts[part] then return true end
 		if part:FindFirstChildWhichIsA("Constraint") or part:FindFirstChildWhichIsA("BodyMover") then return true end
+		if part:GetAttribute("Beat") or part:GetAttribute("OnTransparency") or part:GetAttribute("OffTransparency")
+			or part:FindFirstChild("OnTransparency") or part:FindFirstChild("OffTransparency")
+			or part:FindFirstChild("Beat") then
+			return true
+		end
+		if part:FindFirstChild("VanisherConfiguration")
+			or (part.Parent and part.Parent:FindFirstChild("VanisherConfiguration"))
+			or part:GetAttribute("VanishMode") or part:GetAttribute("FadeTime") or part:GetAttribute("RespawnTime")
+			or part:FindFirstChild("VanisherSelectionBox") then
+			return true
+		end
 		if nameHint(part.Name) then return true end
 		local parent = part.Parent
 		while parent and parent ~= workspace do
@@ -271,13 +315,15 @@ do
 		local cf0 = part.CFrame
 		return {
 			rc = { cf0:GetComponents() }, rcf = cf0, pd = false, vd = true, an = part.Anchored, rad = 0, tr = 0,
-			rest = true, emaZ = true, propsOff = false,
+			propsOff = false,
 			rv = rv, cp = cp,
 			kp = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 			lq = { 0, 0, 0 }, aq = { 0, 0, 0 },
 			pv = { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-			dyn = false, kT = 0, moved = false, needBase = true, chain = -1, gen = 0,
-			prevCF = nil, prevFrame = -10, emaL = nil, emaA = nil,
+			dyn = false, kT = 0, clk = 3, moved = false, needBase = true, chain = -1, gen = 0,
+			prevCF = nil, prevFrame = -10,
+			-- scripted parts: clock fitness / speed per clock, the last poses with their clock readings
+			fit = { 0, 0, 0, 0 }, esp = { 0, 0, 0, 0 }, hcf = {}, h1 = {}, h3 = {}, h4 = {}, hp = 0, hn = 0,
 		}
 	end
 
@@ -413,6 +459,18 @@ do
 	local function releasePart(id)
 		local part = parts[id]
 		if part then
+			local s = S[id]
+			if s and s.rcf and s.rv and play.active then
+				pcall(function()
+					part.CFrame = s.rcf
+					part.Transparency = s.rv[1] / 1000
+					part.CanCollide = s.rv[2] == 1
+					part.Color = Color3.fromRGB(s.rv[3], s.rv[4], s.rv[5])
+					part.Size = V3(s.rv[6] / 1000, s.rv[7] / 1000, s.rv[8] / 1000)
+					local okM, mat = pcall(function() return Enum.Material:FromValue(s.rv[9]) end)
+					if okM and mat then part.Material = mat end
+				end)
+			end
 			if orig[part] ~= nil then restorePart(part, orig[part]) end
 			orig[part], origVel[part] = nil, nil
 		end
@@ -454,17 +512,20 @@ do
 			s.tr = part.Transparency
 		end
 		local pos = part.Position
-		local d = (pos - ppos).Magnitude
+		local dx, dy, dz = pos.X - ppos.X, pos.Y - ppos.Y, pos.Z - ppos.Z
+		local d2 = dx * dx + dy * dy + dz * dz
 		local rad = s.rad
-		if d - rad > RADIUS then return false end
+		local maxR = RADIUS + rad
+		if d2 > maxR * maxR then return false end
 		if strict then
 			-- Frustum Culling CO: close parts always, otherwise only visible parts on screen
-			if d <= 25 then return true end
+			if d2 <= 625 then return true end
 			if s.tr >= 1 and part.LocalTransparencyModifier >= 1 then return false end
 			if not cam then return true end
 			local sp, onScreen = cam:WorldToViewportPoint(pos)
 			return onScreen and sp.Z > 0
 		end
+		local d = sqrt(d2)
 		if d - rad <= ALWAYS then return true end
 		if not cam then return true end
 		if (pos - camPos).Magnitude <= rad * 1.2 + 6 then return true end
@@ -512,7 +573,8 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- pose model
-	-- the keyframe pose moved on by its velocity for dt seconds (one CFrame when it doesn't turn)
+	-- v2 records (older files): the keyframe pose moved on by its velocity for dt seconds, in a straight line
+	-- (one CFrame when it doesn't turn)
 	local function buildPose(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9, lx, ly, lz, wx, wy, wz, dt)
 		if dt and dt > 0 then
 			if dt > MAX_EXTRAP then dt = MAX_EXTRAP end
@@ -527,30 +589,176 @@ do
 		return CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
 	end
 
+	-- v3 records: the keyframe pose moved on by a constant twist (a screw motion). l = the velocity at the
+	-- part's position, w = the angular velocity (world space). The part turns by w around the axis through
+	-- the point where its velocity is only along w, so a part going round a spinner's centre stays on its
+	-- circle (a straight line leaves it within a frame or two), a part spinning in place stays in place and
+	-- a slider (w = 0) moves in a straight line
+	local function buildPose3(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9, lx, ly, lz, wx, wy, wz, dt)
+		if dt and dt > 0 then
+			if dt > MAX_EXTRAP then dt = MAX_EXTRAP end
+			local w2 = wx * wx + wy * wy + wz * wz
+			if w2 > 1e-10 then
+				local mag = sqrt(w2)
+				local turn = CFrame.fromAxisAngle(V3(wx / mag, wy / mag, wz / mag), mag * dt)
+				-- the part's offset from the screw axis: (l x w) / |w|^2; its speed along the axis: (l . w) / |w|^2
+				local ox, oy, oz = (ly * wz - lz * wy) / w2, (lz * wx - lx * wz) / w2, (lx * wy - ly * wx) / w2
+				local along = (lx * wx + ly * wy + lz * wz) / w2 * dt
+				local q = turn * V3(ox, oy, oz)
+				return turn * CF(0, 0, 0, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+					+ V3(x - ox + q.X + wx * along, y - oy + q.Y + wy * along, z - oz + q.Z + wz * along)
+			end
+			return CF(x + lx * dt, y + ly * dt, z + lz * dt, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+		end
+		return CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+	end
+
+	-- playback time t (TAS clock) on clock c of a v3 keyframe (0 = TAS clock, 1-3 see the header comment):
+	-- the clock's values in the current and the next frame (play.cv / play.nv), blended like the time itself
+	local function objTime(c, t)
+		if c == 0 then return t end
+		local v0, v1 = play.cv[c], play.nv[c]
+		local span = play.nextT - play.curT
+		local a = 0
+		if span > 1e-6 then
+			a = (t - play.curT) / span
+			if a < 0 then a = 0 elseif a > 1 then a = 1 end
+		end
+		return v0 + (v1 - v0) * a
+	end
+
 	local function poseAt(s, t)
 		local dt = nil
-		if t and s[48] == 1 then dt = t - s[45] end
-		return buildPose(
+		if t and s[48] == 1 then dt = objTime(s[47], t) - s[45] end
+		local build = buildPose
+		if s[49] == 3 then build = buildPose3 end
+		return build(
 			s[1] / 1000, s[2] / 1000, s[3] / 1000,
 			s[4] / 1000, s[5] / 1000, s[6] / 1000, s[7] / 1000, s[8] / 1000, s[9] / 1000, s[10] / 1000, s[11] / 1000, s[12] / 1000,
 			s[36] / 1000, s[37] / 1000, s[38] / 1000, s[39] / 1000, s[40] / 1000, s[41] / 1000, dt)
 	end
 
+	-- the constant twist that turns pose c0 into pose c1 in dt seconds: the velocity at c1's position and the
+	-- angular velocity (screw motion: turning around an axis while moving along it)
+	local function twistFrom(c0, c1, dt)
+		if not dt or dt <= 1e-5 then return ZV, ZV end
+		local d = c1 * c0:Inverse()
+		local tr = d.Position
+		local axis, ang = d:ToAxisAngle()
+		if ang == ang and ang > 1e-6 and axis.X == axis.X and axis.Magnitude > 0.5 then
+			local n = axis.Unit
+			local w = n * (ang / dt)
+			local tpar = n * tr:Dot(n)
+			local tperp = tr - tpar
+			-- a point on the screw axis: (t + cot(ang / 2) n x t) / 2 (t = the move across the axis)
+			local ctr = (tperp + n:Cross(tperp) / math.tan(ang * 0.5)) * 0.5
+			return tpar / dt + w:Cross(c1.Position - ctr), w
+		end
+		return tr / dt, ZV
+	end
+
 	-- --------------------------------------------------------------------------------------------- recorder
 	local A, P, K = {}, {}, {}
+	-- the clocks of the frame being recorded, in seconds, exactly as playback rebuilds them: CLK[c + 1] for
+	-- clock c (see the header comment). DCLK = their change since the frame before (haveD: that frame was
+	-- recorded too). base = the raw readings taken off (skip moves on by every pause, rawS = the simulation
+	-- time of the last recorded frame)
+	local CLK, DCLK, lastCLK, haveD = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, false
+	local base = { skip = 0, real = 0, wall = 0, rawS = nil }
+	local run = { 0, 0, 0 } -- clocks 1-3 as last stored (since the last full snapshot), like the decoder keeps them
+	local usedPrev = { false, false, false }
+	local lastRec, lastRecVer = nil, -1 -- the frame table recorded last, and the data version then
+	local CLOCK_FLAG = { 0, K_CK1, K_CK2, K_CK1 + K_CK2 }
+	local H_N = 4 -- poses kept per moving scripted part (its twist is measured over them)
+	local SIM_HZ, WALL_HZ = 240, 50000
+	local CARRY_BIT = { 8, 16, 32 }
 
-	local function recordObject(out, id, part, s, now, dtT)
+	local function ringPush(s, cf, c1, c3, c4)
+		local i = s.hp % H_N + 1
+		s.hp = i
+		s.hcf[i], s.h1[i], s.h3[i], s.h4[i] = cf, c1, c3, c4
+		if s.hn < H_N then s.hn = s.hn + 1 end
+	end
+
+	-- scripted (anchored) parts: their last poses with the clock readings, and how steady each clock makes
+	-- the part's motion (the speed measured on the clock its script uses barely changes, on the others it
+	-- jumps with every frame's timing)
+	local function trackScripted(s, cf)
+		local prev = s.prevCF
+		if not (prev and haveD and s.prevFrame == frameNo - 1) then
+			s.hn = 0
+			ringPush(s, cf, CLK[1], CLK[3], CLK[4])
+			return
+		end
+		local m = 0
+		if cf ~= prev then
+			local d = cf * prev:Inverse()
+			local _, ang = d:ToAxisAngle()
+			if ang == ang and ang > 1e-6 then
+				local r = s.rad
+				if r < 1 then r = 1 end
+				m = ang * r
+			end
+			m = m + d.Position.Magnitude
+		end
+		-- (scripted parts: TAS clock, wall clock or game time; game time with or without the pauses changes the
+		-- same from frame to frame, the one with them is used)
+		local fit, esp = s.fit, s.esp
+		for c = 1, 4 do
+			local dt = DCLK[c]
+			if dt > 1e-6 and dt < 0.25 then
+				local sp = m / dt
+				local e = esp[c]
+				if e > 0 then
+					local dev = (sp - e) / e
+					if dev > 1 then dev = 1 elseif dev < -1 then dev = -1 end
+					fit[c] = fit[c] * 0.9 + dev * dev * 0.1
+					esp[c] = e * 0.7 + sp * 0.3
+				elseif sp > 0 then
+					esp[c] = sp
+				end
+			elseif m > 0 and dt <= 1e-6 then
+				fit[c] = fit[c] * 0.9 + 0.1 -- it moved while this clock stood still: not its clock
+			end
+		end
+		if s.hn == 0 then ringPush(s, prev, lastCLK[1], lastCLK[3], lastCLK[4]) end
+		ringPush(s, cf, CLK[1], CLK[3], CLK[4])
+	end
+
+	-- the clock with the steadiest motion (another one has to be clearly better to take over)
+	local SCRIPT_CLOCKS = { 1, 3, 4 }
+	local function bestClock(s)
+		local fit, cur = s.fit, s.clk
+		if cur == 2 then cur = 3 end
+		local best = cur
+		for _, c in ipairs(SCRIPT_CLOCKS) do
+			if fit[c] < fit[best] then best = c end
+		end
+		if best ~= cur and fit[best] < fit[cur] * 0.7 then return best end
+		return cur
+	end
+
+	-- a scripted part's twist over the poses it was seen in (the oldest kept one to now) on clock c
+	local function scriptedTwist(s, cf, c)
+		local n = s.hn
+		if n < 2 then return ZV, ZV end
+		local j = (s.hp - n) % H_N + 1
+		local hc = s.h3
+		if c == 1 then hc = s.h1 elseif c == 4 then hc = s.h4 end
+		return twistFrom(s.hcf[j], cf, CLK[c] - hc[j])
+	end
+
+	local function recordObject(out, id, part, s)
 		if s.gen ~= recGen then
 			s.gen = recGen
-			s.prevCF, s.emaL, s.emaA = nil, nil, nil
-			s.rest, s.emaZ = true, true
+			s.prevCF, s.hn = nil, 0
 		end
 
 		local cf = part.CFrame
 		local cp = s.cp
 		-- the properties are read on the same frames as always (every 2nd), but only when one of them
 		-- changed since the last read (or every 16th frame, in case a change was not reported)
-		if (frameNo + id) % 2 == 0 and (s.pd or (frameNo + id) % 16 == 0) then
+		if s.pd then
 			s.pd = false
 			readProps(part, cp)
 			local rvv, off = s.rv, false
@@ -560,37 +768,15 @@ do
 			s.propsOff = off
 		end
 
-		-- most parts never move: still exactly on the start CFrame, properties as they started and (scripted
-		-- parts) no velocity left from earlier frames means the full path below would only keep its
-		-- bookkeeping, so only that is done (no velocity reads, no maths). s.rest: the last CFrame was the
-		-- start CFrame (or none yet), s.emaZ: no measured velocity left
+		-- most parts never move: still exactly on the start CFrame with the properties they started with,
+		-- so only the bookkeeping is kept (no maths, no velocity reads)
 		local anchored = s.an
-		if not s.moved and not s.propsOff and cf == s.rcf
-			and (not anchored or (s.emaZ and (s.rest or not dtT or s.prevFrame ~= frameNo - 1))) then
-			if anchored then s.emaL, s.emaA = ZV, ZV end
-			s.prevCF, s.prevFrame, s.rest = cf, frameNo, true
+		if not s.moved and not s.propsOff and cf == s.rcf then
+			s.prevCF, s.prevFrame, s.hn = cf, frameNo, 0
 			return
 		end
-
-		-- velocity: physics parts report it, scripted (anchored) parts are measured frame to frame
-		local instL, instA = ZV, ZV
-		if anchored then
-			local prev = s.prevCF
-			if prev and dtT and s.prevFrame == frameNo - 1 and cf ~= prev then -- an unchanged CFrame = no velocity
-				instL = (cf.Position - prev.Position) / dtT
-				local axis, ang = (cf.Rotation * prev.Rotation:Inverse()):ToAxisAngle()
-				if ang == ang and ang > 1e-6 and axis.X == axis.X then instA = axis * (ang / dtT) end
-				if instL.X ~= instL.X then instL = ZV end
-			end
-			local eL, eA = s.emaL, s.emaA
-			if instL == ZV and (eL == nil or eL == ZV) then s.emaL = ZV else s.emaL = eL and eL:Lerp(instL, 0.5) or instL end
-			if instA == ZV and (eA == nil or eA == ZV) then s.emaA = ZV else s.emaA = eA and eA:Lerp(instA, 0.5) or instA end
-			s.emaZ = s.emaL == ZV and s.emaA == ZV
-		else
-			instL, instA = part.AssemblyLinearVelocity, part.AssemblyAngularVelocity
-		end
+		if anchored then trackScripted(s, cf) end
 		s.prevCF, s.prevFrame = cf, frameNo
-		s.rest = cf == s.rcf
 
 		local filled = false
 		if not s.moved then
@@ -630,15 +816,15 @@ do
 			s.dyn = false
 		end
 
-		-- does the model still explain the part? (same maths as playback, same clock)
+		-- does the model still explain the part? (the same maths and clock as playback)
 		local needKey = first
 		if not first then
-			local age = now - s.kT
 			if s.dyn then
+				local age = CLK[s.clk] - s.kT
 				if age > MAX_AGE then
 					needKey = true
 				else
-					local pc = buildPose(
+					local pc = buildPose3(
 						kp[1] / 1000, kp[2] / 1000, kp[3] / 1000,
 						kp[4] / 1000, kp[5] / 1000, kp[6] / 1000, kp[7] / 1000, kp[8] / 1000, kp[9] / 1000, kp[10] / 1000, kp[11] / 1000, kp[12] / 1000,
 						lq[1] / 1000, lq[2] / 1000, lq[3] / 1000, aq[1] / 1000, aq[2] / 1000, aq[3] / 1000, age)
@@ -669,6 +855,7 @@ do
 		local flags = 0
 		local rotChanged = false
 		local l1, l2, l3, a1, a2, a3 = 0, 0, 0, 0, 0, 0
+		local clk = s.clk
 		if needKey then
 			for i = 1, 12 do K[i] = floor(A[i] * 1000 + 0.5) end
 			rotChanged = first
@@ -677,8 +864,18 @@ do
 					if K[i] ~= kp[i] then rotChanged = true break end
 				end
 			end
-			local L, W = instL, instA
-			if anchored and s.dyn then L, W = s.emaL or instL, s.emaA or instA end
+			-- physics parts move on the simulation clock (without the pauses: HappaTAS holds them) and report
+			-- their velocity: the one at the part's position (an assembly's own velocity is its centre of
+			-- mass's). Scripted parts: measured over the last frames on the clock their motion follows
+			local L, W
+			if anchored then
+				clk = bestClock(s)
+				L, W = scriptedTwist(s, cf, clk)
+			else
+				clk = 2
+				W = part.AssemblyAngularVelocity
+				L = part:GetVelocityAtPosition(cf.Position)
+			end
 			local lm, wm = L.Magnitude, W.Magnitude
 			if lm >= V_MIN and lm < 5000 then
 				l1, l2, l3 = floor(L.X * 1000 + 0.5), floor(L.Y * 1000 + 0.5), floor(L.Z * 1000 + 0.5)
@@ -690,6 +887,8 @@ do
 			if rotChanged then flags = flags + K_ROT end
 			if l1 ~= 0 or l2 ~= 0 or l3 ~= 0 then flags = flags + K_LV end
 			if a1 ~= 0 or a2 ~= 0 or a3 ~= 0 then flags = flags + K_AV end
+			-- (the clock only matters for a part that moves on its own)
+			if flags >= K_LV then flags = flags + CLOCK_FLAG[clk] end
 		end
 		if trD then flags = flags + K_TR end
 		if ccD then flags = flags + K_CC + (cp[2] == 1 and K_CCV or 0) end
@@ -708,7 +907,8 @@ do
 			if a1 ~= 0 or a2 ~= 0 or a3 ~= 0 then putZig(out, a1); putZig(out, a2); putZig(out, a3) end
 			lq[1], lq[2], lq[3], aq[1], aq[2], aq[3] = l1, l2, l3, a1, a2, a3
 			s.dyn = (l1 ~= 0 or l2 ~= 0 or l3 ~= 0 or a1 ~= 0 or a2 ~= 0 or a3 ~= 0)
-			s.kT = now
+			s.clk = clk
+			s.kT = CLK[clk]
 		end
 		if trD then putZig(out, cp[1] - pv[1]); pv[1] = cp[1] end
 		if ccD then pv[2] = cp[2] end
@@ -726,49 +926,109 @@ do
 		Reg.used[id] = true
 	end
 
-	function CO.BeginRecording()
-		forceFull = true
+	-- lastFrame = the TAS's last frame when recording starts (after cut frames were removed).
+	-- Unpausing (1 frame or not) right where the recorder stopped keeps every chain going: the parts were
+	-- put back on their recorded poses with their recorded velocities, and the clocks skip the pause. After
+	-- cut frames, a loaded or edited TAS or the first recording, every part starts again (full snapshot)
+	function CO.BeginRecording(lastFrame)
 		recGen = recGen + 1
-		lastT = nil
 		dropQ = {}
+		haveD = false
+		local cont = lastFrame ~= nil and lastFrame == lastRec and lastRecVer == CO.dataVersion and base.rawS ~= nil
+		local rawS, rawW = time(), os.clock()
+		if cont then
+			-- physics parts were held while paused: their clock skips the pause; scripts ran on: the other
+			-- clocks don't
+			base.skip = base.skip + (rawS - base.rawS)
+		else
+			forceFull = true
+			newChain = true
+			base.skip, base.real, base.wall = rawS, rawS, rawW
+		end
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
 	end
 
-	-- tNow = TotalTime of the frame being recorded (TAS clock)
-	function CO.Record(playerPos, tNow)
+	-- tNow = TotalTime of the frame being recorded (TAS clock); simNow / wallNow = time() and os.clock()
+	-- when that frame started (its render step); frame = the frame table the result goes into
+	function CO.Record(playerPos, tNow, simNow, wallNow, frame)
 		if not (enabled and scanDone) then return nil end
 		frameNo = frameNo + 1
-		local now = tNow or 0
-		local dtT = lastT and (now - lastT) or nil
-		lastT = now
-		if dtT and (dtT > 0.25 or dtT <= 0) then dtT = nil end
+		tNow = tNow or 0
+		simNow, wallNow = simNow or tNow, wallNow or tNow
+		local val = {
+			floor((simNow - base.skip) * SIM_HZ + 0.5),
+			floor((wallNow - base.wall) * WALL_HZ + 0.5),
+			floor((simNow - base.real) * SIM_HZ + 0.5),
+		}
+		CLK[1], CLK[2], CLK[3], CLK[4] = tNow, val[1] / SIM_HZ, val[2] / WALL_HZ, val[3] / SIM_HZ
+		for c = 1, 4 do DCLK[c] = CLK[c] - lastCLK[c] end
 
-		local full = forceFull or frameNo % FULL_EVERY == 0
+		-- a full snapshot every FULL_SECS of TAS time (and at most every FULL_EVERY frames: playback
+		-- looks 3000 frames back for one when it seeks)
+		local full = forceFull or frameNo - lastFullF >= FULL_EVERY or tNow - lastFullT >= FULL_SECS or tNow < lastFullT
 		forceFull = false
-		if full then chainNo = chainNo + 1 end
+		if full then
+			chainNo = chainNo + 1
+			lastFullF, lastFullT = frameNo, tNow
+		end
 
 		updateVisibility(playerPos, false)
 
-		local out = { full and 3 or 2 }
+		local body = {}
 		for id in pairs(dropQ) do
-			putVar(out, id)
-			putVar(out, K_DROP)
+			putVar(body, id)
+			putVar(body, K_DROP)
 		end
 		dropQ = {}
 
 		local anyDyn = false
+		local usedNow = { false, false, false }
 		for i = 1, #actArr do
 			local id = actArr[i]
 			local part, s = parts[id], S[id]
 			-- (removed parts are unregistered by DescendantRemoving; the visibility pass checks Parent too)
 			if part and s then
-				recordObject(out, id, part, s, now, dtT)
-				if s.dyn and s.moved then anyDyn = true end
+				recordObject(body, id, part, s)
+				if s.dyn and s.moved then
+					anyDyn = true
+					if s.clk > 1 then usedNow[s.clk - 1] = true end
+				end
 			end
 		end
 
-		-- a 1 byte marker keeps frames alive while something moves by velocity (Optimize TAS keeps them)
-		if #out == 1 and not full and not anyDyn then return nil end
+		lastCLK[1], lastCLK[2], lastCLK[3], lastCLK[4] = CLK[1], CLK[2], CLK[3], CLK[4]
+		haveD = true
+		base.rawS = simNow
+		lastRec, lastRecVer = frame, CO.dataVersion
+		-- a frame with only its header (the clocks) keeps frames alive while something moves by velocity
+		-- (Optimize TAS keeps them, playback needs their clocks)
+		if #body == 0 and not full and not anyDyn then
+			usedPrev = usedNow
+			return nil
+		end
+		-- the clocks moving parts use now or used in the frame before (playback blends from that frame)
+		local b = full and 5 or 4
+		if full then
+			run[1], run[2], run[3] = 0, 0, 0
+			if newChain then b = b + 64 end
+			newChain = false
+		end
+		local carry = {}
+		for i = 1, 3 do
+			carry[i] = usedNow[i] or usedPrev[i]
+			if carry[i] then b = b + CARRY_BIT[i] end
+		end
+		local out = { b }
+		for i = 1, 3 do
+			if carry[i] then
+				local pred = 0
+				if i == 2 and not full then pred = floor(((frame and frame.FrameTime) or 0) * WALL_HZ + 0.5) end
+				putZig(out, val[i] - run[i] - pred)
+				run[i] = val[i]
+			end
+		end
+		table.move(body, 1, #body, #out + 1, out)
+		usedPrev = usedNow
 		return bufToString(out)
 	end
 
@@ -800,17 +1060,36 @@ do
 		end
 		return p
 	end
+	-- the clocks a v3 frame carries, onto rn (the running values, updated in place); ft = the frame's FrameTime.
+	-- Returns where the records start
+	local function readClocks(str, rn, ft)
+		local b = byte(str, 1)
+		local full = b % 8 == 5
+		if full then rn[1], rn[2], rn[3] = 0, 0, 0 end
+		local fl, p = floor(b / 8), 2
+		for i = 1, 3 do
+			if fl % 2 == 1 then
+				local d
+				d, p = rz(str, p)
+				if i == 2 and not full then d = d + floor((ft or 0) * WALL_HZ + 0.5) end
+				rn[i] = rn[i] + d
+			end
+			fl = floor(fl / 2)
+		end
+		return p
+	end
+	local function bodyStart(str)
+		if byte(str, 1) >= 4 then return readClocks(str, { 0, 0, 0 }, 0) end
+		return 2
+	end
+	local function clockValues(rn, out)
+		out[1], out[2], out[3] = rn[1] / SIM_HZ, rn[2] / WALL_HZ, rn[3] / SIM_HZ
+		return out
+	end
+
 	local verN = 0
-	local function newState()
-		local t = {}
-		for i = 1, 50 do t[i] = 0 end
-		return t
-	end
-	local function copyState(s)
-		local t = {}
-		for i = 1, 50 do t[i] = s[i] end
-		return t
-	end
+	local function newState() return table.create(50, 0) end
+	local function copyState(s) return table.clone(s) end
 
 	local function skipPayload(isV2, flags, str, p)
 		if isV2 then
@@ -910,8 +1189,8 @@ do
 		end
 	end
 
-	-- one v2 record payload onto a state table
-	local function applyPayloadV2(str, p, s, flags, tNow)
+	-- one v2 / v3 record payload onto a state table (cvs = the frame's clocks in seconds, v3 only)
+	local function applyPayloadV2(str, p, s, flags, tNow, cvs)
 		verN = verN + 1
 		s[I_VER] = verN
 		local mask = s[I_MASK]
@@ -935,7 +1214,14 @@ do
 			else
 				s[39], s[40], s[41] = 0, 0, 0
 			end
-			s[45] = tNow
+			if cvs then
+				local c = (hasMask(flags, K_CK1) and 1 or 0) + (hasMask(flags, K_CK2) and 2 or 0)
+				s[47], s[49] = c, 3
+				s[45] = (c == 0) and tNow or cvs[c]
+			else
+				s[47], s[49] = 0, 0
+				s[45] = tNow
+			end
 			s[48] = moving and 1 or 0
 		end
 		if hasMask(flags, K_TR) then
@@ -965,8 +1251,14 @@ do
 		return p
 	end
 
-	local function applyV2(str, cur, touched, tNow)
+	local cvScratch = { 0, 0, 0 }
+	local function applyV2(str, cur, touched, tNow, ft)
 		local p, n = 2, #str
+		local cvs = nil
+		if byte(str, 1) >= 4 then
+			p = readClocks(str, play.run, ft)
+			cvs = clockValues(play.run, cvScratch)
+		end
 		while p <= n do
 			local id, flags
 			id, p = rv(str, p)
@@ -978,7 +1270,7 @@ do
 			else
 				local s = cur[id]
 				if not s then s = newState(); cur[id] = s end
-				p = applyPayloadV2(str, p, s, flags, tNow)
+				p = applyPayloadV2(str, p, s, flags, tNow, cvs)
 				touched[id] = true
 			end
 		end
@@ -986,10 +1278,10 @@ do
 
 	local function isFull(str)
 		local b = byte(str, 1)
-		return b == 1 or b == 3
+		return b == 1 or b == 3 or (b >= 4 and b % 8 == 5)
 	end
 
-	local function applyString(str, cur, touched, tNow)
+	local function applyString(str, cur, touched, tNow, ft)
 		if isFull(str) then
 			for id in pairs(cur) do
 				play.dropped[id] = true
@@ -997,7 +1289,7 @@ do
 			end
 		end
 		if byte(str, 1) >= 2 then
-			applyV2(str, cur, touched, tNow or 0)
+			applyV2(str, cur, touched, tNow or 0, ft)
 		else
 			applyV1(str, cur, touched)
 		end
@@ -1098,8 +1390,12 @@ do
 			end
 			sh.cf, sh.t, sh.v = cf, t, v
 		end
-		if not renderPass and sh.pv ~= v then
+		if (not renderPass and sh.pv ~= v) or rs.pd then
+			if rs.pd then
+				sh[I_TR], sh[I_CC], sh[I_COL], sh[I_SZ], sh[I_MAT] = nil, nil, nil, nil, nil
+			end
 			writeProps(part, s, sh)
+			rs.pd = false
 			sh.pv = v
 		end
 	end
@@ -1122,9 +1418,10 @@ do
 				local d = abs(k - i)
 				if d > farD then far, farD = k, d end
 			end
-			if far then play.ck[far] = nil; play.ckN = play.ckN - 1 end
+			if far then play.ck[far], play.ckRun[far] = nil, nil; play.ckN = play.ckN - 1 end
 		end
 		play.ck[i] = cloneCur(play.cur)
+		play.ckRun[i] = { play.run[1], play.run[2], play.run[3] }
 		play.ckN = play.ckN + 1
 	end
 
@@ -1147,7 +1444,7 @@ do
 			local fr = data[i]
 			local str = fr and fr.CO
 			if str then
-				applyString(str, play.cur, touched, fr.TotalTime or 0)
+				applyString(str, play.cur, touched, fr.TotalTime or 0, fr.FrameTime)
 				if makeCk and (i % CK == 0 or isFull(str)) then ckPut(i) end
 			end
 		end
@@ -1161,12 +1458,31 @@ do
 		local fr, nf = data[f], data[f + 1]
 		play.curT = fr and fr.TotalTime or 0
 		play.nextT = nf and nf.TotalTime or play.curT
-		if not (nf and nf.CO) or not Settings.On("Smooth Client Objects") then return end
-		local str = nf.CO
+		-- the next frame's clocks (from this frame's running values)
+		local nr = { play.run[1], play.run[2], play.run[3] }
+		local nstr = nf and nf.CO
+		local np = 2
+		if nstr and byte(nstr, 1) >= 4 then np = readClocks(nstr, nr, nf.FrameTime) end
+		clockValues(nr, play.nv)
+		local nvReal = { play.nv[1], play.nv[2], play.nv[3] }
+		if nstr and byte(nstr, 1) >= 64 then
+			-- the next frame starts a new recording with new clocks: up to it, the clocks of this one go on
+			-- (at the TAS clock's rate) instead of being blended into the new numbers
+			local span = play.nextT - play.curT
+			for c = 1, 3 do play.nv[c] = play.cv[c] + span end
+		end
+		if not nstr or not Settings.On("Smooth Client Objects") then return end
+		local str = nstr
 		if byte(str, 1) < 2 then return end
-		local p, n = 2, #str
+		local p, n = np, #str
+		local cvs = nil
+		if byte(str, 1) >= 4 then cvs = nvReal end
 		local cur = play.cur
 		local s = nextScratch -- (reused for every record: only dp / dr are kept)
+		-- a full snapshot's records are whole values, not changes: they start from nothing (applied to the
+		-- current state they made the "next keyframe" the sum of both, and a part near the origin jumped for
+		-- a frame at every full snapshot)
+		local nextFull = isFull(str)
 		local ok = pcall(function()
 			while p <= n do
 				local id, flags
@@ -1174,11 +1490,13 @@ do
 				flags, p = rv(str, p)
 				if not hasMask(flags, K_DROP) then
 					local base = cur[id]
-					for i = 1, 50 do s[i] = base and base[i] or 0 end
-					p = applyPayloadV2(str, p, s, flags, play.nextT)
+					local from = (not nextFull) and base or nil
+					for i = 1, 50 do s[i] = from and from[i] or 0 end
+					p = applyPayloadV2(str, p, s, flags, play.nextT, cvs)
 					if base and hasPose(base) and hasPose(s) and hasMask(flags, K_KEY) then
-						-- where the current model would be vs. the next keyframe
-						local want = poseAt(s, play.nextT)
+						-- where the current model would be vs. the next keyframe (the keyframe's own pose: it is
+						-- the pose at the next frame)
+						local want = poseAt(s, nil)
 						local have = poseAt(base, play.nextT)
 						local dp = want.Position - have.Position
 						if dp.Magnitude < 25 then
@@ -1195,7 +1513,7 @@ do
 
 	local function advanceTo(data, f, touched)
 		if play.ckData ~= data or play.ckVer ~= CO.dataVersion then
-			play.ck, play.ckN = {}, 0
+			play.ck, play.ckN, play.ckRun = {}, 0, {}
 			play.ckData, play.ckVer = data, CO.dataVersion
 		end
 		local makeCk = play.kind == "show"
@@ -1214,8 +1532,11 @@ do
 			local start
 			if bestF then
 				play.cur = cloneCur(play.ck[bestF])
+				local cr = play.ckRun[bestF]
+				play.run[1], play.run[2], play.run[3] = cr[1], cr[2], cr[3]
 				start = bestF + 1
 			else
+				play.run[1], play.run[2], play.run[3] = 0, 0, 0
 				local base = f
 				local limit = math.max(1, f - 3000)
 				while base >= limit do
@@ -1231,6 +1552,7 @@ do
 			for id in pairs(play.cur) do touched[id] = true end
 			finalize(touched)
 		end
+		clockValues(play.run, play.cv)
 		if play.nextFor ~= f then computeNext(data, f) end
 	end
 
@@ -1296,6 +1618,8 @@ do
 		local fr = data[frame]
 		return fr and fr.TotalTime or 0
 	end
+	local touchedScratch = {}
+	local function cleanTouched() table.clear(touchedScratch); return touchedScratch end
 
 	function CO.PlaybackBegin(data, startFrame)
 		if not (enabled and scanDone) then return false end
@@ -1307,7 +1631,7 @@ do
 		play.data = nil
 		play.nextFor = nil
 		play.t = frameTime(data, startFrame)
-		advanceTo(data, startFrame, {})
+		advanceTo(data, startFrame, cleanTouched())
 		writeAll(play.t, false)
 		return true
 	end
@@ -1316,7 +1640,7 @@ do
 	function CO.PlaybackTo(data, frame, t)
 		if not play.active then return end
 		play.t = t or frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		writeAll(play.t, false)
 		sweepAnchors()
 	end
@@ -1324,7 +1648,6 @@ do
 	-- every Heartbeat while paused in Create mode
 	function CO.Tick()
 		if not (play.active and play.kind == "show") then return end
-		writeAll(play.t, false)
 		sweepAnchors()
 	end
 
@@ -1347,7 +1670,7 @@ do
 		play.kind = "show"
 		play.active = true
 		play.t = frameTime(data, frame)
-		advanceTo(data, frame, {})
+		advanceTo(data, frame, cleanTouched())
 		play.next, play.nextFor = {}, nil -- no blending while paused: show exactly the frame
 		writeAll(play.t, false)
 		sweepAnchors()
@@ -1358,7 +1681,7 @@ do
 		if not (enabled and scanDone) then return end
 		if hasCOData(data) and frame and data[frame] then
 			play.kind = "show"
-			advanceTo(data, frame, {})
+			advanceTo(data, frame, cleanTouched())
 			local t = frameTime(data, frame)
 			for id, s in pairs(play.cur) do
 				local part = parts[id]
@@ -1372,8 +1695,20 @@ do
 						orig[part], origVel[part] = nil, nil
 					end
 					if not part.Anchored then
-						part.AssemblyLinearVelocity = V3(s[36] / 1000, s[37] / 1000, s[38] / 1000)
-						part.AssemblyAngularVelocity = V3(s[39] / 1000, s[40] / 1000, s[41] / 1000)
+						local L = V3(s[36] / 1000, s[37] / 1000, s[38] / 1000)
+						local W = V3(s[39] / 1000, s[40] / 1000, s[41] / 1000)
+						local w2 = W:Dot(W)
+						if s[49] == 3 and w2 > 1e-10 then
+							-- v3 keeps the velocity at the part's position; the assembly's is the one at its centre
+							-- of mass: the part's motion along the screw axis + w x (centre of mass - axis point)
+							local okC, com = pcall(function() return part.AssemblyCenterOfMass end)
+							if okC and typeof(com) == "Vector3" then
+								local ctr = V3(s[1] / 1000, s[2] / 1000, s[3] / 1000) - L:Cross(W) / w2
+								L = W * (L:Dot(W) / w2) + W:Cross(com - ctr)
+							end
+						end
+						part.AssemblyLinearVelocity = L
+						part.AssemblyAngularVelocity = W
 					end
 				end
 			end
@@ -1385,7 +1720,7 @@ do
 	function CO.IdsOf(str, set)
 		set = set or {}
 		local isV2 = byte(str, 1) >= 2
-		local p, n = 2, #str
+		local p, n = bodyStart(str), #str
 		while p <= n do
 			local id, flags
 			id, p = rv(str, p)
@@ -1398,8 +1733,8 @@ do
 
 	local function remapString(str, map)
 		local isV2 = byte(str, 1) >= 2
-		local out = { sub(str, 1, 1) }
-		local p, n = 2, #str
+		local p, n = bodyStart(str), #str
+		local out = { sub(str, 1, p - 1) }
 		while p <= n do
 			local id
 			id, p = rv(str, p)

@@ -13,6 +13,7 @@ p13_clientobjects
 p14_buttons
 p15_tools
 p16_sounds
+p16_speedhack
 p17_profiler
 p18_core
 p19_menu

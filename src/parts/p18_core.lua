@@ -8,6 +8,9 @@
 --                          Heartbeat      bookkeeping, stats
 --  Playback: Heartbeat advances the timer and poses the character for physics, PreRender poses
 --  it again for rendering at the same time, the end of the render step re-asserts client objects.
+--  Speed hack (slow motion): a frame recorded while it is on stores its time x the factor and the
+--  velocity / the factor (C.recScale = the factor the frame's physics ran with), so the TAS is saved
+--  in normal time.
 -- ================================================================================================
 local C = {
 	data = {}, mode = 1, frame = 1, paused = true, back = false, forw = false,
@@ -16,7 +19,7 @@ local C = {
 	merge = false, mergeBefore = {}, mergeAfter = {}, oldTAS = {}, mergeReqDist = nil, mergeCFrame = nil,
 	mergeCanComplete = false, mergeBaseHeld = nil, hitboxes = {},
 	Humanoid = nil, Char = nil, HRP = nil, IsMobile = UIS.TouchEnabled, QuitTestEvent = nil,
-	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0,
+	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0, recScale = 1,
 }
 Core.State = C
 
@@ -188,7 +191,7 @@ do
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
 
-	local lastBT = nil
+	local lastBT, lastStatFD, lastStatFN, lastStatPaused, lastStatSH = nil, nil, nil, nil, nil
 	function SS.Create(pausedNow, frameNo, FrameData)
 		local panel = C.CreateStatsF
 		showPanel(panel)
@@ -196,7 +199,12 @@ do
 		if lastBT == nil then lastBT = panel.BackgroundTransparency end
 		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
 		local f = labels(panel)
-		setText(f["1"], " Frame: " .. frameNo)
+		local sh = SpeedHack.Wanted()
+		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo and lastStatSH == sh then
+			return
+		end
+		lastStatPaused, lastStatFD, lastStatFN, lastStatSH = pausedNow, FrameData, frameNo, sh
+		setText(f["1"], " Frame: " .. frameNo .. ((sh < 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
@@ -300,11 +308,17 @@ do
 		else
 			cam.CFrame = C.TableToCFrame(FrameData.CamCframe)
 		end
+		local hrp, hum = C.HRP, C.Humanoid
+		if hrp and hrp.Parent then
+			local off = hum and hum.CameraOffset or ZERO3
+			cam.Focus = CFrame.new(hrp.CFrame.Position + hrp.CFrame:VectorToWorldSpace(Vector3.new(0, 1.5, 0) + off))
+		end
 		if not UnlockShift then
 			local IsShiftLock = Bridge.IsShiftlocked() and 1 or 0
 			if IsShiftLock ~= FrameData.ShiftLock then Bridge.ShiftlockSwitch() end
 		end
-		Bridge.SetZoom(tonumber(FrameData.Zoom) or 12.5, true)
+		local z = tonumber(FrameData.Zoom) or 12.5
+		Bridge.SetZoom(z, true)
 	end
 
 	-- the character exactly on a recorded frame
@@ -314,7 +328,11 @@ do
 
 	function C.anchor(value)
 		if C.HRP then C.HRP.Anchored = value end
-		Bridge.ShiftlockRotation(not value)
+		local allowAutoRotate = (not value) and (C.mode ~= 3)
+		if C.Humanoid then
+			pcall(function() C.Humanoid.AutoRotate = allowAutoRotate end)
+		end
+		Bridge.ShiftlockRotation(allowAutoRotate)
 	end
 
 	function C.LoadFrame(FrameData, unpausing, backtrack)
@@ -329,12 +347,20 @@ do
 			C.SyncFrame(FrameData)
 			C.UpdateCamera(FrameData)
 			if C.mode == 2 then
+				if C.SetCam() and not C.LookAround then
+					Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+				end
 				ClientObjects.ShowFrame(data, C.frame)
 				Buttons.ShowFrame(data, C.frame)
+				Lighting.ShowFrame(data, C.frame)
 			end
 		else
 			ClientObjects.RestoreUnpause(data, C.frame)
-			if C.SetCam() then Bridge.SetZoom(FrameData.Zoom, true) end
+			if C.SetCam() then
+				Bridge.SetZoom(FrameData.Zoom, true)
+				Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+			end
+			Bridge.ResetGhost(true)
 			C.LastPause = C.frame
 			C.anchor(false)
 		end
@@ -370,8 +396,10 @@ do
 		if #data > C.frame then
 			for _ = C.frame + 1, #data do data[#data] = nil end
 			C.DataChanged()
+			Lighting.Trim(C.frame)
 		end
 	end
+	local af1, af2, afCF1, afCF2, afCam1, afCam2
 
 	-- interpolated pose between two frames at playback time t (proper rotation interpolation)
 	function C.AveragedFrame(f1, f2, t)
@@ -383,10 +411,19 @@ do
 			end
 			return CFrame.new(), CFrame.new(), ZERO3, ZERO3, 12.5
 		end
+		if f1 ~= af1 or f2 ~= af2 then
+			if f1 == af2 then
+				afCF1, afCam1 = afCF2, afCam2
+			else
+				afCF1, afCam1 = C.TableToCFrame(f1.Cframe), C.TableToCFrame(f1.CamCframe)
+			end
+			afCF2, afCam2 = C.TableToCFrame(f2.Cframe), C.TableToCFrame(f2.CamCframe)
+			af1, af2 = f1, f2
+		end
 		local t1, t2 = f1.TotalTime or 0, f2.TotalTime or 0
 		local w = (t2 > t1) and clampn((t - t1) / (t2 - t1), 0, 1) or 0
-		local rootCF = C.TableToCFrame(f1.Cframe):Lerp(C.TableToCFrame(f2.Cframe), w)
-		local camCF = C.TableToCFrame(f1.CamCframe):Lerp(C.TableToCFrame(f2.CamCframe), w)
+		local rootCF = afCF1:Lerp(afCF2, w)
+		local camCF = afCam1:Lerp(afCam2, w)
 		local l1, l2 = f1.Velocity.Linear, f2.Velocity.Linear
 		local a1, a2 = f1.Velocity.Angular, f2.Velocity.Angular
 		local lin = Vector3.new(l1[1] + (l2[1] - l1[1]) * w, l1[2] + (l2[2] - l1[2]) * w, l1[3] + (l2[3] - l1[3]) * w)
@@ -546,11 +583,14 @@ do
 		Bridge.ResetGhost()
 		camType(Enum.CameraType.Custom)
 		C.mode, C.frame = 1, 1
+		C.pausedCamCF, C.pausedZoom = nil, nil
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
 		Buttons.Release()
+		Lighting.Release()
 		ToolSync.ReplayEnd()
 		Cursor.Reset()
 		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
@@ -559,6 +599,9 @@ do
 
 	function inputs.Create(force)
 		if C.DoubleInput() and not force then return end
+		if InputSys.IsReplaying() then InputSys.ReplayEnd() end
+		if ClientObjects.IsTesting() then ClientObjects.EndPlayback() end
+		ToolSync.ReplayEnd()
 		camType(Enum.CameraType.Custom)
 		local data = C.data
 		C.frame = #data
@@ -566,13 +609,21 @@ do
 		C.paused = true
 		C.LookAround = false
 		if #data > 0 and data[#data] then
-			C.LoadFrame(data[#data], false, true)
-			Bridge.SetZoom(data[#data].Zoom, true)
+			local last = data[#data]
+			C.LoadFrame(last, false, true)
+			Bridge.SetZoom(last.Zoom, true)
+			if C.SetCam() then
+				Bridge.UpdateGhost(last.Zoom, 0, true)
+			else
+				Bridge.ResetGhost(true)
+			end
 		else
+			Bridge.ResetGhost(true)
 			Buttons.Pause(0)
+			Lighting.Pause()
 		end
 		C.anchor(true)
-		Bridge.LockShiftlock(false)
+		Bridge.LockShiftlock(#data > 0)
 		Bridge.LockAnimations(true)
 	end
 
@@ -594,7 +645,7 @@ do
 		camType(Settings.On("Lock Camera (Test)") and Enum.CameraType.Scriptable or Enum.CameraType.Custom)
 		C.mode = 3
 		if data[C.frame] then
-			C.UpdateCamera(data[C.frame], true)
+			C.UpdateCamera(data[C.frame], false)
 			Bridge.SetZoom(data[C.frame].Zoom, true)
 		end
 		C.anchor(false)
@@ -606,15 +657,18 @@ do
 			ClientObjects.PlaybackBegin(data, C.frame)
 		end
 		Buttons.PlaybackBegin(data, C.frame)
+		Lighting.PlaybackBegin(data, C.frame)
 		ToolSync.ReplayBegin(data, C.frame, C.Char)
 	end
 
 	local function beginRecordingAt()
 		local data = C.data
+		C.lastVX, C.lastVY = nil, nil
 		InputSys.BeginRecording(data, C.merge and C.mergeBaseHeld or nil)
-		ClientObjects.BeginRecording()
+		ClientObjects.BeginRecording(data[#data])
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
+		Lighting.Resume(data, #data)
 	end
 	-- unpausing: cut the frames after the current one, camera back on the last frame
 	local function unpauseFrom(data)
@@ -642,6 +696,8 @@ do
 		unpauseFrom(data)
 		C.LoadFrame(data[#data], true)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.paused = false
@@ -657,8 +713,16 @@ do
 		if C.DoubleInput() then return end
 		Bridge.LockAnimations(true)
 		C.paused = true
-		C.LoadFrame(C.data[#C.data])
-		Buttons.Pause(frameTime(#C.data))
+		local cam = workspace.CurrentCamera
+		C.pausedCamCF = cam and cam.CFrame or C.pausedCamCF
+		C.pausedZoom = Bridge.GetZoom()
+		local data = C.data
+		if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
+		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
+		C.LoadFrame(data[#data])
+		Buttons.Pause(frameTime(#data))
+		Lighting.Pause()
 	end
 
 	function inputs.Unpause1F()
@@ -669,23 +733,30 @@ do
 		if #data > 1 and data[C.frame] and data[C.frame].State == Enum.HumanoidStateType.Landed.Value then FrameCount = 2 end
 		unpauseFrom(data)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.LoadFrame(data[#data], true)
 		noJumpOneFrame()
 		C.paused = false
+		Bridge.SetFreeMouse(false)
 		C.FirstFrameRecord = false
 		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
 		Buttons.Pause(frameTime(#C.data))
+		Lighting.Pause()
 	end
 
 	-- paused on frame f (Back / Forward hold it while the key is down)
 	local function holdAt(f)
 		C.frame = f
 		C.paused = true
+		Bridge.LockShiftlock(#C.data > 0)
 		Bridge.LockAnimations(true)
 		C.LoadFrame(C.data[f], false, true)
 	end
@@ -705,6 +776,8 @@ do
 		if ConfirmDelete then
 			C.data = {}
 			C.DataChanged()
+			if Buttons.Reset then pcall(Buttons.Reset) end
+			Lighting.Clear()
 			C.LastPause = 1
 			C.frame = 0
 			task.spawn(C.SetStatus, "TAS Deleted")
@@ -822,6 +895,8 @@ do
 		else
 			C.data = LoadedTAS or {}
 			C.DataChanged()
+			Lighting.Clear()
+			Lighting.LoadFromData(C.data)
 			if C.mode == 2 then
 				C.frame = #C.data
 				if #C.data > 0 then
@@ -847,6 +922,7 @@ do
 		pcall(InputSys.ReplayEnd)
 		pcall(ClientObjects.EndPlayback)
 		pcall(Buttons.Release)
+		pcall(Lighting.Release)
 		pcall(Bridge.LockShiftlock, false)
 		pcall(Bridge.LockAnimations, false)
 		pcall(Bridge.SetFreeMouse, false)
@@ -877,17 +953,24 @@ do
 	local RENDER_BIND = "HappaTASLate"
 
 	local function finishTest()
+		local data = C.data
+		local lastFr = (#data > 0) and (data[#data] or data[C.frame]) or nil
+		local endZoom = (lastFr and tonumber(lastFr.Zoom)) or (C.pose and C.pose.Zoom) or Bridge.GetZoom()
+		local endShift = lastFr and lastFr.ShiftLock or nil
 		Bridge.ResetGhost()
 		pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
 		InputSys.ReplayEnd()
 		ClientObjects.EndPlayback()
 		Buttons.Release()
+		Lighting.Release()
 		ToolSync.ReplayEnd()
 		C.mode, C.frame = 1, 1
+		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
-		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		Bridge.RestoreCameraAfterTest(endZoom, endShift)
 		C.guardFrames = 45
 		Cursor.Reset()
 		local data = C.data
@@ -905,18 +988,47 @@ do
 	local function menuOpen()
 		return Menu.IsModalOpen ~= nil and Menu.IsModalOpen()
 	end
+	local function isMode2MouseLocked()
+		if C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+			local fr = C.data[C.frame]
+			if fr and fr.Cframe then
+				return fr.ShiftLock == 1 or (tonumber(fr.Zoom) or 99) <= 0.55
+			end
+		end
+		return Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+	end
+	local function holdPausedCamera()
+		if C.mode ~= 2 or not C.paused or C.FirstFrameRecord or C.LookAround or not C.SetCam() then return end
+		local fr = C.data[C.frame]
+		if fr and fr.CamCframe then
+			C.UpdateCamera(fr, false)
+		end
+	end
 
 	-- mouse lock rules: free while paused with a locked camera / testing with a scriptable camera.
 	-- For a short time after HappaTAS hands the camera back, the camera's mouse lock is checked
 	-- every frame (stale first person state from older camera scripts), never longer.
 	local function updateMouseMode()
+		local modal = menuOpen()
+		local camFreeze = (C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround)
+		local freezeZoom = camFreeze
+		local lockedView = (C.mode == 2 and not modal) and isMode2MouseLocked() or false
+		local forceLock = camFreeze and lockedView
+		Bridge.SetCameraFreeze(camFreeze, forceLock, freezeZoom)
 		local free = false
-		if C.mode == 2 and C.paused and C.SetCam() and not C.LookAround then free = true end
-		if C.mode == 3 and Settings.On("Lock Camera (Test)") then free = true end
+		if modal then
+			free = true
+		elseif C.mode == 3 and Settings.On("Lock Camera (Test)") then
+			free = true
+		elseif camFreeze and not lockedView then
+			free = true
+		end
 		Bridge.SetFreeMouse(free)
-		if C.guardFrames > 0 then
-			C.guardFrames = C.guardFrames - 1
-			if not free and C.mode ~= 3 then Bridge.GuardMouse(menuOpen()) end
+		if not free and C.mode ~= 3 then
+			if C.mode == 2 or C.guardFrames > 0 then
+				if C.guardFrames > 0 then C.guardFrames = C.guardFrames - 1 end
+				Bridge.GuardMouse(modal, forceLock)
+			end
 		end
 	end
 
@@ -925,73 +1037,101 @@ do
 		Profiler.FrameBegin(dt)
 		Profiler.Begin("HappaTAS")
 		local data, mode = C.data, C.mode
-		if not (mode == 2 and not C.paused) then InputSys.Clear() end
+		if not (mode == 2 and (not C.paused or C.FirstFrameRecord)) then InputSys.Clear() end
 
 		if mode == 2 and C.CharLoaded() then
 			if not C.paused and C.NotDead() and not C.FirstFrameRecord then
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
-				local ft = r(C.LastFrameTime, 1000000)
-				local total = (n >= 2 and data[n].TotalTime) and r(data[n].TotalTime + C.LastFrameTime, 1000000) or ft
+				-- (speed hack: this frame's physics ran recScale times slower than normal)
+				local k = C.recScale
+				local dtN = C.LastFrameTime * k
+				local ft = r(dtN, 1000000)
+				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + dtN, 1000000) or ft
+				local lin, ang = HRP.AssemblyLinearVelocity, HRP.AssemblyAngularVelocity
+				if k ~= 1 then lin, ang = lin / k, ang / k end
 				local mx, my, uvx, uvy, vx, vy = InputSys.Mouse()
+				local vpChanged = (n == 0 or vx ~= C.lastVX or vy ~= C.lastVY)
+				if vpChanged then C.lastVX, C.lastVY = vx, vy end
+				local curZoom = r(Bridge.GetZoom(), 1000)
+				-- the simulation and wall clocks of this frame: client objects move on them (see ClientObjects)
+				C.recSim, C.recWall = time(), os.clock()
 				data[n + 1] = {
-					Cframe = nil,
-					Velocity = { Linear = C.Vector3ToTable(HRP.AssemblyLinearVelocity), Angular = C.Vector3ToTable(HRP.AssemblyAngularVelocity) },
-					State = nil,
+					Velocity = { Linear = C.Vector3ToTable(lin), Angular = C.Vector3ToTable(ang) },
 					CamCframe = C.CFrameToTable(workspace.CurrentCamera.CFrame),
 					ShiftLock = Bridge.IsShiftlocked() and 1 or 0,
-					Mobile = C.IsMobile and C.ReadMobile() or 0,
-					Anim = nil,
-					Zoom = r(Bridge.GetZoom(), 1000),
+					Mobile = C.IsMobile and C.ReadMobile() or nil,
+					Zoom = curZoom,
 					FrameTime = ft,
 					TotalTime = total,
 					Input = InputSys.Take(),
-					MX = mx, MY = my, UVX = uvx, UVY = uvy, VX = vx, VY = vy,
+					MX = mx, MY = my, UVX = uvx, UVY = uvy,
+					VX = vpChanged and vx or nil, VY = vpChanged and vy or nil,
 				}
 				Profiler.End("Record")
 			end
-			if C.paused and #data > 1 and not C.LookAround and data[C.frame] then
-				C.UpdateCamera(data[C.frame], true)
+			if C.paused then
+				holdPausedCamera()
 			end
+			updateMouseMode()
 		elseif mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
 			Profiler.Begin("Playback")
 			local p = C.PlaybackPose()
 			C.SyncCharacter(p.root, p.lin, p.ang)
 			C.UpdateCamera(p)
-			if C.SetCam() and workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then
-				Bridge.UpdateGhost(p.Zoom, dt)
+			if C.SetCam() then
+				Bridge.UpdateGhost(p.Zoom, dt, false)
 			end
 			Profiler.End("Playback")
 		end
+		-- speed hack: on while the character records (Create, unpaused or the first frame of an unpause,
+		-- alive), for the physics step that comes next
+		local hum = C.Humanoid
+		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
+		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
 		Profiler.End("HappaTAS")
 		Profiler.FrameEnd() -- the end of this frame's jobs as far as a script can see (Jobs Wall Time)
 	end
 
 	-- ---------------------------------------------------------------------------------------- PreSimulation
+	-- the frame made in the last render step gets the character's state, client objects, tools and buttons.
+	-- Normally in PreSimulation (before the frame's physics). Roblox steps physics at 240 Hz and a frame
+	-- without a physics step has no PreSimulation (measured: at 240 FPS one frame in five), so then it is
+	-- done in Heartbeat (nothing has moved since)
+	local function fillFrame(data)
+		local fd = data[#data]
+		if not (fd and fd.Cframe == nil) then return end
+		Profiler.Begin("Record")
+		local HRP, hum = C.HRP, C.Humanoid
+		local state = hum:GetState()
+		fd.Cframe = C.CFrameToTable(HRP.CFrame)
+		fd.State = state.Value
+		fd.Anim = Bridge.GetAnimation(#data == 2)
+		Profiler.End("Record")
+		Profiler.Begin("Client Objects")
+		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd)
+		Profiler.End("Client Objects")
+		fd.Tools = ToolSync.Take()
+		Profiler.Begin("Buttons")
+		fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
+		Profiler.End("Buttons")
+		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
+		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
+	end
+
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
 		local data = C.data
 		if C.mode == 2 and C.CharLoaded() and not C.paused and not C.FirstFrameRecord and C.NotDead() then
-			local fd = data[#data]
-			if fd and fd.Cframe == nil then
-				Profiler.Begin("Record")
-				local HRP, hum = C.HRP, C.Humanoid
-				local state = hum:GetState()
-				fd.Cframe = C.CFrameToTable(HRP.CFrame)
-				fd.State = state.Value
-				fd.Anim = Bridge.GetAnimation(#data == 2)
-				Profiler.End("Record")
-				Profiler.Begin("Client Objects")
-				fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime)
-				Profiler.End("Client Objects")
-				fd.Tools = ToolSync.Take()
-				Profiler.Begin("Buttons")
-				fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
-				Profiler.End("Buttons")
-				if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
-			end
+			fillFrame(data)
 		elseif C.mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
+			if Settings.On("Interpolate Playback") then
+				local p = C.PlaybackPose()
+				C.SyncCharacter(p.root, p.lin, p.ang)
+			elseif data[C.frame] and data[C.frame].Cframe and data[C.frame].Velocity then
+				C.SyncFrame(data[C.frame])
+			end
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
 		Profiler.End("HappaTAS")
@@ -1023,6 +1163,7 @@ do
 			Profiler.Begin("Buttons")
 			Buttons.PlaybackTo(data, frame, C.TestingTimer)
 			Profiler.End("Buttons")
+			Lighting.PlaybackTo(data, frame)
 
 			if data[frame + 1].FrameTime and data[frame + 1].FrameTime > 0.1 then
 				holdPose(data[frame]) -- a lag spike was recorded here: hold the frame instead of sliding through it
@@ -1056,6 +1197,7 @@ do
 			InputSys.ReplayMouse(fr)
 			ClientObjects.PlaybackTo(data, frame, nil)
 			Buttons.PlaybackTo(data, frame, fr.TotalTime)
+			Lighting.PlaybackTo(data, frame)
 			local FrameTime = fr.FrameTime or 0
 			if C.FreezeTimeRemaining > dt then
 				holdPose(fr)
@@ -1102,9 +1244,12 @@ do
 					Buttons.Step(data[C.frame] and data[C.frame].TotalTime or 0)
 				else
 					if C.FirstFrameRecord and #data == 1 then
-						data[1].FrameTime = r(C.LastFrameTime, 1000000)
-						data[1].TotalTime = r(C.LastFrameTime, 1000000)
+						data[1].FrameTime = r(C.LastFrameTime * C.recScale, 1000000)
+						data[1].TotalTime = r(C.LastFrameTime * C.recScale, 1000000)
 					end
+					-- a frame without a physics step had no PreSimulation: filled here (it used to be dropped,
+					-- with its time and inputs: a TAS recorded at 240 FPS replayed about 12 % too fast)
+					if #data > 0 and data[#data].Cframe == nil and not C.FirstFrameRecord and C.NotDead() then fillFrame(data) end
 					if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 					C.frame = #data
 					Buttons.Step(data[#data] and data[#data].TotalTime or 0)
@@ -1130,10 +1275,25 @@ do
 	-- ---------------------------------------------------------------------------------------- end of render step
 	local function lateRender()
 		Profiler.Begin("HappaTAS")
+		if C.mode == 2 then
+			if C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+				holdPausedCamera()
+				local fr = C.data[C.frame]
+				if fr then Bridge.UpdateGhost(fr.Zoom, C.LastFrameTime, true) end
+			else
+				Bridge.ResetGhost(true)
+			end
+		elseif C.mode == 3 and C.SetCam() then
+			local fr = C.data[C.frame]
+			local z = (C.pose and C.pose.Zoom) or (fr and fr.Zoom) or Bridge.GetZoom()
+			Bridge.UpdateGhost(z, C.LastFrameTime, false)
+		end
 		ClientObjects.RenderStep()
+		Buttons.RenderStep()
+		Lighting.RenderStep()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
-		Cursor.Update(C.mode, (C.mode == 3) and C.data[C.frame] or nil, menuOpen) -- (asked only when needed)
+		Cursor.Update(C.mode, (C.mode == 3 or (C.mode == 2 and C.paused and #C.data > 0 and C.SetCam() and not C.LookAround)) and C.data[C.frame] or nil, menuOpen)
 		Profiler.End("Cursor")
 		Profiler.End("HappaTAS")
 	end
@@ -1218,7 +1378,8 @@ do
 			elseif CheckInput(inp, "Forward") and mode == 2 then inputs.Forward()
 			elseif CheckInput(inp, "Delete TAS") and not merge then inputs.Delete()
 			elseif CheckInput(inp, "Optimize TAS") then inputs.Optimize()
-			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround() end
+			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround()
+			elseif CheckInput(inp, "Toggle Speed Hack") then Settings.Set("Speed Hack", Settings.On("Speed Hack") and 0 or 1) end
 		end)
 
 		on(uis.InputEnded, function(inp)

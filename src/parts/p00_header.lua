@@ -1,10 +1,34 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.4
+	Version: V2.38.13
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.13 changes (short): speed hack (slow motion while recording)
+		- Settings > Speed Hack slows the game down while you record in Create mode, like a video played
+		  slower (Speed 0.1 - 1, 0.5 = half speed; a key for Toggle Speed Hack can be picked in Controls).
+		  Gravity x speed^2, WalkSpeed and JumpPower x speed, the character's motion and HappaTAS's
+		  animations x speed (JumpHeight jumps stay as high). The frames are saved in normal time (their time
+		  x speed, the velocity / speed), so Test plays the TAS at normal speed and a slow recording is the
+		  same TAS a normal one makes (tested frame by frame). Paused, Idle, Test and while dead everything
+		  runs at normal speed. Moving parts and other players keep their speed (like Tasability's speed
+		  hack); timed buttons follow the TAS clock, so they slow down too.
+		- Client objects move on their own clocks (physics parts on the simulation clock, scripted parts on
+		  the wall clock) and a part that turns while it moves is one screw motion: a spinner needs a key
+		  about every 2 s instead of every frame (a test TAS: 17.8 KB -> 4.0 KB). File format v4 (older
+		  versions refuse it instead of playing its client objects wrong; v1 - v3 files load as before).
+		- Frames without a physics step (above 60 FPS Roblox steps physics at 240 Hz, so some frames have
+		  none) are recorded in Heartbeat instead of being dropped: a TAS recorded at 240 FPS lost about
+		  12 % of its frames and time and replayed too fast.
+		- Camera calls (zoom, first person, shift lock, the zoom spring, the mouse lock offset) run in a
+		  thread of their own again: called directly they took the frame's access to the interface away
+		  ("lacking capability Plugin" while paused in Create mode, checked in the client).
+
+	V2.38.5 - V2.38.12 (made in the release build, now in src/parts too): timed buttons and their timer UI,
+	Lighting Changers, vanishers, beat blocks, morphs, camera freeze while paused, first person / shift lock
+	fixes, see the update log.
 
 	V2.38.4 changes (short): the MicroProfiler's Avg counts every frame
 		- Avg in the Time / Avg / Max readout is the average of every frame since the count started, also the
@@ -120,7 +144,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.4"
+local VERSION = "V2.38.13"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {
@@ -132,11 +156,12 @@ local CONFIG = {
 	ClientObjects = {
 		Radius        = 450,
 		AlwaysRadius  = 35,
-		FullEvery     = 600,
+		FullEvery     = 2400, -- a full snapshot at least every 2400 recorded frames...
+		FullSeconds   = 10,   -- ...and every 10 s of TAS time
 		VisEvery      = 6,
 		PosTolerance  = 0.015,
 		RotTolerance  = 0.0015,
-		MaxModelAge   = 1.0,
+		MaxModelAge   = 2.0,
 		MaxRegistered = 8000,
 		MaxWatched    = 30000,
 		WatchAnchored = true,

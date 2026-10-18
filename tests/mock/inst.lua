@@ -122,7 +122,7 @@ wait = function(t) task.wait(t); return t or 0, M.now end
 spawn = function(f) task.defer(f) end
 delay = function(t, f) task.delay(t, f) end
 tick = function() return M.now end
-time = function() return M.now end
+time = function() return M.simNow or M.now end
 elapsedTime = function() return M.now end
 
 function M.runDeferred()
@@ -405,6 +405,7 @@ instMt.__index = function(self, k)
 		if k == "PivotOffset" then return CFrame.new() end
 		if k == "Mass" or k == "AssemblyMass" then local s = d.props.Size or Vector3.new(4, 1, 2); return s.X * s.Y * s.Z * 0.7 end
 		if k == "AssemblyRootPart" then return self end
+		if k == "AssemblyCenterOfMass" then return cf.Position end
 		if k == "ExtentsCFrame" then return cf end
 	end
 	if k == "TextBounds" then return M.textBounds(self) end

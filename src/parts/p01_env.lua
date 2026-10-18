@@ -208,6 +208,6 @@ local ZERO3 = Vector3.zero
 -- ------------------------------------------------------------------------------------------------ module tables
 -- Declared up front so every module can call every other one (no forward-reference nil globals).
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
-local ClientObjects, Buttons, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}
-local Core, Menu = {}, {}
+local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
+local Core, Menu, SpeedHack = {}, {}, {}
 

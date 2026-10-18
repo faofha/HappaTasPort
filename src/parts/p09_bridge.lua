@@ -17,15 +17,22 @@ do
 	local Default = Enum.MouseBehavior.Default
 	local LockCenter = Enum.MouseBehavior.LockCenter
 	local Scriptable = Enum.CameraType.Scriptable
-	local FIRST_PERSON = 1.0      -- BaseCamera's FIRST_PERSON_DISTANCE_THRESHOLD
+	local FIRST_PERSON = 0.55
 
 	local cameras                 -- CameraModule (PlayerModule:GetCameras())
+	local activeCamCtrl = nil
+	local zoomModTbl = nil
+	local transparencyCtrl = nil
 	local patchedModule = nil
 	local originals = {}          -- { table, key, original, wrapper } or { hooked = function }
 	local rotate = true
 	local shiftlockBlocked = false
 	local freeMouse = false
-	local snapUntil = 0
+	local camFreeze = false
+	local camFreezeZoom = false
+	local forceLockCenter = false
+	local snapZoom = false
+	local pendingRestore = nil
 	local mouseLockCtrl = nil
 	local zoomControllers = {}
 	local gcDone = false
@@ -42,6 +49,17 @@ do
 	-- the same, and only the short-lived thread loses its access. (Reading values is not affected.)
 	local function gameCall(f, ...)
 		task.spawn(pcall, f, ...)
+	end
+	-- the same for a call whose result is needed (V2.38.13, checked in the client: even the getter
+	-- MouseLockController:GetMouseLockOffset takes the access away, like SetIsMouseLocked,
+	-- SetCameraToSubjectDistance and ZoomController.Update; GetCameraToSubjectDistance, GetIsMouseLocked,
+	-- SetMouseLockOffset and ZoomController.SetZoomParameters don't). ok is false if f errored or yielded.
+	local function gameGet(f, ...)
+		local ok, v = false, nil
+		task.spawn(function(...)
+			ok, v = pcall(f, ...)
+		end, ...)
+		return ok, v
 	end
 
 	-- Changes the behaviour of one of the camera script's functions. With the executor's hookfunction the
@@ -81,21 +99,121 @@ do
 		patchedModule = playerModule
 		local camMod = playerModule:FindFirstChild("CameraModule")
 		if not camMod then return end
+		local camInp = camMod:FindFirstChild("CameraInput")
+		if camInp then
+			local okI, CameraInput = pcall(require, camInp)
+			if okI and type(CameraInput) == "table" then
+				if type(CameraInput.getRotation) == "function" then
+					patch(CameraInput, "getRotation", function(orig)
+						return function(...)
+							local rot = orig(...)
+							if camFreeze then return Vector2.zero end
+							return rot
+						end
+					end)
+				end
+				if type(CameraInput.getZoomDelta) == "function" then
+					patch(CameraInput, "getZoomDelta", function(orig)
+						return function(...)
+							local dz = orig(...)
+							if camFreezeZoom then return 0 end
+							return dz
+						end
+					end)
+				end
+			end
+		end
 		local baseCam = camMod:FindFirstChild("BaseCamera")
 		if baseCam then
 			local okR, BaseCamera = pcall(require, baseCam)
 			if okR and type(BaseCamera) == "table" then
 				patch(BaseCamera, "UpdateMouseBehavior", function(orig)
 					return function(self, ...)
+						if type(self) == "table" then
+							activeCamCtrl = self
+							if pendingRestore then
+								local pr = pendingRestore
+								pendingRestore = nil
+								pcall(function()
+									if type(pr.zoom) == "number" and pr.zoom > 0 then
+										self.currentSubjectDistance = pr.zoom < FIRST_PERSON and 0.5 or pr.zoom
+										if type(self.SetCameraToSubjectDistance) == "function" then
+											self:SetCameraToSubjectDistance(pr.zoom)
+										end
+										if pr.zoom < FIRST_PERSON then
+											if type(self.EnterFirstPerson) == "function" then self:EnterFirstPerson() else self.inFirstPerson = true end
+										elseif self.inFirstPerson then
+											if type(self.LeaveFirstPerson) == "function" then self:LeaveFirstPerson() else self.inFirstPerson = false end
+										end
+									end
+								end)
+							end
+							if not freeMouse and not camFreeze then
+								local isShift = Bridge.IsShiftlocked()
+								if self.inMouseLockedMode ~= isShift then
+									pcall(function()
+										if type(self.SetIsMouseLocked) == "function" then
+											self:SetIsMouseLocked(isShift)
+										else
+											self.inMouseLockedMode = isShift
+										end
+										if type(self.SetMouseLockOffset) == "function" then
+											self:SetMouseLockOffset(isShift and Vector3.new(1.75, 0, 0) or Vector3.zero)
+										end
+									end)
+								end
+							end
+						end
 						if freeMouse then
 							setMouseBehavior(Default)
 							return
 						end
+						if forceLockCenter or (camFreeze and (self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked())) then
+							setMouseBehavior(LockCenter)
+							if (not rotate or camFreeze) and UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
+							return
+						end
+						if camFreeze then
+							setMouseBehavior(Default)
+							return
+						end
 						local res = orig(self, ...)
-						if not rotate and UserGameSettings and (self.inFirstPerson or self.inMouseLockedMode) then
-							pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+						local lockedNow = self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+						if lockedNow then
+							setMouseBehavior(LockCenter)
+							if UserGameSettings then
+								local wantRot = (rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+								pcall(function() UserGameSettings.RotationType = wantRot end)
+							end
+						elseif UIS.MouseBehavior == LockCenter then
+							setMouseBehavior(Default)
+							if UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
 						end
 						return res
+					end
+				end)
+				if type(BaseCamera.CalculateNewLookCFrameFromArg) == "function" then
+					patch(BaseCamera, "CalculateNewLookCFrameFromArg", function(orig)
+						return function(self, suppliedLookVector, rotateInput, ...)
+							if camFreeze then rotateInput = Vector2.zero end
+							return orig(self, suppliedLookVector, rotateInput, ...)
+						end
+					end)
+				end
+			end
+		end
+		local classicCam = camMod:FindFirstChild("ClassicCamera")
+		if classicCam then
+			local okC, ClassicCamera = pcall(require, classicCam)
+			if okC and type(ClassicCamera) == "table" and type(ClassicCamera.Update) == "function" then
+				patch(ClassicCamera, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then activeCamCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -104,15 +222,30 @@ do
 		if zoomMod then
 			local okR, Zoom = pcall(require, zoomMod)
 			if okR and type(Zoom) == "table" then
+				zoomModTbl = Zoom
 				patch(Zoom, "Update", function(orig)
 					return function(renderDt, ...)
-						if snapUntil > 0 then
-							if os.clock() <= snapUntil and type(renderDt) == "number" then
-								renderDt = renderDt * 1000000
+						if snapZoom then
+							snapZoom = false
+							local res = orig(100, ...)
+							if type(Zoom.ReleaseSpring) == "function" then
+								pcall(Zoom.ReleaseSpring)
 							end
-							snapUntil = 0 -- consumed by the first update after the request
+							return res
 						end
 						return orig(renderDt, ...)
+					end
+				end)
+			end
+		end
+		local transMod = camMod:FindFirstChild("TransparencyController")
+		if transMod then
+			local okT, TC = pcall(require, transMod)
+			if okT and type(TC) == "table" and type(TC.Update) == "function" then
+				patch(TC, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then transparencyCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -127,6 +260,17 @@ do
 			and not table.find(zoomControllers, t) then
 			zoomControllers[#zoomControllers + 1] = t
 		end
+		if type(rawget(t, "activeCameraController")) == "table"
+			or type(rawget(t, "activeTransparencyController")) == "table"
+			or type(rawget(t, "activeMouseLockController")) == "table" then
+			cameras = t
+			if type(rawget(t, "activeTransparencyController")) == "table" then
+				transparencyCtrl = rawget(t, "activeTransparencyController")
+			end
+		end
+		if not transparencyCtrl and rawget(t, "transparencyDirty") ~= nil and type(rawget(t, "cachedParts")) == "table" then
+			transparencyCtrl = t
+		end
 		if not mouseLockCtrl then
 			local amc = rawget(t, "activeMouseLockController")
 			if type(amc) == "table" then
@@ -140,7 +284,7 @@ do
 	-- filtergc matches the tables natively, only the ones with these keys come back (Real docs).
 	-- getgc(true) first puts every object of the game's memory in one table, which can freeze the client
 	-- in a big game (Real's own tools refuse to run it); it is only used when there is no filtergc.
-	local GC_KEYS = { "currentSubjectDistance", "activeMouseLockController", "isMouseLocked" }
+	local GC_KEYS = { "currentSubjectDistance", "activeCameraController", "activeTransparencyController", "activeMouseLockController", "isMouseLocked", "transparencyDirty" }
 	local function scanFiltered()
 		for _, key in ipairs(GC_KEYS) do
 			local found = Env.filtergc("table", { Keys = { key } })
@@ -175,25 +319,30 @@ do
 	end
 
 	local function resolve()
-		if cameras then return cameras end
+		if cameras and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil) then
+			return cameras
+		end
 		local now = os.clock()
-		if now - lastResolveTry < 1 then return nil end -- don't re-require every frame while it's missing
+		if now - lastResolveTry < 1 then return cameras end
 		lastResolveTry = now
 		local ps = LocalPlayer:FindFirstChild("PlayerScripts")
 		local pm = ps and ps:FindFirstChild("PlayerModule")
-		if not pm then return nil end
+		if not pm then return cameras end
+		applyPatches(pm)
 		local ok, mod = pcall(require, pm)
-		if not ok or type(mod) ~= "table" then return nil end
+		if not ok or type(mod) ~= "table" then return cameras end
 		local cams
 		pcall(function()
 			if type(mod.GetCameras) == "function" then cams = mod:GetCameras() end
 			if not cams and type(mod.cameras) == "table" then cams = mod.cameras end
 		end)
-		if cams then
+		if type(cams) == "table" and (rawget(cams, "activeCameraController") ~= nil or rawget(cams, "activeTransparencyController") ~= nil or rawget(cams, "activeMouseLockController") ~= nil) then
 			cameras = cams
-			applyPatches(pm)
 			if not mouseLockCtrl and type(cams.activeMouseLockController) == "table" then
 				mouseLockCtrl = cams.activeMouseLockController
+			end
+			if not transparencyCtrl and type(cams.activeTransparencyController) == "table" then
+				transparencyCtrl = cams.activeTransparencyController
 			end
 		end
 		return cameras
@@ -201,20 +350,36 @@ do
 
 	local function activeController()
 		local cams = resolve()
-		local ctrl = cams and cams.activeCameraController
+		local ctrl = activeCamCtrl or (cams and cams.activeCameraController)
 		if type(ctrl) == "table" then return ctrl end
-		return nil
+		for _, zc in ipairs(zoomControllers) do
+			if rawget(zc, "enabled") == true then return zc end
+		end
+		return zoomControllers[1]
+	end
+	local function getTransparencyController()
+		if transparencyCtrl then return transparencyCtrl end
+		local cams = resolve()
+		if cams and type(cams.activeTransparencyController) == "table" then
+			transparencyCtrl = cams.activeTransparencyController
+		end
+		return transparencyCtrl
 	end
 	Bridge.Controller = activeController
 
 	function Bridge.Init()
+		on(UIS:GetPropertyChangedSignal("MouseBehavior"), function()
+			if forceLockCenter and not freeMouse and not (GuiService and GuiService.MenuIsOpen) and UIS.MouseBehavior ~= LockCenter then
+				pcall(function() UIS.MouseBehavior = LockCenter end)
+			end
+		end)
 		task.spawn(scanGC)
 		task.spawn(function()
 			local t0 = os.clock()
-			while not Janitor.unloading and not resolve() and os.clock() - t0 < 120 do
+			while not Janitor.unloading and not activeController() and os.clock() - t0 < 120 do
 				task.wait(0.5)
 			end
-			if not cameras and not Janitor.unloading then
+			if not activeController() and not Janitor.unloading then
 				warnf("Could not find the game's PlayerModule, zoom/shiftlock syncing is limited.")
 			end
 		end)
@@ -222,13 +387,16 @@ do
 
 	function Bridge.GetZoom()
 		local ctrl = activeController()
+		if ctrl and ctrl.inFirstPerson == true then
+			return 0.5
+		end
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local ok, z = pcall(zoomModTbl.GetZoomRadius)
+			if ok and type(z) == "number" and z == z and z > 0 then return z end
+		end
 		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
 			local ok, z = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
 			if ok and type(z) == "number" and z == z then return z end
-		end
-		for _, zc in ipairs(zoomControllers) do
-			local ok, z = pcall(zc.GetCameraToSubjectDistance, zc)
-			if ok and type(z) == "number" and z == z and z ~= 12.5 then return z end
 		end
 		local cam = workspace.CurrentCamera
 		if cam then
@@ -236,30 +404,76 @@ do
 		end
 		return 12.5
 	end
+	local function forEachCamController(fn)
+		local seen = {}
+		local function visit(c)
+			if type(c) == "table" and not seen[c] then
+				seen[c] = true
+				gameCall(fn, c) -- fn calls the camera module (zoom, first person, mouse lock)
+			end
+		end
+		visit(activeCamCtrl)
+		local cams = resolve()
+		if cams then visit(cams.activeCameraController) end
+		for _, zc in ipairs(zoomControllers) do visit(zc) end
+	end
 
 	function Bridge.RemoveZoomSpring()
-		snapUntil = os.clock() + 0.25
+		snapZoom = true
+		if zoomModTbl and type(zoomModTbl.Update) == "function" then
+			local cam = workspace.CurrentCamera
+			gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
+		end
 	end
 
 	-- static = land on the zoom instantly (no spring)
 	function Bridge.SetZoom(zoom, static)
 		if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
-		if static then Bridge.RemoveZoomSpring() end
+		local targetZ = zoom < FIRST_PERSON and 0.5 or zoom
 		local ctrl = activeController()
-		if ctrl and type(ctrl.SetCameraToSubjectDistance) == "function" then
-			local okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
-			local same = okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4
-				and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
-			if not same then gameCall(ctrl.SetCameraToSubjectDistance, ctrl, zoom) end
+		local curR
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local okR, r = pcall(zoomModTbl.GetZoomRadius)
+			if okR and type(r) == "number" and r == r then curR = r end
 		end
-		for _, zc in ipairs(zoomControllers) do
-			if zc ~= ctrl then
-				local okG, cur = pcall(zc.GetCameraToSubjectDistance, zc)
-				if not (okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4) then
-					gameCall(zc.SetCameraToSubjectDistance, zc, zoom)
+		local okG, cur = false, nil
+		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
+			okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
+		end
+		local checkDist = curR or (okG and cur)
+		local same = not static and type(checkDist) == "number" and math.abs(checkDist - targetZ) < 1e-3
+			and ctrl ~= nil
+			and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
+			and not (zoom >= FIRST_PERSON and ctrl.inFirstPerson == true)
+		if same then return end
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
+		end
+		forEachCamController(function(c)
+			if rawget(c, "currentSubjectDistance") ~= nil then
+				c.currentSubjectDistance = targetZ
+			end
+			if type(c.SetCameraToSubjectDistance) == "function" then
+				c:SetCameraToSubjectDistance(targetZ)
+			end
+			if zoom < FIRST_PERSON then
+				if type(c.EnterFirstPerson) == "function" then
+					c:EnterFirstPerson()
+				elseif rawget(c, "inFirstPerson") ~= nil then
+					c.inFirstPerson = true
+				end
+			elseif c.inFirstPerson then
+				if type(c.LeaveFirstPerson) == "function" then
+					c:LeaveFirstPerson()
+				else
+					c.inFirstPerson = false
 				end
 			end
+		end)
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
 		end
+		if static then Bridge.RemoveZoomSpring() end
 	end
 
 	-- --------------------------------------------------------------------------------------------
@@ -276,47 +490,68 @@ do
 		return list
 	end
 
-	function Bridge.UpdateGhost(zoom, dt)
+	function Bridge.UpdateGhost(zoom, dt, snap)
 		local char = LocalPlayer.Character
 		if not char then return end
-		zoom = tonumber(zoom) or 12.5
+		local dist = tonumber(zoom) or 12.5
+		local cam = workspace.CurrentCamera
+		if cam then
+			local head = char:FindFirstChild("Head")
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			local focusPos = (head and head.Position) or (hrp and (hrp.Position + Vector3.new(0, 1.5, 0))) or cam.Focus.Position
+			local camDist = (cam.CFrame.Position - focusPos).Magnitude
+			if camDist < dist then dist = camDist end
+		end
 		local target = 0
-		if zoom < 2 then target = 1 - (zoom - 0.5) / 1.5 end
-		if target < 0.5 then target = 0 end
+		if dist < 2 then
+			target = 1 - (dist - 0.5) / 1.5
+			if target < 0.5 then target = 0 end
+		end
 		local value = target
-		if ghost.last ~= nil then
+		if not snap and ghost.last ~= nil and not (target == 1 and ghost.last >= 0.95) then
 			local maxDelta = 2.8 * (dt or 0.016)
 			value = ghost.last + clampn(target - ghost.last, -maxDelta, maxDelta)
 		end
 		value = clampn(math.floor(value * 100 + 0.5) / 100, 0, 1)
 		ghost.tick = ghost.tick + 1
-		local rebuild = ghost.char ~= char or ghost.tick % 60 == 1
+		local rebuild = snap or ghost.char ~= char or ghost.tick % 60 == 1
 		if rebuild then
 			ghost.char = char
 			ghost.parts = collectGhostParts(char)
 		end
-		if rebuild or value ~= ghost.last then
-			for _, part in ipairs(ghost.parts) do
-				if part.Parent then part.LocalTransparencyModifier = value end
+		for _, part in ipairs(ghost.parts) do
+			if part.Parent and part.LocalTransparencyModifier ~= value then
+				part.LocalTransparencyModifier = value
 			end
+		end
+		local tc = getTransparencyController()
+		if tc then
+			tc.lastTransparency = value
+			tc.transparencyDirty = false
 		end
 		ghost.last = value
 		ghost.active = true
 	end
 
-	function Bridge.ResetGhost()
-		if not ghost.active then return end
+	function Bridge.ResetGhost(keepCurrent)
+		if not ghost.active then
+			local tc = getTransparencyController()
+			if tc then tc.transparencyDirty = true end
+			return
+		end
 		ghost.active = false
+		local lastVal = ghost.last
 		ghost.last = nil
-		for _, part in ipairs(ghost.parts) do
-			if part.Parent then part.LocalTransparencyModifier = 0 end
+		if not keepCurrent then
+			for _, part in ipairs(ghost.parts) do
+				if part.Parent then part.LocalTransparencyModifier = 0 end
+			end
 		end
 		ghost.parts = {}
 		pcall(function()
-			local cams = resolve()
-			local tc = cams and cams.activeTransparencyController
+			local tc = getTransparencyController()
 			if tc then
-				tc.lastTransparency = nil
+				tc.lastTransparency = keepCurrent and lastVal or nil
 				tc.transparencyDirty = true
 			end
 		end)
@@ -347,18 +582,68 @@ do
 		if not mouseObj then pcall(function() mouseObj = LocalPlayer:GetMouse() end) end
 		return mouseObj ~= nil and mouseObj.Icon == "rbxasset://textures/MouseLockedCursor.png"
 	end
+	function Bridge.SyncShiftlockToCamera()
+		local lctrl = lockController()
+		local isLocked = Bridge.IsShiftlocked()
+		local off = Vector3.zero
+		if isLocked then
+			if lctrl and type(lctrl.GetMouseLockOffset) == "function" then
+				local okO, v = gameGet(lctrl.GetMouseLockOffset, lctrl)
+				if okO and typeof(v) == "Vector3" then off = v else off = Vector3.new(1.75, 0, 0) end
+			else
+				off = Vector3.new(1.75, 0, 0)
+			end
+		end
+		forEachCamController(function(cctrl)
+			if type(cctrl.SetIsMouseLocked) == "function" then
+				cctrl:SetIsMouseLocked(isLocked)
+			elseif rawget(cctrl, "inMouseLockedMode") ~= nil then
+				cctrl.inMouseLockedMode = isLocked
+			end
+			if type(cctrl.SetMouseLockOffset) == "function" then
+				cctrl:SetMouseLockOffset(off)
+			end
+		end)
+	end
 
 	function Bridge.ShiftlockSwitch()
 		local ctrl = lockController()
 		if not ctrl then return end
-		if type(ctrl.OnMouseLockToggled) == "function" then
-			gameCall(ctrl.OnMouseLockToggled, ctrl)
-		elseif type(ctrl.DoMouseLockSwitch) == "function" then
+		if type(ctrl.DoMouseLockSwitch) == "function" then
 			local wasBlocked = shiftlockBlocked
 			shiftlockBlocked = false
 			gameCall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
 			shiftlockBlocked = wasBlocked
+		elseif type(ctrl.OnMouseLockToggled) == "function" then
+			gameCall(ctrl.OnMouseLockToggled, ctrl)
 		end
+		Bridge.SyncShiftlockToCamera()
+	end
+	function Bridge.RestoreCameraAfterTest(zoom, wantShiftlock)
+		pendingRestore = { zoom = zoom, shiftlock = wantShiftlock }
+		local function applyRestore()
+			if wantShiftlock ~= nil then
+				local curShift = Bridge.IsShiftlocked() and 1 or 0
+				if curShift ~= wantShiftlock then Bridge.ShiftlockSwitch() end
+			end
+			Bridge.SyncShiftlockToCamera()
+			if type(zoom) == "number" and zoom > 0 then
+				Bridge.SetZoom(zoom, true)
+			end
+			Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		end
+		applyRestore()
+		task.defer(function()
+			if Core.GetMode and Core.GetMode() == 1 then
+				applyRestore()
+				task.delay(0.05, function()
+					if Core.GetMode and Core.GetMode() == 1 then
+						pendingRestore = nil
+						applyRestore()
+					end
+				end)
+			end
+		end)
 	end
 
 	-- while testing the player can't toggle shift lock by hand (the TAS does it)
@@ -385,6 +670,11 @@ do
 		end
 		return Bridge.GetZoom() < FIRST_PERSON
 	end
+	function Bridge.SetCameraFreeze(freeze, forceLock, freezeZoom)
+		camFreeze = freeze and true or false
+		camFreezeZoom = freezeZoom and true or false
+		forceLockCenter = forceLock and true or false
+	end
 
 	-- free = the mouse can move freely (paused with a locked camera, testing with a scriptable camera)
 	function Bridge.SetFreeMouse(free)
@@ -401,25 +691,31 @@ do
 
 	local function rotationFor(locked)
 		if not UserGameSettings then return end
-		local want = (locked and rotate) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+		local want = (locked and rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
 		if UserGameSettings.RotationType ~= want then
 			pcall(function() UserGameSettings.RotationType = want end)
 		end
 	end
 
 	-- modalOpen: a HappaTAS window is open (its Modal button frees the mouse, don't lock it again)
-	function Bridge.GuardMouse(modalOpen)
-		if freeMouse then
-			setMouseBehavior(Default)
+	function Bridge.GuardMouse(modalOpen, forceLocked)
+		if freeMouse or modalOpen or (GuiService and GuiService.MenuIsOpen) then
+			if freeMouse or modalOpen then setMouseBehavior(Default) end
 			return
 		end
-		if modalOpen or (GuiService and GuiService.MenuIsOpen) then return end
 		local cam = workspace.CurrentCamera
 		if not cam or cam.CameraType == Scriptable then return end
-		local locked = Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
-		if locked and UIS.MouseBehavior == Default then
-			setMouseBehavior(LockCenter)
+		local locked = forceLocked or forceLockCenter or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+		if locked then
+			if UIS.MouseBehavior ~= LockCenter then setMouseBehavior(LockCenter) end
 			rotationFor(true)
+		else
+			rotationFor(false)
+			if camFreeze then
+				if UIS.MouseBehavior ~= Default then setMouseBehavior(Default) end
+			elseif UIS.MouseBehavior == LockCenter then
+				setMouseBehavior(Default)
+			end
 		end
 	end
 
@@ -443,9 +739,11 @@ do
 	function Bridge.Restore()
 		pcall(Bridge.ResetGhost)
 		shiftlockBlocked = false
-		snapUntil = 0
+		snapZoom = false; camFreezeZoom = false
 		rotate = true
 		freeMouse = false
+		camFreeze = false
+		forceLockCenter = false
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()

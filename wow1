@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.10 - records and replays TAS runs on the client (executor script).
--- Saves to &lt;executor workspace&gt;/HappaTasPort/&lt;PlaceId&gt;/. Press M for the menu (controls, settings, saves, help).
+-- HappaTAS Executor Port V2.38.13 - records and replays TAS runs on the client (executor script).
+-- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.10"
+local VERSION = "V2.38.13"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -11,11 +11,12 @@ local CONFIG = {
 	ClientObjects = {
 		Radius        = 450,
 		AlwaysRadius  = 35,
-		FullEvery     = 600,
+		FullEvery     = 2400,
+		FullSeconds   = 10,
 		VisEvery      = 6,
 		PosTolerance  = 0.015,
 		RotTolerance  = 0.0015,
-		MaxModelAge   = 1.0,
+		MaxModelAge   = 2.0,
 		MaxRegistered = 8000,
 		MaxWatched    = 30000,
 		WatchAnchored = true,
@@ -185,7 +186,7 @@ end
 local ZERO3 = Vector3.zero
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
 local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
-local Core, Menu = {}, {}
+local Core, Menu, SpeedHack = {}, {}, {}
 local ControlsTable = {
 	{ "Idle", "1" },
 	{ "Create", "2" },
@@ -203,6 +204,7 @@ local ControlsTable = {
 	{ "Delete TAS", "Backspace" },
 	{ "Menu", "M" },
 	{ "MicroProfiler", "F6" },
+	{ "Toggle Speed Hack", "None" },
 }
 local SettingsTable = {
 	{ name = "Lock Camera (Test)",       default = 1, section = "Playback" },
@@ -214,6 +216,8 @@ local SettingsTable = {
 	{ name = "Record Death & Respawn",   default = 1, section = "Create" },
 	{ name = "Record Tool Actions",      default = 1, section = "Create" },
 	{ name = "Ignore Game Processed",    default = 0, section = "Create" },
+	{ name = "Speed Hack",               default = 0, section = "Speed Hack", label = "Speed Hack (slow motion)" },
+	{ name = "Speed Hack Speed",         default = 0.5, section = "Speed Hack", kind = "number", label = "Speed (0.1 - 1, 0.5 = half)", min = 0.1, max = 1 },
 	{ name = "Replay Keyboard",          default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Clicks",      default = 1, section = "Inputs" },
 	{ name = "Replay Mouse Movement",    default = 1, section = "Inputs" },
@@ -638,14 +642,28 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,3750)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4090)},{
+						LV("964", " 10/17/26 - 2.38.13"),
+						LI("964_1", "   -   Speed Hack: slow motion while recording (Settings)"),
+						LI("964_2", "   -   Slow recordings are saved and tested at normal speed"),
+						LI("964_3", "   -   Client objects on their own clocks: smaller files"),
+						LI("964_4", "   -   240 FPS: frames without physics are no longer dropped"),
+						LI("964_5", "   -   Camera calls no longer break the interface when paused"),
+						LV("965", " 10/17/26 - 2.38.12"),
+						LI("965_1", "   -   Synced exact button timer decimal places (e.g. 0.90) from live game UI & configs"),
+						LV("966", " 10/17/26 - 2.38.11"),
+						LI("966_1", "   -   Eliminated lag with many buttons (event-indexed seek & cached scans)"),
+						LI("966_2", "   -   Fixed shiftlock cursor & mouse lock state after Test replay ends"),
+						LI("966_3", "   -   Fixed first-person zoom resetting to Frame 1 zoom after Test ends"),
+						LI("966_4", "   -   Synced part timer SurfaceGui/BillboardGui with top screen timer UI"),
 						LV("967", " 10/16/26 - 2.38.10"),
 						LI("967_1", "   -   Create mode rewind fix: buttons un-glow & reset before press"),
-						LI("967_2", "   -   Cloned EToH v6.1.3 timer UI with UIStroke & zero duplicates"),
-						LI("967_3", "   -   Paused button lock: glowing Neon & timer held past duration"),
-						LI("967_4", "   -   FPS boost: event-driven lighting & CO props, cached CFrames"),
-						LI("967_5", "   -   Memory & GC optimization: table.create/clone & scratch reuse"),
-						LI("967_6", "   -   Smaller files: compact script & v2/v3 TAS encoding"),
+						LI("967_2", "   -   Locked mouse cursor in FP & shiftlock while paused/rewinding"),
+						LI("967_3", "   -   Cloned EToH v6.1.3 timer UI with UIStroke & zero duplicates"),
+						LI("967_4", "   -   Paused/unpaused button lock: no timer restart when near end"),
+						LI("967_5", "   -   Fixed first-person character body visibility (Test -> Create)"),
+						LI("967_6", "   -   FPS boost: event-driven lighting & CO props, cached CFrames"),
+						LI("967_7", "   -   Smaller files & lower RAM: compact v2/v3 encoding & table reuse"),
 						LV("968", " 10/16/26 - 2.38.9"),
 						LI("968_1", "   -   3-digit number and Digits/NeedDigits part property support"),
 						LI("968_2", "   -   Duplicate timer prevention: re-touching after rewind starts 1 clean timer"),
@@ -908,6 +926,11 @@ do
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
+					H("38", "Speed Hack (Slow Motion)", 212, true, {
+						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
+						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
+						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
+						{ 48, "Gravity, walk speed, jump power and animations slow down. Moving parts and other players keep their speed; timed buttons follow the TAS clock." } }),
 					H("37", "Frustum Culling & Sandboxing", 135, true, {
 						{ 48, "Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag." },
 						{ 67, "Roblox services are reached through cloneref (a second reference to the same object, not the game's own). The interface sits in gethui or syn.protect_gui; native LZ4 compresses files." } })
@@ -1144,7 +1167,7 @@ do
 	for i, n in ipairs(COLUMNS_V1) do COLUMNS_V2[i] = n; COLUMNS_V3[i] = n end
 	for _, n in ipairs({ "CO", "OB" }) do COLUMNS_V2[#COLUMNS_V2 + 1] = n; COLUMNS_V3[#COLUMNS_V3 + 1] = n end
 	for _, n in ipairs({ "FC", "VP", "TL", "TS", "BE", "BK" }) do COLUMNS_V3[#COLUMNS_V3 + 1] = n end
-	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3 }
+	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3 }
 	local TOOL_CODE = { Equip = 1, Unequip = 2, Activate = 3, Deactivate = 4 }
 	local TOOL_NAME = { "Equip", "Unequip", "Activate", "Deactivate" }
 	local floor = math.floor
@@ -1272,7 +1295,7 @@ do
 		local cols = {}
 		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
 		local coParts = {}
-		local hasCO = false
+		local hasCO, coV3 = false, false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
 		local ROT, LV, AV, ST, CR, CP, ZM = cols.ROT, cols.LV, cols.AV, cols.ST, cols.CR, cols.CP, cols.ZM
 		local PO, JT, SP, AN, MS, IN, MB = cols.PO, cols.JT, cols.SP, cols.AN, cols.MS, cols.IN, cols.MB
@@ -1449,6 +1472,7 @@ do
 			end
 			if f.CO then
 				hasCO = true
+				if not coV3 and byte(f.CO, 1) >= 4 then coV3 = true end
 				fb = fb + 128
 				local hdr = {}
 				putVar(hdr, #f.CO)
@@ -1505,6 +1529,7 @@ do
 		local version = 1
 		if hasCO or (objects and #objects > 0) then version = 2 end
 		if v3 then version = 3 end
+		if coV3 then version = 4 end
 		if version >= 2 then
 			local OB = cols.OB
 			putVar(OB, #(objects or {}))
@@ -1561,7 +1586,7 @@ do
 		if not Codec.IsCompact(data) then error("not a HappaTAS binary file", 0) end
 		if #data > CONFIG.MaxFileBytes then error("file is too big", 0) end
 		local version, flags = byte(data, 5), byte(data, 6)
-		if version ~= 1 and version ~= 2 and version ~= 3 then error("unsupported file version " .. tostring(version), 0) end
+		if version ~= 1 and version ~= 2 and version ~= 3 and version ~= 4 then error("unsupported file version " .. tostring(version), 0) end
 		local rd = newReader(data, 7)
 		local total = getVar(rd)
 		local rawLen = getVar(rd)
@@ -2105,14 +2130,21 @@ do
 	local Default = Enum.MouseBehavior.Default
 	local LockCenter = Enum.MouseBehavior.LockCenter
 	local Scriptable = Enum.CameraType.Scriptable
-	local FIRST_PERSON = 1.0
+	local FIRST_PERSON = 0.55
 	local cameras
+	local activeCamCtrl = nil
+	local zoomModTbl = nil
+	local transparencyCtrl = nil
 	local patchedModule = nil
 	local originals = {}
 	local rotate = true
 	local shiftlockBlocked = false
 	local freeMouse = false
-	local snapUntil = 0
+	local camFreeze = false
+	local camFreezeZoom = false
+	local forceLockCenter = false
+	local snapZoom = false
+	local pendingRestore = nil
 	local mouseLockCtrl = nil
 	local zoomControllers = {}
 	local gcDone = false
@@ -2121,6 +2153,13 @@ do
 	local ghost = { last = nil, parts = {}, char = nil, tick = 0, active = false }
 	local function gameCall(f, ...)
 		task.spawn(pcall, f, ...)
+	end
+	local function gameGet(f, ...)
+		local ok, v = false, nil
+		task.spawn(function(...)
+			ok, v = pcall(f, ...)
+		end, ...)
+		return ok, v
 	end
 	local function patch(tbl, key, makeWrapper)
 		if type(tbl) ~= "table" then return false end
@@ -2153,21 +2192,121 @@ do
 		patchedModule = playerModule
 		local camMod = playerModule:FindFirstChild("CameraModule")
 		if not camMod then return end
+		local camInp = camMod:FindFirstChild("CameraInput")
+		if camInp then
+			local okI, CameraInput = pcall(require, camInp)
+			if okI and type(CameraInput) == "table" then
+				if type(CameraInput.getRotation) == "function" then
+					patch(CameraInput, "getRotation", function(orig)
+						return function(...)
+							local rot = orig(...)
+							if camFreeze then return Vector2.zero end
+							return rot
+						end
+					end)
+				end
+				if type(CameraInput.getZoomDelta) == "function" then
+					patch(CameraInput, "getZoomDelta", function(orig)
+						return function(...)
+							local dz = orig(...)
+							if camFreezeZoom then return 0 end
+							return dz
+						end
+					end)
+				end
+			end
+		end
 		local baseCam = camMod:FindFirstChild("BaseCamera")
 		if baseCam then
 			local okR, BaseCamera = pcall(require, baseCam)
 			if okR and type(BaseCamera) == "table" then
 				patch(BaseCamera, "UpdateMouseBehavior", function(orig)
 					return function(self, ...)
+						if type(self) == "table" then
+							activeCamCtrl = self
+							if pendingRestore then
+								local pr = pendingRestore
+								pendingRestore = nil
+								pcall(function()
+									if type(pr.zoom) == "number" and pr.zoom > 0 then
+										self.currentSubjectDistance = pr.zoom < FIRST_PERSON and 0.5 or pr.zoom
+										if type(self.SetCameraToSubjectDistance) == "function" then
+											self:SetCameraToSubjectDistance(pr.zoom)
+										end
+										if pr.zoom < FIRST_PERSON then
+											if type(self.EnterFirstPerson) == "function" then self:EnterFirstPerson() else self.inFirstPerson = true end
+										elseif self.inFirstPerson then
+											if type(self.LeaveFirstPerson) == "function" then self:LeaveFirstPerson() else self.inFirstPerson = false end
+										end
+									end
+								end)
+							end
+							if not freeMouse and not camFreeze then
+								local isShift = Bridge.IsShiftlocked()
+								if self.inMouseLockedMode ~= isShift then
+									pcall(function()
+										if type(self.SetIsMouseLocked) == "function" then
+											self:SetIsMouseLocked(isShift)
+										else
+											self.inMouseLockedMode = isShift
+										end
+										if type(self.SetMouseLockOffset) == "function" then
+											self:SetMouseLockOffset(isShift and Vector3.new(1.75, 0, 0) or Vector3.zero)
+										end
+									end)
+								end
+							end
+						end
 						if freeMouse then
 							setMouseBehavior(Default)
 							return
 						end
+						if forceLockCenter or (camFreeze and (self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked())) then
+							setMouseBehavior(LockCenter)
+							if (not rotate or camFreeze) and UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
+							return
+						end
+						if camFreeze then
+							setMouseBehavior(Default)
+							return
+						end
 						local res = orig(self, ...)
-						if not rotate and UserGameSettings and (self.inFirstPerson or self.inMouseLockedMode) then
-							pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+						local lockedNow = self.inFirstPerson or self.inMouseLockedMode or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+						if lockedNow then
+							setMouseBehavior(LockCenter)
+							if UserGameSettings then
+								local wantRot = (rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+								pcall(function() UserGameSettings.RotationType = wantRot end)
+							end
+						elseif UIS.MouseBehavior == LockCenter then
+							setMouseBehavior(Default)
+							if UserGameSettings then
+								pcall(function() UserGameSettings.RotationType = Enum.RotationType.MovementRelative end)
+							end
 						end
 						return res
+					end
+				end)
+				if type(BaseCamera.CalculateNewLookCFrameFromArg) == "function" then
+					patch(BaseCamera, "CalculateNewLookCFrameFromArg", function(orig)
+						return function(self, suppliedLookVector, rotateInput, ...)
+							if camFreeze then rotateInput = Vector2.zero end
+							return orig(self, suppliedLookVector, rotateInput, ...)
+						end
+					end)
+				end
+			end
+		end
+		local classicCam = camMod:FindFirstChild("ClassicCamera")
+		if classicCam then
+			local okC, ClassicCamera = pcall(require, classicCam)
+			if okC and type(ClassicCamera) == "table" and type(ClassicCamera.Update) == "function" then
+				patch(ClassicCamera, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then activeCamCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -2176,15 +2315,30 @@ do
 		if zoomMod then
 			local okR, Zoom = pcall(require, zoomMod)
 			if okR and type(Zoom) == "table" then
+				zoomModTbl = Zoom
 				patch(Zoom, "Update", function(orig)
 					return function(renderDt, ...)
-						if snapUntil > 0 then
-							if os.clock() <= snapUntil and type(renderDt) == "number" then
-								renderDt = renderDt * 1000000
+						if snapZoom then
+							snapZoom = false
+							local res = orig(100, ...)
+							if type(Zoom.ReleaseSpring) == "function" then
+								pcall(Zoom.ReleaseSpring)
 							end
-							snapUntil = 0
+							return res
 						end
 						return orig(renderDt, ...)
+					end
+				end)
+			end
+		end
+		local transMod = camMod:FindFirstChild("TransparencyController")
+		if transMod then
+			local okT, TC = pcall(require, transMod)
+			if okT and type(TC) == "table" and type(TC.Update) == "function" then
+				patch(TC, "Update", function(orig)
+					return function(self, ...)
+						if type(self) == "table" then transparencyCtrl = self end
+						return orig(self, ...)
 					end
 				end)
 			end
@@ -2197,6 +2351,17 @@ do
 			and not table.find(zoomControllers, t) then
 			zoomControllers[#zoomControllers + 1] = t
 		end
+		if type(rawget(t, "activeCameraController")) == "table"
+			or type(rawget(t, "activeTransparencyController")) == "table"
+			or type(rawget(t, "activeMouseLockController")) == "table" then
+			cameras = t
+			if type(rawget(t, "activeTransparencyController")) == "table" then
+				transparencyCtrl = rawget(t, "activeTransparencyController")
+			end
+		end
+		if not transparencyCtrl and rawget(t, "transparencyDirty") ~= nil and type(rawget(t, "cachedParts")) == "table" then
+			transparencyCtrl = t
+		end
 		if not mouseLockCtrl then
 			local amc = rawget(t, "activeMouseLockController")
 			if type(amc) == "table" then
@@ -2207,7 +2372,7 @@ do
 			end
 		end
 	end
-	local GC_KEYS = { "currentSubjectDistance", "activeMouseLockController", "isMouseLocked" }
+	local GC_KEYS = { "currentSubjectDistance", "activeCameraController", "activeTransparencyController", "activeMouseLockController", "isMouseLocked", "transparencyDirty" }
 	local function scanFiltered()
 		for _, key in ipairs(GC_KEYS) do
 			local found = Env.filtergc("table", { Keys = { key } })
@@ -2241,57 +2406,81 @@ do
 		log(#zoomControllers .. " zoom controller(s) found")
 	end
 	local function resolve()
-		if cameras then return cameras end
+		if cameras and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil) then
+			return cameras
+		end
 		local now = os.clock()
-		if now - lastResolveTry < 1 then return nil end
+		if now - lastResolveTry < 1 then return cameras end
 		lastResolveTry = now
 		local ps = LocalPlayer:FindFirstChild("PlayerScripts")
 		local pm = ps and ps:FindFirstChild("PlayerModule")
-		if not pm then return nil end
+		if not pm then return cameras end
+		applyPatches(pm)
 		local ok, mod = pcall(require, pm)
-		if not ok or type(mod) ~= "table" then return nil end
+		if not ok or type(mod) ~= "table" then return cameras end
 		local cams
 		pcall(function()
 			if type(mod.GetCameras) == "function" then cams = mod:GetCameras() end
 			if not cams and type(mod.cameras) == "table" then cams = mod.cameras end
 		end)
-		if cams then
+		if type(cams) == "table" and (rawget(cams, "activeCameraController") ~= nil or rawget(cams, "activeTransparencyController") ~= nil or rawget(cams, "activeMouseLockController") ~= nil) then
 			cameras = cams
-			applyPatches(pm)
 			if not mouseLockCtrl and type(cams.activeMouseLockController) == "table" then
 				mouseLockCtrl = cams.activeMouseLockController
+			end
+			if not transparencyCtrl and type(cams.activeTransparencyController) == "table" then
+				transparencyCtrl = cams.activeTransparencyController
 			end
 		end
 		return cameras
 	end
 	local function activeController()
 		local cams = resolve()
-		local ctrl = cams and cams.activeCameraController
+		local ctrl = activeCamCtrl or (cams and cams.activeCameraController)
 		if type(ctrl) == "table" then return ctrl end
-		return nil
+		for _, zc in ipairs(zoomControllers) do
+			if rawget(zc, "enabled") == true then return zc end
+		end
+		return zoomControllers[1]
+	end
+	local function getTransparencyController()
+		if transparencyCtrl then return transparencyCtrl end
+		local cams = resolve()
+		if cams and type(cams.activeTransparencyController) == "table" then
+			transparencyCtrl = cams.activeTransparencyController
+		end
+		return transparencyCtrl
 	end
 	Bridge.Controller = activeController
 	function Bridge.Init()
+		on(UIS:GetPropertyChangedSignal("MouseBehavior"), function()
+			if forceLockCenter and not freeMouse and not (GuiService and GuiService.MenuIsOpen) and UIS.MouseBehavior ~= LockCenter then
+				pcall(function() UIS.MouseBehavior = LockCenter end)
+			end
+		end)
 		task.spawn(scanGC)
 		task.spawn(function()
 			local t0 = os.clock()
-			while not Janitor.unloading and not resolve() and os.clock() - t0 < 120 do
+			while not Janitor.unloading and not activeController() and os.clock() - t0 < 120 do
 				task.wait(0.5)
 			end
-			if not cameras and not Janitor.unloading then
+			if not activeController() and not Janitor.unloading then
 				warnf("Could not find the game's PlayerModule, zoom/shiftlock syncing is limited.")
 			end
 		end)
 	end
 	function Bridge.GetZoom()
 		local ctrl = activeController()
+		if ctrl and ctrl.inFirstPerson == true then
+			return 0.5
+		end
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local ok, z = pcall(zoomModTbl.GetZoomRadius)
+			if ok and type(z) == "number" and z == z and z > 0 then return z end
+		end
 		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
 			local ok, z = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
 			if ok and type(z) == "number" and z == z then return z end
-		end
-		for _, zc in ipairs(zoomControllers) do
-			local ok, z = pcall(zc.GetCameraToSubjectDistance, zc)
-			if ok and type(z) == "number" and z == z and z ~= 12.5 then return z end
 		end
 		local cam = workspace.CurrentCamera
 		if cam then
@@ -2299,27 +2488,73 @@ do
 		end
 		return 12.5
 	end
+	local function forEachCamController(fn)
+		local seen = {}
+		local function visit(c)
+			if type(c) == "table" and not seen[c] then
+				seen[c] = true
+				gameCall(fn, c)
+			end
+		end
+		visit(activeCamCtrl)
+		local cams = resolve()
+		if cams then visit(cams.activeCameraController) end
+		for _, zc in ipairs(zoomControllers) do visit(zc) end
+	end
 	function Bridge.RemoveZoomSpring()
-		snapUntil = os.clock() + 0.25
+		snapZoom = true
+		if zoomModTbl and type(zoomModTbl.Update) == "function" then
+			local cam = workspace.CurrentCamera
+			gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
+		end
 	end
 	function Bridge.SetZoom(zoom, static)
 		if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
-		if static then Bridge.RemoveZoomSpring() end
+		local targetZ = zoom < FIRST_PERSON and 0.5 or zoom
 		local ctrl = activeController()
-		if ctrl and type(ctrl.SetCameraToSubjectDistance) == "function" then
-			local okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
-			local same = okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4
-				and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
-			if not same then gameCall(ctrl.SetCameraToSubjectDistance, ctrl, zoom) end
+		local curR
+		if zoomModTbl and type(zoomModTbl.GetZoomRadius) == "function" then
+			local okR, r = pcall(zoomModTbl.GetZoomRadius)
+			if okR and type(r) == "number" and r == r then curR = r end
 		end
-		for _, zc in ipairs(zoomControllers) do
-			if zc ~= ctrl then
-				local okG, cur = pcall(zc.GetCameraToSubjectDistance, zc)
-				if not (okG and type(cur) == "number" and math.abs(cur - zoom) < 1e-4) then
-					gameCall(zc.SetCameraToSubjectDistance, zc, zoom)
+		local okG, cur = false, nil
+		if ctrl and type(ctrl.GetCameraToSubjectDistance) == "function" then
+			okG, cur = pcall(ctrl.GetCameraToSubjectDistance, ctrl)
+		end
+		local checkDist = curR or (okG and cur)
+		local same = not static and type(checkDist) == "number" and math.abs(checkDist - targetZ) < 1e-3
+			and ctrl ~= nil
+			and not (zoom < FIRST_PERSON and ctrl.inFirstPerson == false)
+			and not (zoom >= FIRST_PERSON and ctrl.inFirstPerson == true)
+		if same then return end
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
+		end
+		forEachCamController(function(c)
+			if rawget(c, "currentSubjectDistance") ~= nil then
+				c.currentSubjectDistance = targetZ
+			end
+			if type(c.SetCameraToSubjectDistance) == "function" then
+				c:SetCameraToSubjectDistance(targetZ)
+			end
+			if zoom < FIRST_PERSON then
+				if type(c.EnterFirstPerson) == "function" then
+					c:EnterFirstPerson()
+				elseif rawget(c, "inFirstPerson") ~= nil then
+					c.inFirstPerson = true
+				end
+			elseif c.inFirstPerson then
+				if type(c.LeaveFirstPerson) == "function" then
+					c:LeaveFirstPerson()
+				else
+					c.inFirstPerson = false
 				end
 			end
+		end)
+		if zoomModTbl and type(zoomModTbl.SetZoomParameters) == "function" then
+			pcall(zoomModTbl.SetZoomParameters, targetZ, 0)
 		end
+		if static then Bridge.RemoveZoomSpring() end
 	end
 	local function collectGhostParts(char)
 		local list = {}
@@ -2330,46 +2565,67 @@ do
 		end
 		return list
 	end
-	function Bridge.UpdateGhost(zoom, dt)
+	function Bridge.UpdateGhost(zoom, dt, snap)
 		local char = LocalPlayer.Character
 		if not char then return end
-		zoom = tonumber(zoom) or 12.5
+		local dist = tonumber(zoom) or 12.5
+		local cam = workspace.CurrentCamera
+		if cam then
+			local head = char:FindFirstChild("Head")
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			local focusPos = (head and head.Position) or (hrp and (hrp.Position + Vector3.new(0, 1.5, 0))) or cam.Focus.Position
+			local camDist = (cam.CFrame.Position - focusPos).Magnitude
+			if camDist < dist then dist = camDist end
+		end
 		local target = 0
-		if zoom < 2 then target = 1 - (zoom - 0.5) / 1.5 end
-		if target < 0.5 then target = 0 end
+		if dist < 2 then
+			target = 1 - (dist - 0.5) / 1.5
+			if target < 0.5 then target = 0 end
+		end
 		local value = target
-		if ghost.last ~= nil then
+		if not snap and ghost.last ~= nil and not (target == 1 and ghost.last >= 0.95) then
 			local maxDelta = 2.8 * (dt or 0.016)
 			value = ghost.last + clampn(target - ghost.last, -maxDelta, maxDelta)
 		end
 		value = clampn(math.floor(value * 100 + 0.5) / 100, 0, 1)
 		ghost.tick = ghost.tick + 1
-		local rebuild = ghost.char ~= char or ghost.tick % 60 == 1
+		local rebuild = snap or ghost.char ~= char or ghost.tick % 60 == 1
 		if rebuild then
 			ghost.char = char
 			ghost.parts = collectGhostParts(char)
 		end
-		if rebuild or value ~= ghost.last then
-			for _, part in ipairs(ghost.parts) do
-				if part.Parent then part.LocalTransparencyModifier = value end
+		for _, part in ipairs(ghost.parts) do
+			if part.Parent and part.LocalTransparencyModifier ~= value then
+				part.LocalTransparencyModifier = value
 			end
+		end
+		local tc = getTransparencyController()
+		if tc then
+			tc.lastTransparency = value
+			tc.transparencyDirty = false
 		end
 		ghost.last = value
 		ghost.active = true
 	end
-	function Bridge.ResetGhost()
-		if not ghost.active then return end
+	function Bridge.ResetGhost(keepCurrent)
+		if not ghost.active then
+			local tc = getTransparencyController()
+			if tc then tc.transparencyDirty = true end
+			return
+		end
 		ghost.active = false
+		local lastVal = ghost.last
 		ghost.last = nil
-		for _, part in ipairs(ghost.parts) do
-			if part.Parent then part.LocalTransparencyModifier = 0 end
+		if not keepCurrent then
+			for _, part in ipairs(ghost.parts) do
+				if part.Parent then part.LocalTransparencyModifier = 0 end
+			end
 		end
 		ghost.parts = {}
 		pcall(function()
-			local cams = resolve()
-			local tc = cams and cams.activeTransparencyController
+			local tc = getTransparencyController()
 			if tc then
-				tc.lastTransparency = nil
+				tc.lastTransparency = keepCurrent and lastVal or nil
 				tc.transparencyDirty = true
 			end
 		end)
@@ -2395,17 +2651,67 @@ do
 		if not mouseObj then pcall(function() mouseObj = LocalPlayer:GetMouse() end) end
 		return mouseObj ~= nil and mouseObj.Icon == "rbxasset://textures/MouseLockedCursor.png"
 	end
+	function Bridge.SyncShiftlockToCamera()
+		local lctrl = lockController()
+		local isLocked = Bridge.IsShiftlocked()
+		local off = Vector3.zero
+		if isLocked then
+			if lctrl and type(lctrl.GetMouseLockOffset) == "function" then
+				local okO, v = gameGet(lctrl.GetMouseLockOffset, lctrl)
+				if okO and typeof(v) == "Vector3" then off = v else off = Vector3.new(1.75, 0, 0) end
+			else
+				off = Vector3.new(1.75, 0, 0)
+			end
+		end
+		forEachCamController(function(cctrl)
+			if type(cctrl.SetIsMouseLocked) == "function" then
+				cctrl:SetIsMouseLocked(isLocked)
+			elseif rawget(cctrl, "inMouseLockedMode") ~= nil then
+				cctrl.inMouseLockedMode = isLocked
+			end
+			if type(cctrl.SetMouseLockOffset) == "function" then
+				cctrl:SetMouseLockOffset(off)
+			end
+		end)
+	end
 	function Bridge.ShiftlockSwitch()
 		local ctrl = lockController()
 		if not ctrl then return end
-		if type(ctrl.OnMouseLockToggled) == "function" then
-			gameCall(ctrl.OnMouseLockToggled, ctrl)
-		elseif type(ctrl.DoMouseLockSwitch) == "function" then
+		if type(ctrl.DoMouseLockSwitch) == "function" then
 			local wasBlocked = shiftlockBlocked
 			shiftlockBlocked = false
 			gameCall(ctrl.DoMouseLockSwitch, ctrl, "MouseLockSwitchAction", Enum.UserInputState.Begin, game)
 			shiftlockBlocked = wasBlocked
+		elseif type(ctrl.OnMouseLockToggled) == "function" then
+			gameCall(ctrl.OnMouseLockToggled, ctrl)
 		end
+		Bridge.SyncShiftlockToCamera()
+	end
+	function Bridge.RestoreCameraAfterTest(zoom, wantShiftlock)
+		pendingRestore = { zoom = zoom, shiftlock = wantShiftlock }
+		local function applyRestore()
+			if wantShiftlock ~= nil then
+				local curShift = Bridge.IsShiftlocked() and 1 or 0
+				if curShift ~= wantShiftlock then Bridge.ShiftlockSwitch() end
+			end
+			Bridge.SyncShiftlockToCamera()
+			if type(zoom) == "number" and zoom > 0 then
+				Bridge.SetZoom(zoom, true)
+			end
+			Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		end
+		applyRestore()
+		task.defer(function()
+			if Core.GetMode and Core.GetMode() == 1 then
+				applyRestore()
+				task.delay(0.05, function()
+					if Core.GetMode and Core.GetMode() == 1 then
+						pendingRestore = nil
+						applyRestore()
+					end
+				end)
+			end
+		end)
 	end
 	function Bridge.LockShiftlock(lock)
 		shiftlockBlocked = lock and true or false
@@ -2429,6 +2735,11 @@ do
 		end
 		return Bridge.GetZoom() < FIRST_PERSON
 	end
+	function Bridge.SetCameraFreeze(freeze, forceLock, freezeZoom)
+		camFreeze = freeze and true or false
+		camFreezeZoom = freezeZoom and true or false
+		forceLockCenter = forceLock and true or false
+	end
 	function Bridge.SetFreeMouse(free)
 		free = free and true or false
 		if freeMouse == free then return end
@@ -2442,23 +2753,29 @@ do
 	function Bridge.IsMouseFree() return freeMouse end
 	local function rotationFor(locked)
 		if not UserGameSettings then return end
-		local want = (locked and rotate) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
+		local want = (locked and rotate and not camFreeze) and Enum.RotationType.CameraRelative or Enum.RotationType.MovementRelative
 		if UserGameSettings.RotationType ~= want then
 			pcall(function() UserGameSettings.RotationType = want end)
 		end
 	end
-	function Bridge.GuardMouse(modalOpen)
-		if freeMouse then
-			setMouseBehavior(Default)
+	function Bridge.GuardMouse(modalOpen, forceLocked)
+		if freeMouse or modalOpen or (GuiService and GuiService.MenuIsOpen) then
+			if freeMouse or modalOpen then setMouseBehavior(Default) end
 			return
 		end
-		if modalOpen or (GuiService and GuiService.MenuIsOpen) then return end
 		local cam = workspace.CurrentCamera
 		if not cam or cam.CameraType == Scriptable then return end
-		local locked = Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
-		if locked and UIS.MouseBehavior == Default then
-			setMouseBehavior(LockCenter)
+		local locked = forceLocked or forceLockCenter or Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+		if locked then
+			if UIS.MouseBehavior ~= LockCenter then setMouseBehavior(LockCenter) end
 			rotationFor(true)
+		else
+			rotationFor(false)
+			if camFreeze then
+				if UIS.MouseBehavior ~= Default then setMouseBehavior(Default) end
+			elseif UIS.MouseBehavior == LockCenter then
+				setMouseBehavior(Default)
+			end
 		end
 	end
 	function Bridge.RefreshMouse(modalOpen)
@@ -2478,9 +2795,11 @@ do
 	function Bridge.Restore()
 		pcall(Bridge.ResetGhost)
 		shiftlockBlocked = false
-		snapUntil = 0
+		snapZoom = false; camFreezeZoom = false
 		rotate = true
 		freeMouse = false
+		camFreeze = false
+		forceLockCenter = false
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()
@@ -2788,7 +3107,7 @@ do
 	function InputSys.FrameLocked(fr)
 		if not fr then return false end
 		if fr.ShiftLock == 1 then return true end
-		if (fr.Zoom or 99) < 1 then return true end
+		if (fr.Zoom or 99) <= 0.55 then return true end
 		return replay.state[ID_M2] == true
 	end
 	function InputSys.FramePoint(fr)
@@ -2991,7 +3310,7 @@ do
 		local cx, cy, vp = viewportCenter()
 		local px, py = InputSys.FramePoint(fr)
 		local locked = InputSys.FrameLocked(fr)
-		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) < 1
+		local centered = fr.ShiftLock == 1 or (fr.Zoom or 99) <= 0.55
 		if locked then
 			if not st.wasLocked then
 				if centered then st.anchorX, st.anchorY = cx, cy
@@ -3044,24 +3363,40 @@ do
 			if st.fake or st.realHidden then Cursor.Reset() end
 			return
 		end
+		local isShift = (fr and fr.ShiftLock == 1) or Bridge.IsShiftlocked()
+		local isFP = (fr and (tonumber(fr.Zoom) or 99) <= 0.55) or Bridge.IsInFirstPerson()
 		local mb = UIS.MouseBehavior
-		local locked = mb ~= Default and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
+		local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
+		local locked = (centered or mb ~= Default) and not Bridge.IsMouseFree() and not (menuOpen and menuOpen())
 		if locked then
 			if not ensure() then return end
-			local m = UIS:GetMouseLocation()
-			setIcon(Bridge.IsShiftlocked() and LOCKED or ARROW)
-			if not st.fake then
+			if centered then
+				local cx, cy = viewportCenter()
+				st.anchorX, st.anchorY = cx, cy
+			elseif not st.wasLocked then
+				local m = UIS:GetMouseLocation()
+				st.anchorX, st.anchorY = m.X, m.Y
+			end
+			st.wasLocked = true
+			setIcon(isShift and LOCKED or ARROW)
+			if centered then
+				st.hideAt = nil
+				hideReal()
+			elseif not st.fake then
 				st.hideAt = frameNo + HIDE_DELAY
 			end
-			showFakeAt(m.X, m.Y)
+			showFakeAt(st.anchorX, st.anchorY)
 			if st.hideAt and frameNo >= st.hideAt then
 				st.hideAt = nil
 				hideReal()
 			end
-		elseif st.fake or st.realHidden then
-			showReal()
-			hideFake()
-			st.hideAt = nil
+		else
+			st.wasLocked = false
+			if st.fake or st.realHidden then
+				showReal()
+				hideFake()
+				st.hideAt = nil
+			end
 		end
 	end
 	Janitor.add(function() Cursor.Reset() end)
@@ -3136,6 +3471,8 @@ do
 		local currentAnimTrack = nil
 		local currentAnimKeyframeHandler = nil
 		local currentAnimSpeed = 1.0
+		local function hack() return SpeedHack.scale end
+		local animClock = 0
 		local animTable = {}
 		for name, list in pairs(ANIM_DEFS) do
 			local t = { count = 0, totalWeight = 0 }
@@ -3184,7 +3521,7 @@ do
 		function setAnimationSpeed(speed, TASanim)
 			if speed ~= currentAnimSpeed and (TASanim or LockAnimations == false) then
 				currentAnimSpeed = speed
-				if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed) end
+				if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed * hack()) end
 			end
 		end
 		function keyFrameReachedFunc(frameName)
@@ -3216,14 +3553,16 @@ do
 				if not TASanim and AnimToNumber[animName] then
 					table.insert(FrameAnims, { AnimToNumber[animName], transitionTime })
 				end
+				local k = hack()
 				if currentAnimTrack ~= nil then
-					currentAnimTrack:Stop(transitionTime)
+					currentAnimTrack:Stop(transitionTime / k)
 					currentAnimTrack:Destroy()
 				end
 				currentAnimSpeed = 1.0
 				currentAnimTrack = loaderOf(humanoid):LoadAnimation(anim)
 				currentAnimTrack.Priority = Enum.AnimationPriority.Core
-				currentAnimTrack:Play(transitionTime)
+				currentAnimTrack:Play(transitionTime / k)
+				if k ~= 1 then currentAnimTrack:AdjustSpeed(k) end
 				currentAnim = animName
 				currentAnimInstance = anim
 				if currentAnimKeyframeHandler ~= nil then
@@ -3248,9 +3587,11 @@ do
 					toolAnimTrack:Destroy()
 					transitionTime = 0
 				end
+				local k = hack()
 				toolAnimTrack = loaderOf(humanoid):LoadAnimation(anim)
 				if priority then toolAnimTrack.Priority = priority end
-				toolAnimTrack:Play(transitionTime)
+				toolAnimTrack:Play(transitionTime / k)
+				if k ~= 1 then toolAnimTrack:AdjustSpeed(k) end
 				toolAnimName = animName
 				toolAnimInstance = anim
 				if currentToolAnimKeyframeHandler ~= nil then currentToolAnimKeyframeHandler:Disconnect() end
@@ -3273,7 +3614,7 @@ do
 			return oldAnim
 		end
 		local function onRunning(speed)
-			speed = speed / getRigScale()
+			speed = speed / getRigScale() / hack()
 			if speed > 0.01 then
 				playAnimation("walk", 0.1, Humanoid)
 				if currentAnimInstance and currentAnimInstance.AnimationId == "http://www.roblox.com/asset/?id=180426354" then
@@ -3289,7 +3630,7 @@ do
 		end
 		local function onDied() pose = "Dead" end
 		local function onJumping() playAnimation("jump", 0.1, Humanoid); jumpAnimTime = jumpAnimDuration; pose = "Jumping" end
-		local function onClimbing(speed) speed = speed / getRigScale(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
+		local function onClimbing(speed) speed = speed / getRigScale() / hack(); playAnimation("climb", 0.1, Humanoid); setAnimationSpeed(speed / 12.0, false); pose = "Climbing" end
 		local function onGettingUp() pose = "GettingUp" end
 		local function onFreeFall() if jumpAnimTime <= 0 then playAnimation("fall", fallTransitionTime, Humanoid) end pose = "FreeFall" end
 		local function onFallingDown() pose = "FallingDown" end
@@ -3391,6 +3732,11 @@ do
 			end
 		end
 		function self.Lock(lock) LockAnimations = lock end
+		function self.Rescale()
+			local k = hack()
+			if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed * k) end
+			if toolAnimTrack then toolAnimTrack:AdjustSpeed(k) end
+		end
 		function self.Destroy()
 			if not self.alive then return end
 			self.alive = false
@@ -3414,13 +3760,15 @@ do
 		end
 		connect(RunService.Heartbeat, function(deltaTime)
 			if handedOut or #FrameAnims > 0 then FrameAnims = {}; handedOut = false end
-			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - deltaTime end
+			local gdt = deltaTime * hack()
+			animClock = animClock + gdt
+			if jumpAnimTime > 0 then jumpAnimTime = jumpAnimTime - gdt end
 		end)
 		task.spawn(function()
 			while self.alive and Figure.Parent ~= nil do
 				task.wait(0.1)
 				if not self.alive then break end
-				pcall(move, os.clock())
+				pcall(move, animClock)
 			end
 		end)
 		return self
@@ -3503,7 +3851,8 @@ do
 	local hasMask, addMask = bit32.btest, bit32.bor
 	local RADIUS         = CFG.Radius or 300
 	local ALWAYS         = CFG.AlwaysRadius or 30
-	local FULL_EVERY     = CFG.FullEvery or 600
+	local FULL_EVERY     = CFG.FullEvery or 2400
+	local FULL_SECS      = CFG.FullSeconds or 10
 	local VIS_EVERY      = CFG.VisEvery or 6
 	local POS_TOL        = CFG.PosTolerance or 0.015
 	local POS_TOL2       = POS_TOL * POS_TOL
@@ -3520,6 +3869,7 @@ do
 	local F_VEL, F_SPIN, F_SKIP = 256, 512, 1024
 	local K_KEY, K_ROT, K_LV, K_AV = 1, 2, 4, 8
 	local K_TR, K_CC, K_CCV, K_COL, K_SZ, K_MAT, K_DROP = 16, 32, 64, 128, 256, 512, 1024
+	local K_CK1, K_CK2 = 2048, 4096
 	local Reg = { keyToId = {}, idToKey = {}, nextId = 1, used = {} }
 	CO.Reg = Reg
 	CO.dataVersion = 0
@@ -3537,12 +3887,15 @@ do
 	local orig, origVel = {}, {}
 	local frozen = false
 	local frameNo, chainNo, forceFull = 0, 0, true
-	local recGen, lastT, visCursor = 0, nil, 1
+	local newChain = true
+	local recGen, visCursor = 0, 1
+	local lastFullF, lastFullT = 0, -1e9
 	local play = {
 		cur = {}, dyn = {}, dropped = {}, active = false, kind = "test",
 		data = nil, version = -1, frame = nil, sweep = 0,
 		ck = {}, ckN = 0, ckData = nil, ckVer = -1,
 		t = 0, curT = 0, nextT = 0, next = {}, nextFor = nil,
+		run = { 0, 0, 0 }, cv = { 0, 0, 0 }, nv = { 0, 0, 0 }, ckRun = {},
 		lost = {},
 	}
 	CO.play = play
@@ -3737,13 +4090,14 @@ do
 		local cf0 = part.CFrame
 		return {
 			rc = { cf0:GetComponents() }, rcf = cf0, pd = false, vd = true, an = part.Anchored, rad = 0, tr = 0,
-			rest = true, emaZ = true, propsOff = false,
+			propsOff = false,
 			rv = rv, cp = cp,
 			kp = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 			lq = { 0, 0, 0 }, aq = { 0, 0, 0 },
 			pv = { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-			dyn = false, kT = 0, moved = false, needBase = true, chain = -1, gen = 0,
-			prevCF = nil, prevFrame = -10, emaL = nil, emaA = nil,
+			dyn = false, kT = 0, clk = 3, moved = false, needBase = true, chain = -1, gen = 0,
+			prevCF = nil, prevFrame = -10,
+			fit = { 0, 0, 0, 0 }, esp = { 0, 0, 0, 0 }, hcf = {}, h1 = {}, h3 = {}, h4 = {}, hp = 0, hn = 0,
 		}
 	end
 	local function listRemove(arr, pos, id)
@@ -3986,20 +4340,137 @@ do
 		end
 		return CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
 	end
+	local function buildPose3(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9, lx, ly, lz, wx, wy, wz, dt)
+		if dt and dt > 0 then
+			if dt > MAX_EXTRAP then dt = MAX_EXTRAP end
+			local w2 = wx * wx + wy * wy + wz * wz
+			if w2 > 1e-10 then
+				local mag = sqrt(w2)
+				local turn = CFrame.fromAxisAngle(V3(wx / mag, wy / mag, wz / mag), mag * dt)
+				local ox, oy, oz = (ly * wz - lz * wy) / w2, (lz * wx - lx * wz) / w2, (lx * wy - ly * wx) / w2
+				local along = (lx * wx + ly * wy + lz * wz) / w2 * dt
+				local q = turn * V3(ox, oy, oz)
+				return turn * CF(0, 0, 0, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+					+ V3(x - ox + q.X + wx * along, y - oy + q.Y + wy * along, z - oz + q.Z + wz * along)
+			end
+			return CF(x + lx * dt, y + ly * dt, z + lz * dt, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+		end
+		return CF(x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9)
+	end
+	local function objTime(c, t)
+		if c == 0 then return t end
+		local v0, v1 = play.cv[c], play.nv[c]
+		local span = play.nextT - play.curT
+		local a = 0
+		if span > 1e-6 then
+			a = (t - play.curT) / span
+			if a < 0 then a = 0 elseif a > 1 then a = 1 end
+		end
+		return v0 + (v1 - v0) * a
+	end
 	local function poseAt(s, t)
 		local dt = nil
-		if t and s[48] == 1 then dt = t - s[45] end
-		return buildPose(
+		if t and s[48] == 1 then dt = objTime(s[47], t) - s[45] end
+		local build = buildPose
+		if s[49] == 3 then build = buildPose3 end
+		return build(
 			s[1] / 1000, s[2] / 1000, s[3] / 1000,
 			s[4] / 1000, s[5] / 1000, s[6] / 1000, s[7] / 1000, s[8] / 1000, s[9] / 1000, s[10] / 1000, s[11] / 1000, s[12] / 1000,
 			s[36] / 1000, s[37] / 1000, s[38] / 1000, s[39] / 1000, s[40] / 1000, s[41] / 1000, dt)
 	end
+	local function twistFrom(c0, c1, dt)
+		if not dt or dt <= 1e-5 then return ZV, ZV end
+		local d = c1 * c0:Inverse()
+		local tr = d.Position
+		local axis, ang = d:ToAxisAngle()
+		if ang == ang and ang > 1e-6 and axis.X == axis.X and axis.Magnitude > 0.5 then
+			local n = axis.Unit
+			local w = n * (ang / dt)
+			local tpar = n * tr:Dot(n)
+			local tperp = tr - tpar
+			local ctr = (tperp + n:Cross(tperp) / math.tan(ang * 0.5)) * 0.5
+			return tpar / dt + w:Cross(c1.Position - ctr), w
+		end
+		return tr / dt, ZV
+	end
 	local A, P, K = {}, {}, {}
-	local function recordObject(out, id, part, s, now, dtT)
+	local CLK, DCLK, lastCLK, haveD = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, false
+	local base = { skip = 0, real = 0, wall = 0, rawS = nil }
+	local run = { 0, 0, 0 }
+	local usedPrev = { false, false, false }
+	local lastRec, lastRecVer = nil, -1
+	local CLOCK_FLAG = { 0, K_CK1, K_CK2, K_CK1 + K_CK2 }
+	local H_N = 4
+	local SIM_HZ, WALL_HZ = 240, 50000
+	local CARRY_BIT = { 8, 16, 32 }
+	local function ringPush(s, cf, c1, c3, c4)
+		local i = s.hp % H_N + 1
+		s.hp = i
+		s.hcf[i], s.h1[i], s.h3[i], s.h4[i] = cf, c1, c3, c4
+		if s.hn < H_N then s.hn = s.hn + 1 end
+	end
+	local function trackScripted(s, cf)
+		local prev = s.prevCF
+		if not (prev and haveD and s.prevFrame == frameNo - 1) then
+			s.hn = 0
+			ringPush(s, cf, CLK[1], CLK[3], CLK[4])
+			return
+		end
+		local m = 0
+		if cf ~= prev then
+			local d = cf * prev:Inverse()
+			local _, ang = d:ToAxisAngle()
+			if ang == ang and ang > 1e-6 then
+				local r = s.rad
+				if r < 1 then r = 1 end
+				m = ang * r
+			end
+			m = m + d.Position.Magnitude
+		end
+		local fit, esp = s.fit, s.esp
+		for c = 1, 4 do
+			local dt = DCLK[c]
+			if dt > 1e-6 and dt < 0.25 then
+				local sp = m / dt
+				local e = esp[c]
+				if e > 0 then
+					local dev = (sp - e) / e
+					if dev > 1 then dev = 1 elseif dev < -1 then dev = -1 end
+					fit[c] = fit[c] * 0.9 + dev * dev * 0.1
+					esp[c] = e * 0.7 + sp * 0.3
+				elseif sp > 0 then
+					esp[c] = sp
+				end
+			elseif m > 0 and dt <= 1e-6 then
+				fit[c] = fit[c] * 0.9 + 0.1
+			end
+		end
+		if s.hn == 0 then ringPush(s, prev, lastCLK[1], lastCLK[3], lastCLK[4]) end
+		ringPush(s, cf, CLK[1], CLK[3], CLK[4])
+	end
+	local SCRIPT_CLOCKS = { 1, 3, 4 }
+	local function bestClock(s)
+		local fit, cur = s.fit, s.clk
+		if cur == 2 then cur = 3 end
+		local best = cur
+		for _, c in ipairs(SCRIPT_CLOCKS) do
+			if fit[c] < fit[best] then best = c end
+		end
+		if best ~= cur and fit[best] < fit[cur] * 0.7 then return best end
+		return cur
+	end
+	local function scriptedTwist(s, cf, c)
+		local n = s.hn
+		if n < 2 then return ZV, ZV end
+		local j = (s.hp - n) % H_N + 1
+		local hc = s.h3
+		if c == 1 then hc = s.h1 elseif c == 4 then hc = s.h4 end
+		return twistFrom(s.hcf[j], cf, CLK[c] - hc[j])
+	end
+	local function recordObject(out, id, part, s)
 		if s.gen ~= recGen then
 			s.gen = recGen
-			s.prevCF, s.emaL, s.emaA = nil, nil, nil
-			s.rest, s.emaZ = true, true
+			s.prevCF, s.hn = nil, 0
 		end
 		local cf = part.CFrame
 		local cp = s.cp
@@ -4013,30 +4484,12 @@ do
 			s.propsOff = off
 		end
 		local anchored = s.an
-		if not s.moved and not s.propsOff and cf == s.rcf
-			and (not anchored or (s.emaZ and (s.rest or not dtT or s.prevFrame ~= frameNo - 1))) then
-			if anchored then s.emaL, s.emaA = ZV, ZV end
-			s.prevCF, s.prevFrame, s.rest = cf, frameNo, true
+		if not s.moved and not s.propsOff and cf == s.rcf then
+			s.prevCF, s.prevFrame, s.hn = cf, frameNo, 0
 			return
 		end
-		local instL, instA = ZV, ZV
-		if anchored then
-			local prev = s.prevCF
-			if prev and dtT and s.prevFrame == frameNo - 1 and cf ~= prev then
-				instL = (cf.Position - prev.Position) / dtT
-				local axis, ang = (cf.Rotation * prev.Rotation:Inverse()):ToAxisAngle()
-				if ang == ang and ang > 1e-6 and axis.X == axis.X then instA = axis * (ang / dtT) end
-				if instL.X ~= instL.X then instL = ZV end
-			end
-			local eL, eA = s.emaL, s.emaA
-			if instL == ZV and (eL == nil or eL == ZV) then s.emaL = ZV else s.emaL = eL and eL:Lerp(instL, 0.5) or instL end
-			if instA == ZV and (eA == nil or eA == ZV) then s.emaA = ZV else s.emaA = eA and eA:Lerp(instA, 0.5) or instA end
-			s.emaZ = s.emaL == ZV and s.emaA == ZV
-		else
-			instL, instA = part.AssemblyLinearVelocity, part.AssemblyAngularVelocity
-		end
+		if anchored then trackScripted(s, cf) end
 		s.prevCF, s.prevFrame = cf, frameNo
-		s.rest = cf == s.rcf
 		local filled = false
 		if not s.moved then
 			local dev = false
@@ -4075,12 +4528,12 @@ do
 		end
 		local needKey = first
 		if not first then
-			local age = now - s.kT
 			if s.dyn then
+				local age = CLK[s.clk] - s.kT
 				if age > MAX_AGE then
 					needKey = true
 				else
-					local pc = buildPose(
+					local pc = buildPose3(
 						kp[1] / 1000, kp[2] / 1000, kp[3] / 1000,
 						kp[4] / 1000, kp[5] / 1000, kp[6] / 1000, kp[7] / 1000, kp[8] / 1000, kp[9] / 1000, kp[10] / 1000, kp[11] / 1000, kp[12] / 1000,
 						lq[1] / 1000, lq[2] / 1000, lq[3] / 1000, aq[1] / 1000, aq[2] / 1000, aq[3] / 1000, age)
@@ -4109,6 +4562,7 @@ do
 		local flags = 0
 		local rotChanged = false
 		local l1, l2, l3, a1, a2, a3 = 0, 0, 0, 0, 0, 0
+		local clk = s.clk
 		if needKey then
 			for i = 1, 12 do K[i] = floor(A[i] * 1000 + 0.5) end
 			rotChanged = first
@@ -4117,8 +4571,15 @@ do
 					if K[i] ~= kp[i] then rotChanged = true break end
 				end
 			end
-			local L, W = instL, instA
-			if anchored and s.dyn then L, W = s.emaL or instL, s.emaA or instA end
+			local L, W
+			if anchored then
+				clk = bestClock(s)
+				L, W = scriptedTwist(s, cf, clk)
+			else
+				clk = 2
+				W = part.AssemblyAngularVelocity
+				L = part:GetVelocityAtPosition(cf.Position)
+			end
 			local lm, wm = L.Magnitude, W.Magnitude
 			if lm >= V_MIN and lm < 5000 then
 				l1, l2, l3 = floor(L.X * 1000 + 0.5), floor(L.Y * 1000 + 0.5), floor(L.Z * 1000 + 0.5)
@@ -4130,6 +4591,7 @@ do
 			if rotChanged then flags = flags + K_ROT end
 			if l1 ~= 0 or l2 ~= 0 or l3 ~= 0 then flags = flags + K_LV end
 			if a1 ~= 0 or a2 ~= 0 or a3 ~= 0 then flags = flags + K_AV end
+			if flags >= K_LV then flags = flags + CLOCK_FLAG[clk] end
 		end
 		if trD then flags = flags + K_TR end
 		if ccD then flags = flags + K_CC + (cp[2] == 1 and K_CCV or 0) end
@@ -4147,7 +4609,8 @@ do
 			if a1 ~= 0 or a2 ~= 0 or a3 ~= 0 then putZig(out, a1); putZig(out, a2); putZig(out, a3) end
 			lq[1], lq[2], lq[3], aq[1], aq[2], aq[3] = l1, l2, l3, a1, a2, a3
 			s.dyn = (l1 ~= 0 or l2 ~= 0 or l3 ~= 0 or a1 ~= 0 or a2 ~= 0 or a3 ~= 0)
-			s.kT = now
+			s.clk = clk
+			s.kT = CLK[clk]
 		end
 		if trD then putZig(out, cp[1] - pv[1]); pv[1] = cp[1] end
 		if ccD then pv[2] = cp[2] end
@@ -4163,40 +4626,89 @@ do
 		s.chain = chainNo
 		Reg.used[id] = true
 	end
-	function CO.BeginRecording()
-		forceFull = true
+	function CO.BeginRecording(lastFrame)
 		recGen = recGen + 1
-		lastT = nil
 		dropQ = {}
+		haveD = false
+		local cont = lastFrame ~= nil and lastFrame == lastRec and lastRecVer == CO.dataVersion and base.rawS ~= nil
+		local rawS, rawW = time(), os.clock()
+		if cont then
+			base.skip = base.skip + (rawS - base.rawS)
+		else
+			forceFull = true
+			newChain = true
+			base.skip, base.real, base.wall = rawS, rawS, rawW
+		end
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
 	end
-	function CO.Record(playerPos, tNow)
+	function CO.Record(playerPos, tNow, simNow, wallNow, frame)
 		if not (enabled and scanDone) then return nil end
 		frameNo = frameNo + 1
-		local now = tNow or 0
-		local dtT = lastT and (now - lastT) or nil
-		lastT = now
-		if dtT and (dtT > 0.25 or dtT <= 0) then dtT = nil end
-		local full = forceFull or frameNo % FULL_EVERY == 0
+		tNow = tNow or 0
+		simNow, wallNow = simNow or tNow, wallNow or tNow
+		local val = {
+			floor((simNow - base.skip) * SIM_HZ + 0.5),
+			floor((wallNow - base.wall) * WALL_HZ + 0.5),
+			floor((simNow - base.real) * SIM_HZ + 0.5),
+		}
+		CLK[1], CLK[2], CLK[3], CLK[4] = tNow, val[1] / SIM_HZ, val[2] / WALL_HZ, val[3] / SIM_HZ
+		for c = 1, 4 do DCLK[c] = CLK[c] - lastCLK[c] end
+		local full = forceFull or frameNo - lastFullF >= FULL_EVERY or tNow - lastFullT >= FULL_SECS or tNow < lastFullT
 		forceFull = false
-		if full then chainNo = chainNo + 1 end
+		if full then
+			chainNo = chainNo + 1
+			lastFullF, lastFullT = frameNo, tNow
+		end
 		updateVisibility(playerPos, false)
-		local out = { full and 3 or 2 }
+		local body = {}
 		for id in pairs(dropQ) do
-			putVar(out, id)
-			putVar(out, K_DROP)
+			putVar(body, id)
+			putVar(body, K_DROP)
 		end
 		dropQ = {}
 		local anyDyn = false
+		local usedNow = { false, false, false }
 		for i = 1, #actArr do
 			local id = actArr[i]
 			local part, s = parts[id], S[id]
 			if part and s then
-				recordObject(out, id, part, s, now, dtT)
-				if s.dyn and s.moved then anyDyn = true end
+				recordObject(body, id, part, s)
+				if s.dyn and s.moved then
+					anyDyn = true
+					if s.clk > 1 then usedNow[s.clk - 1] = true end
+				end
 			end
 		end
-		if #out == 1 and not full and not anyDyn then return nil end
+		lastCLK[1], lastCLK[2], lastCLK[3], lastCLK[4] = CLK[1], CLK[2], CLK[3], CLK[4]
+		haveD = true
+		base.rawS = simNow
+		lastRec, lastRecVer = frame, CO.dataVersion
+		if #body == 0 and not full and not anyDyn then
+			usedPrev = usedNow
+			return nil
+		end
+		local b = full and 5 or 4
+		if full then
+			run[1], run[2], run[3] = 0, 0, 0
+			if newChain then b = b + 64 end
+			newChain = false
+		end
+		local carry = {}
+		for i = 1, 3 do
+			carry[i] = usedNow[i] or usedPrev[i]
+			if carry[i] then b = b + CARRY_BIT[i] end
+		end
+		local out = { b }
+		for i = 1, 3 do
+			if carry[i] then
+				local pred = 0
+				if i == 2 and not full then pred = floor(((frame and frame.FrameTime) or 0) * WALL_HZ + 0.5) end
+				putZig(out, val[i] - run[i] - pred)
+				run[i] = val[i]
+			end
+		end
+		table.move(body, 1, #body, #out + 1, out)
+		usedPrev = usedNow
 		return bufToString(out)
 	end
 	local function rv(str, p)
@@ -4225,6 +4737,30 @@ do
 			p = p + 1
 		end
 		return p
+	end
+	local function readClocks(str, rn, ft)
+		local b = byte(str, 1)
+		local full = b % 8 == 5
+		if full then rn[1], rn[2], rn[3] = 0, 0, 0 end
+		local fl, p = floor(b / 8), 2
+		for i = 1, 3 do
+			if fl % 2 == 1 then
+				local d
+				d, p = rz(str, p)
+				if i == 2 and not full then d = d + floor((ft or 0) * WALL_HZ + 0.5) end
+				rn[i] = rn[i] + d
+			end
+			fl = floor(fl / 2)
+		end
+		return p
+	end
+	local function bodyStart(str)
+		if byte(str, 1) >= 4 then return readClocks(str, { 0, 0, 0 }, 0) end
+		return 2
+	end
+	local function clockValues(rn, out)
+		out[1], out[2], out[3] = rn[1] / SIM_HZ, rn[2] / WALL_HZ, rn[3] / SIM_HZ
+		return out
 	end
 	local verN = 0
 	local function newState() return table.create(50, 0) end
@@ -4324,7 +4860,7 @@ do
 			end
 		end
 	end
-	local function applyPayloadV2(str, p, s, flags, tNow)
+	local function applyPayloadV2(str, p, s, flags, tNow, cvs)
 		verN = verN + 1
 		s[I_VER] = verN
 		local mask = s[I_MASK]
@@ -4348,7 +4884,14 @@ do
 			else
 				s[39], s[40], s[41] = 0, 0, 0
 			end
-			s[45] = tNow
+			if cvs then
+				local c = (hasMask(flags, K_CK1) and 1 or 0) + (hasMask(flags, K_CK2) and 2 or 0)
+				s[47], s[49] = c, 3
+				s[45] = (c == 0) and tNow or cvs[c]
+			else
+				s[47], s[49] = 0, 0
+				s[45] = tNow
+			end
 			s[48] = moving and 1 or 0
 		end
 		if hasMask(flags, K_TR) then
@@ -4377,8 +4920,14 @@ do
 		s[I_MASK] = mask
 		return p
 	end
-	local function applyV2(str, cur, touched, tNow)
+	local cvScratch = { 0, 0, 0 }
+	local function applyV2(str, cur, touched, tNow, ft)
 		local p, n = 2, #str
+		local cvs = nil
+		if byte(str, 1) >= 4 then
+			p = readClocks(str, play.run, ft)
+			cvs = clockValues(play.run, cvScratch)
+		end
 		while p <= n do
 			local id, flags
 			id, p = rv(str, p)
@@ -4390,16 +4939,16 @@ do
 			else
 				local s = cur[id]
 				if not s then s = newState(); cur[id] = s end
-				p = applyPayloadV2(str, p, s, flags, tNow)
+				p = applyPayloadV2(str, p, s, flags, tNow, cvs)
 				touched[id] = true
 			end
 		end
 	end
 	local function isFull(str)
 		local b = byte(str, 1)
-		return b == 1 or b == 3
+		return b == 1 or b == 3 or (b >= 4 and b % 8 == 5)
 	end
-	local function applyString(str, cur, touched, tNow)
+	local function applyString(str, cur, touched, tNow, ft)
 		if isFull(str) then
 			for id in pairs(cur) do
 				play.dropped[id] = true
@@ -4407,7 +4956,7 @@ do
 			end
 		end
 		if byte(str, 1) >= 2 then
-			applyV2(str, cur, touched, tNow or 0)
+			applyV2(str, cur, touched, tNow or 0, ft)
 		else
 			applyV1(str, cur, touched)
 		end
@@ -4517,9 +5066,10 @@ do
 				local d = abs(k - i)
 				if d > farD then far, farD = k, d end
 			end
-			if far then play.ck[far] = nil; play.ckN = play.ckN - 1 end
+			if far then play.ck[far], play.ckRun[far] = nil, nil; play.ckN = play.ckN - 1 end
 		end
 		play.ck[i] = cloneCur(play.cur)
+		play.ckRun[i] = { play.run[1], play.run[2], play.run[3] }
 		play.ckN = play.ckN + 1
 	end
 	local function finalize(touched)
@@ -4540,7 +5090,7 @@ do
 			local fr = data[i]
 			local str = fr and fr.CO
 			if str then
-				applyString(str, play.cur, touched, fr.TotalTime or 0)
+				applyString(str, play.cur, touched, fr.TotalTime or 0, fr.FrameTime)
 				if makeCk and (i % CK == 0 or isFull(str)) then ckPut(i) end
 			end
 		end
@@ -4552,12 +5102,25 @@ do
 		local fr, nf = data[f], data[f + 1]
 		play.curT = fr and fr.TotalTime or 0
 		play.nextT = nf and nf.TotalTime or play.curT
-		if not (nf and nf.CO) or not Settings.On("Smooth Client Objects") then return end
-		local str = nf.CO
+		local nr = { play.run[1], play.run[2], play.run[3] }
+		local nstr = nf and nf.CO
+		local np = 2
+		if nstr and byte(nstr, 1) >= 4 then np = readClocks(nstr, nr, nf.FrameTime) end
+		clockValues(nr, play.nv)
+		local nvReal = { play.nv[1], play.nv[2], play.nv[3] }
+		if nstr and byte(nstr, 1) >= 64 then
+			local span = play.nextT - play.curT
+			for c = 1, 3 do play.nv[c] = play.cv[c] + span end
+		end
+		if not nstr or not Settings.On("Smooth Client Objects") then return end
+		local str = nstr
 		if byte(str, 1) < 2 then return end
-		local p, n = 2, #str
+		local p, n = np, #str
+		local cvs = nil
+		if byte(str, 1) >= 4 then cvs = nvReal end
 		local cur = play.cur
 		local s = nextScratch
+		local nextFull = isFull(str)
 		local ok = pcall(function()
 			while p <= n do
 				local id, flags
@@ -4565,10 +5128,11 @@ do
 				flags, p = rv(str, p)
 				if not hasMask(flags, K_DROP) then
 					local base = cur[id]
-					for i = 1, 50 do s[i] = base and base[i] or 0 end
-					p = applyPayloadV2(str, p, s, flags, play.nextT)
+					local from = (not nextFull) and base or nil
+					for i = 1, 50 do s[i] = from and from[i] or 0 end
+					p = applyPayloadV2(str, p, s, flags, play.nextT, cvs)
 					if base and hasPose(base) and hasPose(s) and hasMask(flags, K_KEY) then
-						local want = poseAt(s, play.nextT)
+						local want = poseAt(s, nil)
 						local have = poseAt(base, play.nextT)
 						local dp = want.Position - have.Position
 						if dp.Magnitude < 25 then
@@ -4584,7 +5148,7 @@ do
 	end
 	local function advanceTo(data, f, touched)
 		if play.ckData ~= data or play.ckVer ~= CO.dataVersion then
-			play.ck, play.ckN = {}, 0
+			play.ck, play.ckN, play.ckRun = {}, 0, {}
 			play.ckData, play.ckVer = data, CO.dataVersion
 		end
 		local makeCk = play.kind == "show"
@@ -4601,8 +5165,11 @@ do
 			local start
 			if bestF then
 				play.cur = cloneCur(play.ck[bestF])
+				local cr = play.ckRun[bestF]
+				play.run[1], play.run[2], play.run[3] = cr[1], cr[2], cr[3]
 				start = bestF + 1
 			else
+				play.run[1], play.run[2], play.run[3] = 0, 0, 0
 				local base = f
 				local limit = math.max(1, f - 3000)
 				while base >= limit do
@@ -4618,6 +5185,7 @@ do
 			for id in pairs(play.cur) do touched[id] = true end
 			finalize(touched)
 		end
+		clockValues(play.run, play.cv)
 		if play.nextFor ~= f then computeNext(data, f) end
 	end
 	local function restoreHeld(part)
@@ -4739,8 +5307,18 @@ do
 						orig[part], origVel[part] = nil, nil
 					end
 					if not part.Anchored then
-						part.AssemblyLinearVelocity = V3(s[36] / 1000, s[37] / 1000, s[38] / 1000)
-						part.AssemblyAngularVelocity = V3(s[39] / 1000, s[40] / 1000, s[41] / 1000)
+						local L = V3(s[36] / 1000, s[37] / 1000, s[38] / 1000)
+						local W = V3(s[39] / 1000, s[40] / 1000, s[41] / 1000)
+						local w2 = W:Dot(W)
+						if s[49] == 3 and w2 > 1e-10 then
+							local okC, com = pcall(function() return part.AssemblyCenterOfMass end)
+							if okC and typeof(com) == "Vector3" then
+								local ctr = V3(s[1] / 1000, s[2] / 1000, s[3] / 1000) - L:Cross(W) / w2
+								L = W * (L:Dot(W) / w2) + W:Cross(com - ctr)
+							end
+						end
+						part.AssemblyLinearVelocity = L
+						part.AssemblyAngularVelocity = W
 					end
 				end
 			end
@@ -4750,7 +5328,7 @@ do
 	function CO.IdsOf(str, set)
 		set = set or {}
 		local isV2 = byte(str, 1) >= 2
-		local p, n = 2, #str
+		local p, n = bodyStart(str), #str
 		while p <= n do
 			local id, flags
 			id, p = rv(str, p)
@@ -4762,8 +5340,8 @@ do
 	end
 	local function remapString(str, map)
 		local isV2 = byte(str, 1) >= 2
-		local out = { sub(str, 1, 1) }
-		local p, n = 2, #str
+		local p, n = bodyStart(str), #str
+		local out = { sub(str, 1, p - 1) }
 		while p <= n do
 			local id
 			id, p = rv(str, p)
@@ -4831,6 +5409,10 @@ do
 	local sharedRealTemplate = nil
 	local cachedContainers = nil
 	local lastContainerScan = 0
+	local cachedAdorneeGuis = nil
+	local lastAdorneeScan = 0
+	local lastCanTouchState = nil
+	local dirtyButtons = {}
 	local idx, idxData, idxVer, idxCount = nil, nil, -1, -1
 	local dataVersion = 0
 	local applied = 0
@@ -4855,17 +5437,35 @@ do
 			or inst:FindFirstChildWhichIsA("Configuration")
 			or inst:FindFirstChildWhichIsA("ModuleScript")
 	end
+	local function isGroupContainer(inst)
+		if not inst or inst == workspace then return true end
+		local n = inst.Name:lower()
+		if n == "buttons" or n == "clientobjects" or n == "clientparts" or n == "mechanics" or n == "obstacles" then
+			return true
+		end
+		if inst:IsA("Folder") then
+			if inst:FindFirstChild("ButtonPart") or inst:FindFirstChild("ButtonConfiguration") or inst:FindFirstChild("Configuration") or inst:FindFirstChild("Pressed") then
+				return false
+			end
+			return true
+		end
+		return false
+	end
 	local function getButtonInfo(v)
 		if not (v and v:IsA("BoolValue") and v.Name == "Pressed") then return nil end
 		local p = v.Parent
 		if not p then return nil end
-		local bp = p:FindFirstChild("ButtonPart") or p:FindFirstChild("Button")
+		if p:IsA("BasePart") then
+			local m = (p.Parent and not isGroupContainer(p.Parent)) and p.Parent or p
+			return m, p, findConfig(p) or (m ~= p and findConfig(m)) or nil
+		end
+		local bp = p:FindFirstChild("ButtonPart") or p:FindFirstChild("Button") or p:FindFirstChildWhichIsA("BasePart")
 		if bp and bp:IsA("BasePart") then
-			return p, bp, findConfig(p)
+			return p, bp, findConfig(p) or findConfig(bp)
 		end
 		local pp = p.Parent
-		if pp then
-			bp = pp:FindFirstChild("ButtonPart") or pp:FindFirstChild("Button")
+		if pp and not isGroupContainer(pp) then
+			bp = pp:FindFirstChild("ButtonPart") or pp:FindFirstChild("Button") or pp:FindFirstChildWhichIsA("BasePart")
 			if bp and bp:IsA("BasePart") then
 				return pp, bp, p
 			end
@@ -4873,10 +5473,6 @@ do
 			if bpNested and bpNested:IsA("BasePart") then
 				return pp, bpNested, p
 			end
-		end
-		if p:IsA("BasePart") and (p.Name == "ButtonPart" or p.Name:find("[Bb]utton")) then
-			local m = p.Parent or p
-			return m, p, findConfig(m)
 		end
 		return nil
 	end
@@ -4888,7 +5484,7 @@ do
 		if not ts or timerStartConns[ts] then return end
 		timerStartConns[ts] = ts:GetPropertyChangedSignal("Value"):Connect(function()
 			if suppressTimerStart[b.id] then return end
-			if (control == "paused" or control == "test") and pressAt[b.id] ~= nil and b.currentPressed then
+			if control ~= "none" and pressAt[b.id] ~= nil and b.currentPressed then
 				local rawEl = tNowCache - pressAt[b.id]
 				if rawEl >= -0.001 then
 					local want = os.clock() - math.max(0, rawEl)
@@ -5014,17 +5610,61 @@ do
 		if nk == "needdigits" or nk == "needsdigits" or nk == "needdigit" or nk == "threedigits" or nk == "3digits" then
 			if v == true or v == 1 or tostring(v):lower() == "true" then return 3 end
 			return tonumber(v)
-		elseif nk:find("digit") or nk:find("decimal") or nk == "precision" then
-			if v == true or tostring(v):lower() == "true" then return 3 end
+		elseif nk == "twodigits" or nk == "2digits" or nk == "hundredths" or nk == "showhundredths" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 2 end
 			return tonumber(v)
+		elseif nk == "onedigit" or nk == "1digit" or nk == "tenths" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 1 end
+			return tonumber(v)
+		elseif nk == "nodecimals" or nk == "nodigits" or nk == "wholenumbers" or nk == "integer" then
+			if v == true or v == 1 or tostring(v):lower() == "true" then return 0 end
+		elseif nk:find("digit") or nk:find("decimal") or nk == "precision" or nk == "places" or nk == "rounding" then
+			if v == true or tostring(v):lower() == "true" then return 2 end
+			if type(v) == "number" then return v end
+			if type(v) == "string" then
+				local fmtD = v:match("%%%.(%d+)f")
+				if fmtD then return tonumber(fmtD) end
+				local dotD = v:match("^%d*%.(%d+)$")
+				if dotD then return #dotD end
+				return tonumber(v)
+			end
 		end
 		return nil
 	end
+	local function learnFormatFromGameText(b, txt)
+		if type(txt) ~= "string" or txt == "" then return false end
+		local intStr, decStr = txt:match("(%d+)%.(%d+)")
+		if not decStr then return false end
+		local nDec = #decStr
+		if nDec < 1 or nDec > 4 then return false end
+		local intVal = tonumber(intStr) or 0
+		local changed = false
+		if intVal == 0 then
+			if b.subSecDecimals ~= nDec then
+				b.subSecDecimals = nDec
+				changed = true
+			end
+		else
+			if b.aboveSecDecimals ~= nDec then
+				b.aboveSecDecimals = nDec
+				changed = true
+			end
+		end
+		if b.liveDecimals ~= nDec then
+			b.liveDecimals = nDec
+			changed = true
+		end
+		if changed then
+			b.lastRemQ = nil
+			b.lastFormatted = nil
+		end
+		return changed
+	end
 	local function getDigitsProperty(b)
-		if b.decimalPlaces ~= nil then return b.decimalPlaces end
+		if b.configDecimals ~= nil then return b.configDecimals ~= false and b.configDecimals or nil end
 		local bp, model = b.bp, b.model or b.parent
 		local config = b.config or findConfig(model)
-		local function checkInstance(inst)
+		local function checkInstance(inst, deep)
 			if not inst then return nil end
 			local decAttr = inst:GetAttribute("TimerDecimalPlaces") or inst:GetAttribute("DecimalPlaces") or inst:GetAttribute("Digits") or inst:GetAttribute("Decimals")
 			if type(decAttr) == "number" then return decAttr end
@@ -5032,13 +5672,14 @@ do
 			if okAttr and type(attrs) == "table" then
 				for k, v in pairs(attrs) do
 					local d = parseDigitKV(k, v)
-					if d then return d end
+					if d ~= nil then return d end
 				end
 			end
-			for _, ch in ipairs(inst:GetChildren()) do
+			local list = deep and inst:GetDescendants() or inst:GetChildren()
+			for _, ch in ipairs(list) do
 				if ch:IsA("ValueBase") then
 					local d = parseDigitKV(ch.Name, ch.Value)
-					if d then return d end
+					if d ~= nil then return d end
 				end
 			end
 			if CollectionService then
@@ -5046,35 +5687,84 @@ do
 					local ok, has = pcall(CollectionService.HasTag, CollectionService, inst, tag)
 					if ok and has then return 3 end
 				end
+				for _, tag in ipairs({ "2Digits", "TwoDigits", "Hundredths" }) do
+					local ok, has = pcall(CollectionService.HasTag, CollectionService, inst, tag)
+					if ok and has then return 2 end
+				end
 			end
 			return nil
 		end
-		local d = checkInstance(config) or checkInstance(bp) or checkInstance(model)
-		if d == nil and b.parent and b.parent ~= model and b.parent ~= config then d = checkInstance(b.parent) end
-		if d ~= nil then return d end
-		local mod = (config and config:IsA("ModuleScript") and config) or (model and model:FindFirstChildWhichIsA("ModuleScript"))
+		local d = checkInstance(b.pressed, false)
+			or checkInstance(config, true)
+			or checkInstance(bp, true)
+			or (model and not isGroupContainer(model) and checkInstance(model, true))
+		if d == nil and b.parent and b.parent ~= model and b.parent ~= config and not isGroupContainer(b.parent) then
+			d = checkInstance(b.parent, true)
+		end
+		if d == nil and model and model.Parent and model.Parent ~= workspace then
+			d = checkInstance(model.Parent, false)
+		end
+		if d ~= nil then
+			b.configDecimals = d
+			return d
+		end
+		local mod = (config and config:IsA("ModuleScript") and config) or (model and not isGroupContainer(model) and model:FindFirstChildWhichIsA("ModuleScript", true))
 		if mod then
 			local ok, res = pcall(require, mod)
 			if ok and type(res) == "table" then
 				for k, v in pairs(res) do
 					local dv = parseDigitKV(k, v)
-					if dv then return dv end
+					if dv ~= nil then
+						b.configDecimals = dv
+						return dv
+					end
 				end
 			end
 		end
-		local tl = (config and config:FindFirstChildWhichIsA("TextLabel", true)) or (model and model:FindFirstChildWhichIsA("TextLabel", true))
-		if tl and tl.Text ~= "" then
-			local decs = tl.Text:match("%.(%d+)")
-			if decs and #decs > 0 then return #decs end
+		local dur = getButtonDuration(b)
+		if dur and dur > 0 then
+			local s = string.format("%.4f", dur):gsub("0+$", ""):gsub("%.$", "")
+			local frac = s:match("%.(%d+)")
+			if frac and #frac >= 2 then
+				b.configDecimals = #frac
+				return #frac
+			end
 		end
+		local bestTlDec = nil
+		local function scanLabelsForDec(root)
+			if not root or isGroupContainer(root) then return end
+			for _, dInst in ipairs(root:GetDescendants()) do
+				if dInst:IsA("TextLabel") and dInst.Text ~= "" then
+					local decs = dInst.Text:match("%d+%.(%d+)")
+					if decs and #decs >= 2 and #decs <= 4 then
+						if not bestTlDec or #decs > bestTlDec then bestTlDec = #decs end
+					end
+				end
+			end
+		end
+		scanLabelsForDec(config)
+		scanLabelsForDec(bp)
+		if model ~= bp then scanLabelsForDec(model) end
+		if bestTlDec then
+			b.configDecimals = bestTlDec
+			return bestTlDec
+		end
+		b.configDecimals = false
+		return nil
+	end
+	local function getEffectiveDecimals(b, remaining)
+		if remaining ~= nil then
+			if remaining < 1 and b.subSecDecimals ~= nil then return b.subSecDecimals end
+			if remaining >= 1 and b.aboveSecDecimals ~= nil then return b.aboveSecDecimals end
+		end
+		if b.liveDecimals ~= nil then return b.liveDecimals end
+		local cfgD = getDigitsProperty(b)
+		if cfgD ~= nil then return math.max(0, math.floor(cfgD)) end
+		if remaining ~= nil and remaining < 1 and b.subSecDecimals ~= nil then return b.subSecDecimals end
 		return 1
 	end
-	local function formatTimer(b, remaining)
-		local dec = b.decimalPlaces
-		if dec == nil then
-			dec = math.max(0, math.floor(getDigitsProperty(b) or 1))
-			b.decimalPlaces = dec
-		end
+	local function formatTimer(b, remaining, forceDec)
+		local dec = forceDec or getEffectiveDecimals(b, remaining)
 		local strVal = b.timerText
 		if strVal == nil then
 			local model = b.model or b.parent
@@ -5152,20 +5842,25 @@ do
 			end
 		end
 	end
+	local function stripScripts(inst)
+		if not inst then return end
+		for _, d in ipairs(inst:GetDescendants()) do
+			if d:IsA("LuaSourceContainer") then pcall(function() d:Destroy() end) end
+		end
+	end
 	local function cacheTemplateFromLabel(b, lbl, isLiveForThisButton)
 		if not (lbl and lbl:IsA("TextLabel")) then return end
 		if lbl:GetAttribute("HappaTASFake") then return end
 		if b.realTemplate and (b.realTemplateFromLive or not isLiveForThisButton) then return end
 		pcall(function()
 			local cl = lbl:Clone()
+			stripScripts(cl)
 			cl:SetAttribute("HappaTASButton", nil)
 			cl:SetAttribute("HappaTASFake", nil)
 			b.realTemplate = cl
 			b.realTemplateFromLive = isLiveForThisButton and true or false
 			if not sharedRealTemplate then
-				local scl = lbl:Clone()
-				scl:SetAttribute("HappaTASButton", nil)
-				scl:SetAttribute("HappaTASFake", nil)
+				local scl = cl:Clone()
 				sharedRealTemplate = scl
 			end
 		end)
@@ -5285,7 +5980,7 @@ do
 		end
 		return nil, false
 	end
-	local function matchesOtherActiveButton(b, lblColor)
+	local function matchesOtherActiveButton(b, lblColor, candidateLbl)
 		if not lblColor then return false end
 		for otherId, _ in pairs(pressAt) do
 			if otherId ~= b.id then
@@ -5293,7 +5988,10 @@ do
 				if otherB and (otherB.currentPressed or (otherB.pressed and otherB.pressed.Value)) then
 					local oc = otherB.unpressedColor or (otherB.bp and otherB.bp.Color)
 					if oc and colorClose(lblColor, oc, 0.08) then
-						return true
+						local oLbl = otherB.screenLabel
+						if not (oLbl and oLbl.Parent and oLbl ~= candidateLbl and not oLbl:GetAttribute("HappaTASFake")) then
+							return true
+						end
 					end
 				end
 			end
@@ -5302,19 +6000,21 @@ do
 	end
 	local function getScreenLabel(b, createIfMissing)
 		if isHideGUI(b) then return nil end
-		if control == "record" or control == "none" then
+		if control == "none" then
 			createIfMissing = false
 		end
+		local now = os.clock()
 		local cur = b.screenLabel
+		local recentRealPress = b.realPressClock and (now - b.realPressClock) < 0.35
 		if cur and cur.Parent then
-			if cur ~= b.ourScreenLabel then
+			local interval = (cur == b.ourScreenLabel) and (recentRealPress and 0.08 or 0.25) or 0.2
+			if b.lastScreenScan and (now - b.lastScreenScan) < interval then
 				return cur
 			end
-			local now = os.clock()
-			if not b.pressClock or (now - b.pressClock) > 0.35 then
-				return cur
-			end
+		elseif b.lastScreenScan and (now - b.lastScreenScan) < (recentRealPress and 0.05 or 0.2) then
+			return nil
 		end
+		b.lastScreenScan = now
 		local bp = b.bp
 		local bpColor = b.unpressedColor or (bp and bp.Color)
 		local curBpColor = bp and bp.Color
@@ -5322,6 +6022,7 @@ do
 		local containers = getAllTimerContainers()
 		local bestReal = nil
 		local bestRealScore = 0
+		local realMatches = {}
 		local fakeDuplicates = {}
 		local otherTimerInList = nil
 		local function scoreLabel(lbl, containerEntry)
@@ -5339,28 +6040,36 @@ do
 				return
 			end
 			otherTimerInList = otherTimerInList or lbl
+			local colorMatched = false
 			local score = 0
-			if attrId == b.id then
-				score = score + 1000
-			end
-			if lbl == b.screenLabel then
-				score = score + 600
-			end
 			if bpColor then
 				if colorClose(lbl.TextColor3, bpColor, 0.08) or (curBpColor and colorClose(lbl.TextColor3, curBpColor, 0.08)) then
+					colorMatched = true
 					score = score + 300
 					if invColor and colorClose(lbl.TextStrokeColor3, invColor, 0.08) then
 						score = score + 100
 					end
 				elseif invColor and colorClose(lbl.TextStrokeColor3, invColor, 0.08) then
+					colorMatched = true
 					score = score + 200
-				elseif not matchesOtherActiveButton(b, lbl.TextColor3) then
+				elseif not matchesOtherActiveButton(b, lbl.TextColor3, lbl) then
 					score = score + 80
 				end
 			else
+				colorMatched = true
 				score = score + 100
 			end
-			if score > bestRealScore then
+			local ownedByB = (attrId == b.id) or (attrId == nil and colorMatched and not matchesOtherActiveButton(b, lbl.TextColor3, lbl))
+			if ownedByB then
+				realMatches[#realMatches + 1] = { lbl = lbl, entry = containerEntry }
+				score = score + 1000 + #realMatches * 10
+				if lbl.TextTransparency < 0.5 then
+					score = score + 500
+				end
+			elseif lbl == b.screenLabel then
+				score = score + 600
+			end
+			if score >= bestRealScore and score > 0 then
 				bestRealScore = score
 				bestReal = lbl
 			end
@@ -5376,6 +6085,17 @@ do
 			end
 		end
 		if bestReal then
+			for _, m in ipairs(realMatches) do
+				if m.lbl ~= bestReal and m.lbl.Parent then
+					pcall(function()
+						if m.entry and m.entry ~= m.lbl and m.entry.Parent and m.entry.Name ~= "TimerList" and m.entry.Name ~= "Timers" then
+							m.entry:Destroy()
+						else
+							m.lbl:Destroy()
+						end
+					end)
+				end
+			end
 			for _, fk in ipairs(fakeDuplicates) do
 				if fk.Parent then pcall(function() fk:Destroy() end) end
 			end
@@ -5384,6 +6104,9 @@ do
 			end
 			b.ourScreenLabel = nil
 			cacheTemplateFromLabel(b, bestReal, true)
+			if (b.currentPressed or (b.pressed and b.pressed.Value)) and bestReal.Text ~= "" and bestReal.Text ~= b.lastFormatted then
+				learnFormatFromGameText(b, bestReal.Text)
+			end
 			if bestReal:GetAttribute("HappaTASButton") ~= b.id then
 				pcall(function()
 					bestReal:SetAttribute("HappaTASButton", b.id)
@@ -5406,10 +6129,10 @@ do
 		end
 		b.ourScreenLabel = nil
 		b.screenLabel = nil
-		if not createIfMissing or control == "record" or control == "none" then
+		if not createIfMissing or control == "none" then
 			return nil
 		end
-		if b.pressed and b.pressed.Value and b.pressClock and (os.clock() - b.pressClock) < 0.06 then
+		if b.reasserting or (b.pressed and b.pressed.Value and b.realPressClock and (now - b.realPressClock) < 0.2) then
 			return nil
 		end
 		local tList = getTimerList(true)
@@ -5444,9 +6167,91 @@ do
 		b.ourScreenLabel = newLabel
 		return newLabel
 	end
+	local labelTextConns = setmetatable({}, { __mode = "k" })
+	local suppressLabelText = setmetatable({}, { __mode = "k" })
+	local function syncPartLabelVisual(lbl, formatted)
+		if not (lbl and lbl.Parent) then return end
+		if lbl.Text ~= formatted then
+			suppressLabelText[lbl] = true
+			pcall(function() lbl.Text = formatted end)
+			suppressLabelText[lbl] = nil
+		end
+		if not lbl.Visible then pcall(function() lbl.Visible = true end) end
+		if lbl.TextTransparency > 0.5 then pcall(function() lbl.TextTransparency = 0 end) end
+		local gui = lbl:FindFirstAncestorWhichIsA("LayerCollector")
+		if gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) and not gui.Enabled then
+			pcall(function() gui.Enabled = true end)
+		end
+	end
+	local function hookLabelText(b, lbl)
+		if not lbl or labelTextConns[lbl] then return end
+		if not lbl:GetAttribute("HappaTASFake") and (b.currentPressed or (b.pressed and b.pressed.Value)) and lbl.Text ~= "" and lbl.Text ~= b.lastFormatted then
+			learnFormatFromGameText(b, lbl.Text)
+		end
+		labelTextConns[lbl] = lbl:GetPropertyChangedSignal("Text"):Connect(function()
+			if suppressLabelText[lbl] then return end
+			local gameTxt = lbl.Text
+			if not lbl:GetAttribute("HappaTASFake") and (b.currentPressed or (b.pressed and b.pressed.Value) or control == "none") then
+				if learnFormatFromGameText(b, gameTxt) and control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
+					local dur = getButtonDuration(b)
+					if dur > 0 then
+						local rem = math.max(0, dur - math.max(0, tNowCache - pressAt[b.id]))
+						local dec = getEffectiveDecimals(b, rem)
+						b.lastUsedDec = dec
+						b.lastRemQ = math.floor(rem * (10 ^ dec) + 0.5)
+						b.lastFormatted = formatTimer(b, rem, dec)
+						local sLbl = b.screenLabel
+						if sLbl and sLbl.Parent and sLbl ~= lbl then
+							suppressLabelText[sLbl] = true
+							pcall(function() sLbl.Text = b.lastFormatted end)
+							suppressLabelText[sLbl] = nil
+						end
+						local pLbls = b.partLabels
+						if pLbls then
+							for i = 1, #pLbls do
+								if pLbls[i] ~= lbl then syncPartLabelVisual(pLbls[i], b.lastFormatted) end
+							end
+						end
+					end
+				end
+			end
+			if control ~= "none" then
+				if b.currentPressed and b.lastFormatted then
+					if lbl.Text ~= b.lastFormatted then
+						suppressLabelText[lbl] = true
+						pcall(function() lbl.Text = b.lastFormatted end)
+						suppressLabelText[lbl] = nil
+					end
+					if not lbl.Visible then pcall(function() lbl.Visible = true end) end
+				elseif not b.currentPressed and lbl ~= b.screenLabel then
+					if lbl.Visible then pcall(function() lbl.Visible = false end) end
+				end
+			end
+		end)
+	end
+	local function getAdorneeGuis()
+		local now = os.clock()
+		if cachedAdorneeGuis and (now - lastAdorneeScan) < 0.5 then
+			return cachedAdorneeGuis
+		end
+		lastAdorneeScan = now
+		local list = {}
+		local lp = Players.LocalPlayer
+		local pg = lp and lp:FindFirstChild("PlayerGui")
+		if pg then
+			for _, d in ipairs(pg:GetDescendants()) do
+				if (d:IsA("SurfaceGui") or d:IsA("BillboardGui")) and d.Adornee ~= nil then
+					list[#list + 1] = d
+				end
+			end
+		end
+		cachedAdorneeGuis = list
+		return list
+	end
 	local function getPartLabels(b, createIfMissing)
-		if isHideGUI(b) then return {} end
+		local now = os.clock()
 		local cached = b.partLabels
+		local recentP = b.realPressClock and (now - b.realPressClock) < 0.35
 		if cached and #cached > 0 then
 			local allValid = true
 			for i = 1, #cached do
@@ -5456,56 +6261,77 @@ do
 				end
 			end
 			if allValid then
-				if not b.ourPartGui then
-					return cached
-				end
-				if not b.pressClock or (os.clock() - b.pressClock) > 0.35 then
+				local interval = b.ourPartGui and (recentP and 0.08 or 0.25) or 0.25
+				if b.lastPartScan and (now - b.lastPartScan) < interval then
 					return cached
 				end
 			end
-		end
-		local now = os.clock()
-		if not createIfMissing and cached and #cached == 0 and b.lastPartScan and (now - b.lastPartScan) < 0.2 then
+		elseif cached and #cached == 0 and b.lastPartScan and (now - b.lastPartScan) < (recentP and 0.05 or 0.25) then
 			return cached
 		end
 		b.lastPartScan = now
 		local list = {}
 		local seen = {}
-		local foundReal = false
-		local function add(lbl)
+		local realGuis = {}
+		local seenGuis = {}
+		local bp = b.bp
+		local model = b.model or b.parent
+		local config = b.config
+		local function isConfigTemplate(inst)
+			if not inst or not config or config == bp or config == model then return false end
+			return inst:IsDescendantOf(config)
+		end
+		local function addLabel(lbl)
 			if lbl and lbl:IsA("TextLabel") and not seen[lbl] and lbl.Parent then
-				if lbl:GetAttribute("HappaTASFake") then return end
+				if lbl:GetAttribute("HappaTASFake") or isConfigTemplate(lbl) then return end
 				seen[lbl] = true
 				list[#list + 1] = lbl
-				foundReal = true
+				hookLabelText(b, lbl)
 				cacheTemplateFromLabel(b, lbl, true)
 			end
 		end
-		local bp = b.bp
-		local model = b.model or b.parent
-		if bp and bp.Parent then
-			for _, ch in ipairs(bp:GetChildren()) do
-				if (ch:IsA("SurfaceGui") or ch:IsA("BillboardGui")) and not ch:GetAttribute("HappaTASFake") then
-					for _, gch in ipairs(ch:GetChildren()) do
-						if gch:IsA("TextLabel") then add(gch) end
-					end
-				elseif ch:IsA("TextLabel") then
-					add(ch)
+		local function addGui(gui)
+			if not (gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) and gui.Parent) then return end
+			if gui:GetAttribute("HappaTASFake") or seenGuis[gui] or isConfigTemplate(gui) then return end
+			seenGuis[gui] = true
+			realGuis[#realGuis + 1] = gui
+			if not b.realPartGuiTemplate then
+				pcall(function()
+					local cl = gui:Clone()
+					stripScripts(cl)
+					b.realPartGuiTemplate = cl
+				end)
+			end
+			for _, d in ipairs(gui:GetDescendants()) do
+				if d:IsA("TextLabel") then addLabel(d) end
+			end
+		end
+		local function scanRoot(root)
+			if not (root and root.Parent) or isGroupContainer(root) then return end
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("SurfaceGui") or d:IsA("BillboardGui") then
+					addGui(d)
+				elseif d:IsA("TextLabel") then
+					addLabel(d)
 				end
 			end
 		end
-		if model and model.Parent then
-			for _, ch in ipairs(model:GetChildren()) do
-				if (ch:IsA("SurfaceGui") or ch:IsA("BillboardGui")) and not ch:GetAttribute("HappaTASFake") then
-					for _, gch in ipairs(ch:GetChildren()) do
-						if gch:IsA("TextLabel") then add(gch) end
+		scanRoot(bp)
+		if model and model ~= bp and not isGroupContainer(model) then scanRoot(model) end
+		if b.parent and b.parent ~= model and b.parent ~= bp and b.parent ~= config and not isGroupContainer(b.parent) then
+			scanRoot(b.parent)
+		end
+		if bp or (model and not isGroupContainer(model)) then
+			for _, gui in ipairs(getAdorneeGuis()) do
+				if gui.Parent then
+					local ad = gui.Adornee
+					if ad and (ad == bp or ad == model or (model and not isGroupContainer(model) and ad:IsDescendantOf(model))) then
+						addGui(gui)
 					end
-				elseif ch:IsA("TextLabel") then
-					add(ch)
 				end
 			end
 		end
-		if foundReal then
+		if #list > 0 then
 			if b.ourPartGui and b.ourPartGui.Parent then
 				pcall(function() b.ourPartGui:Destroy() end)
 			end
@@ -5514,69 +6340,81 @@ do
 			return list
 		end
 		if b.ourPartGui and b.ourPartGui.Parent then
-			local fakeLbl = b.ourPartGui:FindFirstChildWhichIsA("TextLabel")
-			if fakeLbl then
-				b.partLabels = { fakeLbl }
+			local fakeLabels = {}
+			for _, d in ipairs(b.ourPartGui:GetDescendants()) do
+				if d:IsA("TextLabel") then
+					hookLabelText(b, d)
+					fakeLabels[#fakeLabels + 1] = d
+				end
+			end
+			if #fakeLabels > 0 then
+				b.partLabels = fakeLabels
 				return b.partLabels
 			end
 		end
 		b.ourPartGui = nil
-		if createIfMissing and (control == "paused" or control == "test") and bp and bp.Parent then
-			if not (b.pressed and b.pressed.Value and b.pressClock and (now - b.pressClock) < 0.06) then
-				local template, isLiveForThisButton = findTemplateForButton(b)
-				if template then
-					local bpColor = b.unpressedColor or bp.Color
-					local sgui = Instance.new("SurfaceGui")
-					sgui.Name = "SurfaceGui"
-					sgui.Face = Enum.NormalId.Top
-					sgui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-					sgui.PixelsPerStud = 50
-					sgui:SetAttribute("HappaTASFake", true)
-					sgui:SetAttribute("HappaTASButton", b.id)
-					local pText = template:Clone()
-					pText.Visible = true
-					applyRealButtonColors(pText, bpColor, isLiveForThisButton)
-					pText:SetAttribute("HappaTASFake", true)
-					pText:SetAttribute("HappaTASButton", b.id)
-					pText.Parent = sgui
-					sgui.Parent = bp
-					b.ourPartGui = sgui
-					b.partLabels = { pText }
-					return b.partLabels
+		if not b.realPartGuiTemplate and config and config ~= bp then
+			local cfgGui = config:FindFirstChildWhichIsA("SurfaceGui", true) or config:FindFirstChildWhichIsA("BillboardGui", true)
+			if cfgGui then
+				pcall(function()
+					local cl = cfgGui:Clone()
+					stripScripts(cl)
+					b.realPartGuiTemplate = cl
+				end)
+			end
+		end
+		if createIfMissing and control ~= "none" and bp and bp.Parent and b.realPartGuiTemplate then
+			if not (b.reasserting or (b.pressed and b.pressed.Value and b.realPressClock and (now - b.realPressClock) < 0.2)) then
+				local sgui = b.realPartGuiTemplate:Clone()
+				stripScripts(sgui)
+				sgui.Enabled = true
+				sgui:SetAttribute("HappaTASFake", true)
+				sgui:SetAttribute("HappaTASButton", b.id)
+				local fakeLabels = {}
+				for _, d in ipairs(sgui:GetDescendants()) do
+					if d:IsA("TextLabel") then
+						d.Visible = true
+						d:SetAttribute("HappaTASFake", true)
+						d:SetAttribute("HappaTASButton", b.id)
+						hookLabelText(b, d)
+						fakeLabels[#fakeLabels + 1] = d
+					end
 				end
+				sgui.Parent = bp
+				b.ourPartGui = sgui
+				b.partLabels = fakeLabels
+				return b.partLabels
 			end
 		end
 		b.partLabels = list
 		return list
 	end
 	local function updateTimerUI(b, remaining, allowCreate)
-		if isHideGUI(b) then return end
-		local canCreate = allowCreate == true and (control == "paused" or control == "test")
-		local sLabel = getScreenLabel(b, canCreate)
+		if control == "none" then return end
+		local canCreate = allowCreate == true and control ~= "none"
+		local sLabel = (not isHideGUI(b)) and getScreenLabel(b, canCreate) or nil
+		if sLabel and sLabel.Parent then hookLabelText(b, sLabel) end
 		local pLabels = getPartLabels(b, canCreate)
-		if control == "record" or control == "none" then return end
-		if b.decimalPlaces == nil then
-			b.decimalPlaces = math.max(0, math.floor(getDigitsProperty(b) or 1))
-			b.decScale = 10 ^ b.decimalPlaces
-		end
-		local scale = b.decScale or (10 ^ b.decimalPlaces)
+		local dec = getEffectiveDecimals(b, remaining)
+		local scale = 10 ^ dec
 		local remQ = math.floor(math.max(0, remaining) * scale + 0.5)
 		local formatted = b.lastFormatted
-		if remQ ~= b.lastRemQ or not formatted then
+		if remQ ~= b.lastRemQ or dec ~= b.lastUsedDec or not formatted then
 			b.lastRemQ = remQ
-			formatted = formatTimer(b, remaining)
+			b.lastUsedDec = dec
+			formatted = formatTimer(b, remaining, dec)
 			b.lastFormatted = formatted
 		end
 		if sLabel and sLabel.Parent then
-			if sLabel.Text ~= formatted then pcall(function() sLabel.Text = formatted end) end
+			if sLabel.Text ~= formatted then
+				suppressLabelText[sLabel] = true
+				pcall(function() sLabel.Text = formatted end)
+				suppressLabelText[sLabel] = nil
+			end
 			if not sLabel.Visible then pcall(function() sLabel.Visible = true end) end
 		end
 		for i = 1, #pLabels do
-			local lbl = pLabels[i]
-			if lbl and lbl.Parent then
-				if lbl.Text ~= formatted then pcall(function() lbl.Text = formatted end) end
-				if not lbl.Visible then pcall(function() lbl.Visible = true end) end
-			end
+			syncPartLabelVisual(pLabels[i], formatted)
 		end
 	end
 	local function hideTimerUI(b)
@@ -5685,7 +6523,11 @@ do
 		local v = b.pressed
 		if not v or not v.Parent then return end
 		if v.Value == value then return end
-		if value then b.pressClock = os.clock() end
+		if value then
+			local now = os.clock()
+			b.realPressClock = now
+			if not silent then b.pressClock = now end
+		end
 		local snd = silent and b.bp and b.bp:FindFirstChild("Press")
 		local oldVol
 		if snd and snd:IsA("Sound") then
@@ -5704,6 +6546,8 @@ do
 		end
 	end
 	local function setAllCanTouch(canTouch)
+		if lastCanTouchState == canTouch then return end
+		lastCanTouchState = canTouch
 		for _, b in pairs(reg.byId) do
 			local bp = b.bp
 			if bp and bp.Parent and bp.CanTouch ~= canTouch then
@@ -5714,10 +6558,21 @@ do
 	local function reassertPressed(b)
 		if b.reasserting then return end
 		b.reasserting = true
+		b.realPressClock = os.clock()
+		local dur0 = getButtonDuration(b)
+		local rawEl0 = pressAt[b.id] and (tNowCache - pressAt[b.id]) or 0
+		if rawEl0 >= -0.001 and (dur0 == 0 or rawEl0 < dur0) then
+			local el0 = math.max(0, rawEl0)
+			if b.pressed and b.pressed.Parent and not b.pressed.Value then
+				setPressed(b, true, true)
+				local ts0 = getTimerValues(b)
+				if ts0 then setTimerStartValue(b, ts0, os.clock() - el0) end
+			end
+		end
 		restoreButtonVisual(b, true)
 		task.defer(function()
 			b.reasserting = false
-			if (control == "paused" or control == "test") and b.currentPressed and pressAt[b.id] ~= nil then
+			if control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
 				local dur = getButtonDuration(b)
 				local rawEl = tNowCache - pressAt[b.id]
 				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
@@ -5732,6 +6587,12 @@ do
 					restoreButtonVisual(b, true)
 					if dur > 0 then
 						updateTimerUI(b, math.max(0, dur - elapsedTAS), true)
+						task.defer(function()
+							if control ~= "none" and b.currentPressed and pressAt[b.id] ~= nil then
+								local curEl = math.max(0, tNowCache - pressAt[b.id])
+								updateTimerUI(b, math.max(0, dur - curEl), true)
+							end
+						end)
 					end
 				end
 			end
@@ -5746,7 +6607,7 @@ do
 		restoreButtonVisual(b, false)
 		task.defer(function()
 			b.reassertingUnpress = false
-			if (control == "paused" or control == "test") and not b.currentPressed then
+			if control ~= "none" and not b.currentPressed then
 				if b.pressed and b.pressed.Parent and b.pressed.Value then
 					setPressed(b, false, true)
 				end
@@ -5764,6 +6625,9 @@ do
 	local function getLiveElapsed(b, clock)
 		local timerStart = getTimerValues(b)
 		local dur = getButtonDuration(b)
+		if b.pausedElapsed ~= nil then
+			return b.pausedElapsed, dur
+		end
 		local el = (timerStart and timerStart.Value > 0 and math.max(0, clock - timerStart.Value))
 			or (b.pressClock and math.max(0, clock - b.pressClock)) or 0
 		return el, dur
@@ -5771,18 +6635,21 @@ do
 	local function applyPressedState(b, id, t0, el, silent, clock)
 		local dur = getButtonDuration(b)
 		if dur > 0 and el >= dur then return false end
-		b.currentPressed, b.pressedInIdle = true, nil
+		b.currentPressed, b.pressedInIdle, b.pausedElapsed = true, nil, el
+		dirtyButtons[id] = true
 		pressAt[id] = t0
+		local nowClock = clock or os.clock()
+		b.pressClock = nowClock - el
 		setPressed(b, true, silent)
 		local timerStart = getTimerValues(b)
-		setTimerStartValue(b, timerStart, (clock or os.clock()) - el)
+		setTimerStartValue(b, timerStart, nowClock - el)
 		if dur > 0 then
-			updateTimerUI(b, math.max(0, dur - el), control == "paused" or control == "test")
+			updateTimerUI(b, math.max(0, dur - el), control ~= "none")
 			task.defer(function()
 				if b.currentPressed and pressAt[id] then
 					local curEl = math.max(0, tNowCache - pressAt[id])
 					setTimerStartValue(b, timerStart, os.clock() - curEl)
-					updateTimerUI(b, math.max(0, dur - curEl), control == "paused" or control == "test")
+					updateTimerUI(b, math.max(0, dur - curEl), control ~= "none")
 				end
 			end)
 		end
@@ -5794,7 +6661,7 @@ do
 		if not v or not v.Parent then return end
 		local now = v.Value
 		if now then
-			b.pressClock = os.clock()
+			b.realPressClock = os.clock()
 			b.needTimerStartRecheck = true
 			if b.bp and b.bp.Parent and b.bp.Material ~= b.unpressedMaterial then b.pressedMaterial = b.bp.Material end
 		end
@@ -5803,27 +6670,50 @@ do
 			suppress[b.id] = nil
 			if s == now then return end
 		end
-		if control == "paused" or control == "test" then
+		if control ~= "none" then
 			if not now and b.currentPressed and pressAt[b.id] ~= nil then
 				local dur = getButtonDuration(b)
 				local rawEl = tNowCache - pressAt[b.id]
-				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then reassertPressed(b); return end
+				local tol = (control == "record") and 0.05 or 0
+				if rawEl >= -0.001 and ((dur == 0 and control ~= "record") or (dur > 0 and rawEl < dur - tol)) then
+					reassertPressed(b)
+					return
+				end
 			elseif now and not b.currentPressed and control == "paused" then
-				reassertUnpressed(b); return
+				reassertUnpressed(b)
+				return
+			elseif now and b.currentPressed and pressAt[b.id] ~= nil then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - pressAt[b.id]
+				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
+					local elapsedTAS = math.max(0, rawEl)
+					local timerStart = getTimerValues(b)
+					if timerStart then setTimerStartValue(b, timerStart, os.clock() - elapsedTAS) end
+					if dur > 0 then updateTimerUI(b, math.max(0, dur - elapsedTAS), true) end
+					return
+				end
 			end
 			if control == "paused" then return end
 		end
 		if recording then pending[#pending + 1] = { b.id, now and 1 or 0 } end
 		if now then
+			b.pressClock = os.clock()
 			b.currentPressed = true
+			dirtyButtons[b.id] = true
+			b.pausedElapsed = nil
 			clearOurLabels(b)
 			pressAt[b.id] = tNowCache
 			b.pressedInIdle = (control == "none")
-			task.defer(function()
-				if b.currentPressed then getScreenLabel(b, false); getPartLabels(b, false) end
-			end)
+			local function hookLiveLabels()
+				if not b.currentPressed then return end
+				local sLbl = getScreenLabel(b, false)
+				if sLbl then hookLabelText(b, sLbl) end
+				getPartLabels(b, false)
+			end
+			task.defer(hookLiveLabels)
+			task.delay(0.05, hookLiveLabels)
 		else
-			b.currentPressed, b.pressedInIdle, pressAt[b.id] = false, nil, nil
+			b.currentPressed, b.pressedInIdle, b.pausedElapsed, pressAt[b.id] = false, nil, nil, nil
 			hideTimerUI(b)
 		end
 	end
@@ -5840,9 +6730,11 @@ do
 		b.timerStart, b.durationVal, b.cachedDuration = nil, nil, nil
 		b.timerValuesChecked, b.needTimerStartRecheck, b.hideGUI = false, false, nil
 		b.partLabels, b.screenLabel, b.ourScreenLabel, b.ourPartGui = nil, nil, nil, nil
-		b.timerText, b.decimalPlaces, b.decScale, b.lastRemQ, b.lastFormatted = nil, nil, nil, nil, nil
+		b.timerText, b.decimalPlaces, b.configDecimals, b.liveDecimals, b.subSecDecimals, b.aboveSecDecimals = nil, nil, nil, nil, nil, nil
+		b.decScale, b.lastUsedDec, b.lastRemQ, b.lastFormatted = nil, nil, nil, nil
 		b.currentPressed = v.Value
 		b.pressClock = v.Value and os.clock() or nil
+		b.realPressClock = b.pressClock
 		if not v.Value or not b.unpressedColor then b.unpressedColor = bp.Color end
 		local pm = getPressedMaterial(b)
 		if not v.Value and bp.Material ~= pm then
@@ -5857,8 +6749,10 @@ do
 			b.unpressedCF, b.pressedCF = bp.CFrame, bp.CFrame * pressOffset
 		else
 			b.pressedCF, b.unpressedCF = bp.CFrame, bp.CFrame * pressOffset:Inverse()
+			dirtyButtons[id] = true
 			if pressAt[id] == nil then pressAt[id] = tNowCache; b.pressedInIdle = (control == "none") end
 		end
+		getPartLabels(b, false)
 		if control == "paused" and bp.CanTouch then pcall(function() bp.CanTouch = false end) end
 		conns[v] = v:GetPropertyChangedSignal("Value"):Connect(function() onPressedChanged(b) end)
 	end
@@ -5893,8 +6787,8 @@ do
 		for _, b in pairs(reg.byId) do clearOurLabels(b) end
 		for ts, cn in pairs(timerStartConns) do pcall(function() cn:Disconnect() end); timerStartConns[ts] = nil end
 		for v in pairs(conns) do unbind(v) end
-		pressAt, pending, suppress, suppressTimerStart = {}, {}, {}, {}
-		cachedContainers = nil
+		pressAt, pending, suppress, suppressTimerStart, dirtyButtons = {}, {}, {}, {}, {}
+		cachedContainers, cachedAdorneeGuis, lastCanTouchState = nil, nil, nil
 		control, recording = "none", false
 		idx = nil
 	end
@@ -5912,21 +6806,21 @@ do
 		for id, t0 in pairs(pressAt) do
 			local b = reg.byId[id]
 			local v = b and b.pressed
-			if v and v.Parent and (v.Value or control == "paused" or control == "test" or b.currentPressed) then
+			if v and v.Parent and (v.Value or control ~= "none" or b.currentPressed) then
 				local timerStart = getTimerValues(b)
 				local dur = getButtonDuration(b)
 				local rawEl = tNowCache - t0
 				if rawEl < -0.001 or (dur > 0 and rawEl >= dur) then
-					if control == "paused" or control == "test" then
-						b.currentPressed, pressAt[id] = false, nil
-						reassertUnpressed(b)
-					elseif not v.Value then
-						b.currentPressed, pressAt[id] = false, nil
+					if recording and b.currentPressed then
+						pending[#pending + 1] = { id, 0 }
 					end
-				elseif control == "paused" or control == "test" then
+					b.currentPressed, b.pausedElapsed, pressAt[id] = false, nil, nil
+					reassertUnpressed(b)
+				else
 					local elapsedTAS = math.max(0, rawEl)
 					b.currentPressed = true
-					if not v.Value then reassertPressed(b) end
+					dirtyButtons[id] = true
+					if not v.Value and (control ~= "record" or dur > 0) then reassertPressed(b) end
 					if timerStart then setTimerStartValue(b, timerStart, clock - elapsedTAS) end
 					if dur > 0 then updateTimerUI(b, math.max(0, dur - elapsedTAS), true) end
 					restoreButtonVisual(b, true)
@@ -5937,8 +6831,38 @@ do
 		end
 	end
 	function B.RenderStep()
-		if not enabled or (control ~= "paused" and control ~= "test") or next(pressAt) == nil then return end
-		B.Step(tNowCache)
+		if not enabled or control == "none" or next(pressAt) == nil then return end
+		local clock = os.clock()
+		for id, t0 in pairs(pressAt) do
+			local b = reg.byId[id]
+			if b and b.currentPressed then
+				local dur = getButtonDuration(b)
+				local rawEl = tNowCache - t0
+				if rawEl >= -0.001 and (dur == 0 or rawEl < dur) then
+					local elapsedTAS = math.max(0, rawEl)
+					local ts = b.timerStart
+					if ts and ts.Parent then setTimerStartValue(b, ts, clock - elapsedTAS) end
+					if dur > 0 then
+						local formatted = b.lastFormatted or formatTimer(b, math.max(0, dur - elapsedTAS))
+						local sLabel = b.screenLabel or (not isHideGUI(b) and getScreenLabel(b, false)) or nil
+						if sLabel and sLabel.Parent then
+							if sLabel.Text ~= formatted then
+								suppressLabelText[sLabel] = true
+								pcall(function() sLabel.Text = formatted end)
+								suppressLabelText[sLabel] = nil
+							end
+							if not sLabel.Visible then pcall(function() sLabel.Visible = true end) end
+						end
+						local pLabels = b.partLabels or getPartLabels(b, false)
+						if pLabels then
+							for i = 1, #pLabels do
+								syncPartLabelVisual(pLabels[i], formatted)
+							end
+						end
+					end
+				end
+			end
+		end
 	end
 	function B.RecordFrame(tNow, first)
 		if not enabled or not recording then
@@ -6007,14 +6931,20 @@ do
 		idxData, idxVer, idxCount = data, dataVersion, #data
 		return idx
 	end
+	local seekCandidates = {}
 	local function seekTo(data, f)
 		if not enabled then return end
 		local ix = buildIndex(data)
 		local tF = data[f] and data[f].TotalTime or 0
 		tNowCache = tF
 		local clock = os.clock()
-		for id, b in pairs(reg.byId) do
-			if b.pressed and b.pressed.Parent then
+		table.clear(seekCandidates)
+		for id in pairs(ix.byId) do seekCandidates[id] = true end
+		for id in pairs(pressAt) do seekCandidates[id] = true end
+		for id in pairs(dirtyButtons) do seekCandidates[id] = true end
+		for id in pairs(seekCandidates) do
+			local b = reg.byId[id]
+			if b and b.pressed and b.pressed.Parent then
 				local list = ix.byId[id]
 				local pressed, el = false, 0
 				if list then
@@ -6029,16 +6959,15 @@ do
 						el = e[3] + (tF - (data[e[1]] and data[e[1]].TotalTime or tF))
 					end
 				end
-				if pressed and not applyPressedState(b, id, tF - el, el, control == "paused", clock) then
+				if pressed and not applyPressedState(b, id, tF - el, el, control == "paused" or control == "record", clock) then
 					pressed = false
 				end
 				if not pressed then
-					local bp = b.bp
-					local wantMat = b.unpressedMaterial or Enum.Material.SmoothPlastic
-					local matWrong = bp and bp.Parent and bp.Material ~= wantMat
-					if b.currentPressed ~= false or b.pressed.Value or pressAt[id] ~= nil or matWrong or b.screenLabel ~= nil or b.ourScreenLabel ~= nil or b.ourPartGui ~= nil then
-						b.currentPressed, b.pressedInIdle, pressAt[id] = false, nil, nil
+					if b.currentPressed or b.pressed.Value or pressAt[id] ~= nil or b.screenLabel ~= nil or b.ourScreenLabel ~= nil or b.ourPartGui ~= nil then
+						b.currentPressed, b.pressedInIdle, b.pausedElapsed, pressAt[id] = false, nil, nil, nil
 						reassertUnpressed(b)
+					elseif list == nil then
+						dirtyButtons[id] = nil
 					end
 				end
 			end
@@ -6077,11 +7006,22 @@ do
 	function B.Resume(data, f)
 		if not enabled then return end
 		control, recording = "record", true
+		if f and f > 0 and data[f] then
+			seekTo(data, f)
+		else
+			tNowCache = 0
+			local clock = os.clock()
+			for id, b in pairs(reg.byId) do
+				if b.currentPressed and pressAt[id] ~= nil then
+					local el = b.pausedElapsed or math.max(0, -pressAt[id])
+					applyPressedState(b, id, -el, el, true, clock)
+				end
+			end
+		end
 		for _, b in pairs(reg.byId) do
 			if b.bp and b.bp.Parent then pcall(function() b.bp.CanTouch = true end) end
-			clearOurLabels(b)
+			if not b.currentPressed then clearOurLabels(b) end
 		end
-		if f and f > 0 and data[f] then seekTo(data, f) end
 		table.clear(pending)
 		dataVersion = dataVersion + 1
 		idx = nil
@@ -6101,9 +7041,18 @@ do
 				if b.pressed and b.pressed.Parent and b.pressed.Value and (pressAt[id] == nil or b.pressedInIdle) then
 					local el, dur = getLiveElapsed(b, clock)
 					if dur == 0 or el < dur then
-						b.currentPressed, b.pressedInIdle = true, nil
+						b.currentPressed, b.pressedInIdle, b.pausedElapsed = true, nil, el
 						pressAt[id] = tNowCache - el
 					end
+				elseif b.currentPressed and pressAt[id] ~= nil then
+					b.pausedElapsed = math.max(0, tNowCache - pressAt[id])
+				end
+			end
+		else
+			for id, t0 in pairs(pressAt) do
+				local b = reg.byId[id]
+				if b and b.currentPressed then
+					b.pausedElapsed = math.max(0, tNowCache - t0)
 				end
 			end
 		end
@@ -6158,8 +7107,8 @@ do
 		idx = nil
 	end
 	function B.Release()
+		setAllCanTouch(true)
 		for _, b in pairs(reg.byId) do
-			if b.bp and b.bp.Parent then pcall(function() b.bp.CanTouch = true end) end
 			clearOurLabels(b)
 			b.pressedInIdle = nil
 		end
@@ -6647,6 +7596,103 @@ do
 	end
 	function Sounds.PlayLive(_, isMouse, isRight) play(true, isMouse, isRight) end
 	function Sounds.PlayReplay(_, isMouse, isRight) play(false, isMouse, isRight) end
+end
+do
+	local SH = SpeedHack
+	SH.scale = 1
+	local applied = false
+	local hum, root = nil, nil
+	local baseWalk, baseJump, lastWalk, lastJump = nil, nil, nil, nil
+	local baseGravity, lastGravity = nil, nil
+	local function near(a, b)
+		return math.abs(a - b) <= 1e-4 * math.max(1, math.abs(b))
+	end
+	function SH.Wanted()
+		if not Settings.On("Speed Hack") then return 1 end
+		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 1)
+		if s >= 0.999 then return 1 end
+		return s
+	end
+	local function scaleMomentum(part, ratio)
+		if not (part and part.Parent) or part.Anchored then return end
+		pcall(function()
+			part.AssemblyLinearVelocity = part.AssemblyLinearVelocity * ratio
+			part.AssemblyAngularVelocity = part.AssemblyAngularVelocity * ratio
+		end)
+	end
+	local function rescaleAnimations()
+		local e = AnimEngine.current
+		if e and e.Rescale then pcall(e.Rescale) end
+	end
+	local function applyValues(h, s)
+		if h ~= hum then
+			hum = h
+			baseWalk, baseJump, lastWalk, lastJump = h.WalkSpeed, h.JumpPower, nil, nil
+		else
+			if lastWalk and not near(h.WalkSpeed, lastWalk) then baseWalk = h.WalkSpeed end
+			if lastJump and not near(h.JumpPower, lastJump) then baseJump = h.JumpPower end
+		end
+		local w, j = baseWalk * s, baseJump * s
+		if not near(h.WalkSpeed, w) then h.WalkSpeed = w end
+		if not near(h.JumpPower, j) then h.JumpPower = j end
+		lastWalk, lastJump = h.WalkSpeed, h.JumpPower
+		local g = workspace.Gravity
+		if baseGravity == nil or (lastGravity ~= nil and not near(g, lastGravity)) then baseGravity = g end
+		local wantG = baseGravity * s * s
+		if not near(g, wantG) then workspace.Gravity = wantG end
+		lastGravity = workspace.Gravity
+	end
+	function SH.Restore(keepMomentum)
+		local s = SH.scale
+		if applied then
+			if hum and hum.Parent then
+				pcall(function()
+					if lastWalk and near(hum.WalkSpeed, lastWalk) then hum.WalkSpeed = baseWalk end
+					if lastJump and near(hum.JumpPower, lastJump) then hum.JumpPower = baseJump end
+				end)
+			end
+			if baseGravity and lastGravity and near(workspace.Gravity, lastGravity) then
+				pcall(function() workspace.Gravity = baseGravity end)
+			end
+			if keepMomentum and s < 1 then scaleMomentum(root, 1 / s) end
+		end
+		applied, hum, root = false, nil, nil
+		baseWalk, baseJump, lastWalk, lastJump, baseGravity, lastGravity = nil, nil, nil, nil, nil, nil
+		SH.scale = 1
+		if s ~= 1 then rescaleAnimations() end
+	end
+	function SH.Update(active, h, part, keepMomentum)
+		local s = 1
+		if active and h and part then s = SH.Wanted() end
+		if s >= 1 then
+			if applied then SH.Restore(keepMomentum) end
+			return 1
+		end
+		local ok, err = pcall(applyValues, h, s)
+		if not ok then
+			reportError("speed hack", err)
+			return SH.scale
+		end
+		local prev = applied and SH.scale or 1
+		root = part
+		applied = true
+		SH.scale = s
+		if prev ~= s then
+			scaleMomentum(part, s / prev)
+			rescaleAnimations()
+		end
+		return s
+	end
+	function SH.Start()
+		local function announce()
+			local s = SH.Wanted()
+			local text = (s < 1) and ("Speed Hack: " .. tostring(r(s, 1000)) .. "x while recording") or "Speed Hack: Off"
+			task.spawn(Core.SetStatus, text, true)
+		end
+		Settings.Changed("Speed Hack", announce)
+		Settings.Changed("Speed Hack Speed", function() if Settings.On("Speed Hack") then announce() end end)
+		Janitor.add(function() SH.Restore(true) end)
+	end
 end
 do
 	local function profilerModule()
@@ -9152,25 +10198,25 @@ do
 					for i, r in ipairs(rows) do
 						local h = (mxv > 0) and floor(r[2] / mxv * 118 + 0.5) or 0
 						local col = (r[5] >= r[4]) and "#ff7f27" or "#37a0ee"
-						svg[#svg + 1] = sfmt("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"%s\">&lt;title&gt;%s %.2fms&lt;/title&gt;&lt;/rect&gt;",
+						svg[#svg + 1] = sfmt("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"%s\"><title>%s %.2fms</title></rect>",
 							(i - 1) * bw, 120 - h, bw - 1, h, col, htmlEscape(tostring(r[1])), r[2])
 					end
-					svg[#svg + 1] = "&lt;/svg&gt;"
-					local tbl = { "&lt;table&gt;&lt;tr&gt;&lt;th&gt;frame&lt;/th&gt;&lt;th&gt;cpu ms&lt;/th&gt;&lt;th&gt;gpu ms&lt;/th&gt;&lt;th&gt;render ms&lt;/th&gt;&lt;th&gt;jobs ms&lt;/th&gt;&lt;th&gt;physics ms&lt;/th&gt;&lt;th&gt;HappaTAS ms&lt;/th&gt;&lt;/tr&gt;" }
+					svg[#svg + 1] = "</svg>"
+					local tbl = { "<table><tr><th>frame</th><th>cpu ms</th><th>gpu ms</th><th>render ms</th><th>jobs ms</th><th>physics ms</th><th>HappaTAS ms</th></tr>" }
 					for _, r in ipairs(rows) do
-						tbl[#tbl + 1] = sfmt("&lt;tr&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;td&gt;%.3f&lt;/td&gt;&lt;/tr&gt;",
+						tbl[#tbl + 1] = sfmt("<tr><td>%s</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>",
 							htmlEscape(tostring(r[1]) .. (r.incomplete and " (incomplete)" or "")), r[2], r[3], r[4], r[5], r[6], r[7])
 					end
-					tbl[#tbl + 1] = "&lt;/table&gt;"
+					tbl[#tbl + 1] = "</table>"
 					textOut = table.concat({
-						"&lt;!doctype html&gt;&lt;html&gt;&lt;head&gt;<meta charset=\"utf-8\">&lt;title&gt;", htmlEscape(name), "&lt;/title&gt;&lt;style&gt;",
+						"<!doctype html><html><head><meta charset=\"utf-8\"><title>", htmlEscape(name), "</title><style>",
 						"body{background:#313131;color:#fff;font:12px 'Roboto Mono',monospace;margin:16px}",
 						"svg{background:#474747;display:block;margin:12px 0}table{border-collapse:collapse}",
 						"th{background:#474747}td,th{padding:2px 10px;text-align:right;border-bottom:1px solid #474747}",
-						"&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;h3&gt;HappaTAS ", htmlEscape(VERSION), " - ", htmlEscape(title), "&lt;/h3&gt;",
-						sfmt("&lt;p&gt;%d frames, Avg %.2f ms, Max %.2f ms, Aggregate %s, Place %s&lt;/p&gt;", #rows, avg, peak,
+						"</style></head><body><h3>HappaTAS ", htmlEscape(VERSION), " - ", htmlEscape(title), "</h3>",
+						sfmt("<p>%d frames, Avg %.2f ms, Max %.2f ms, Aggregate %s, Place %s</p>", #rows, avg, peak,
 							(cfg.aggregate == 0) and "Infinite" or tostring(cfg.aggregate), htmlEscape(tostring(game.PlaceId))),
-						table.concat(svg), table.concat(tbl), "&lt;/body&gt;&lt;/html&gt;",
+						table.concat(svg), table.concat(tbl), "</body></html>",
 					})
 					ext = "html"
 				end
@@ -9343,7 +10389,7 @@ local C = {
 	merge = false, mergeBefore = {}, mergeAfter = {}, oldTAS = {}, mergeReqDist = nil, mergeCFrame = nil,
 	mergeCanComplete = false, mergeBaseHeld = nil, hitboxes = {},
 	Humanoid = nil, Char = nil, HRP = nil, IsMobile = UIS.TouchEnabled, QuitTestEvent = nil,
-	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0,
+	dataVersion = 0, inputs = {}, poseT = nil, pose = nil, guardFrames = 0, recScale = 1,
 }
 Core.State = C
 do
@@ -9493,7 +10539,7 @@ do
 		liveRows(f, root, IDLE_ROWS)
 		setText(f["8"], " Zoom: " .. r(zoom or 12.5, 1000))
 	end
-	local lastBT, lastStatFD, lastStatFN, lastStatPaused = nil, nil, nil, nil
+	local lastBT, lastStatFD, lastStatFN, lastStatPaused, lastStatSH = nil, nil, nil, nil, nil
 	function SS.Create(pausedNow, frameNo, FrameData)
 		local panel = C.CreateStatsF
 		showPanel(panel)
@@ -9501,11 +10547,12 @@ do
 		if lastBT == nil then lastBT = panel.BackgroundTransparency end
 		if lastBT ~= bt then panel.BackgroundTransparency = bt; lastBT = bt end
 		local f = labels(panel)
-		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo then
+		local sh = SpeedHack.Wanted()
+		if pausedNow and FrameData and lastStatPaused and lastStatFD == FrameData and lastStatFN == frameNo and lastStatSH == sh then
 			return
 		end
-		lastStatPaused, lastStatFD, lastStatFN = pausedNow, FrameData, frameNo
-		setText(f["1"], " Frame: " .. frameNo)
+		lastStatPaused, lastStatFD, lastStatFN, lastStatSH = pausedNow, FrameData, frameNo, sh
+		setText(f["1"], " Frame: " .. frameNo .. ((sh < 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
@@ -9600,18 +10647,28 @@ do
 		else
 			cam.CFrame = C.TableToCFrame(FrameData.CamCframe)
 		end
+		local hrp, hum = C.HRP, C.Humanoid
+		if hrp and hrp.Parent then
+			local off = hum and hum.CameraOffset or ZERO3
+			cam.Focus = CFrame.new(hrp.CFrame.Position + hrp.CFrame:VectorToWorldSpace(Vector3.new(0, 1.5, 0) + off))
+		end
 		if not UnlockShift then
 			local IsShiftLock = Bridge.IsShiftlocked() and 1 or 0
 			if IsShiftLock ~= FrameData.ShiftLock then Bridge.ShiftlockSwitch() end
 		end
-		Bridge.SetZoom(tonumber(FrameData.Zoom) or 12.5, true)
+		local z = tonumber(FrameData.Zoom) or 12.5
+		Bridge.SetZoom(z, true)
 	end
 	function C.SyncFrame(fr)
 		C.SyncCharacter(C.TableToCFrame(fr.Cframe), C.TableToVector3(fr.Velocity.Linear), C.TableToVector3(fr.Velocity.Angular))
 	end
 	function C.anchor(value)
 		if C.HRP then C.HRP.Anchored = value end
-		Bridge.ShiftlockRotation(not value)
+		local allowAutoRotate = (not value) and (C.mode ~= 3)
+		if C.Humanoid then
+			pcall(function() C.Humanoid.AutoRotate = allowAutoRotate end)
+		end
+		Bridge.ShiftlockRotation(allowAutoRotate)
 	end
 	function C.LoadFrame(FrameData, unpausing, backtrack)
 		local data = C.data
@@ -9624,13 +10681,20 @@ do
 			C.SyncFrame(FrameData)
 			C.UpdateCamera(FrameData)
 			if C.mode == 2 then
+				if C.SetCam() and not C.LookAround then
+					Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+				end
 				ClientObjects.ShowFrame(data, C.frame)
 				Buttons.ShowFrame(data, C.frame)
 				Lighting.ShowFrame(data, C.frame)
 			end
 		else
 			ClientObjects.RestoreUnpause(data, C.frame)
-			if C.SetCam() then Bridge.SetZoom(FrameData.Zoom, true) end
+			if C.SetCam() then
+				Bridge.SetZoom(FrameData.Zoom, true)
+				Bridge.UpdateGhost(FrameData.Zoom, 0, true)
+			end
+			Bridge.ResetGhost(true)
 			C.LastPause = C.frame
 			C.anchor(false)
 		end
@@ -9833,7 +10897,9 @@ do
 		Bridge.ResetGhost()
 		camType(Enum.CameraType.Custom)
 		C.mode, C.frame = 1, 1
+		C.pausedCamCF, C.pausedZoom = nil, nil
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
@@ -9856,14 +10922,21 @@ do
 		C.paused = true
 		C.LookAround = false
 		if #data > 0 and data[#data] then
-			C.LoadFrame(data[#data], false, true)
-			Bridge.SetZoom(data[#data].Zoom, true)
+			local last = data[#data]
+			C.LoadFrame(last, false, true)
+			Bridge.SetZoom(last.Zoom, true)
+			if C.SetCam() then
+				Bridge.UpdateGhost(last.Zoom, 0, true)
+			else
+				Bridge.ResetGhost(true)
+			end
 		else
+			Bridge.ResetGhost(true)
 			Buttons.Pause(0)
 			Lighting.Pause()
 		end
 		C.anchor(true)
-		Bridge.LockShiftlock(false)
+		Bridge.LockShiftlock(#data > 0)
 		Bridge.LockAnimations(true)
 	end
 	function inputs.Test()
@@ -9884,7 +10957,7 @@ do
 		camType(Settings.On("Lock Camera (Test)") and Enum.CameraType.Scriptable or Enum.CameraType.Custom)
 		C.mode = 3
 		if data[C.frame] then
-			C.UpdateCamera(data[C.frame], true)
+			C.UpdateCamera(data[C.frame], false)
 			Bridge.SetZoom(data[C.frame].Zoom, true)
 		end
 		C.anchor(false)
@@ -9903,7 +10976,7 @@ do
 		local data = C.data
 		C.lastVX, C.lastVY = nil, nil
 		InputSys.BeginRecording(data, C.merge and C.mergeBaseHeld or nil)
-		ClientObjects.BeginRecording()
+		ClientObjects.BeginRecording(data[#data])
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
 		Lighting.Resume(data, #data)
@@ -9931,6 +11004,8 @@ do
 		unpauseFrom(data)
 		C.LoadFrame(data[#data], true)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.paused = false
@@ -9944,9 +11019,13 @@ do
 		if C.DoubleInput() then return end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		local cam = workspace.CurrentCamera
+		C.pausedCamCF = cam and cam.CFrame or C.pausedCamCF
+		C.pausedZoom = Bridge.GetZoom()
 		local data = C.data
 		if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(data[#data])
 		Buttons.Pause(frameTime(#data))
 		Lighting.Pause()
@@ -9959,24 +11038,28 @@ do
 		if #data > 1 and data[C.frame] and data[C.frame].State == Enum.HumanoidStateType.Landed.Value then FrameCount = 2 end
 		unpauseFrom(data)
 		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
+		Bridge.LockShiftlock(false)
 		beginRecordingAt()
 		C.FirstFrameRecord = true
 		C.LoadFrame(data[#data], true)
 		noJumpOneFrame()
 		C.paused = false
+		Bridge.SetFreeMouse(false)
 		C.FirstFrameRecord = false
-		for _ = 1, FrameCount do rs.Heartbeat:Wait() end
+		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
 		Bridge.LockAnimations(true)
 		C.paused = true
-		if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 		C.frame = #data
+		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
-		Buttons.Pause(frameTime(#data))
+		Buttons.Pause(frameTime(#C.data))
 		Lighting.Pause()
 	end
 	local function holdAt(f)
 		C.frame = f
 		C.paused = true
+		Bridge.LockShiftlock(#C.data > 0)
 		Bridge.LockAnimations(true)
 		C.LoadFrame(C.data[f], false, true)
 	end
@@ -10158,6 +11241,10 @@ do
 	local uis = UIS
 	local RENDER_BIND = "HappaTASLate"
 	local function finishTest()
+		local data = C.data
+		local lastFr = (#data > 0) and (data[#data] or data[C.frame]) or nil
+		local endZoom = (lastFr and tonumber(lastFr.Zoom)) or (C.pose and C.pose.Zoom) or Bridge.GetZoom()
+		local endShift = lastFr and lastFr.ShiftLock or nil
 		Bridge.ResetGhost()
 		pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
 		InputSys.ReplayEnd()
@@ -10166,10 +11253,12 @@ do
 		Lighting.Release()
 		ToolSync.ReplayEnd()
 		C.mode, C.frame = 1, 1
+		C.anchor(false)
+		Bridge.SetCameraFreeze(false, false)
 		Bridge.LockShiftlock(false)
 		Bridge.LockAnimations(false)
 		Bridge.SetFreeMouse(false)
-		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
+		Bridge.RestoreCameraAfterTest(endZoom, endShift)
 		C.guardFrames = 45
 		Cursor.Reset()
 		local data = C.data
@@ -10186,37 +11275,72 @@ do
 	local function menuOpen()
 		return Menu.IsModalOpen ~= nil and Menu.IsModalOpen()
 	end
+	local function isMode2MouseLocked()
+		if C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+			local fr = C.data[C.frame]
+			if fr and fr.Cframe then
+				return fr.ShiftLock == 1 or (tonumber(fr.Zoom) or 99) <= 0.55
+			end
+		end
+		return Bridge.IsInFirstPerson() or Bridge.IsShiftlocked()
+	end
+	local function holdPausedCamera()
+		if C.mode ~= 2 or not C.paused or C.FirstFrameRecord or C.LookAround or not C.SetCam() then return end
+		local fr = C.data[C.frame]
+		if fr and fr.CamCframe then
+			C.UpdateCamera(fr, false)
+		end
+	end
 	local function updateMouseMode()
+		local modal = menuOpen()
+		local camFreeze = (C.mode == 2 and C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround)
+		local freezeZoom = camFreeze
+		local lockedView = (C.mode == 2 and not modal) and isMode2MouseLocked() or false
+		local forceLock = camFreeze and lockedView
+		Bridge.SetCameraFreeze(camFreeze, forceLock, freezeZoom)
 		local free = false
-		if C.mode == 2 and C.paused and C.SetCam() and not C.LookAround then free = true end
-		if C.mode == 3 and Settings.On("Lock Camera (Test)") then free = true end
+		if modal then
+			free = true
+		elseif C.mode == 3 and Settings.On("Lock Camera (Test)") then
+			free = true
+		elseif camFreeze and not lockedView then
+			free = true
+		end
 		Bridge.SetFreeMouse(free)
-		if C.guardFrames > 0 then
-			C.guardFrames = C.guardFrames - 1
-			if not free and C.mode ~= 3 then Bridge.GuardMouse(menuOpen()) end
+		if not free and C.mode ~= 3 then
+			if C.mode == 2 or C.guardFrames > 0 then
+				if C.guardFrames > 0 then C.guardFrames = C.guardFrames - 1 end
+				Bridge.GuardMouse(modal, forceLock)
+			end
 		end
 	end
 	local function preRender(dt)
 		Profiler.FrameBegin(dt)
 		Profiler.Begin("HappaTAS")
 		local data, mode = C.data, C.mode
-		if not (mode == 2 and not C.paused) then InputSys.Clear() end
+		if not (mode == 2 and (not C.paused or C.FirstFrameRecord)) then InputSys.Clear() end
 		if mode == 2 and C.CharLoaded() then
 			if not C.paused and C.NotDead() and not C.FirstFrameRecord then
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
-				local ft = r(C.LastFrameTime, 1000000)
-				local total = (n >= 2 and data[n].TotalTime) and r(data[n].TotalTime + C.LastFrameTime, 1000000) or ft
+				local k = C.recScale
+				local dtN = C.LastFrameTime * k
+				local ft = r(dtN, 1000000)
+				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + dtN, 1000000) or ft
+				local lin, ang = HRP.AssemblyLinearVelocity, HRP.AssemblyAngularVelocity
+				if k ~= 1 then lin, ang = lin / k, ang / k end
 				local mx, my, uvx, uvy, vx, vy = InputSys.Mouse()
 				local vpChanged = (n == 0 or vx ~= C.lastVX or vy ~= C.lastVY)
 				if vpChanged then C.lastVX, C.lastVY = vx, vy end
+				local curZoom = r(Bridge.GetZoom(), 1000)
+				C.recSim, C.recWall = time(), os.clock()
 				data[n + 1] = {
-					Velocity = { Linear = C.Vector3ToTable(HRP.AssemblyLinearVelocity), Angular = C.Vector3ToTable(HRP.AssemblyAngularVelocity) },
+					Velocity = { Linear = C.Vector3ToTable(lin), Angular = C.Vector3ToTable(ang) },
 					CamCframe = C.CFrameToTable(workspace.CurrentCamera.CFrame),
 					ShiftLock = Bridge.IsShiftlocked() and 1 or 0,
 					Mobile = C.IsMobile and C.ReadMobile() or nil,
-					Zoom = r(Bridge.GetZoom(), 1000),
+					Zoom = curZoom,
 					FrameTime = ft,
 					TotalTime = total,
 					Input = InputSys.Take(),
@@ -10225,46 +11349,58 @@ do
 				}
 				Profiler.End("Record")
 			end
-			if C.paused and #data > 1 and not C.LookAround and data[C.frame] then
-				C.UpdateCamera(data[C.frame], true)
+			if C.paused then
+				holdPausedCamera()
 			end
+			updateMouseMode()
 		elseif mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
 			Profiler.Begin("Playback")
 			local p = C.PlaybackPose()
 			C.SyncCharacter(p.root, p.lin, p.ang)
 			C.UpdateCamera(p)
-			if C.SetCam() and workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then
-				Bridge.UpdateGhost(p.Zoom, dt)
+			if C.SetCam() then
+				Bridge.UpdateGhost(p.Zoom, dt, false)
 			end
 			Profiler.End("Playback")
 		end
+		local hum = C.Humanoid
+		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
+		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
 		Profiler.End("HappaTAS")
 		Profiler.FrameEnd()
+	end
+	local function fillFrame(data)
+		local fd = data[#data]
+		if not (fd and fd.Cframe == nil) then return end
+		Profiler.Begin("Record")
+		local HRP, hum = C.HRP, C.Humanoid
+		local state = hum:GetState()
+		fd.Cframe = C.CFrameToTable(HRP.CFrame)
+		fd.State = state.Value
+		fd.Anim = Bridge.GetAnimation(#data == 2)
+		Profiler.End("Record")
+		Profiler.Begin("Client Objects")
+		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd)
+		Profiler.End("Client Objects")
+		fd.Tools = ToolSync.Take()
+		Profiler.Begin("Buttons")
+		fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
+		Profiler.End("Buttons")
+		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
+		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 	end
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
 		local data = C.data
 		if C.mode == 2 and C.CharLoaded() and not C.paused and not C.FirstFrameRecord and C.NotDead() then
-			local fd = data[#data]
-			if fd and fd.Cframe == nil then
-				Profiler.Begin("Record")
-				local HRP, hum = C.HRP, C.Humanoid
-				local state = hum:GetState()
-				fd.Cframe = C.CFrameToTable(HRP.CFrame)
-				fd.State = state.Value
-				fd.Anim = Bridge.GetAnimation(#data == 2)
-				Profiler.End("Record")
-				Profiler.Begin("Client Objects")
-				fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime)
-				Profiler.End("Client Objects")
-				fd.Tools = ToolSync.Take()
-				Profiler.Begin("Buttons")
-				fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
-				Profiler.End("Buttons")
-				fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
-				if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
-			end
+			fillFrame(data)
 		elseif C.mode == 3 and C.CharLoaded() and data[C.frame + 1] and C.TestingTimer >= 0 then
+			if Settings.On("Interpolate Playback") then
+				local p = C.PlaybackPose()
+				C.SyncCharacter(p.root, p.lin, p.ang)
+			elseif data[C.frame] and data[C.frame].Cframe and data[C.frame].Velocity then
+				C.SyncFrame(data[C.frame])
+			end
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
 		Profiler.End("HappaTAS")
@@ -10368,9 +11504,10 @@ do
 					Buttons.Step(data[C.frame] and data[C.frame].TotalTime or 0)
 				else
 					if C.FirstFrameRecord and #data == 1 then
-						data[1].FrameTime = r(C.LastFrameTime, 1000000)
-						data[1].TotalTime = r(C.LastFrameTime, 1000000)
+						data[1].FrameTime = r(C.LastFrameTime * C.recScale, 1000000)
+						data[1].TotalTime = r(C.LastFrameTime * C.recScale, 1000000)
 					end
+					if #data > 0 and data[#data].Cframe == nil and not C.FirstFrameRecord and C.NotDead() then fillFrame(data) end
 					if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 					C.frame = #data
 					Buttons.Step(data[#data] and data[#data].TotalTime or 0)
@@ -10393,12 +11530,25 @@ do
 	end
 	local function lateRender()
 		Profiler.Begin("HappaTAS")
+		if C.mode == 2 then
+			if C.paused and not C.FirstFrameRecord and #C.data > 0 and C.SetCam() and not C.LookAround then
+				holdPausedCamera()
+				local fr = C.data[C.frame]
+				if fr then Bridge.UpdateGhost(fr.Zoom, C.LastFrameTime, true) end
+			else
+				Bridge.ResetGhost(true)
+			end
+		elseif C.mode == 3 and C.SetCam() then
+			local fr = C.data[C.frame]
+			local z = (C.pose and C.pose.Zoom) or (fr and fr.Zoom) or Bridge.GetZoom()
+			Bridge.UpdateGhost(z, C.LastFrameTime, false)
+		end
 		ClientObjects.RenderStep()
 		Buttons.RenderStep()
 		Lighting.RenderStep()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
-		Cursor.Update(C.mode, (C.mode == 3) and C.data[C.frame] or nil, menuOpen)
+		Cursor.Update(C.mode, (C.mode == 3 or (C.mode == 2 and C.paused and #C.data > 0 and C.SetCam() and not C.LookAround)) and C.data[C.frame] or nil, menuOpen)
 		Profiler.End("Cursor")
 		Profiler.End("HappaTAS")
 	end
@@ -10475,7 +11625,8 @@ do
 			elseif CheckInput(inp, "Forward") and mode == 2 then inputs.Forward()
 			elseif CheckInput(inp, "Delete TAS") and not merge then inputs.Delete()
 			elseif CheckInput(inp, "Optimize TAS") then inputs.Optimize()
-			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround() end
+			elseif CheckInput(inp, "Look Around") and mode == 2 and paused and Settings.On("Lock Camera (Paused)") then inputs.LookAround()
+			elseif CheckInput(inp, "Toggle Speed Hack") then Settings.Set("Speed Hack", Settings.On("Speed Hack") and 0 or 1) end
 		end)
 		on(uis.InputEnded, function(inp)
 			if CheckInput(inp, "Back") then C.back = false end
@@ -11019,6 +12170,7 @@ pcall(function() restore.autoJump = LocalPlayer.AutoJumpEnabled end)
 local handle = { Version = VERSION }
 local function Unload()
 	if Janitor.unloading then return end
+	pcall(SpeedHack.Restore, true)
 	pcall(Core.Shutdown)
 	pcall(Cursor.Reset)
 	pcall(ClientObjects.Disable)
@@ -11047,6 +12199,7 @@ ClientObjects.OnStatus = function(text) Menu.SetStatus(text, true) end
 ClientObjects.Start()
 Buttons.Start()
 Lighting.Start()
+SpeedHack.Start()
 Profiler.Start()
 local function onCharacter(char)
 	task.spawn(function()
