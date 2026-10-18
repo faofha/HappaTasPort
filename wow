@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.14 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.15 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.14"
+local VERSION = "V2.38.15"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -650,7 +650,11 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4260)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4350)},{
+						LV("962", " 10/18/26 - 2.38.15"),
+						LI("962_1", "   -   Speed Hack: bounce pads bounce as high as at normal speed"),
+						LI("962_2", "   -   Client objects saved from their start: morphs show up"),
+						LI("962_3", "   -   before their button is pressed when testing"),
 						LV("963", " 10/18/26 - 2.38.14"),
 						LI("963_1", "   -   Kit scripts on the TAS clock: pause / slow motion stop them"),
 						LI("963_2", "   -   Jump launcher push no longer cut short by a pause"),
@@ -942,11 +946,11 @@ do
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
-					H("38", "Speed Hack (Slow Motion)", 231, true, {
+					H("38", "Speed Hack (Slow Motion)", 250, true, {
 						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
 						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
 						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
-						{ 67, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, pushers and the EToH kit's timers. Other players keep their speed." } }),
+						{ 86, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, bounce pads and the EToH kit's timers. Other players keep their speed. A platform you push yourself still moves too fast." } }),
 					H("39", "EToH Kit Objects", 226, true, {
 						{ 67, "Settings > World Sync > Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the TAS clock, so they stop while paused and slow down with the speed hack." },
 						{ 48, "A jump launcher's push, moving platforms, vanishers, falling platforms and spawner cooldowns keep the same timing whether you pause or not." },
@@ -4002,6 +4006,7 @@ do
 	local newChain = true
 	local recGen, visCursor = 0, 1
 	local lastFullF, lastFullT = 0, -1e9
+	local starts = { log = {}, data = nil }
 	local play = {
 		cur = {}, dyn = {}, dropped = {}, active = false, kind = "test",
 		data = nil, version = -1, frame = nil, sweep = 0,
@@ -4251,6 +4256,7 @@ do
 		plist[#plist + 1] = id
 		pidx[id] = #plist
 		local s = newRecState(part)
+		s.regN = frameNo
 		S[id] = s
 		watchProps(part, s)
 		nRegistered = nRegistered + 1
@@ -4380,6 +4386,7 @@ do
 		scanDone, scanning = false, false
 		play.cur, play.dyn, play.dropped, play.ck, play.ckN = {}, {}, {}, {}, 0
 		play.data, play.frame = nil, nil
+		starts.log, starts.data = {}, nil
 	end
 	local function isVisible(part, s, ppos, cam, camPos, vpX, vpY, tanHalf, strict)
 		if s.vd then
@@ -4520,6 +4527,43 @@ do
 	local H_N = 4
 	local SIM_HZ, WALL_HZ = 240, 50000
 	local CARRY_BIT = { 8, 16, 32 }
+	function starts.record(id, s)
+		local out, rc, rvv = {}, s.rc, s.rv
+		putVar(out, id)
+		putVar(out, K_KEY + K_ROT + K_TR + K_CC + (rvv[2] == 1 and K_CCV or 0) + K_COL + K_SZ + K_MAT)
+		for i = 1, 12 do putZig(out, floor(rc[i] * 1000 + 0.5)) end
+		putZig(out, rvv[1])
+		out[#out + 1] = rvv[3] % 256; out[#out + 1] = rvv[4] % 256; out[#out + 1] = rvv[5] % 256
+		for i = 6, 8 do putZig(out, rvv[i]) end
+		putVar(out, rvv[9])
+		return bufToString(out)
+	end
+	function starts.add(id, s)
+		local log, data = starts.log, starts.data
+		local rec, inChain = nil, false
+		for i = #log, 1, -1 do
+			local e = log[i]
+			local fr = e.fr
+			if e.data ~= data or data[e.i] ~= fr or type(fr.CO) ~= "string" then
+				table.remove(log, i)
+			elseif e.n > s.regN and e.n ~= frameNo then
+				rec = rec or starts.record(id, s)
+				fr.CO = fr.CO .. rec
+				if e.n == lastFullF then inChain = true end
+			end
+		end
+		if not rec then return end
+		Reg.used[id] = true
+		play.ck, play.ckN, play.ckRun, play.ckData = {}, 0, {}, nil
+		play.data, play.nextFor, play.hasData = nil, nil, nil
+		if inChain then
+			local kp, pv, rc, rvv = s.kp, s.pv, s.rc, s.rv
+			for i = 1, 12 do kp[i] = floor(rc[i] * 1000 + 0.5) end
+			for i = 1, 9 do pv[i] = rvv[i] end
+			s.lq[1], s.lq[2], s.lq[3], s.aq[1], s.aq[2], s.aq[3] = 0, 0, 0, 0, 0, 0
+			s.dyn, s.chain, s.needBase = false, chainNo, false
+		end
+	end
 	local function ringPush(s, cf, c1, c3, c4)
 		local i = s.hp % H_N + 1
 		s.hp = i
@@ -4603,6 +4647,7 @@ do
 		local anchored = s.an
 		if not s.moved and not s.propsOff and cf == s.rcf then
 			s.prevCF, s.prevFrame, s.hn = cf, frameNo, 0
+			s.atStart = true
 			return
 		end
 		if anchored then trackScripted(s, cf) end
@@ -4628,8 +4673,12 @@ do
 					if cp[i] ~= rvv[i] then dev = true break end
 				end
 			end
-			if not dev then return end
+			if not dev then
+				s.atStart = true
+				return
+			end
 			s.moved = true
+			if s.atStart and starts.data then starts.add(id, s) end
 		end
 		if not filled then
 			A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8], A[9], A[10], A[11], A[12] = cf:GetComponents()
@@ -4758,9 +4807,10 @@ do
 		end
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
 	end
-	function CO.Record(playerPos, tNow, simNow, wallNow, frame)
+	function CO.Record(playerPos, tNow, simNow, wallNow, frame, data)
 		if not (enabled and scanDone) then return nil end
 		frameNo = frameNo + 1
+		starts.data = data
 		tNow = tNow or 0
 		simNow, wallNow = simNow or tNow, wallNow or tNow
 		local val = {
@@ -4775,6 +4825,11 @@ do
 		if full then
 			chainNo = chainNo + 1
 			lastFullF, lastFullT = frameNo, tNow
+			if frame and data and data[#data] == frame then
+				local log = starts.log
+				if log[1] and log[1].data ~= data then log = {}; starts.log = log end
+				log[#log + 1] = { fr = frame, i = #data, n = frameNo, data = data }
+			end
 		end
 		updateVisibility(playerPos, false)
 		local body = {}
@@ -7859,6 +7914,70 @@ do
 			end
 		end)
 	end
+	local KIT_CONFIG = { BouncePadConfiguration = { Power = 1 } }
+	W.KIT_CONFIG = KIT_CONFIG
+	local knownCfg = setmetatable({}, { __mode = "k" })
+	local cfgEnts = {}
+	local cfgScan, cfgScanIn = true, 0
+	local function scanConfigs()
+		cfgScan = false
+		if not Env.filtergc then return end
+		local ok, found = pcall(Env.filtergc, "table", { Keys = { "__instance", "__defaults" } })
+		if not ok or type(found) ~= "table" then return end
+		for _, t in ipairs(found) do
+			if type(t) == "table" and not knownCfg[t] then
+				local inst = rawget(t, "__instance")
+				local props = typeof(inst) == "Instance" and KIT_CONFIG[inst.Name] or nil
+				if props then knownCfg[t] = props end
+			end
+		end
+	end
+	local function writeCfg(t, e, k)
+		local want = (wf == 1) and e.base[k] or scaled(e.base[k], e.props[k], wf)
+		rawset(t, k, want)
+		e.last[k] = want
+	end
+	local function addCfg(t, props)
+		local e = { props = props, base = {}, last = {} }
+		for k in pairs(props) do
+			local v = rawget(t, k)
+			if type(v) == "number" and v == v then e.base[k] = v end
+		end
+		if next(e.base) == nil then return end
+		cfgEnts[t] = e
+		for k in pairs(e.base) do writeCfg(t, e, k) end
+	end
+	local function restoreCfgs()
+		for t, e in pairs(cfgEnts) do
+			for k, b in pairs(e.base) do
+				if rawget(t, k) == e.last[k] then rawset(t, k, b) end
+			end
+		end
+		cfgEnts = {}
+	end
+	local function stepCfgs()
+		for t, e in pairs(cfgEnts) do
+			for k in pairs(e.base) do
+				local now = rawget(t, k)
+				if now == nil then
+					cfgEnts[t] = nil
+					break
+				elseif now ~= e.last[k] then
+					e.base[k] = now
+					writeCfg(t, e, k)
+				end
+			end
+		end
+		if cfgScan then
+			cfgScanIn = cfgScanIn - 1
+			if cfgScanIn <= 0 then
+				scanConfigs()
+				for t, props in pairs(knownCfg) do
+					if not cfgEnts[t] then addCfg(t, props) end
+				end
+			end
+		end
+	end
 	function W.Track()
 		if tracking then return end
 		tracking = true
@@ -7866,6 +7985,8 @@ do
 			if TIME_PROPS[d.ClassName] then
 				known[d] = true
 				if wf ~= 1 then addEntry(d) end
+			elseif KIT_CONFIG[d.Name] then
+				cfgScan, cfgScanIn = true, 30
 			end
 		end)
 		on(workspace.DescendantRemoving, function(d)
@@ -7890,7 +8011,8 @@ do
 	end
 	function W.SetFactor(f)
 		if f == wf then return end
-		local ratio = f / wf
+		local from = wf
+		local ratio = f / from
 		wf = f
 		if f ~= 1 then
 			for d in pairs(known) do
@@ -7904,6 +8026,15 @@ do
 			end
 			for _, v in pairs(vparts) do writeVel(v) end
 			collectVParts()
+			if cfgScan or from == 1 then scanConfigs() end
+			for t, props in pairs(knownCfg) do
+				local e = cfgEnts[t]
+				if e then
+					for k in pairs(e.base) do writeCfg(t, e, k) end
+				else
+					addCfg(t, props)
+				end
+			end
 		else
 			for _, e in pairs(ents) do restoreEntry(e) end
 			ents = {}
@@ -7916,6 +8047,7 @@ do
 				end
 			end
 			vparts = {}
+			restoreCfgs()
 		end
 		scaleFree(ratio)
 	end
@@ -7933,13 +8065,15 @@ do
 				vparts[p] = nil
 			end
 		end
+		stepCfgs()
 	end
 	function W.Factor() return wf end
 	function W.Count()
-		local n, m = 0, 0
+		local n, m, c = 0, 0, 0
 		for _ in pairs(ents) do n = n + 1 end
 		for _ in pairs(vparts) do m = m + 1 end
-		return n, m
+		for _ in pairs(cfgEnts) do c = c + 1 end
+		return n, m, c
 	end
 	function SH.Wanted()
 		if not Settings.On("Speed Hack") then return 1 end
@@ -12957,7 +13091,7 @@ do
 		fd.Anim = Bridge.GetAnimation(#data == 2)
 		Profiler.End("Record")
 		Profiler.Begin("Client Objects")
-		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd)
+		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd, data)
 		Profiler.End("Client Objects")
 		fd.Tools = ToolSync.Take()
 		Profiler.Begin("Buttons")

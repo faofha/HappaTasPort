@@ -8,6 +8,9 @@
 --  Playback: the pose at time t comes from the model, blended towards the next keyframe over one
 --  frame ("Smooth Client Objects", same idea as Tasability's render segments). Poses are written in
 --  Heartbeat (physics) and again at the end of the render step (so game scripts can't override them).
+--  A part costs nothing while it is still as it was when it was registered; when it changes for the first
+--  time, its start state goes into the full snapshots recorded before it (V2.38.15, see starts.add), so
+--  playback shows it there even when the part is somewhere else now (a pressed morph, a fallen platform).
 --
 --  record layout (v3):  frame byte = 4 (delta) / 5 (full snapshot) + 8 / 16 / 32 when the frame carries
 --      clock 1 / 2 / 3, + 64 on the full snapshot that starts a new recording (its clocks start again
@@ -86,6 +89,9 @@ do
 	local newChain = true -- the next full snapshot starts new clocks (marked with + 64)
 	local recGen, visCursor = 0, 1
 	local lastFullF, lastFullT = 0, -1e9 -- frame number / TotalTime of the last full snapshot
+	-- start states of parts that change later (see starts.add; one table: the module is at Luau's 200 locals
+	-- limit). log = the full snapshots recorded in this session, data = the TAS being recorded
+	local starts = { log = {}, data = nil }
 
 	local play = {
 		cur = {}, dyn = {}, dropped = {}, active = false, kind = "test",
@@ -369,6 +375,7 @@ do
 		plist[#plist + 1] = id
 		pidx[id] = #plist
 		local s = newRecState(part)
+		s.regN = frameNo -- (frames recorded before it was registered)
 		S[id] = s
 		watchProps(part, s)
 		nRegistered = nRegistered + 1
@@ -508,6 +515,7 @@ do
 		scanDone, scanning = false, false
 		play.cur, play.dyn, play.dropped, play.ck, play.ckN = {}, {}, {}, {}, 0
 		play.data, play.frame = nil, nil
+		starts.log, starts.data = {}, nil
 	end
 
 	-- --------------------------------------------------------------------------------------------- visibility
@@ -679,6 +687,53 @@ do
 	local SIM_HZ, WALL_HZ = 240, 50000
 	local CARRY_BIT = { 8, 16, 32 }
 
+	-- A part is skipped while it is still on the pose and properties it had when it was registered. When it
+	-- changes for the first time, the frames before had nothing for it, and playback left it wherever it was
+	-- (the EToH kit's Morph stayed pressed when the script was run again or the TAS was loaded later). Its
+	-- start state now goes into the full snapshots recorded before in this session since it was registered
+	-- (starts.log: their frame tables), and the change is recorded as a change from it. Only for a part that was
+	-- seen on its start state while recording (s.atStart): one that changed before the recording isn't on it.
+	-- the record of a part's start state, as a full snapshot holds it (whole values: from nothing)
+	function starts.record(id, s)
+		local out, rc, rvv = {}, s.rc, s.rv
+		putVar(out, id)
+		putVar(out, K_KEY + K_ROT + K_TR + K_CC + (rvv[2] == 1 and K_CCV or 0) + K_COL + K_SZ + K_MAT)
+		for i = 1, 12 do putZig(out, floor(rc[i] * 1000 + 0.5)) end
+		putZig(out, rvv[1])
+		out[#out + 1] = rvv[3] % 256; out[#out + 1] = rvv[4] % 256; out[#out + 1] = rvv[5] % 256
+		for i = 6, 8 do putZig(out, rvv[i]) end
+		putVar(out, rvv[9])
+		return bufToString(out)
+	end
+	function starts.add(id, s)
+		local log, data = starts.log, starts.data
+		local rec, inChain = nil, false
+		for i = #log, 1, -1 do
+			local e = log[i]
+			local fr = e.fr
+			if e.data ~= data or data[e.i] ~= fr or type(fr.CO) ~= "string" then
+				table.remove(log, i) -- (cut frames, an optimized TAS or another TAS)
+			elseif e.n > s.regN and e.n ~= frameNo then
+				rec = rec or starts.record(id, s)
+				fr.CO = fr.CO .. rec
+				if e.n == lastFullF then inChain = true end
+			end
+		end
+		if not rec then return end
+		Reg.used[id] = true
+		-- (playback's checkpoints were made from these frames)
+		play.ck, play.ckN, play.ckRun, play.ckData = {}, 0, {}, nil
+		play.data, play.nextFor, play.hasData = nil, nil, nil
+		if inChain then
+			-- this chain starts with the start state now: the part's records go on from it
+			local kp, pv, rc, rvv = s.kp, s.pv, s.rc, s.rv
+			for i = 1, 12 do kp[i] = floor(rc[i] * 1000 + 0.5) end
+			for i = 1, 9 do pv[i] = rvv[i] end
+			s.lq[1], s.lq[2], s.lq[3], s.aq[1], s.aq[2], s.aq[3] = 0, 0, 0, 0, 0, 0
+			s.dyn, s.chain, s.needBase = false, chainNo, false
+		end
+	end
+
 	local function ringPush(s, cf, c1, c3, c4)
 		local i = s.hp % H_N + 1
 		s.hp = i
@@ -779,6 +834,7 @@ do
 		local anchored = s.an
 		if not s.moved and not s.propsOff and cf == s.rcf then
 			s.prevCF, s.prevFrame, s.hn = cf, frameNo, 0
+			s.atStart = true
 			return
 		end
 		if anchored then trackScripted(s, cf) end
@@ -805,8 +861,12 @@ do
 					if cp[i] ~= rvv[i] then dev = true break end
 				end
 			end
-			if not dev then return end
+			if not dev then
+				s.atStart = true
+				return
+			end
 			s.moved = true
+			if s.atStart and starts.data then starts.add(id, s) end
 		end
 		if not filled then
 			A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8], A[9], A[10], A[11], A[12] = cf:GetComponents()
@@ -956,9 +1016,10 @@ do
 
 	-- tNow = TotalTime of the frame being recorded (TAS clock); simNow / wallNow = time() and os.clock()
 	-- when that frame started (its render step); frame = the frame table the result goes into
-	function CO.Record(playerPos, tNow, simNow, wallNow, frame)
+	function CO.Record(playerPos, tNow, simNow, wallNow, frame, data)
 		if not (enabled and scanDone) then return nil end
 		frameNo = frameNo + 1
+		starts.data = data
 		tNow = tNow or 0
 		simNow, wallNow = simNow or tNow, wallNow or tNow
 		local val = {
@@ -976,6 +1037,11 @@ do
 		if full then
 			chainNo = chainNo + 1
 			lastFullF, lastFullT = frameNo, tNow
+			if frame and data and data[#data] == frame then
+				local log = starts.log
+				if log[1] and log[1].data ~= data then log = {}; starts.log = log end
+				log[#log + 1] = { fr = frame, i = #data, n = frameNo, data = data }
+			end
 		end
 
 		updateVisibility(playerPos, false)
