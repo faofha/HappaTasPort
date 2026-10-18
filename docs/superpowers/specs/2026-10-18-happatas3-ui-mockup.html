@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liquid glass Studio v16</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500&family=Nunito:wght@500&family=Roboto+Mono:wght@500&family=Source+Sans+3:wght@500&family=Fredoka:wght@500&family=Oswald:wght@500&family=Merriweather:wght@400&family=Roboto:wght@500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0f1115; color: #e8eaf0; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: #9aa0ad; margin: 0 0 22px; max-width: 1080px; }
+  .opt { border: 1px solid #262a33; border-radius: 14px; background: #141720; margin-bottom: 26px; overflow: hidden; }
+  .opt header { padding: 14px 16px 12px; }
+  .opt header h2 { margin: 0; font-size: 16px; }
+  .screen { position: relative; margin: 0 16px 16px; height: 900px; border-radius: 10px; overflow: hidden; font: 12px/1.3 "Segoe UI", sans-serif;
+    background: linear-gradient(#78b6ef 0%, #cfe7fb 52%, transparent 52%), repeating-linear-gradient(90deg, #5aa04e 0 40px, #4f9445 40px 80px); }
+  .p { position: absolute; border-radius: 4px; }
+  .num { font-family: "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  /* windows: rounder again (16 px default) */
+  .g { position: absolute; color: #fff; border-radius: 16px; overflow: hidden;
+       background: rgba(36,42,56,.46); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5);
+       box-shadow: 0 12px 30px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.16); }
+  .g > * { position: relative; z-index: 1; }
+  .grip { position: absolute; right: 6px; bottom: 6px; width: 12px; height: 12px; z-index: 2; opacity: .7;
+    background: linear-gradient(135deg, transparent 0 45%, rgba(255,255,255,.7) 45% 52%, transparent 52% 64%, rgba(255,255,255,.7) 64% 71%, transparent 71%); }
+  .t { display: flex; justify-content: space-between; align-items: center; padding: 11px 18px 10px; font-weight: 700; font-size: 13.5px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.45); display: block; }
+  .dots i:first-child { background: #ff6a6a; }
+
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 4px 18px; min-height: 32px; }
+  .row .name { display: flex; flex-direction: column; }
+  .row .name small { opacity: .6; font-size: 10.5px; margin-top: 1px; }
+  .row .rs { display: flex; justify-content: center; }
+  .row .ctl { display: flex; justify-content: flex-end; align-items: center; gap: 7px; }
+  .sect { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px 4px; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; opacity: .85; }
+  .sect .act span { letter-spacing: 0; text-transform: none; font-weight: 600; font-size: 11px; }
+
+  /* ---------- controls: C2 shapes, soft liquid ---------- */
+  .glassy { background: rgba(255,255,255,.12); box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 0 0 1px rgba(255,255,255,.10); }
+  .reset { width: 24px; height: 24px; border-radius: 999px; color: #2a1c00; text-align: center; line-height: 24px; font-size: 12px; font-weight: 800;
+           background: linear-gradient(180deg, rgba(255,200,110,.95), rgba(240,160,50,.9)); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+  .bt { display: inline-block; padding: 4px 13px; border-radius: 999px; font-size: 11.5px; }
+  .bt.pri { background: linear-gradient(180deg, #5b92f7, #3f7cf0); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+  .seg { display: inline-flex; border-radius: 999px; background: rgba(255,255,255,.12); padding: 2px; }
+  .seg span { padding: 3px 11px; border-radius: 999px; opacity: .78; }
+  .seg .on { opacity: 1; color: #fff; background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.20)); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.18), 0 1px 3px rgba(0,0,0,.2); }
+  .tog { display: inline-block; width: 44px; height: 26px; border-radius: 999px; position: relative; background: #3f7cf0; }
+  .tog::after { content: ""; position: absolute; right: 2px; top: 2px; width: 22px; height: 22px; border-radius: 50%;
+         background: radial-gradient(120% 100% at 50% 18%, #ffffff, rgba(255,255,255,.94) 55%, rgba(236,242,255,.88));
+         box-shadow: inset 0 0 0 1px rgba(255,255,255,.95), inset 0 -2px 3px rgba(180,200,240,.35), 0 2px 6px rgba(0,0,0,.3); }
+  .tog.off { background: rgba(255,255,255,.22); }
+  .tog.off::after { right: auto; left: 2px; }
+  .field { display: inline-flex; align-items: center; justify-content: center; height: 24px; padding: 0 12px; border-radius: 999px; background: rgba(0,0,0,.25); min-width: 60px; text-align: center; line-height: 1; }
+  .field.edit { background: rgba(0,0,0,.45); box-shadow: 0 0 0 2px #4b8bff, inset 0 1px 2px rgba(0,0,0,.35); }
+  .caret { display: inline-block; width: 1px; height: 13px; background: #fff; margin-left: 1px; }
+  .drop { display: inline-block; padding: 3px 12px; border-radius: 999px; }
+  .slider { position: relative; width: 112px; height: 4px; border-radius: 999px; background: rgba(255,255,255,.25); }
+  .slider i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: #3f7cf0; }
+  .slider b { position: absolute; top: -9px; width: 22px; height: 22px; border-radius: 50%; transform: translateX(-11px);
+              background: radial-gradient(120% 100% at 50% 18%, #ffffff, rgba(255,255,255,.94) 55%, rgba(236,242,255,.88));
+              box-shadow: inset 0 0 0 1px rgba(255,255,255,.95), inset 0 -2px 3px rgba(180,200,240,.35), 0 2px 6px rgba(0,0,0,.3); }
+  .sw { display: inline-block; flex: 0 0 auto; align-self: center; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 0 0 1.5px rgba(255,255,255,.35), 0 1px 3px rgba(0,0,0,.3); }
+  .sw.on { box-shadow: 0 0 0 2px #fff, inset 0 1px 0 rgba(255,255,255,.6), 0 1px 3px rgba(0,0,0,.3); }
+  .search { display: flex; justify-content: space-between; align-items: center; height: 32px; margin: 10px 18px 4px; padding: 0 16px; border-radius: 999px; background: rgba(0,0,0,.25); }
+  .search span { line-height: 32px; font-size: 13.5px; }
+  .search .typed { opacity: 1; }
+  .search svg { width: 15px; height: 15px; opacity: .85; }
+  .nav { display: flex; gap: 6px; padding: 6px 18px 4px; flex-wrap: wrap; }
+  .nav span { padding: 3px 11px; border-radius: 999px; font-size: 11px; }
+  .nav .on { background: linear-gradient(180deg, #5b92f7, #3f7cf0); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+  .tip { position: absolute; z-index: 5; font-size: 10.5px; background: rgba(0,0,0,.75); padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+
+  /* colour picker popover */
+  .pick { position: absolute; z-index: 6; width: 268px; padding: 12px; border-radius: 16px; }
+  .sv { position: relative; height: 150px; border-radius: 10px; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #4b8bff); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+  .sv b { position: absolute; left: 70%; top: 18%; width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); transform: translate(-8px,-8px); }
+  .hue, .alpha { position: relative; height: 12px; border-radius: 999px; margin-top: 10px; }
+  .hue { background: linear-gradient(90deg, red, yellow, lime, cyan, blue, magenta, red); }
+  .alpha { background: linear-gradient(90deg, rgba(75,139,255,0), #4b8bff), repeating-conic-gradient(#888 0 25%, #ccc 0 50%) 0 0/10px 10px; }
+  .hue b, .alpha b { position: absolute; top: -3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); transform: translateX(-9px); }
+  .prev { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .prev .old, .prev .new { width: 34px; height: 22px; }
+  .prev .old { border-radius: 999px 0 0 999px; background: #4b8bff; }
+  .prev .new { border-radius: 0 999px 999px 0; background: #6a5cff; margin-left: -8px; }
+  .modes { margin-left: auto; }
+  .chans { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 6px; margin-top: 10px; text-align: center; font-size: 10.5px; }
+  .chans div { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+  .chans .field { min-width: 0; width: 100%; padding: 0 4px; }
+  .chans small { opacity: .6; font-size: 10px; }
+  .recent { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+  .recent .sw { width: 16px; height: 16px; }
+  .pick .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+
+  .bez { display: grid; grid-template-columns: 170px 1fr; gap: 14px; margin: 2px 18px 8px; padding: 12px; border-radius: 12px; background: rgba(0,0,0,.18); }
+  .graph { position: relative; height: 128px; border-radius: 10px; background: rgba(0,0,0,.2); }
+  .graph svg { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); overflow: visible; touch-action: none; }
+  .hd { fill: #fff; stroke: rgba(180,200,240,.9); stroke-width: 1.5; cursor: grab; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+  .bezside { display: flex; flex-direction: column; gap: 6px; }
+  .bezvals, .bezlbl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .bezvals .field { min-width: 0; text-align: center; padding: 3px 4px; }
+  .bezlbl { text-align: center; font-size: 10px; opacity: .6; margin-top: -3px; }
+  .bezpre { display: flex; flex-wrap: wrap; gap: 5px; }
+  .bezpre span { padding: 2px 10px; border-radius: 999px; font-size: 11px; }
+  .bezrow { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+  .bezrow span:first-child { opacity: .75; }
+
+  .drop.open { box-shadow: 0 0 0 2px #5b92f7, inset 0 1px 0 rgba(255,255,255,.28); }
+  .fontpop { width: 230px; padding: 6px 6px 6px; border-radius: 16px; z-index: 7; }
+  .fontpop .fs { margin: 2px 6px 6px; }
+  .fgroup { padding: 6px 12px 3px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; opacity: .6; font-family: "Segoe UI", sans-serif; }
+  .fopt { display: flex; justify-content: space-between; align-items: center; height: 25px; padding: 0 12px; margin: 1px 0; border-radius: 999px; font-size: 14px; }
+  .fopt:hover { background: rgba(255,255,255,.08); }
+  .fopt.sel { background: rgba(91,146,247,.35); }
+  .fopt .chk { font-family: "Segoe UI", sans-serif; font-size: 12px; }
+  .fprev { display: flex; flex-direction: column; gap: 3px; margin: 8px 6px 2px; padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,.2); font-size: 12.5px; }
+  .fprev span:first-child { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<h1>Liquid glass + Studio, v16: Settings</h1>
+<p class="sub">Changes from v15: search text is bigger (13.5 instead of 12) in both search boxes; font rows are closer together (25 px instead of 30 px) and the dropdown is a bit narrower.</p>
+
+<section class="opt">
+  <header><h2>Settings, with the colour picker open on Accent colour</h2></header>
+  <div class="screen">
+    <div class="p" style="left:76%;bottom:48%;width:80px;height:100px;background:#c94f4f"></div>
+    <div class="p" style="left:88%;bottom:48%;width:50px;height:50px;background:#e6c14c"></div>
+
+    <div class="g" style="left:24px; top:16px; width:540px; height:860px;">
+      <div class="t"><span>Settings</span><span class="dots"><i></i><i></i></span></div>
+      <div class="search"><span class="typed">gla<span class="caret"></span></span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg></div>
+      <div class="nav"><span class="on">Appearance</span><span class="glassy">Playback</span><span class="glassy">Create</span><span class="glassy">Speed hack</span><span class="glassy">Inputs</span><span class="glassy">World sync</span><span class="glassy">Interface</span><span class="glassy">Sounds</span><span class="glassy">UI sounds</span></div>
+
+      <div class="sect"><span>Appearance</span><span class="act"><span class="bt glassy">Reset section</span></span></div>
+      <div class="row"><div class="name">Theme<small>Save your look and switch between saved looks</small></div><div class="ctl"><span class="drop glassy">Default ▾</span><span class="bt glassy">Save as…</span></div></div>
+      <div class="row"><div class="name">Glass<small>Frost blurs the game behind (high graphics only)</small></div><div class="ctl"><span class="reset">↺</span><span class="seg"><span>Clear</span><span>Tint</span><span class="on">Frost</span></span></div></div>
+      <div class="row"><div class="name">Glass colour</div><div class="ctl"><span class="sw" style="background:#242a38"></span><span class="field num">#242A38</span></div></div>
+      <div class="row"><div class="name">Glass transparency</div><div class="ctl"><span class="slider"><i style="width:54%"></i><b style="left:54%"></b></span><span class="field num" style="min-width:60px">54%</span></div></div>
+      <div class="row"><div class="name">Blur strength</div><div class="ctl"><span class="reset">↺</span><span class="slider"><i style="width:70%"></i><b style="left:70%"></b></span><span class="field num" style="min-width:60px">70%</span></div></div>
+      <div class="row"><div class="name">Accent colour</div><div class="ctl"><span class="reset">↺</span><span class="sw" style="background:#4b8bff"></span><span class="sw on" style="background:#6a5cff"></span><span class="sw" style="background:#2ed3b7"></span><span class="sw" style="background:#ff6bb5"></span><span class="sw" style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)"></span></div></div>
+      <div class="row"><div class="name">Text colour</div><div class="ctl"><span class="sw" style="background:#ffffff"></span><span class="field num">#FFFFFF</span></div></div>
+      <div class="row"><div class="name">Font</div><div class="ctl"><span class="drop glassy open" id="fontbtn">Builder Sans ▴</span></div></div>
+      <div class="row"><div class="name">Text size<small>Click the number to type a value</small></div><div class="ctl"><span class="reset">↺</span><span class="slider"><i style="width:60%"></i><b style="left:60%"></b></span><span class="field num edit" style="min-width:60px">15<span class="caret"></span></span></div></div>
+      <div class="row"><div class="name">Interface scale</div><div class="ctl"><span class="slider"><i style="width:50%"></i><b style="left:50%"></b></span><span class="field num" style="min-width:60px">100%</span></div></div>
+      <div class="row"><div class="name">Window corners</div><div class="ctl"><span class="slider"><i style="width:57%"></i><b style="left:57%"></b></span><span class="field num" style="min-width:60px">16 px</span></div></div>
+      <div class="row"><div class="name">Button shape</div><div class="ctl"><span class="seg"><span class="on">Pill</span><span>Rounded</span><span>Square</span></span></div></div>
+      <div class="row"><div class="name">Shadows</div><div class="ctl"><span class="tog"></span></div></div>
+      <div class="row"><div class="name">Animations</div><div class="ctl"><span class="seg"><span>Off</span><span class="on">Smooth</span><span>Snappy</span><span>Bouncy</span></span></div></div>
+      <div class="row"><div class="name">Easing</div><div class="ctl"><span class="reset">↺</span><span class="drop glassy">Custom (cubic-bezier) ▾</span></div></div>
+      <div class="bez">
+        <div class="graph">
+          <svg id="bz" viewBox="0 0 160 120">
+            <line x1="10" y1="110" x2="150" y2="10" stroke="rgba(255,255,255,.18)" stroke-dasharray="3 4"/>
+            <line id="l1" x1="10" y1="110" x2="52" y2="28" stroke="rgba(255,255,255,.6)" stroke-width="1.5"/>
+            <line id="l2" x1="150" y1="10" x2="66" y2="10" stroke="rgba(255,255,255,.6)" stroke-width="1.5"/>
+            <path id="cv" d="M10,110 C52,28 66,10 150,10" fill="none" stroke="#5b92f7" stroke-width="3"/>
+            <circle cx="10" cy="110" r="3" fill="rgba(255,255,255,.7)"/><circle cx="150" cy="10" r="3" fill="rgba(255,255,255,.7)"/>
+            <circle id="h1" class="hd" cx="52" cy="28" r="7"/>
+            <circle id="h2" class="hd" cx="66" cy="10" r="7"/>
+          </svg>
+        </div>
+        <div class="bezside">
+          <div class="bezvals num"><span class="field" id="vx1">0.30</span><span class="field" id="vy1">0.82</span><span class="field" id="vx2">0.40</span><span class="field" id="vy2">1.00</span></div>
+          <div class="bezlbl"><span>x1</span><span>y1</span><span>x2</span><span>y2</span></div>
+          <div class="bezpre"><span class="glassy">Ease</span><span class="glassy">Ease in</span><span class="glassy">Ease out</span><span class="glassy">Overshoot</span></div>
+          <div class="bezrow"><span>Length</span><span class="field num">0.22 s</span><span class="bt glassy">▶ Preview</span></div>
+        </div>
+      </div>
+
+      <div class="sect"><span>UI sounds</span><span class="act"><span class="bt glassy">Reset section</span></span></div>
+      <div class="row"><div class="name">Interface sounds<small>Soft sounds when you click, hover and open windows</small></div><div class="ctl"><span class="tog"></span></div></div>
+      <div class="row"><div class="name">Click sound</div><div class="ctl"><span class="drop glassy">Soft tick ▾</span><span class="bt glassy">▶</span></div></div>
+      <div class="row"><div class="name">Hover sound</div><div class="ctl"><span class="reset">↺</span><span class="tog off"></span></div></div>
+      <div class="row"><div class="name">Open / close sound</div><div class="ctl"><span class="drop glassy">Whoosh ▾</span><span class="bt glassy">▶</span></div></div>
+      <div class="row"><div class="name">Volume</div><div class="ctl"><span class="slider"><i style="width:40%"></i><b style="left:40%"></b></span><span class="field num" style="min-width:60px">40%</span></div></div>
+      <i class="grip"></i>
+    </div>
+
+
+    <div class="g fontpop" style="left:296px; top:472px;">
+      <div class="search fs"><span>Search fonts...</span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg></div>
+      <div class="fopt sel" style="font-family:'Nunito',sans-serif"><span>Builder Sans</span><span class="chk">✓</span></div>
+      <div class="fopt" style="font-family:'Montserrat',sans-serif"><span>Gotham</span></div>
+      <div class="fopt" style="font-family:'Source Sans 3',sans-serif"><span>Source Sans Pro</span></div>
+      <div class="fopt" style="font-family:'Roboto',sans-serif"><span>Roboto</span></div>
+      <div class="fopt" style="font-family:'Fredoka',sans-serif"><span>Fredoka One</span></div>
+      <div class="fopt" style="font-family:'Oswald',sans-serif"><span>Oswald</span></div>
+      <div class="fopt" style="font-family:'Merriweather',serif"><span>Merriweather</span></div>
+      <div class="fopt" style="font-family:'Roboto Mono',monospace"><span>Roboto Mono</span></div>
+    </div>
+    <!-- colour picker popover, anchored to the accent swatch -->
+    <div class="g pick" style="left:580px; top:262px;">
+      <div class="sv"><b></b></div>
+      <div class="hue"><b style="left:69%"></b></div>
+      <div class="alpha"><b style="left:100%"></b></div>
+      <div class="prev"><span class="old"></span><span class="new"></span>
+        <span class="seg modes"><span class="on">HEX</span><span>RGB</span><span>HSV</span></span></div>
+      <div class="chans"><div><span class="field num">#6A5CFF</span><small>HEX</small></div><div><span class="field num">106</span><small>R</small></div><div><span class="field num">92</span><small>G</small></div><div><span class="field num">255</span><small>B</small></div></div>
+      <div class="recent"><span style="opacity:.7;font-size:10.5px">Recent</span><span class="sw" style="background:#4b8bff"></span><span class="sw" style="background:#ff5a64"></span><span class="sw" style="background:#2ed3b7"></span><span class="sw" style="background:#ffd34d"></span></div>
+      <div class="btns"><span class="bt glassy">Cancel</span><span class="bt pri">Apply</span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var svg = document.getElementById('bz'); if (!svg) return;
+  var X0 = 10, Y0 = 110, X1 = 150, Y1 = 10, drag = null;
+  function pt(e) { var p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function upd() {
+    var a = document.getElementById('h1'), b = document.getElementById('h2');
+    var ax = +a.getAttribute('cx'), ay = +a.getAttribute('cy'), bx = +b.getAttribute('cx'), by = +b.getAttribute('cy');
+    document.getElementById('l1').setAttribute('x2', ax); document.getElementById('l1').setAttribute('y2', ay);
+    document.getElementById('l2').setAttribute('x2', bx); document.getElementById('l2').setAttribute('y2', by);
+    document.getElementById('cv').setAttribute('d', 'M' + X0 + ',' + Y0 + ' C' + ax + ',' + ay + ' ' + bx + ',' + by + ' ' + X1 + ',' + Y1);
+    function nx(x) { return ((x - X0) / (X1 - X0)).toFixed(2); } function ny(y) { return ((Y0 - y) / (Y0 - Y1)).toFixed(2); }
+    document.getElementById('vx1').textContent = nx(ax); document.getElementById('vy1').textContent = ny(ay);
+    document.getElementById('vx2').textContent = nx(bx); document.getElementById('vy2').textContent = ny(by);
+  }
+  ['h1', 'h2'].forEach(function (id) {
+    document.getElementById(id).addEventListener('pointerdown', function (e) { drag = this; this.setPointerCapture(e.pointerId); });
+  });
+  svg.addEventListener('pointermove', function (e) {
+    if (!drag) return; var p = pt(e);
+    drag.setAttribute('cx', Math.max(X0, Math.min(X1, p.x))); drag.setAttribute('cy', Math.max(-30, Math.min(150, p.y))); upd();
+  });
+  svg.addEventListener('pointerup', function () { drag = null; });
+  upd();
+})();
+</script>
+</body>
+</html>
