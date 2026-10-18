@@ -1138,7 +1138,7 @@ do
 		fd.Anim = Bridge.GetAnimation(#data == 2)
 		Profiler.End("Record")
 		Profiler.Begin("Client Objects")
-		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd)
+		fd.CO = ClientObjects.Record(HRP.Position, fd.TotalTime, C.recSim, C.recWall, fd, data)
 		Profiler.End("Client Objects")
 		fd.Tools = ToolSync.Take()
 		Profiler.Begin("Buttons")
