@@ -7,7 +7,7 @@ HappaTAS as **one client-side Luau script** for Roblox executors. It records and
 It started as the HappaTAS model pair (an initializer that `require()`s a MainModule); everything,
 including the old server scripts, now runs in one local script. No network code.
 
-**Latest version: V2.38.15.** Run `wow` (or `wow1`, the same file) in your executor.
+**Latest version: V2.38.16.** Run `wow` (or `wow1`, the same file) in your executor.
 
 ## Quick start
 
@@ -46,14 +46,22 @@ No HappaTAS key does anything while you type in chat or a text box.
   beat blocks, turrets, pushboxes, morphs.
   - *Kit Scripts On TAS Clock*: the kit's own scripts wait, delay and tween on the TAS clock, so they
     stop while you are paused and slow down with the speed hack (a jump launcher's push, moving
-    platforms, vanishers, cooldowns...).
+    platforms, vanishers, cooldowns...). Kit scripts that move things every frame (the Zipline ride, the
+    Sequencer) get the TAS clock's frame time too.
   - *Sync Kit Objects*: beat blocks follow the TAS time, turret bullets are saved in the TAS (with
-    their hits and damage), pushboxes are hidden on frames before they were spawned.
-- **Speed Hack** (Settings > Speed Hack): slow motion while recording, like a video played slower. The
-  character, gravity, animations and the world (constraints, conveyors, bounce pads, kit timers) slow
-  down; the TAS is still saved in normal time, so Test plays it at normal speed. Not slowed: a platform
-  you push yourself (the kit's Pushing Platform), because Roblox's walking force can't be slowed by a
+    their hits and damage), pushboxes are hidden on frames before they were spawned, and the effects of
+    bounce pads and jump launchers (sound, particles) are saved and shown again when testing.
+- **Speed Hack** (Settings > Speed Hack): slow or fast motion while recording (0.1x - 4x), like a video
+  played slower or faster. The character, gravity, animations, the camera's zoom and the world
+  (constraints, conveyors, bounce pads, swings, kit timers) change speed; the TAS is still saved in normal
+  time, so Test plays it at normal speed. In this "smooth" mode a platform you push yourself (the kit's
+  Pushing Platform) moves too fast in slow motion, because Roblox's walking force can't be slowed by a
   script.
+  - *Frame Step* (below 1x): nothing is scaled. Roblox's normal physics runs on some frames only (one in
+    two at 0.5x) and everything that moves is held still for the others; only the frames whose physics
+    ran are recorded. Walking, jumping and falling come out exactly like normal speed, and a platform you
+    push speeds up normally (in smooth mode far too fast); the moment you bump into it can still play out a
+    little differently (the push may start later, now and then it stalls: re-record that bit).
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
@@ -67,7 +75,7 @@ No HappaTAS key does anything while you type in chat or a text box.
 | --- | --- |
 | Playback | Lock Camera (Test), Interpolate Playback, Playback Speed, Restart When Testing, Show Completion Message |
 | Create | Lock Camera (Paused), Record Death & Respawn, Record Tool Actions, Ignore Game Processed |
-| Speed Hack | Speed Hack, Speed (0.1 - 1, 0.5 = half) |
+| Speed Hack | Speed Hack, Speed (0.1 - 4, 0.5 = half, 2 = double), Frame Step (normal physics, below 1x) |
 | Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, Normalize Mouse UV, NohBoard Cursor, Invisible Mouse Speed, Window Guarding |
 | World Sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |
 | Interface | Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Size, MicroProfiler Text Offset, Allow Visible Interface (PlayerGui) |
@@ -158,12 +166,15 @@ there stay on your own computer and are never pushed to GitHub.
 ## File format
 
 `.tas` files start with `HTAS` and a version byte; the frames are stored column by column and LZ4
-compressed. v5 (V2.38.14) adds the kit events (turret bullets, pushbox spawns), the speed hack factor
-and the kit objects' ids; v4 (V2.38.13) the client object clocks. Older files (v1 - v4, and the old JSON
+compressed. v5 (V2.38.14) adds the kit events (turret bullets, pushbox spawns; V2.38.16: bounce pad /
+jump launcher effects, which V2.38.15 and older can't read), the speed hack factor and the kit objects' ids; v4 (V2.38.13) the client object clocks. Older files (v1 - v4, and the old JSON
 slots) still load.
 
 ## Version history (short)
 
+- **V2.38.16**: speed hack up to 4x (fast motion), Frame Step slow motion (normal physics: pushed
+  platforms speed up normally), the zoom plays back at normal speed after slow / fast motion, bounce pad and jump
+  launcher effects shown when testing, the Zipline ride and Sequencer on the TAS clock.
 - **V2.38.15**: bounce pads bounce as high in slow motion, client objects saved from their start state
   (morphs show up before their button is pressed when testing).
 - **V2.38.14**: the EToH kit's scripts on the TAS clock (a pause no longer cuts a jump launcher's
