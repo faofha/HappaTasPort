@@ -33,29 +33,40 @@ local function unloadOlder()
 	end
 end
 
+-- The handle is shared first and every later step runs protected: a Start that fails halfway is
+-- reported and unloaded at once, so it never leaves a running copy nothing can unload.
 function Main.Start()
 	unloadOlder()
 	local errs = Errors.new()
-	local life = Lifecycle.new()
-	local state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
-	local bus = Bus.new(errs)
-	local pipe = Pipeline.new(life, errs, bus)
-	pipe:start()
+	local life = Lifecycle.new("HappaTAS3")
 	local handle = { Version = CONFIG.VERSION, Unload = Main.Unload }
-	kernel = { errs = errs, life = life, state = state, bus = bus, pipe = pipe, handle = handle }
+	local k = { errs = errs, life = life, handle = handle }
+	kernel = k
 	share("__HappaTAS3", handle, errs)
-	if CONFIG.Debug then
-		kernel.debug = { errs = errs, life = life, state = state, bus = bus, pipe = pipe, Env = Env }
-		share("__HappaTAS3_T", kernel.debug, errs)
-		print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
+	local ok, err = pcall(function()
+		k.state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
+		k.bus = Bus.new(errs)
+		k.pipe = Pipeline.new(life, errs, k.bus)
+		k.pipe:start()
+		if CONFIG.Debug then
+			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env }
+			share("__HappaTAS3_T", k.debug, errs)
+			print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
+		end
+	end)
+	if not ok then
+		errs:report("main", "start failed: " .. tostring(err))
+		Main.Unload()
+		return false
 	end
+	return true
 end
 
 function Main.Unload()
 	local k = kernel
 	if not k then return end
 	kernel = nil
-	k.pipe:stop()
+	if k.pipe then k.pipe:stop() end
 	k.life:cleanup()
 	local genv = Env.genv
 	if genv.__HappaTAS3 == k.handle then share("__HappaTAS3", nil) end

@@ -55,4 +55,23 @@ local ok = pcall(h2.Unload)
 check(ok, "Unload twice is fine")
 M.steps(3)
 eq(afterUnload, 0, "nothing runs after Unload")
+
+section("a Start that fails halfway leaves nothing behind")
+local Pipeline = __T3("kernel/pipeline")
+local realStart = Pipeline.start
+Pipeline.start = function(self)
+	self.life:connect(RS.PreRender, function() end) -- (got this far, then broke)
+	error("start broke")
+end
+local okStart = pcall(__T3("main").Start)
+Pipeline.start = realStart
+check(okStart, "Start doesn't throw")
+eq(RS.PreRender:Count(), before[1], "the connection made before the failure is gone")
+eq(genv.__HappaTAS3, nil, "no handle left behind")
+local reported, kept = false, {}
+for _, l in ipairs(M.logs) do
+	if l:find("start failed", 1, true) then reported = true else kept[#kept + 1] = l end
+end
+check(reported, "the failure is reported")
+M.logs = kept
 finish()
