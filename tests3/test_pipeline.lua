@@ -1,6 +1,10 @@
 -- ================================================================================================
 -- HappaTAS 3, phase 1: the frame pipeline (ordered, protected handlers per Roblox event)
 -- ================================================================================================
+-- (counts every coroutine.create: the pipeline must not make a new thread per handler call)
+local realCo = coroutine
+creates = 0
+coroutine = setmetatable({ create = function(f) creates = creates + 1; return realCo.create(f) end }, { __index = realCo })
 check(boot(3), "boots")
 local Lifecycle = __T3("kernel/lifecycle")
 local Errors = __T3("kernel/errors")
@@ -18,7 +22,22 @@ pipe:start()
 local log = {}
 local function logger(name) return function() log[#log + 1] = name end end
 
+section("one runner thread per stage, not one per handler call")
+do
+	local c0 = creates
+	M.steps(10)
+	local base = creates - c0
+	local removers = {}
+	for i = 1, 10 do removers[i] = pipe:add("PreRender", 100 + i, "busy" .. i, function() end) end
+	c0 = creates
+	M.steps(10)
+	local perFrame = (creates - c0 - base) / 10
+	check(perFrame <= 1, "10 handlers in one stage make at most 1 thread a frame (" .. perFrame .. ")")
+	for _, rm in ipairs(removers) do rm() end
+end
+
 section("order: by stage, then by order number, ties in the order added")
+local frame0 = pipe.frame
 pipe:add("PreRender", 20, "b", logger("b"))
 pipe:add("PreRender", 10, "a", logger("a"))
 pipe:add("PreSimulation", 10, "c", logger("c"))
@@ -31,7 +50,7 @@ check(s:find("a,a2,b", 1, true) ~= nil, "PreRender handlers in order (" .. s .. 
 check(s:find("c,d", 1, true) ~= nil, "PreSimulation before PostSimulation (" .. s .. ")")
 check(s:find("e", 1, true) ~= nil, "LateRender handler ran (" .. s .. ")")
 check(s:find("b") < s:find("c"), "PreRender before PreSimulation")
-eq(pipe.frame, 1, "frame counter")
+eq(pipe.frame, frame0 + 1, "frame counter")
 
 section("a frame without a physics step has no PreSimulation / PostSimulation")
 log = {}
