@@ -4,10 +4,10 @@
 # With a reference build, the differential traces (tests/test_diff.lua, tests/test_diffco.lua) are
 # compared against it too (IGNORE='regex' skips trace lines, see tools/diff_builds.sh).
 cd "$(dirname "$0")/.."
-LUAU="${LUAU:-/home/claude/tools/luau/luau}"
+LUAU="${LUAU:-$(command -v luau || echo /home/claude/tools/luau/luau)}"
 bash tools/assemble.sh >/dev/null || exit 1
 fail=0
-for s in smoke profiler graphimg core scale perf textline typing live realinput security coclock speedhack; do
+for s in smoke profiler graphimg core scale perf textline typing live realinput security coclock speedhack kit; do
   bash tools/build_test.sh "$s" >/dev/null
   out=$(cd tests && "$LUAU" "run_$s.lua" 2>&1)
   res=$(echo "$out" | grep -E "^RESULT" | tail -1)

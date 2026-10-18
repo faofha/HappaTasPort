@@ -4,10 +4,9 @@
 --  No network functions are used anywhere in this script (no HttpGet / request / loadstring).
 -- ================================================================================================
 local genv = (type(getgenv) == "function" and getgenv()) or _G
-local HANDLE_KEY = "__HappaTAS"
 
 do -- unload an older copy that is still running (re-executing the script)
-	local old = rawget(genv, HANDLE_KEY)
+	local old = rawget(genv, "__HappaTAS")
 	if type(old) == "table" and type(old.Unload) == "function" then
 		-- in a thread of its own: the Unload of V2.37.1 and older could take its thread's access to
 		-- CoreGui away (see gameCall in the bridge), which would stop this copy using gethui()
@@ -15,14 +14,17 @@ do -- unload an older copy that is still running (re-executing the script)
 	end
 end
 
-local cloneref_ = (type(cloneref) == "function") and cloneref or function(x) return x end
-
-local function svc(name)
-	local ok, s = pcall(game.GetService, game, name)
-	if not ok or s == nil then return nil end
-	local ok2, c = pcall(cloneref_, s)
-	if ok2 and c ~= nil then return c end
-	return s
+-- (the main chunk is at Luau's 200 local limit: helpers used in one place live inside a do block)
+local svc
+do
+	local cloneref_ = (type(cloneref) == "function") and cloneref or function(x) return x end
+	function svc(name)
+		local ok, s = pcall(game.GetService, game, name)
+		if not ok or s == nil then return nil end
+		local ok2, c = pcall(cloneref_, s)
+		if ok2 and c ~= nil then return c end
+		return s
+	end
 end
 
 local Players      = svc("Players")
@@ -66,6 +68,10 @@ do
 	Env.getgc       = fn(getgc)
 	Env.filtergc    = fn(filtergc)
 	Env.hookfunction    = fn(hookfunction, replaceclosure)
+	Env.iscclosure      = fn(iscclosure)
+	Env.getloadedmodules = fn(getloadedmodules)
+	Env.setreadonly     = fn(setreadonly)
+	Env.isreadonly      = fn(isreadonly)
 	Env.restorefunction = fn(restorefunction)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 
@@ -154,12 +160,12 @@ end
 -- (TextChatService) or HappaTAS's own slot name and settings boxes (under gethui()), so those are checked
 -- directly: ChatInputBarConfiguration.IsFocused ("whether the default chat input bar is focused", Roblox
 -- docs) and the Focused / FocusLost events of our own boxes.
-local TextChatService = svc("TextChatService")
 -- rebinding: a control waits for its new key. boundInput: the key press that gave it the new key; Roblox
 -- doesn't promise the order of the InputBegan handlers, so that press is recognised by its InputObject in
 -- the handlers that run after the binding took it (found in the live client: it also ran its old control)
 local Typing = { own = nil, bar = nil, rebinding = false, boundInput = nil }
 do
+	local TextChatService = svc("TextChatService")
 	local function chatFocused()
 		local bar = Typing.bar
 		if not (bar and bar.Parent) then
@@ -209,5 +215,5 @@ local ZERO3 = Vector3.zero
 -- Declared up front so every module can call every other one (no forward-reference nil globals).
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
 local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
-local Core, Menu, SpeedHack = {}, {}, {}
+local Core, Menu, SpeedHack, KitClock, KitObjects = {}, {}, {}, {}, {}
 

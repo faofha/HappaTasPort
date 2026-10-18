@@ -43,6 +43,7 @@ do
 		C.dataVersion = C.dataVersion + 1
 		ClientObjects.Invalidate()
 		Buttons.Invalidate()
+		KitObjects.Invalidate()
 	end
 
 	local function changeState(hum, st) hum:ChangeState(st) end
@@ -591,6 +592,7 @@ do
 		Bridge.SetFreeMouse(false)
 		Buttons.Release()
 		Lighting.Release()
+		KitObjects.Release()
 		ToolSync.ReplayEnd()
 		Cursor.Reset()
 		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
@@ -673,6 +675,7 @@ do
 	-- unpausing: cut the frames after the current one, camera back on the last frame
 	local function unpauseFrom(data)
 		C.RemoveCutFrames()
+		KitObjects.Unpause(data, #data)
 		C.LookAround = false
 		Bridge.LockAnimations(false)
 		if #data > 0 then
@@ -721,6 +724,7 @@ do
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(data[#data])
+		KitClock.Rewind(data, #data) -- (the step after the last frame is thrown away: the kit's clock too)
 		Buttons.Pause(frameTime(#data))
 		Lighting.Pause()
 	end
@@ -748,6 +752,7 @@ do
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
+		KitClock.Rewind(C.data, #C.data)
 		Buttons.Pause(frameTime(#C.data))
 		Lighting.Pause()
 	end
@@ -923,6 +928,7 @@ do
 		pcall(ClientObjects.EndPlayback)
 		pcall(Buttons.Release)
 		pcall(Lighting.Release)
+		pcall(KitObjects.Release)
 		pcall(Bridge.LockShiftlock, false)
 		pcall(Bridge.LockAnimations, false)
 		pcall(Bridge.SetFreeMouse, false)
@@ -963,6 +969,7 @@ do
 		ClientObjects.EndPlayback()
 		Buttons.Release()
 		Lighting.Release()
+		KitObjects.Release()
 		ToolSync.ReplayEnd()
 		C.mode, C.frame = 1, 1
 		C.anchor(false)
@@ -1068,7 +1075,10 @@ do
 					Input = InputSys.Take(),
 					MX = mx, MY = my, UVX = uvx, UVY = uvy,
 					VX = vpChanged and vx or nil, VY = vpChanged and vy or nil,
+					-- (slow motion: the factor this frame's physics ran with, see ClientObjects.RestoreUnpause)
+					SK = (k ~= 1) and r(k, 10000) or nil,
 				}
+				KitClock.Mark(data, n + 1) -- (the kit's time of this frame: a pause goes back to it)
 				Profiler.End("Record")
 			end
 			if C.paused then
@@ -1090,6 +1100,24 @@ do
 		local hum = C.Humanoid
 		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
 		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
+		-- the kit's objects on the TAS time of the frame shown (beat blocks, bullets...), and the kit's clock:
+		-- the TAS clock while recording (x the speed hack), stopped while paused, the playback speed in Test
+		Profiler.Begin("Kit")
+		local kitRate = 1
+		if mode == 2 then
+			local rec = not C.paused or C.FirstFrameRecord
+			local f = rec and #data or C.frame
+			local fr = data[f]
+			KitObjects.Frame(2, data, f, fr and fr.TotalTime or 0, rec and #data > 0)
+			kitRate = rec and C.recScale or 0
+		elseif mode == 3 then
+			KitObjects.Frame(3, data, C.frame, C.TestingTimer, false)
+			kitRate = math.max(0, Settings.Get("Playback Speed"))
+		else
+			KitObjects.Frame(1, data, 0, 0, false)
+		end
+		KitClock.SetRate(kitRate)
+		Profiler.End("Kit")
 		Profiler.End("HappaTAS")
 		Profiler.FrameEnd() -- the end of this frame's jobs as far as a script can see (Jobs Wall Time)
 	end
@@ -1122,6 +1150,7 @@ do
 
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
+		KitObjects.Reassert()
 		local data = C.data
 		if C.mode == 2 and C.CharLoaded() and not C.paused and not C.FirstFrameRecord and C.NotDead() then
 			fillFrame(data)
@@ -1252,6 +1281,7 @@ do
 					if #data > 0 and data[#data].Cframe == nil and not C.FirstFrameRecord and C.NotDead() then fillFrame(data) end
 					if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 					C.frame = #data
+					if #data > 0 and not C.FirstFrameRecord then KitObjects.AfterPhysics(data, #data) end
 					Buttons.Step(data[#data] and data[#data].TotalTime or 0)
 				end
 				C.SetStats("Create", data[C.frame], dt, C.frame)
@@ -1291,6 +1321,7 @@ do
 		ClientObjects.RenderStep()
 		Buttons.RenderStep()
 		Lighting.RenderStep()
+		KitObjects.Reassert()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
 		Cursor.Update(C.mode, (C.mode == 3 or (C.mode == 2 and C.paused and #C.data > 0 and C.SetCam() and not C.LookAround)) and C.data[C.frame] or nil, menuOpen)

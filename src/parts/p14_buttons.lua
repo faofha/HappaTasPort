@@ -1917,14 +1917,15 @@ do
 		end
 		return false
 	end
+	-- the lighting of frame f (nil before the TAS has any: then the lighting is left as it is)
 	local function findSnap(f)
-		if #timeline == 0 then return initialSnap end
+		if #timeline == 0 then return nil end
 		local lo, hi, best = 1, #timeline, nil
 		while lo <= hi do
 			local mid = math.floor((lo + hi) / 2)
 			if timeline[mid].f <= f then best = timeline[mid]; lo = mid + 1 else hi = mid - 1 end
 		end
-		return best and best.snap or initialSnap
+		return best and best.snap or nil
 	end
 	function L.Enable()
 		if enabled then return end
@@ -2034,10 +2035,12 @@ do
 		dirty = true
 		if f and f > 0 then L.Trim(f) end
 	end
+	-- Idle (key 1) and the end of a test: HappaTAS stops controlling the lighting and leaves it exactly as it
+	-- is (it used to go back to the lighting from before the TAS). Turning Sync Lighting off / unloading
+	-- still puts that lighting back (L.Disable).
 	function L.Release()
 		control = "none"
 		curSnap = nil
-		if initialSnap then apply(initialSnap) end
 	end
 	function L.Start()
 		if Settings.On("Sync Lighting") then L.Enable() end

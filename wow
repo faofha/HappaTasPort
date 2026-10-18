@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.13 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.14 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.13"
+local VERSION = "V2.38.14"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -24,20 +24,22 @@ local CONFIG = {
 	},
 }
 local genv = (type(getgenv) == "function" and getgenv()) or _G
-local HANDLE_KEY = "__HappaTAS"
 do
-	local old = rawget(genv, HANDLE_KEY)
+	local old = rawget(genv, "__HappaTAS")
 	if type(old) == "table" and type(old.Unload) == "function" then
 		task.spawn(pcall, old.Unload)
 	end
 end
-local cloneref_ = (type(cloneref) == "function") and cloneref or function(x) return x end
-local function svc(name)
-	local ok, s = pcall(game.GetService, game, name)
-	if not ok or s == nil then return nil end
-	local ok2, c = pcall(cloneref_, s)
-	if ok2 and c ~= nil then return c end
-	return s
+local svc
+do
+	local cloneref_ = (type(cloneref) == "function") and cloneref or function(x) return x end
+	function svc(name)
+		local ok, s = pcall(game.GetService, game, name)
+		if not ok or s == nil then return nil end
+		local ok2, c = pcall(cloneref_, s)
+		if ok2 and c ~= nil then return c end
+		return s
+	end
 end
 local Players      = svc("Players")
 local RunService   = svc("RunService")
@@ -78,6 +80,10 @@ do
 	Env.getgc       = fn(getgc)
 	Env.filtergc    = fn(filtergc)
 	Env.hookfunction    = fn(hookfunction, replaceclosure)
+	Env.iscclosure      = fn(iscclosure)
+	Env.getloadedmodules = fn(getloadedmodules)
+	Env.setreadonly     = fn(setreadonly)
+	Env.isreadonly      = fn(isreadonly)
 	Env.restorefunction = fn(restorefunction)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 	Env.keypress     = fn(keypress, keydown)
@@ -143,9 +149,9 @@ local function on(signal, fn)
 	Janitor.add(c)
 	return c
 end
-local TextChatService = svc("TextChatService")
 local Typing = { own = nil, bar = nil, rebinding = false, boundInput = nil }
 do
+	local TextChatService = svc("TextChatService")
 	local function chatFocused()
 		local bar = Typing.bar
 		if not (bar and bar.Parent) then
@@ -186,7 +192,7 @@ end
 local ZERO3 = Vector3.zero
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
 local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
-local Core, Menu, SpeedHack = {}, {}, {}
+local Core, Menu, SpeedHack, KitClock, KitObjects = {}, {}, {}, {}, {}
 local ControlsTable = {
 	{ "Idle", "1" },
 	{ "Create", "2" },
@@ -230,6 +236,8 @@ local SettingsTable = {
 	{ name = "Frustum Culling CO",       default = 1, section = "World Sync" },
 	{ name = "Sync Button Timers",       default = 1, section = "World Sync" },
 	{ name = "Sync Lighting",            default = 1, section = "World Sync" },
+	{ name = "Kit Scripts On TAS Clock", default = 1, section = "World Sync" },
+	{ name = "Sync Kit Objects",         default = 1, section = "World Sync", label = "Sync Kit Objects (Beat Blocks, Turrets)" },
 	{ name = "Show Stats (Idle)",        default = 1, section = "Interface" },
 	{ name = "Show Stats (Create)",      default = 1, section = "Interface" },
 	{ name = "Show Stats (Test)",        default = 1, section = "Interface" },
@@ -642,7 +650,15 @@ do
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4090)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4260)},{
+						LV("963", " 10/18/26 - 2.38.14"),
+						LI("963_1", "   -   Kit scripts on the TAS clock: pause / slow motion stop them"),
+						LI("963_2", "   -   Jump launcher push no longer cut short by a pause"),
+						LI("963_3", "   -   Beat blocks follow the TAS time (same beat in playback)"),
+						LI("963_4", "   -   Turret bullets saved in the TAS, hits and damage replayed"),
+						LI("963_5", "   -   Pushboxes hidden on frames before they were spawned"),
+						LI("963_6", "   -   Speed Hack slows spinners, platforms, conveyors too"),
+						LI("963_7", "   -   Idle (1) leaves the lighting as it is"),
 						LV("964", " 10/17/26 - 2.38.13"),
 						LI("964_1", "   -   Speed Hack: slow motion while recording (Settings)"),
 						LI("964_2", "   -   Slow recordings are saved and tested at normal speed"),
@@ -926,11 +942,16 @@ do
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
-					H("38", "Speed Hack (Slow Motion)", 212, true, {
+					H("38", "Speed Hack (Slow Motion)", 231, true, {
 						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
 						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
 						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
-						{ 48, "Gravity, walk speed, jump power and animations slow down. Moving parts and other players keep their speed; timed buttons follow the TAS clock." } }),
+						{ 67, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, pushers and the EToH kit's timers. Other players keep their speed." } }),
+					H("39", "EToH Kit Objects", 226, true, {
+						{ 67, "Settings > World Sync > Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the TAS clock, so they stop while paused and slow down with the speed hack." },
+						{ 48, "A jump launcher's push, moving platforms, vanishers, falling platforms and spawner cooldowns keep the same timing whether you pause or not." },
+						{ 67, "Sync Kit Objects: beat blocks follow the TAS time (the same beat when testing), turret bullets are saved in the TAS with their hits and damage, pushboxes are hidden before they were spawned." },
+						{ 24, "TAS files from before V2.38.14 keep the kit's own behaviour." } }),
 					H("37", "Frustum Culling & Sandboxing", 135, true, {
 						{ 48, "Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag." },
 						{ 67, "Roblox services are reached through cloneref (a second reference to the same object, not the game's own). The interface sits in gethui or syn.protect_gui; native LZ4 compresses files." } })
@@ -1163,11 +1184,13 @@ do
 	local SCROLL_MARK = 0x7F
 	Codec.ScrollBase = 10000
 	local COLUMNS_V1 = { "FA", "FB", "DT", "TA", "PX", "PY", "PZ", "ROT", "LV", "AV", "ST", "CR", "CP", "ZM", "PO", "JT", "SP", "AN", "MS", "IN", "MB" }
-	local COLUMNS_V2, COLUMNS_V3 = {}, {}
+	local COLUMNS_V2, COLUMNS_V3, COLUMNS_V5 = {}, {}, {}
 	for i, n in ipairs(COLUMNS_V1) do COLUMNS_V2[i] = n; COLUMNS_V3[i] = n end
 	for _, n in ipairs({ "CO", "OB" }) do COLUMNS_V2[#COLUMNS_V2 + 1] = n; COLUMNS_V3[#COLUMNS_V3 + 1] = n end
 	for _, n in ipairs({ "FC", "VP", "TL", "TS", "BE", "BK" }) do COLUMNS_V3[#COLUMNS_V3 + 1] = n end
-	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3 }
+	for i, n in ipairs(COLUMNS_V3) do COLUMNS_V5[i] = n end
+	for _, n in ipairs({ "KE", "SK", "KK" }) do COLUMNS_V5[#COLUMNS_V5 + 1] = n end
+	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3, COLUMNS_V5 }
 	local TOOL_CODE = { Equip = 1, Unequip = 2, Activate = 3, Deactivate = 4 }
 	local TOOL_NAME = { "Equip", "Unequip", "Activate", "Deactivate" }
 	local floor = math.floor
@@ -1290,10 +1313,12 @@ do
 		return lz4Fallback(data, usize)
 	end
 	Codec.Lz4Decompress = lz4Decompress
-	function Codec.Encode(frames, progress, objects, buttons)
+	function Codec.Encode(frames, progress, objects, buttons, kit)
 		local total = #frames
 		local cols = {}
-		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
+		for _, name in ipairs(COLUMNS_V5) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
+		local KE, SKc = cols.KE, cols.SK
+		local v5 = kit ~= nil and (kit.version or 0) >= 1
 		local coParts = {}
 		local hasCO, coV3 = false, false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
@@ -1517,6 +1542,36 @@ do
 					putVar(BE, math.max(0, q(e[3] or 0, 1000)))
 				end
 			end
+			local ke = f.KE
+			if type(ke) == "table" and #ke > 0 then
+				fc = fc + 16
+				v5 = true
+				putVar(KE, #ke)
+				for k = 1, #ke do
+					local e = ke[k]
+					local typ = e[1]
+					KE[#KE + 1] = typ
+					if typ == 1 then
+						putVar(KE, e[2]); putVar(KE, e[3])
+						putZig(KE, q(e[4], 1000)); putZig(KE, q(e[5], 1000)); putZig(KE, q(e[6], 1000))
+						putZig(KE, q(e[7], 100000)); putZig(KE, q(e[8], 100000)); putZig(KE, q(e[9], 100000))
+						putZig(KE, q(e[10], 1000)); putZig(KE, q(e[11], 1000)); putZig(KE, q(e[12], 1000))
+						putVar(KE, math.max(0, q(e[13], 1000)))
+					elseif typ == 2 then
+						putVar(KE, e[2]); putVar(KE, math.max(0, q(e[3] or 0, 1000)))
+					elseif typ == 3 then
+						putVar(KE, e[2]); KE[#KE + 1] = (e[3] == 0) and 0 or 1
+					else
+						error("unknown kit event " .. tostring(typ), 0)
+					end
+				end
+			end
+			local sk = tonumber(f.SK)
+			if sk and sk ~= 1 and sk > 0 then
+				fc = fc + 32
+				v5 = true
+				putVar(SKc, q(sk, 10000))
+			end
 			if fc ~= 0 then v3 = true end
 			FA[#FA + 1] = fa
 			FB[#FB + 1] = fb
@@ -1530,6 +1585,7 @@ do
 		if hasCO or (objects and #objects > 0) then version = 2 end
 		if v3 then version = 3 end
 		if coV3 then version = 4 end
+		if v5 then version = 5 end
 		if version >= 2 then
 			local OB = cols.OB
 			putVar(OB, #(objects or {}))
@@ -1547,6 +1603,16 @@ do
 			for _, b in ipairs(buttons or {}) do
 				putVar(BK, b.id)
 				putStr(BK, b.key)
+			end
+		end
+		if version >= 5 then
+			local KK = cols.KK
+			putVar(KK, (kit and kit.version) or 0)
+			local keys = (kit and kit.keys) or {}
+			putVar(KK, #keys)
+			for _, k in ipairs(keys) do
+				putVar(KK, k.id)
+				putStr(KK, k.key)
 			end
 		end
 		local rawParts = {}
@@ -1586,7 +1652,7 @@ do
 		if not Codec.IsCompact(data) then error("not a HappaTAS binary file", 0) end
 		if #data > CONFIG.MaxFileBytes then error("file is too big", 0) end
 		local version, flags = byte(data, 5), byte(data, 6)
-		if version ~= 1 and version ~= 2 and version ~= 3 and version ~= 4 then error("unsupported file version " .. tostring(version), 0) end
+		if version < 1 or version > 5 then error("unsupported file version " .. tostring(version), 0) end
 		local rd = newReader(data, 7)
 		local total = getVar(rd)
 		local rawLen = getVar(rd)
@@ -1771,6 +1837,34 @@ do
 					end
 					f.BT = list
 				end
+				if floor(fc / 16) % 2 == 1 then
+					if not R.KE then error("kit events are missing", 0) end
+					local cnt = getVar(R.KE)
+					if cnt > colLen(R.KE) + 1 then error("kit event list is broken", 0) end
+					local list = {}
+					for k = 1, cnt do
+						local typ = getByte(R.KE)
+						if typ == 1 then
+							local e = { 1, getVar(R.KE), getVar(R.KE) }
+							for m = 4, 6 do e[m] = getZig(R.KE) / 1000 end
+							for m = 7, 9 do e[m] = getZig(R.KE) / 100000 end
+							for m = 10, 12 do e[m] = getZig(R.KE) / 1000 end
+							e[13] = getVar(R.KE) / 1000
+							list[k] = e
+						elseif typ == 2 then
+							list[k] = { 2, getVar(R.KE), getVar(R.KE) / 1000 }
+						elseif typ == 3 then
+							list[k] = { 3, getVar(R.KE), getByte(R.KE) }
+						else
+							error("unknown kit event " .. tostring(typ), 0)
+						end
+					end
+					f.KE = list
+				end
+				if floor(fc / 32) % 2 == 1 then
+					if not R.SK then error("speed factors are missing", 0) end
+					f.SK = getVar(R.SK) / 10000
+				end
 			end
 			if pVX > 0 and pVY > 0 then
 				f.VX, f.VY = pVX / 10, pVY / 10
@@ -1786,7 +1880,7 @@ do
 			end
 		end
 		for name, rdr in pairs(R) do
-			if name ~= "OB" and name ~= "TS" and name ~= "BK" and rdr.p ~= rdr.n + 1 then
+			if name ~= "OB" and name ~= "TS" and name ~= "BK" and name ~= "KK" and rdr.p ~= rdr.n + 1 then
 				error("column " .. name .. " was not read completely", 0)
 			end
 		end
@@ -1806,7 +1900,19 @@ do
 		local objects = R.OB and readTable(R.OB, "object") or nil
 		local buttons = R.BK and readTable(R.BK, "button") or nil
 		if R.TS and R.TS.p ~= R.TS.n + 1 then error("tool table was not read completely", 0) end
-		return frames, objects, buttons
+		local kit = nil
+		if R.KK then
+			local KK = R.KK
+			kit = { version = getVar(KK), keys = {} }
+			local cnt = getVar(KK)
+			if cnt > colLen(KK) then error("kit table is broken", 0) end
+			for k = 1, cnt do
+				local id = getVar(KK)
+				kit.keys[k] = { id = id, key = getStr(KK) }
+			end
+			if KK.p ~= KK.n + 1 then error("kit table was not read completely", 0) end
+		end
+		return frames, objects, buttons, kit
 	end
 end
 do
@@ -1966,7 +2072,9 @@ do
 		end
 		local okO, objects = pcall(ClientObjects.ExportObjects, frames)
 		local okB, buttons = pcall(Buttons.ExportKeys, frames)
-		local okE, bytes, info = pcall(Codec.Encode, frames, progress, okO and objects or nil, okB and buttons or nil)
+		local okK, kit = pcall(KitObjects.Export, allFrames)
+		local okE, bytes, info = pcall(Codec.Encode, frames, progress, okO and objects or nil, okB and buttons or nil,
+			okK and kit or nil)
 		if not okE then return false, tostring(bytes) end
 		local ok, path = writeSlotFile(name, bytes)
 		if not ok then return false, path end
@@ -2029,7 +2137,7 @@ do
 			raw = decomp
 		end
 		if Codec.IsCompact(raw) then
-			local okD, frames, objects, buttons = pcall(Codec.Decode, raw, progress)
+			local okD, frames, objects, buttons, kit = pcall(Codec.Decode, raw, progress)
 			if not okD then
 				local why = tostring(frames):gsub("^[^:]*:%d+: ", "")
 				return false, "The slot file is damaged (" .. why .. ")"
@@ -2042,9 +2150,13 @@ do
 				local okI, err = pcall(Buttons.ImportKeys, frames, buttons)
 				if not okI then warnf("could not map the buttons of this slot:", tostring(err)) end
 			end
+			local okK, errK = pcall(KitObjects.Import, frames, kit)
+			if not okK then warnf("could not map the kit objects of this slot:", tostring(errK)) end
 			return true, frames
 		end
-		return loadLegacyJson(raw, progress)
+		local okL, frames = loadLegacyJson(raw, progress)
+		if okL and type(frames) == "table" then frames.KitVersion = 0 end
+		return okL, frames
 	end
 	function Store.DeleteSlot(name)
 		if not Store.Ready then return false, "Saving is unavailable" end
@@ -4183,6 +4295,11 @@ do
 	end
 	function CO.IsEnabled() return enabled end
 	function CO.IsReady() return enabled and scanDone end
+	function CO.EachPart(fn)
+		for _, part in pairs(parts) do
+			if part.Parent then fn(part) end
+		end
+	end
 	function CO.Enable()
 		if enabled then return end
 		enabled = true
@@ -5295,6 +5412,8 @@ do
 			play.kind = "show"
 			advanceTo(data, frame, cleanTouched())
 			local t = frameTime(data, frame)
+			local sk = tonumber(data[frame].SK) or 1
+			if sk <= 0 then sk = 1 end
 			for id, s in pairs(play.cur) do
 				local part = parts[id]
 				if part and part.Parent and hasPose(s) then
@@ -5317,8 +5436,8 @@ do
 								L = W * (L:Dot(W) / w2) + W:Cross(com - ctr)
 							end
 						end
-						part.AssemblyLinearVelocity = L
-						part.AssemblyAngularVelocity = W
+						part.AssemblyLinearVelocity = L / sk
+						part.AssemblyAngularVelocity = W / sk
 					end
 				end
 			end
@@ -7269,13 +7388,13 @@ do
 		return false
 	end
 	local function findSnap(f)
-		if #timeline == 0 then return initialSnap end
+		if #timeline == 0 then return nil end
 		local lo, hi, best = 1, #timeline, nil
 		while lo <= hi do
 			local mid = math.floor((lo + hi) / 2)
 			if timeline[mid].f <= f then best = timeline[mid]; lo = mid + 1 else hi = mid - 1 end
 		end
-		return best and best.snap or initialSnap
+		return best and best.snap or nil
 	end
 	function L.Enable()
 		if enabled then return end
@@ -7388,7 +7507,6 @@ do
 	function L.Release()
 		control = "none"
 		curSnap = nil
-		if initialSnap then apply(initialSnap) end
 	end
 	function L.Start()
 		if Settings.On("Sync Lighting") then L.Enable() end
@@ -7607,6 +7725,222 @@ do
 	local function near(a, b)
 		return math.abs(a - b) <= 1e-4 * math.max(1, math.abs(b))
 	end
+	local W = {}
+	SH.World = W
+	local TIME_PROPS = {
+		AlignPosition = { MaxVelocity = 1, Responsiveness = 1, MaxForce = 2, MaxAxesForce = 2 },
+		AlignOrientation = { MaxAngularVelocity = 1, Responsiveness = 1, MaxTorque = 2 },
+		LinearVelocity = { VectorVelocity = 1, LineVelocity = 1, PlaneVelocity = 1, MaxForce = 2, MaxAxesForce = 2, MaxPlanarAxesForce = 2 },
+		AngularVelocity = { AngularVelocity = 1, MaxTorque = 2 },
+		VectorForce = { Force = 2 },
+		Torque = { Torque = 2 },
+		LineForce = { Magnitude = 2 },
+		HingeConstraint = { AngularVelocity = 1, MotorMaxTorque = 2, MotorMaxAcceleration = 2, AngularSpeed = 1,
+			ServoMaxTorque = 2, AngularResponsiveness = 1 },
+		PrismaticConstraint = { Velocity = 1, MotorMaxForce = 2, MotorMaxAcceleration = 2, Speed = 1, ServoMaxForce = 2,
+			LinearResponsiveness = 1 },
+		CylindricalConstraint = { Velocity = 1, MotorMaxForce = 2, MotorMaxAcceleration = 2, Speed = 1, ServoMaxForce = 2,
+			LinearResponsiveness = 1, AngularVelocity = 1, MotorMaxTorque = 2, MotorMaxAngularAcceleration = 2,
+			AngularSpeed = 1, ServoMaxTorque = 2, AngularResponsiveness = 1 },
+		SpringConstraint = { Stiffness = 2, Damping = 1, MaxForce = 2 },
+		TorsionSpringConstraint = { Stiffness = 2, Damping = 1, MaxTorque = 2 },
+		RopeConstraint = { WinchSpeed = 1, WinchForce = 2, WinchResponsiveness = 1 },
+		BodyVelocity = { Velocity = 1, MaxForce = 2, P = 1 },
+		BodyAngularVelocity = { AngularVelocity = 1, MaxTorque = 2, P = 1 },
+		BodyPosition = { P = 2, D = 1, MaxForce = 2 },
+		BodyGyro = { P = 2, D = 1, MaxTorque = 2 },
+		BodyForce = { Force = 2 },
+		BodyThrust = { Force = 2 },
+		RocketPropulsion = { MaxSpeed = 1, MaxThrust = 2, ThrustP = 2, ThrustD = 1, MaxTorque = 2, TurnP = 2, TurnD = 1 },
+	}
+	W.TIME_PROPS = TIME_PROPS
+	local known = {}
+	local ents = {}
+	local vparts = {}
+	local wf = 1
+	local tracking = false
+	local function scaled(v, pow, f)
+		if pow == 1 then return v * f end
+		return v * (f * f)
+	end
+	local function writeProp(e, prop)
+		local inst, base = e.inst, e.base[prop]
+		local want = (wf == 1) and base or scaled(base, e.props[prop], wf)
+		e.last[prop] = want
+		e.writing = true
+		local okW = pcall(function() inst[prop] = want end)
+		e.writing = false
+		if okW then
+			local ok, back = pcall(function() return inst[prop] end)
+			if ok then e.last[prop] = back end
+		end
+	end
+	local function addEntry(inst)
+		if ents[inst] then return end
+		local props = TIME_PROPS[inst.ClassName]
+		if not props then return end
+		local e = { inst = inst, props = props, base = {}, last = {}, conns = {} }
+		for prop in pairs(props) do
+			local ok, v = pcall(function() return inst[prop] end)
+			if ok and ((type(v) == "number" and v == v) or typeof(v) == "Vector3" or typeof(v) == "Vector2") then
+				e.base[prop] = v
+			end
+		end
+		for prop in pairs(e.base) do
+			local okC, cn = pcall(function()
+				return inst:GetPropertyChangedSignal(prop):Connect(function()
+					if e.writing then return end
+					local ok, now = pcall(function() return inst[prop] end)
+					if ok and now ~= e.last[prop] then
+						e.base[prop] = now
+						writeProp(e, prop)
+					end
+				end)
+			end)
+			if okC and cn then e.conns[#e.conns + 1] = cn end
+			writeProp(e, prop)
+		end
+		ents[inst] = e
+	end
+	local function restoreEntry(e)
+		for _, cn in ipairs(e.conns) do cn:Disconnect() end
+		local inst = e.inst
+		for prop, base in pairs(e.base) do
+			local ok, now = pcall(function() return inst[prop] end)
+			if ok and now == e.last[prop] then pcall(function() inst[prop] = base end) end
+		end
+	end
+	local function eachWorldPart(fn)
+		if ClientObjects.IsReady() and ClientObjects.EachPart then
+			ClientObjects.EachPart(fn)
+			return
+		end
+		local cp = workspace:FindFirstChild("ClientParts")
+		if cp then
+			for _, d in ipairs(cp:GetDescendants()) do
+				if d:IsA("BasePart") then fn(d) end
+			end
+		end
+	end
+	local function charOf(p)
+		local ch = LocalPlayer.Character
+		return ch ~= nil and p:IsDescendantOf(ch)
+	end
+	local function scaleFree(ratio)
+		if ratio == 1 then return end
+		local done = {}
+		eachWorldPart(function(p)
+			if p.Anchored or charOf(p) then return end
+			local rootP = p.AssemblyRootPart or p
+			if done[rootP] or rootP.Anchored then return end
+			done[rootP] = true
+			pcall(function()
+				rootP.AssemblyLinearVelocity = rootP.AssemblyLinearVelocity * ratio
+				rootP.AssemblyAngularVelocity = rootP.AssemblyAngularVelocity * ratio
+			end)
+		end)
+	end
+	local function writeVel(v)
+		local p = v.part
+		pcall(function()
+			p.AssemblyLinearVelocity = v.lin * wf
+			p.AssemblyAngularVelocity = v.ang * wf
+			v.lastL, v.lastA = p.AssemblyLinearVelocity, p.AssemblyAngularVelocity
+		end)
+	end
+	local function collectVParts()
+		eachWorldPart(function(p)
+			if not p.Anchored or vparts[p] then return end
+			local ok, l, a = pcall(function() return p.AssemblyLinearVelocity, p.AssemblyAngularVelocity end)
+			if ok and (l.Magnitude > 1e-6 or a.Magnitude > 1e-6) then
+				local v = { part = p, lin = l, ang = a }
+				vparts[p] = v
+				writeVel(v)
+			end
+		end)
+	end
+	function W.Track()
+		if tracking then return end
+		tracking = true
+		on(workspace.DescendantAdded, function(d)
+			if TIME_PROPS[d.ClassName] then
+				known[d] = true
+				if wf ~= 1 then addEntry(d) end
+			end
+		end)
+		on(workspace.DescendantRemoving, function(d)
+			if known[d] then
+				known[d] = nil
+				local e = ents[d]
+				if e then ents[d] = nil; for _, cn in ipairs(e.conns) do cn:Disconnect() end end
+			end
+			vparts[d] = nil
+		end)
+		task.spawn(function()
+			local list = workspace:GetDescendants()
+			for i = 1, #list do
+				local d = list[i]
+				if TIME_PROPS[d.ClassName] and d.Parent then
+					known[d] = true
+					if wf ~= 1 then addEntry(d) end
+				end
+				if i % 2000 == 0 then task.wait() end
+			end
+		end)
+	end
+	function W.SetFactor(f)
+		if f == wf then return end
+		local ratio = f / wf
+		wf = f
+		if f ~= 1 then
+			for d in pairs(known) do
+				if d.Parent then
+					if ents[d] then
+						for prop in pairs(ents[d].base) do writeProp(ents[d], prop) end
+					else
+						addEntry(d)
+					end
+				end
+			end
+			for _, v in pairs(vparts) do writeVel(v) end
+			collectVParts()
+		else
+			for _, e in pairs(ents) do restoreEntry(e) end
+			ents = {}
+			for p, v in pairs(vparts) do
+				if p.Parent then
+					pcall(function()
+						if p.AssemblyLinearVelocity == v.lastL then p.AssemblyLinearVelocity = v.lin end
+						if p.AssemblyAngularVelocity == v.lastA then p.AssemblyAngularVelocity = v.ang end
+					end)
+				end
+			end
+			vparts = {}
+		end
+		scaleFree(ratio)
+	end
+	function W.Step()
+		if wf == 1 then return end
+		for p, v in pairs(vparts) do
+			if p.Parent then
+				local ok, l, a = pcall(function() return p.AssemblyLinearVelocity, p.AssemblyAngularVelocity end)
+				if ok and (l ~= v.lastL or a ~= v.lastA) then
+					if l ~= v.lastL then v.lin = l end
+					if a ~= v.lastA then v.ang = a end
+					writeVel(v)
+				end
+			else
+				vparts[p] = nil
+			end
+		end
+	end
+	function W.Factor() return wf end
+	function W.Count()
+		local n, m = 0, 0
+		for _ in pairs(ents) do n = n + 1 end
+		for _ in pairs(vparts) do m = m + 1 end
+		return n, m
+	end
 	function SH.Wanted()
 		if not Settings.On("Speed Hack") then return 1 end
 		local s = clampn(tonumber(Settings.Get("Speed Hack Speed")) or 0.5, 0.1, 1)
@@ -7656,6 +7990,8 @@ do
 			end
 			if keepMomentum and s < 1 then scaleMomentum(root, 1 / s) end
 		end
+		local okW, errW = pcall(W.SetFactor, 1)
+		if not okW then reportError("speed hack world", errW) end
 		applied, hum, root = false, nil, nil
 		baseWalk, baseJump, lastWalk, lastJump, baseGravity, lastGravity = nil, nil, nil, nil, nil, nil
 		SH.scale = 1
@@ -7681,6 +8017,10 @@ do
 			scaleMomentum(part, s / prev)
 			rescaleAnimations()
 		end
+		local okW, errW = pcall(function()
+			if W.Factor() ~= s then W.SetFactor(s) else W.Step() end
+		end)
+		if not okW then reportError("speed hack world", errW) end
 		return s
 	end
 	function SH.Start()
@@ -7691,7 +8031,1219 @@ do
 		end
 		Settings.Changed("Speed Hack", announce)
 		Settings.Changed("Speed Hack Speed", function() if Settings.On("Speed Hack") then announce() end end)
+		if Settings.On("Speed Hack") then W.Track() end
+		Settings.Changed("Speed Hack", function(v) if v ~= 0 then W.Track() end end)
 		Janitor.add(function() SH.Restore(true) end)
+	end
+end
+do
+	local KC = KitClock
+	local realTask = task
+	local clock = os.clock
+	local K0, R0, rate = clock(), clock(), 1
+	KC.rate = 1
+	KC.patched = 0
+	function KC.Now() return K0 + (clock() - R0) * rate end
+	function KC.SetRate(r)
+		r = tonumber(r) or 1
+		if r ~= r or r < 0 then r = 0 end
+		if r == rate then return end
+		local now = clock()
+		K0 = K0 + (now - R0) * rate
+		R0 = now
+		rate = r
+		KC.rate = r
+	end
+	local marks = { {}, {} }
+	function KC.Mark(data, n)
+		local m1 = marks[1]
+		if not (m1.data == data and m1.n == n) then marks[2] = m1; m1 = {}; marks[1] = m1 end
+		m1.data, m1.n, m1.k = data, n, KC.Now()
+	end
+	function KC.Rewind(data, n)
+		local now = clock()
+		local cur = K0 + (now - R0) * rate
+		local k = nil
+		for _, m in ipairs(marks) do
+			if m.data == data and m.n == n then k = m.k end
+		end
+		if k and k < cur and cur - k <= 1 then cur = k end
+		K0, R0, rate, KC.rate = cur, now, 0, 0
+	end
+	local waiting = {}
+	local waitingFor = setmetatable({}, { __mode = "k" })
+	local frameNo = 0
+	local function kitWait(d)
+		d = tonumber(d) or 0
+		if d ~= d or d < 0 then d = 0 end
+		local co = coroutine.running()
+		local now = KC.Now()
+		local e = { co = co, target = now + d, start = now, frame = frameNo }
+		waitingFor[co] = e
+		waiting[#waiting + 1] = e
+		local res = table.pack(coroutine.yield())
+		if waitingFor[co] == e then waitingFor[co] = nil end
+		return table.unpack(res, 1, res.n)
+	end
+	local function kitDelay(d, f, ...)
+		local args = table.pack(...)
+		return realTask.spawn(function()
+			kitWait(d)
+			if type(f) == "thread" then
+				realTask.spawn(f, table.unpack(args, 1, args.n))
+			else
+				f(table.unpack(args, 1, args.n))
+			end
+		end)
+	end
+	KC.Wait, KC.Delay = kitWait, kitDelay
+	function KC.Waiting() return #waiting end
+	local tweens = {}
+	local TWEENABLE = { number = true, Vector3 = true, Vector2 = true, CFrame = true, Color3 = true, UDim2 = true, UDim = true }
+	local function blend(a, b, x)
+		local ta = typeof(a)
+		if ta == "number" then return a + (b - a) * x end
+		if ta == "UDim" then return UDim.new(a.Scale + (b.Scale - a.Scale) * x, a.Offset + (b.Offset - a.Offset) * x) end
+		return a:Lerp(b, x)
+	end
+	local function newSignal()
+		local s = { list = {} }
+		function s.Connect(self, fn)
+			local c = { Connected = true }
+			function c.Disconnect(cc) cc.Connected = false end
+			c.fn = fn
+			self.list[#self.list + 1] = c
+			return c
+		end
+		function s.Once(self, fn)
+			local c
+			c = self:Connect(function(...) c:Disconnect(); fn(...) end)
+			return c
+		end
+		function s.Wait(self)
+			local co = coroutine.running()
+			self:Once(function(...) realTask.spawn(co, ...) end)
+			return coroutine.yield()
+		end
+		function s.Fire(self, ...)
+			local list = self.list
+			self.list = {}
+			for _, c in ipairs(list) do
+				if c.Connected then
+					self.list[#self.list + 1] = c
+					realTask.spawn(c.fn, ...)
+				end
+			end
+		end
+		return s
+	end
+	local tweenMt = {}
+	tweenMt.__index = tweenMt
+	local function finishTween(tw, state)
+		for i = #tweens, 1, -1 do if tweens[i] == tw then table.remove(tweens, i) end end
+		tw.PlaybackState = state
+		tw.Completed:Fire(state)
+	end
+	local function writeTween(tw, x)
+		local inst = tw.Instance
+		for prop, to in pairs(tw.goal) do
+			local from = tw.from[prop]
+			if from ~= nil then
+				local v = (x >= 1) and to or blend(from, to, x)
+				pcall(function() inst[prop] = v end)
+			end
+		end
+	end
+	function tweenMt.Play(tw)
+		if tw.PlaybackState == Enum.PlaybackState.Playing then return end
+		if tw.PlaybackState == Enum.PlaybackState.Paused and tw.pausedAt then
+			tw.startK = KC.Now() - tw.pausedAt
+		else
+			tw.from = {}
+			for prop in pairs(tw.goal) do
+				local ok, v = pcall(function() return tw.Instance[prop] end)
+				if ok and typeof(v) == typeof(tw.goal[prop]) then tw.from[prop] = v end
+			end
+			tw.startK = KC.Now()
+		end
+		tw.pausedAt = nil
+		tw.PlaybackState = Enum.PlaybackState.Playing
+		tweens[#tweens + 1] = tw
+	end
+	function tweenMt.Pause(tw)
+		if tw.PlaybackState ~= Enum.PlaybackState.Playing then return end
+		for i = #tweens, 1, -1 do if tweens[i] == tw then table.remove(tweens, i) end end
+		tw.pausedAt = KC.Now() - tw.startK
+		tw.PlaybackState = Enum.PlaybackState.Paused
+	end
+	function tweenMt.Cancel(tw)
+		if tw.PlaybackState == Enum.PlaybackState.Playing or tw.PlaybackState == Enum.PlaybackState.Paused then
+			finishTween(tw, Enum.PlaybackState.Cancelled)
+		end
+	end
+	function tweenMt.Destroy(tw)
+		for i = #tweens, 1, -1 do if tweens[i] == tw then table.remove(tweens, i) end end
+		tw.destroyed = true
+	end
+	local function stepTweens()
+		if #tweens == 0 then return end
+		local now = KC.Now()
+		local list = table.clone(tweens)
+		for _, tw in ipairs(list) do
+			local info = tw.TweenInfo
+			local len = info.Time
+			local a = (len > 0) and (now - tw.startK) / len or 1
+			if a >= 1 then
+				writeTween(tw, 1)
+				finishTween(tw, Enum.PlaybackState.Completed)
+			elseif a > 0 then
+				local ok, x = pcall(TweenService.GetValue, TweenService, a, info.EasingStyle, info.EasingDirection)
+				writeTween(tw, ok and x or a)
+			end
+		end
+	end
+	local function endTweens()
+		local list = tweens
+		tweens = {}
+		for _, tw in ipairs(list) do
+			writeTween(tw, 1)
+			tw.PlaybackState = Enum.PlaybackState.Completed
+			tw.Completed:Fire(Enum.PlaybackState.Completed)
+		end
+	end
+	local fnTable, origTween, fnWasReadonly = nil, nil, false
+	local function kitTween(instance, config, goal, easingStyle, easingDirection, ...)
+		local extra = table.pack(...)
+		local okI, info = pcall(function()
+			if typeof(config) == "number" then
+				return TweenInfo.new(config,
+					(typeof(easingStyle) == "EnumItem") and easingStyle or Enum.EasingStyle.Linear,
+					(typeof(easingDirection) == "EnumItem") and easingDirection or Enum.EasingDirection.Out,
+					table.unpack(extra, 1, extra.n))
+			end
+			return TweenInfo.new(config.Time, config.Style, config.Direction)
+		end)
+		local plain = okI and typeof(info) == "TweenInfo" and info.RepeatCount == 0 and not info.Reverses
+			and info.DelayTime <= 0 and typeof(goal) == "table" and typeof(instance) == "Instance"
+		if plain then
+			for _, v in pairs(goal) do
+				if not TWEENABLE[typeof(v)] then plain = false break end
+			end
+		end
+		if not plain or not origTween then
+			return origTween(instance, config, goal, easingStyle, easingDirection, table.unpack(extra, 1, extra.n))
+		end
+		local tw = setmetatable({ Instance = instance, TweenInfo = info, PlaybackState = Enum.PlaybackState.Begin,
+			Completed = newSignal(), goal = goal, from = {} }, tweenMt)
+		tw:Play()
+		return tw
+	end
+	KC.Tween = kitTween
+	local fakeTask = setmetatable({ wait = kitWait, delay = kitDelay }, { __index = task })
+	local fakeOs = setmetatable({ clock = KC.Now }, { __index = os })
+	local patched = {}
+	local SKIP_CLOCK = { Button = true }
+	local function kitRoots()
+		local RS = svc("ReplicatedStorage")
+		if not RS then return {} end
+		local roots = {}
+		local fw = RS:FindFirstChild("Framework")
+		local kit = fw and fw:FindFirstChild("Kit")
+		if kit then roots[#roots + 1] = kit end
+		local ext = RS:FindFirstChild("ExternalRepositories")
+		if ext then roots[#roots + 1] = ext end
+		return roots
+	end
+	local function envOf(ms)
+		local ok, ret = pcall(require, ms)
+		if not ok then return nil end
+		local fn = nil
+		if type(ret) == "function" then
+			fn = ret
+		elseif type(ret) == "table" then
+			for _, v in pairs(ret) do
+				if type(v) == "function" and not (Env.iscclosure and Env.iscclosure(v)) then fn = v break end
+			end
+		end
+		if not fn then return nil end
+		local okE, env = pcall(getfenv, fn)
+		if not okE or type(env) ~= "table" or rawget(env, "script") ~= ms then return nil end
+		return env
+	end
+	local function patchEnv(env, withClock)
+		if patched[env] then return end
+		patched[env] = { task = rawget(env, "task"), os = rawget(env, "os") }
+		rawset(env, "task", fakeTask)
+		if withClock then rawset(env, "os", fakeOs) end
+		KC.patched = KC.patched + 1
+	end
+	local function patchTween(kit)
+		if fnTable then return end
+		local util = kit:FindFirstChild("Utility")
+		local fm = util and util:FindFirstChild("Functions")
+		if not fm then return end
+		local ok, F = pcall(require, fm)
+		if not ok or type(F) ~= "table" or type(rawget(F, "tween")) ~= "function" then return end
+		local ro = table.isfrozen(F) or (Env.isreadonly ~= nil and Env.isreadonly(F) == true)
+		if ro and not (Env.setreadonly and pcall(Env.setreadonly, F, false)) then return end
+		local orig = rawget(F, "tween")
+		local okW = pcall(rawset, F, "tween", kitTween)
+		if ro then pcall(Env.setreadonly, F, true) end
+		if okW then fnTable, origTween, fnWasReadonly = F, orig, ro end
+	end
+	local function unpatchTween()
+		if not fnTable then return end
+		if fnWasReadonly then pcall(Env.setreadonly, fnTable, false) end
+		pcall(rawset, fnTable, "tween", origTween)
+		if fnWasReadonly then pcall(Env.setreadonly, fnTable, true) end
+		fnTable = nil
+	end
+	local function scan()
+		if not (Env.getloadedmodules and type(getfenv) == "function") then return 0 end
+		local okL, list = pcall(Env.getloadedmodules)
+		if not okL or type(list) ~= "table" then return 0 end
+		local loaded = {}
+		for _, m in ipairs(list) do loaded[m] = true end
+		local n = 0
+		for _, root in ipairs(kitRoots()) do
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("ModuleScript") and loaded[d] then
+					local env = envOf(d)
+					if env and not patched[env] then
+						patchEnv(env, not SKIP_CLOCK[d.Name])
+						n = n + 1
+					end
+				end
+			end
+			if root.Name == "Kit" then patchTween(root) end
+		end
+		return n
+	end
+	local function releaseWaits()
+		local now = KC.Now()
+		local list = waiting
+		waiting = {}
+		for _, e in ipairs(list) do
+			if waitingFor[e.co] == e then
+				waitingFor[e.co] = nil
+				if coroutine.status(e.co) == "suspended" then
+					local rem = math.max(0, e.target - now)
+					pcall(realTask.delay, rem, e.co, rem + (now - e.start))
+				end
+			end
+		end
+	end
+	local enabled = false
+	function KC.Enable()
+		if enabled then return end
+		enabled = true
+		local ok, err = pcall(scan)
+		if not ok then reportError("kit clock", err) end
+	end
+	function KC.Disable()
+		if not enabled then return end
+		enabled = false
+		for env, old in pairs(patched) do
+			pcall(rawset, env, "task", old.task)
+			pcall(rawset, env, "os", old.os)
+		end
+		patched = {}
+		KC.patched = 0
+		unpatchTween()
+		endTweens()
+		releaseWaits()
+	end
+	function KC.IsEnabled() return enabled end
+	function KC.Step()
+		frameNo = frameNo + 1
+		local n = #waiting
+		if n > 0 then
+			local now = KC.Now()
+			local due, keep = nil, 0
+			for i = 1, n do
+				local e = waiting[i]
+				if waitingFor[e.co] ~= e then
+				elseif now >= e.target - 1e-9 and frameNo > e.frame then
+					due = due or {}
+					due[#due + 1] = e
+				else
+					keep = keep + 1
+					waiting[keep] = e
+				end
+			end
+			for i = keep + 1, n do waiting[i] = nil end
+			if due then
+				for _, e in ipairs(due) do
+					waitingFor[e.co] = nil
+					if coroutine.status(e.co) == "suspended" then
+						local ok, err = pcall(realTask.spawn, e.co, now - e.start)
+						if not ok then reportError("kit clock", err) end
+					end
+				end
+			end
+		end
+		stepTweens()
+	end
+	function KC.Start()
+		local function want() return Settings.On("Kit Scripts On TAS Clock") end
+		if want() then KC.Enable() end
+		Settings.Changed("Kit Scripts On TAS Clock", function(v)
+			if v ~= 0 then KC.Enable() else KC.Disable() end
+		end)
+		on(RunService.Heartbeat, function()
+			local ok, err = pcall(KC.Step)
+			if not ok then reportError("kit clock", err) end
+		end)
+		task.spawn(function()
+			local waitFor = 2
+			while not Janitor.unloading do
+				task.wait(waitFor)
+				if Janitor.unloading then break end
+				if enabled then
+					local ok, err = pcall(scan)
+					if not ok then reportError("kit clock", err) end
+				end
+				waitFor = math.min(waitFor * 2, 30)
+			end
+		end)
+		Janitor.add(function() KC.Disable() end)
+	end
+end
+do
+	local KO = KitObjects
+	KO.CURRENT = 1
+	local CS = svc("CollectionService")
+	local V3, CF = Vector3.new, CFrame.new
+	local floor = math.floor
+	local reg = { keyToId = {}, idToKey = {}, nextId = 1 }
+	local function idFor(key)
+		local id = reg.keyToId[key]
+		if id then return id end
+		id = reg.nextId
+		reg.nextId = id + 1
+		reg.keyToId[key], reg.idToKey[id] = id, key
+		return id
+	end
+	KO.Reg = reg
+	function KO.VersionOf(data)
+		local v = data and rawget(data, "KitVersion")
+		if v == nil then return Settings.On("Sync Kit Objects") and KO.CURRENT or 0 end
+		return v
+	end
+	local cur = { mode = 1, data = nil, f = 0, t = 0, rec = false, on = false }
+	KO.cur = cur
+	local holder
+	local function getHolder()
+		local cam = workspace.CurrentCamera
+		if holder and holder.Parent == cam and cam then return holder end
+		if holder then pcall(function() holder:Destroy() end) end
+		holder = Instance.new("Folder")
+		holder.Name = "HappaTASKit"
+		holder.Parent = cam or workspace
+		return holder
+	end
+	local function attr(inst, name, def)
+		local v = inst and inst:GetAttribute(name)
+		if v == nil then return def end
+		if typeof(def) == "EnumItem" and type(v) == "string" then
+			local ok, e = pcall(function() return def.EnumType[v] end)
+			return (ok and e) or def
+		end
+		if typeof(v) ~= typeof(def) then return def end
+		return v
+	end
+	local muted = {}
+	local function mute(snd)
+		if not snd then return end
+		local m = muted[snd]
+		if m then m.n = m.n + 1 return end
+		muted[snd] = { n = 1, vol = snd.Volume }
+		pcall(function() snd.Volume = 0 end)
+	end
+	local function unmuteAll()
+		for snd, m in pairs(muted) do pcall(function() snd.Volume = m.vol end) end
+		muted = {}
+	end
+	local function playCopy(snd, parent)
+		if not (snd and parent and parent.Parent) then return end
+		local m = muted[snd]
+		local vol = m and m.vol or snd.Volume
+		if vol <= 0 then return end
+		pcall(function()
+			local c = snd:Clone()
+			c.Volume = vol
+			c.Parent = parent
+			c:Play()
+			local len = (c.TimeLength > 0 and c.TimeLength or 2) / math.max(c.PlaybackSpeed, 0.01)
+			task.delay(len + 0.1, function() pcall(function() c:Destroy() end) end)
+		end)
+	end
+	local function charRoot()
+		local ch = LocalPlayer.Character
+		return ch, ch and ch:FindFirstChild("HumanoidRootPart")
+	end
+	local AFFECTED = { Decal = "Transparency", Texture = "Transparency", SelectionBox = "Transparency",
+		SelectionSphere = "Transparency", SurfaceGui = "Enabled", BillboardGui = "Enabled", Beam = "Enabled",
+		ParticleEmitter = "Enabled", Fire = "Enabled", Sparkles = "Enabled", Smoke = "Enabled", Trail = "Enabled",
+		PointLight = "Enabled", SpotLight = "Enabled", SurfaceLight = "Enabled", Highlight = "Enabled" }
+	local beats, beatOf = {}, {}
+	local function beatConf(cfg)
+		return {
+			indicator = attr(cfg, "Indicator", true),
+			indSize = attr(cfg, "IndicatorSize", V3(3, 3, 3)),
+			indMul = attr(cfg, "IndicatorScaleMultiplier", 1),
+			indMat = attr(cfg, "MaterialIndicator", Enum.Material.SmoothPlastic),
+			offCC = attr(cfg, "OffCanCollide", false), offTr = attr(cfg, "OffTransparency", 0.5), offCT = attr(cfg, "OffCanTouch", false),
+			onCC = attr(cfg, "OnCanCollide", true), onTr = attr(cfg, "OnTransparency", 1), onCT = attr(cfg, "OnCanTouch", true),
+			interval = attr(cfg, "Interval", 1), indInterval = attr(cfg, "IndicatorInterval", 0.5),
+			children = attr(cfg, "ToggleChildren", false),
+		}
+	end
+	local function kitBeatTables()
+		local out = {}
+		if not Env.filtergc then return out end
+		local ok, fns = pcall(Env.filtergc, "function", { Constants = { "IndicatorInterval" } })
+		if not ok or type(fns) ~= "table" then return out end
+		for _, fn in ipairs(fns) do
+			pcall(function()
+				local cfgInst, tbl = nil, nil
+				for _, up in pairs(debug.getupvalues(fn)) do
+					if type(up) == "table" and typeof(rawget(up, "__instance")) == "Instance" and rawget(up, "Interval") ~= nil then
+						cfgInst = rawget(up, "__instance")
+					elseif type(up) == "function" then
+						for _, up2 in pairs(debug.getupvalues(up)) do
+							if type(up2) == "table" then
+								local _, first = next(up2)
+								if type(first) == "table" and type(first[1]) == "table" and typeof(first[1].part) == "Instance" then tbl = up2 end
+							end
+						end
+					end
+				end
+				if cfgInst and tbl then out[cfgInst] = tbl end
+			end)
+		end
+		return out
+	end
+	local function looksLikeIndicator(g, p)
+		local c = g.conf
+		return c.indicator and c.indMul == 1 and p.Material == c.indMat and (p.Size - c.indSize).Magnitude < 1e-3
+	end
+	local function addBeat(cfg, kitTables)
+		if beatOf[cfg] then return end
+		local folder = cfg.Parent
+		if not (folder and folder:IsA("Folder")) then return end
+		local ms = cfg:FindFirstChild("MusicSyncConfiguration")
+		if ms and ms:GetAttribute("SyncEnabled") == true and type(ms:GetAttribute("ZoneName")) == "string" then return end
+		local g = { cfg = cfg, groups = {}, parts = {}, orig = {}, kids = {}, conf = beatConf(cfg), n = 0, dirty = true, conns = {},
+			last = nil }
+		for _, p in ipairs(folder:GetDescendants()) do
+			if p:IsA("BasePart") then
+				local num = tonumber(p.Name:match("%d+"))
+				if num then
+					local list = g.groups[num]
+					if not list then list = {}; g.groups[num] = list end
+					list[#list + 1] = p
+					g.parts[#g.parts + 1] = p
+				end
+			end
+		end
+		while g.groups[g.n + 1] do g.n = g.n + 1 end
+		if g.n == 0 then return end
+		local kitT = kitTables and kitTables[cfg]
+		for _, p in ipairs(g.parts) do
+			local o = nil
+			if kitT then
+				for _, list in pairs(kitT) do
+					for _, d in ipairs(list) do
+						if d.part == p and typeof(d.size) == "Vector3" then o = { size = d.size, material = d.material } end
+					end
+				end
+			end
+			if not o and not looksLikeIndicator(g, p) then o = { size = p.Size, material = p.Material } end
+			g.orig[p] = o
+			local kids = {}
+			for _, ch in ipairs(p:GetChildren()) do
+				if AFFECTED[ch.ClassName] then kids[#kids + 1] = ch end
+			end
+			g.kids[p] = kids
+			for _, prop in ipairs({ "CanCollide", "CanTouch", "Transparency", "Size", "Material" }) do
+				g.conns[#g.conns + 1] = p:GetPropertyChangedSignal(prop):Connect(function()
+					g.dirty = true
+					if not g.driving and (prop == "Size" or prop == "Material") and not looksLikeIndicator(g, p) then
+						g.orig[p] = { size = p.Size, material = p.Material }
+					end
+				end)
+			end
+		end
+		g.conns[#g.conns + 1] = cfg.AttributeChanged:Connect(function() g.conf = beatConf(cfg); g.dirty = true end)
+		local snd = cfg:FindFirstChild("DingSound")
+		if not (snd and snd:IsA("Sound")) then
+			local ok, s = pcall(function()
+				return svc("ReplicatedStorage").Framework.Kit.Repository.Visual.BeatBlock:FindFirstChild("DefaultDingSound")
+			end)
+			snd = (ok and s and s:IsA("Sound")) and s or nil
+		end
+		g.ding = snd
+		beatOf[cfg] = g
+		beats[#beats + 1] = g
+	end
+	local function dropBeat(g)
+		for _, c in ipairs(g.conns) do c:Disconnect() end
+		beatOf[g.cfg] = nil
+		for i = #beats, 1, -1 do if beats[i] == g then table.remove(beats, i) end end
+	end
+	local function beatAt(g, t)
+		local c = g.conf
+		local ii = c.indicator and math.max(c.indInterval, 0) or 0
+		local first = math.max(c.interval - ii, 0)
+		local len = first + ii
+		if len <= 1e-6 then len = 1e-6 end
+		local cycle = floor(t / len)
+		local active = cycle % g.n + 1
+		local phase = t - cycle * len
+		local ind = nil
+		if c.indicator and phase >= first then ind = active % g.n + 1 end
+		return active, ind, cycle
+	end
+	local function setIf(p, prop, v)
+		if p[prop] ~= v then p[prop] = v end
+	end
+	local function beatWrite(g, active, ind)
+		local c = g.conf
+		for num, list in pairs(g.groups) do
+			local on = num == active
+			local isInd = num == ind
+			for _, p in ipairs(list) do
+				local o = g.orig[p] or { size = p.Size, material = p.Material }
+				g.orig[p] = o
+				pcall(function()
+					if isInd then
+						setIf(p, "Size", (c.indMul ~= 1) and o.size * c.indMul or c.indSize)
+						setIf(p, "Material", c.indMat)
+						setIf(p, "CanCollide", c.offCC)
+						setIf(p, "CanTouch", c.offCT)
+						setIf(p, "Transparency", c.offTr)
+					else
+						local cc, ct, tr = c.offCC, c.offCT, c.offTr
+						if on then cc, ct, tr = c.onCC, c.onCT, c.onTr end
+						setIf(p, "Size", o.size)
+						setIf(p, "Material", o.material)
+						setIf(p, "CanCollide", cc)
+						setIf(p, "CanTouch", ct)
+						setIf(p, "Transparency", tr)
+						if c.children then
+							for _, ch in ipairs(g.kids[p]) do
+								if AFFECTED[ch.ClassName] == "Transparency" then setIf(ch, "Transparency", tr)
+								else setIf(ch, "Enabled", on) end
+							end
+						end
+					end
+				end)
+			end
+		end
+	end
+	local function beatStep(t, advancing)
+		for _, g in ipairs(beats) do
+			if not (g.cfg.Parent) then
+				dropBeat(g)
+			else
+				local active, ind, cycle = beatAt(g, t)
+				local key = active * 1000 + (ind or 0)
+				if g.dirty or g.lastKey ~= key then
+					if advancing and g.lastCycle ~= nil and cycle ~= g.lastCycle and g.ding then
+						local _, root = charRoot()
+						local best, bd = nil, math.huge
+						for _, p in ipairs(g.groups[active] or {}) do
+							local d = root and (p.Position - root.Position).Magnitude or 0
+							if d < bd then best, bd = p, d end
+						end
+						playCopy(g.ding, best)
+					end
+					g.driving = true
+					beatWrite(g, active, ind)
+					g.dirty = false
+					g.lastKey = key
+				end
+				g.lastCycle = cycle
+			end
+		end
+	end
+	local turrets, turretOf = {}, {}
+	local idx = { data = nil, list = {}, bySeq = {}, nextSeq = 1, valid = false, maxLife = 0, firstSpawn = {} }
+	local shown = {}
+	local damageEvent
+	local function stripBullet(m)
+		for _, d in ipairs(m:GetDescendants()) do
+			if d:IsA("LuaSourceContainer") or d:IsA("Constraint") or d:IsA("BodyMover") or d:IsA("TouchTransmitter") then
+				pcall(function() d:Destroy() end)
+			elseif d:IsA("BasePart") then
+				d.Anchored = true
+				d.CanCollide = false
+				d.CanTouch = false
+				d.CanQuery = false
+				d:SetAttribute("HappaTASIgnore", true)
+			end
+		end
+		m:SetAttribute("HappaTASBullet", true)
+		return m
+	end
+	local function mainPartOf(m)
+		return m.PrimaryPart or m:FindFirstChild("Bullet") or m:FindFirstChildWhichIsA("BasePart", true)
+	end
+	local function kitBulletTemplates()
+		local out = {}
+		if not Env.filtergc then return out end
+		local ok, fns = pcall(Env.filtergc, "function", { Constants = { "BulletOffset" } })
+		if not ok or type(fns) ~= "table" then return out end
+		for _, fn in ipairs(fns) do
+			pcall(function()
+				local tpl, model = nil, nil
+				for _, up in pairs(debug.getupvalues(fn)) do
+					if typeof(up) == "Instance" then
+						if up:IsA("Model") and up.Parent == nil and up:FindFirstChildWhichIsA("BasePart", true) then tpl = up
+						elseif up:IsA("BasePart") and up.Name == "Turret" and up.Parent then model = up.Parent end
+					end
+				end
+				if tpl and model then out[model] = tpl end
+			end)
+		end
+		return out
+	end
+	local function fallbackBullet()
+		local m = Instance.new("Model")
+		m.Name = "Bullet"
+		local p
+		local ok, def = pcall(function()
+			return svc("ReplicatedStorage").Framework.Kit.Repository.Interactables.Turret:FindFirstChild("Bullet")
+		end)
+		if ok and def and def:IsA("BasePart") then
+			p = def:Clone()
+		else
+			p = Instance.new("Part")
+			p.Shape = Enum.PartType.Ball
+			p.Size = V3(1, 1, 1)
+			p.Material = Enum.Material.Neon
+			p.Color = Color3.fromRGB(255, 0, 0)
+		end
+		p.Name = "Bullet"
+		p.Parent = m
+		m.PrimaryPart = p
+		return m
+	end
+	local function turretTemplate(t)
+		if t.template then return t.template end
+		local kitT = kitBulletTemplates()
+		local src = kitT[t.model]
+		local ok, m = pcall(function() return src and src:Clone() end)
+		t.template = stripBullet((ok and m) or fallbackBullet())
+		return t.template
+	end
+	local onKitBullet
+	local function addTurret(cfg)
+		local model = cfg.Parent
+		if not model or turretOf[model] then return end
+		local part = model:FindFirstChild("Turret")
+		if not (part and part:IsA("BasePart")) then return end
+		local key = ClientObjects.KeyOf(model)
+		if not key then return end
+		local t = { model = model, part = part, cfg = cfg, key = key, id = idFor(key), conns = {} }
+		local snd = part:FindFirstChild("Fire")
+		t.fireSnd = (snd and snd:IsA("Sound")) and snd or nil
+		t.conns[#t.conns + 1] = model.ChildAdded:Connect(function(child)
+			if child:IsA("Model") and not child:GetAttribute("HappaTASBullet") then onKitBullet(t, child) end
+		end)
+		turretOf[model] = t
+		turrets[#turrets + 1] = t
+		idx.valid = false
+		t.conns[#t.conns + 1] = model.AncestryChanged:Connect(function()
+			if model:IsDescendantOf(workspace) then return end
+			for _, c in ipairs(t.conns) do c:Disconnect() end
+			turretOf[model] = nil
+			for i = #turrets, 1, -1 do if turrets[i] == t then table.remove(turrets, i) end end
+			idx.valid = false
+		end)
+	end
+	local function rotVec(cf)
+		local axis, angle = cf:ToAxisAngle()
+		return axis * angle
+	end
+	local function vecRot(x, y, z)
+		local v = V3(x, y, z)
+		local a = v.Magnitude
+		if a < 1e-9 then return CF() end
+		return CFrame.fromAxisAngle(v / a, a)
+	end
+	local function makeBullet(e, f, tFire)
+		local key = reg.idToKey[e[2]]
+		local tur = nil
+		for _, t in ipairs(turrets) do if t.key == key then tur = t break end end
+		return { seq = e[3], f = f, t = tFire, tur = tur, turId = e[2], pos = V3(e[4], e[5], e[6]), rot = vecRot(e[7], e[8], e[9]),
+			v = V3(e[10], e[11], e[12]), life = e[13], endF = nil, dmg = 0 }
+	end
+	local function buildIndex(data)
+		idx.data, idx.list, idx.bySeq, idx.nextSeq, idx.valid, idx.maxLife, idx.firstSpawn = data, {}, {}, 1, true, 0, {}
+		if not data then return end
+		for f = 1, #data do
+			local fr = data[f]
+			local ke = fr and fr.KE
+			if ke then
+				for _, e in ipairs(ke) do
+					if e[1] == 1 then
+						local b = makeBullet(e, f, fr.TotalTime or 0)
+						idx.list[#idx.list + 1] = b
+						idx.bySeq[b.seq] = b
+						if b.seq >= idx.nextSeq then idx.nextSeq = b.seq + 1 end
+						if b.life > idx.maxLife then idx.maxLife = b.life end
+					elseif e[1] == 2 then
+						local b = idx.bySeq[e[2]]
+						if b then b.endF = f; b.dmg = e[3] or 0 end
+					elseif e[1] == 3 then
+						if not idx.firstSpawn[e[2]] then idx.firstSpawn[e[2]] = f end
+					end
+				end
+			end
+		end
+	end
+	local function firstFlying(I, t)
+		local list = I.list
+		local lo, hi, from = 1, #list, #list + 1
+		local tMin = t - I.maxLife - 1e-6
+		while lo <= hi do
+			local mid = floor((lo + hi) / 2)
+			if list[mid].t >= tMin then from = mid; hi = mid - 1 else lo = mid + 1 end
+		end
+		return from
+	end
+	local function index(data)
+		if not idx.valid or idx.data ~= data then buildIndex(data) end
+		return idx
+	end
+	local function addEvent(fr, e)
+		local ke = fr.KE
+		if not ke then ke = {}; fr.KE = ke end
+		ke[#ke + 1] = e
+	end
+	local function hideBullet(b)
+		local m = shown[b]
+		if m then
+			shown[b] = nil
+			pcall(function() m:Destroy() end)
+		end
+	end
+	local function hideAllBullets()
+		for b in pairs(shown) do hideBullet(b) end
+	end
+	local function bulletAt(b, t)
+		return b.pos + b.v * math.max(0, t - b.t)
+	end
+	local function showBullets(data, f, t)
+		local I = index(data)
+		local alive = {}
+		local list = I.list
+		for i = firstFlying(I, t), #list do
+			local b = list[i]
+			if b.f >= f then break end
+			if (b.endF == nil or b.endF >= f) and (t - b.t) <= b.life + 1e-6 then
+				alive[b] = true
+				local m = shown[b]
+				if not m then
+					local tur = b.tur
+					if tur then
+						local ok, c = pcall(function() return turretTemplate(tur):Clone() end)
+						if ok and c then
+							m = c
+							c.Parent = getHolder()
+							shown[b] = m
+						end
+					end
+				end
+				if m then
+					pcall(function() m:PivotTo(CF(bulletAt(b, t)) * b.rot) end)
+				end
+			end
+		end
+		for b in pairs(shown) do
+			if not alive[b] then hideBullet(b) end
+		end
+	end
+	onKitBullet = function(t, child)
+		if not cur.on then return end
+		if cur.rec and cur.data and #cur.data > 0 then
+			local data = cur.data
+			local n = #data
+			local fr = data[n]
+			if not t.template then
+				local ok, c = pcall(function() return child:Clone() end)
+				if ok and c then t.template = stripBullet(c) end
+			end
+			local cfg = t.cfg
+			local spawn = t.part.CFrame * attr(cfg, "BulletOffset", CF())
+			local vel = t.part.CFrame.LookVector * attr(cfg, "Speed", 50)
+			local r3 = rotVec(spawn)
+			local I = index(data)
+			local seq = I.nextSeq
+			I.nextSeq = seq + 1
+			local e = { 1, t.id, seq, spawn.X, spawn.Y, spawn.Z, r3.X, r3.Y, r3.Z, vel.X, vel.Y, vel.Z, attr(cfg, "MaxLifetime", 15) }
+			addEvent(fr, e)
+			local b = makeBullet(e, n, fr.TotalTime or 0)
+			b.tur = t
+			I.list[#I.list + 1] = b
+			I.bySeq[seq] = b
+			if b.life > I.maxLife then I.maxLife = b.life end
+			playCopy(t.fireSnd, t.part)
+		end
+		pcall(function() child:Destroy() end)
+	end
+	local function dealDamage(amount)
+		if amount <= 0 then return end
+		if damageEvent == nil then
+			damageEvent = false
+			pcall(function()
+				local cm = require(svc("ReplicatedStorage").Framework.Kit.Managers.CharacterManager)
+				if type(cm) == "table" and type(cm.Damage) == "function" then damageEvent = cm end
+			end)
+		end
+		if damageEvent then
+			task.spawn(pcall, damageEvent.Damage, damageEvent, amount)
+		end
+	end
+	local function verdict(b, part, ch)
+		if not part:IsA("BasePart") then return nil end
+		if b.tur and part == b.tur.part then return nil end
+		if CS and part:HasTag("IgnoreBullets") then return nil end
+		if not part.CanTouch then return nil end
+		local owner = Players:GetPlayerFromCharacter(part.Parent)
+		if owner then
+			if owner ~= LocalPlayer or part.Name == "Torso" then return nil end
+			local tc = b.tur and b.tur.cfg:FindFirstChild("TouchConfiguration")
+			if tc and tc:GetAttribute("player") == false then return nil end
+			return "player"
+		end
+		if part.CanCollide then return "solid" end
+		return nil
+	end
+	local castParams = RaycastParams.new()
+	castParams.FilterType = Enum.RaycastFilterType.Exclude
+	castParams.RespectCanCollide = false
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+	overlapParams.RespectCanCollide = false
+	local function castBullet(b, p0, p1, size, ch)
+		local ex = { getHolder() }
+		if b.tur then ex[#ex + 1] = b.tur.model end
+		local dir = p1 - p0
+		if dir.Magnitude >= 1e-5 then
+			for _ = 1, 8 do
+				castParams.FilterDescendantsInstances = ex
+				local ok, res = pcall(workspace.Blockcast, workspace, CF(p0) * b.rot, size, dir, castParams)
+				if not ok or not res then break end
+				local v = verdict(b, res.Instance, ch)
+				if v then return v end
+				ex[#ex + 1] = res.Instance
+			end
+		end
+		overlapParams.FilterDescendantsInstances = ex
+		local ok, list = pcall(workspace.GetPartBoundsInBox, workspace, CF(p1) * b.rot, size, overlapParams)
+		if ok and type(list) == "table" then
+			local best = nil
+			for _, part in ipairs(list) do
+				local v = verdict(b, part, ch)
+				if v == "player" then return v end
+				best = best or v
+			end
+			return best
+		end
+		return nil
+	end
+	local function turretHits(data, n)
+		local I = index(data)
+		local fr, prev = data[n], data[n - 1]
+		if not fr then return end
+		local t1 = fr.TotalTime or 0
+		local t0 = prev and prev.TotalTime or t1
+		local ch = LocalPlayer.Character
+		local list = I.list
+		for i = firstFlying(I, t0), #list do
+			local b = list[i]
+			if b.f < n and b.endF == nil then
+				local dmg = nil
+				if t1 - b.t >= b.life - 1e-6 then
+					dmg = 0
+				else
+					local size = V3(1, 1, 1)
+					local m = shown[b] or (b.tur and turretTemplate(b.tur))
+					local mp = m and mainPartOf(m)
+					if mp then size = mp.Size end
+					local hit = castBullet(b, bulletAt(b, math.max(t0, b.t)), bulletAt(b, t1), size, ch)
+					if hit == "player" then
+						dmg = (mp == nil or mp.Name == "Bullet") and attr(b.tur and b.tur.cfg, "Damage", 5) or 0
+					elseif hit == "solid" then
+						dmg = 0
+					end
+					if hit and b.tur and not attr(b.tur.cfg, "DestroyOnTouch", true) then
+						if dmg > 0 then dealDamage(dmg) end
+						dmg = nil
+					end
+				end
+				if dmg then
+					addEvent(fr, { 2, b.seq, dmg })
+					b.endF, b.dmg = n, dmg
+					if dmg > 0 then dealDamage(dmg) end
+				end
+			end
+		end
+	end
+	local replayedTo = nil
+	local function replayEvents(data, f)
+		if replayedTo == nil or f < replayedTo then replayedTo = f - 1 end
+		if f - replayedTo > 600 then replayedTo = f - 1 end
+		for i = replayedTo + 1, f do
+			local fr = data[i]
+			if fr and fr.KE then
+				for _, e in ipairs(fr.KE) do
+					if e[1] == 1 then
+						local key = reg.idToKey[e[2]]
+						for _, t in ipairs(turrets) do if t.key == key then playCopy(t.fireSnd, t.part) end end
+					elseif e[1] == 2 and (e[3] or 0) > 0 then
+						dealDamage(e[3])
+					end
+				end
+			end
+		end
+		replayedTo = f
+	end
+	local spawners, spawnerOf = {}, {}
+	local function boxParts(box)
+		local list = {}
+		if box:IsA("BasePart") then list[1] = box end
+		for _, d in ipairs(box:GetDescendants()) do if d:IsA("BasePart") then list[#list + 1] = d end end
+		return list
+	end
+	local function hideBox(s)
+		if s.hidden or not (s.box and s.box.Parent) then return end
+		s.hidden = {}
+		for _, p in ipairs(boxParts(s.box)) do
+			s.hidden[p] = { p.Transparency, p.CanCollide, p.CanTouch, p.CanQuery }
+			pcall(function() p.Transparency = 1; p.CanCollide = false; p.CanTouch = false; p.CanQuery = false end)
+		end
+	end
+	local function unhideBox(s)
+		if not s.hidden then return end
+		for p, v in pairs(s.hidden) do
+			if p.Parent then pcall(function() p.Transparency = v[1]; p.CanCollide = v[2]; p.CanTouch = v[3]; p.CanQuery = v[4] end) end
+		end
+		s.hidden = nil
+	end
+	local function addSpawner(cfg)
+		local model = cfg.Parent
+		if not (model and model:IsA("Model")) or spawnerOf[model] then return end
+		local key = ClientObjects.KeyOf(model)
+		if not key then return end
+		local s = { model = model, cfg = cfg, key = key, id = idFor(key), conns = {}, box = nil, boxF = nil }
+		s.box = model:FindFirstChild("Pushbox")
+		s.conns[#s.conns + 1] = model.ChildAdded:Connect(function(child)
+			if child.Name ~= "Pushbox" then return end
+			unhideBox(s)
+			s.box = child
+			s.boxF = nil
+			if cur.on and cur.data then
+				if cur.rec and #cur.data > 0 then
+					s.boxF = #cur.data
+					addEvent(cur.data[#cur.data], { 3, s.id, 1 })
+					local I = index(cur.data)
+					if not I.firstSpawn[s.id] or I.firstSpawn[s.id] > s.boxF then I.firstSpawn[s.id] = s.boxF end
+				elseif cur.mode == 3 then
+					s.boxF = cur.f
+				end
+			end
+		end)
+		spawnerOf[model] = s
+		spawners[#spawners + 1] = s
+		s.conns[#s.conns + 1] = model.AncestryChanged:Connect(function()
+			if model:IsDescendantOf(workspace) then return end
+			for _, c in ipairs(s.conns) do c:Disconnect() end
+			spawnerOf[model] = nil
+			for i = #spawners, 1, -1 do if spawners[i] == s then table.remove(spawners, i) end end
+		end)
+	end
+	local function spawnedBy(data, s, f)
+		local first = index(data).firstSpawn[s.id]
+		return first ~= nil and first <= f
+	end
+	local function boxesAt(data, f)
+		for _, s in ipairs(spawners) do
+			if s.box and not s.box.Parent then s.box, s.boxF = nil, nil end
+			if s.box and s.boxF and s.boxF > f and not spawnedBy(data, s, f) then hideBox(s) else unhideBox(s) end
+		end
+	end
+	local FORCE = { LinearVelocity = true, VectorForce = true, AngularVelocity = true, AlignPosition = true,
+		AlignOrientation = true, LineForce = true, Torque = true, BodyVelocity = true, BodyForce = true, BodyThrust = true,
+		BodyPosition = true, BodyGyro = true, BodyAngularVelocity = true }
+	local forces = setmetatable({}, { __mode = "k" })
+	local charConn
+	local function watchCharacter(ch)
+		if charConn then charConn:Disconnect(); charConn = nil end
+		if not ch then return end
+		charConn = ch.DescendantAdded:Connect(function(d)
+			if not FORCE[d.ClassName] then return end
+			if cur.on and cur.rec and cur.data then forces[d] = #cur.data else forces[d] = false end
+			if cur.on and cur.mode == 3 then pcall(function() d.Enabled = false end) end
+		end)
+	end
+	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner }
+	local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
+		["CO_Interactables/PushboxSpawn"] = addSpawner }
+	local function consider(inst, kitTables)
+		local add = CONFIGS[inst.Name]
+		if not add and CS then
+			for tag, f in pairs(TAGS) do
+				if inst:HasTag(tag) then add = f break end
+			end
+		end
+		if add then
+			if add == addBeat then add(inst, kitTables) else add(inst) end
+		end
+	end
+	local function scanAll()
+		local kitTables = kitBeatTables()
+		local seen = {}
+		if CS then
+			for tag in pairs(TAGS) do
+				local ok, list = pcall(CS.GetTagged, CS, tag)
+				if ok then
+					for _, inst in ipairs(list) do
+						if inst:IsDescendantOf(workspace) and not seen[inst] then seen[inst] = true; consider(inst, kitTables) end
+					end
+				end
+			end
+		end
+		local cp = workspace:FindFirstChild("ClientParts")
+		for _, d in ipairs((cp or workspace):GetDescendants()) do
+			if CONFIGS[d.Name] and not seen[d] then seen[d] = true; consider(d, kitTables) end
+		end
+	end
+	local enabled = false
+	local function release()
+		if cur.on then
+			cur.on = false
+			for _, g in ipairs(beats) do g.driving = false; g.lastKey = nil; g.lastCycle = nil end
+			hideAllBullets()
+			for _, s in ipairs(spawners) do unhideBox(s) end
+			unmuteAll()
+		end
+		replayedTo = nil
+	end
+	KO.Release = release
+	function KO.Invalidate()
+		idx.valid = false
+	end
+	function KO.Frame(mode, data, f, t, rec)
+		cur.mode, cur.data, cur.f, cur.t, cur.rec = mode, data, f, t, rec
+		if not enabled or (mode ~= 2 and mode ~= 3) or not data then release() return end
+		if rec and rawget(data, "KitVersion") == nil then data.KitVersion = KO.VersionOf(data) end
+		if KO.VersionOf(data) < 1 or not Settings.On("Sync Kit Objects") then release() return end
+		if not cur.on then
+			cur.on = true
+			for _, g in ipairs(beats) do mute(g.ding); g.dirty = true end
+			for _, tt in ipairs(turrets) do mute(tt.fireSnd) end
+			replayedTo = nil
+		end
+		local advancing = rec or (mode == 3)
+		if rec and #data == 1 then
+			for _, s in ipairs(spawners) do
+				if s.box and s.box.Parent and not spawnedBy(data, s, 1) then
+					addEvent(data[1], { 3, s.id, 0 })
+					index(data).firstSpawn[s.id] = 1
+				end
+			end
+		end
+		beatStep(t, advancing)
+		showBullets(data, f, t)
+		boxesAt(data, f)
+		if mode == 3 then replayEvents(data, f) end
+	end
+	function KO.AfterPhysics(data, n)
+		if not (enabled and cur.on and cur.rec and data and data[n]) then return end
+		turretHits(data, n)
+	end
+	function KO.Reassert()
+		if not (enabled and cur.on) or #beats == 0 then return end
+		beatStep(cur.t, false)
+	end
+	function KO.Unpause(data, f)
+		for d, fr in pairs(forces) do
+			if fr and fr > f then
+				forces[d] = nil
+				pcall(function() d:Destroy() end)
+			end
+		end
+		idx.valid = false
+	end
+	function KO.Export(frames)
+		local used = {}
+		for _, fr in ipairs(frames) do
+			if fr.KE then
+				for _, e in ipairs(fr.KE) do
+					if e[1] == 1 or e[1] == 3 then used[e[2]] = true end
+				end
+			end
+		end
+		local keys = {}
+		for id in pairs(used) do keys[#keys + 1] = { id = id, key = reg.idToKey[id] or "" } end
+		table.sort(keys, function(a, b) return a.id < b.id end)
+		return { version = KO.VersionOf(frames), keys = keys }
+	end
+	function KO.Import(frames, kit)
+		if not kit then frames.KitVersion = 0 return end
+		frames.KitVersion = kit.version or 0
+		local map = {}
+		for _, k in ipairs(kit.keys or {}) do map[k.id] = idFor(k.key) end
+		for _, fr in ipairs(frames) do
+			if fr.KE then
+				for _, e in ipairs(fr.KE) do
+					if (e[1] == 1 or e[1] == 3) and map[e[2]] then e[2] = map[e[2]] end
+				end
+			end
+		end
+		idx.valid = false
+	end
+	function KO.Counts()
+		local live = 0
+		for _ in pairs(shown) do live = live + 1 end
+		return #beats, #turrets, #spawners, live
+	end
+	function KO.Enable()
+		if enabled then return end
+		enabled = true
+		pcall(scanAll)
+	end
+	function KO.Disable()
+		if not enabled then return end
+		release()
+		enabled = false
+	end
+	function KO.Start()
+		on(workspace.DescendantAdded, function(d)
+			if CONFIGS[d.Name] then
+				task.defer(function()
+					if d.Parent then pcall(consider, d, (d.Name == "BeatBlockConfiguration") and kitBeatTables() or nil) end
+				end)
+			end
+		end)
+		if LocalPlayer.Character then watchCharacter(LocalPlayer.Character) end
+		on(LocalPlayer.CharacterAdded, watchCharacter)
+		if Settings.On("Sync Kit Objects") then KO.Enable() end
+		Settings.Changed("Sync Kit Objects", function(v)
+			if v ~= 0 then KO.Enable() else KO.Disable() end
+		end)
+		Janitor.add(function()
+			KO.Disable()
+			if charConn then charConn:Disconnect() end
+			for _, g in ipairs(beats) do for _, c in ipairs(g.conns) do c:Disconnect() end end
+			for _, t in ipairs(turrets) do for _, c in ipairs(t.conns) do c:Disconnect() end end
+			for _, s in ipairs(spawners) do for _, c in ipairs(s.conns) do c:Disconnect() end end
+			if holder then pcall(function() holder:Destroy() end) end
+		end)
 	end
 end
 do
@@ -10409,6 +11961,7 @@ do
 		C.dataVersion = C.dataVersion + 1
 		ClientObjects.Invalidate()
 		Buttons.Invalidate()
+		KitObjects.Invalidate()
 	end
 	local function changeState(hum, st) hum:ChangeState(st) end
 	C.ChangeState = function(st) if C.Humanoid then pcall(changeState, C.Humanoid, st) end end
@@ -10905,6 +12458,7 @@ do
 		Bridge.SetFreeMouse(false)
 		Buttons.Release()
 		Lighting.Release()
+		KitObjects.Release()
 		ToolSync.ReplayEnd()
 		Cursor.Reset()
 		Bridge.RefreshMouse(Menu.IsModalOpen and Menu.IsModalOpen())
@@ -10983,6 +12537,7 @@ do
 	end
 	local function unpauseFrom(data)
 		C.RemoveCutFrames()
+		KitObjects.Unpause(data, #data)
 		C.LookAround = false
 		Bridge.LockAnimations(false)
 		if #data > 0 then
@@ -11027,6 +12582,7 @@ do
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(data[#data])
+		KitClock.Rewind(data, #data)
 		Buttons.Pause(frameTime(#data))
 		Lighting.Pause()
 	end
@@ -11053,6 +12609,7 @@ do
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
+		KitClock.Rewind(C.data, #C.data)
 		Buttons.Pause(frameTime(#C.data))
 		Lighting.Pause()
 	end
@@ -11214,6 +12771,7 @@ do
 		pcall(ClientObjects.EndPlayback)
 		pcall(Buttons.Release)
 		pcall(Lighting.Release)
+		pcall(KitObjects.Release)
 		pcall(Bridge.LockShiftlock, false)
 		pcall(Bridge.LockAnimations, false)
 		pcall(Bridge.SetFreeMouse, false)
@@ -11251,6 +12809,7 @@ do
 		ClientObjects.EndPlayback()
 		Buttons.Release()
 		Lighting.Release()
+		KitObjects.Release()
 		ToolSync.ReplayEnd()
 		C.mode, C.frame = 1, 1
 		C.anchor(false)
@@ -11346,7 +12905,9 @@ do
 					Input = InputSys.Take(),
 					MX = mx, MY = my, UVX = uvx, UVY = uvy,
 					VX = vpChanged and vx or nil, VY = vpChanged and vy or nil,
+					SK = (k ~= 1) and r(k, 10000) or nil,
 				}
+				KitClock.Mark(data, n + 1)
 				Profiler.End("Record")
 			end
 			if C.paused then
@@ -11366,6 +12927,22 @@ do
 		local hum = C.Humanoid
 		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
 		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
+		Profiler.Begin("Kit")
+		local kitRate = 1
+		if mode == 2 then
+			local rec = not C.paused or C.FirstFrameRecord
+			local f = rec and #data or C.frame
+			local fr = data[f]
+			KitObjects.Frame(2, data, f, fr and fr.TotalTime or 0, rec and #data > 0)
+			kitRate = rec and C.recScale or 0
+		elseif mode == 3 then
+			KitObjects.Frame(3, data, C.frame, C.TestingTimer, false)
+			kitRate = math.max(0, Settings.Get("Playback Speed"))
+		else
+			KitObjects.Frame(1, data, 0, 0, false)
+		end
+		KitClock.SetRate(kitRate)
+		Profiler.End("Kit")
 		Profiler.End("HappaTAS")
 		Profiler.FrameEnd()
 	end
@@ -11391,6 +12968,7 @@ do
 	end
 	local function preSimulation()
 		Profiler.Begin("HappaTAS")
+		KitObjects.Reassert()
 		local data = C.data
 		if C.mode == 2 and C.CharLoaded() and not C.paused and not C.FirstFrameRecord and C.NotDead() then
 			fillFrame(data)
@@ -11510,6 +13088,7 @@ do
 					if #data > 0 and data[#data].Cframe == nil and not C.FirstFrameRecord and C.NotDead() then fillFrame(data) end
 					if #data > 0 and data[#data].Cframe == nil then data[#data] = nil end
 					C.frame = #data
+					if #data > 0 and not C.FirstFrameRecord then KitObjects.AfterPhysics(data, #data) end
 					Buttons.Step(data[#data] and data[#data].TotalTime or 0)
 				end
 				C.SetStats("Create", data[C.frame], dt, C.frame)
@@ -11546,6 +13125,7 @@ do
 		ClientObjects.RenderStep()
 		Buttons.RenderStep()
 		Lighting.RenderStep()
+		KitObjects.Reassert()
 		updateMouseMode()
 		Profiler.Begin("Cursor")
 		Cursor.Update(C.mode, (C.mode == 3 or (C.mode == 2 and C.paused and #C.data > 0 and C.SetCam() and not C.LookAround)) and C.data[C.frame] or nil, menuOpen)
@@ -12183,10 +13763,10 @@ local function Unload()
 		pcall(function() LocalPlayer.AutoJumpEnabled = restore.autoJump end)
 	end
 	Janitor.cleanup()
-	if rawget(genv, HANDLE_KEY) == handle then genv[HANDLE_KEY] = nil end
+	if rawget(genv, "__HappaTAS") == handle then genv["__HappaTAS"] = nil end
 end
 handle.Unload = Unload
-genv[HANDLE_KEY] = handle
+genv["__HappaTAS"] = handle
 if CONFIG.DisableAutoJump then
 	pcall(function() LocalPlayer.AutoJumpEnabled = false end)
 end
@@ -12200,6 +13780,8 @@ ClientObjects.Start()
 Buttons.Start()
 Lighting.Start()
 SpeedHack.Start()
+KitClock.Start()
+KitObjects.Start()
 Profiler.Start()
 local function onCharacter(char)
 	task.spawn(function()

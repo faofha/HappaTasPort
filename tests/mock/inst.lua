@@ -115,6 +115,8 @@ end
 function task.cancel(co)
 	for i = #sleeping, 1, -1 do if sleeping[i].co == co then table.remove(sleeping, i) end end
 	for i = #deferred, 1, -1 do if deferred[i][1] == co then table.remove(deferred, i) end end
+	-- (Roblox: a cancelled thread is closed, whatever it was waiting on)
+	if type(co) == "thread" and coroutine.status(co) == "suspended" then coroutine.close(co) end
 end
 function task.synchronize() end
 function task.desynchronize() end
@@ -667,16 +669,29 @@ function Inst.Destroy(self)
 	end
 end
 Inst.Remove = function(self) self.Parent = nil end
-function Inst.Clone(self)
+local function cloneInto(self, map)
 	local d = rawInst(self)
 	if d.props.Archivable == false then return nil end
 	local c = Instance_new(d.class.Name)
+	map[self] = c
 	local cd = rawInst(c)
 	for k, v in pairs(d.props) do cd.props[k] = v end
 	for k, v in pairs(d.attrs) do cd.attrs[k] = v end
 	for _, ch in ipairs(d.children) do
-		local cc = ch:Clone()
+		local cc = cloneInto(ch, map)
 		if cc then cc.Parent = c end
+	end
+	return c
+end
+function Inst.Clone(self)
+	local map = {}
+	local c = cloneInto(self, map)
+	-- (like Roblox: a property pointing inside the cloned tree, e.g. a Model's PrimaryPart, points at the copy)
+	for _, cc in pairs(map) do
+		local props = rawInst(cc).props
+		for k, v in pairs(props) do
+			if typeof(v) == "Instance" and map[v] then props[k] = map[v] end
+		end
 	end
 	return c
 end

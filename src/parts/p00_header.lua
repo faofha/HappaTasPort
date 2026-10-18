@@ -1,10 +1,33 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.13
+	Version: V2.38.14
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.14 changes (short): the EToH kit's objects on the TAS clock, the speed hack slows the world too
+		- Kit Clock (Settings > World Sync > Kit Scripts On TAS Clock, on): the kit's own scripts wait, delay,
+		  time and tween on the TAS clock: stopped while paused in Create mode, slowed by the speed hack, at the
+		  playback speed in Test. A jump launcher's push lasts its 0.125 s of TAS time even when you pause in
+		  the middle of it (before: a pause cut the jump to about half its height); moving platforms,
+		  vanishers, falling platforms and spawner cooldowns wait for the TAS too. (Eternal Obbying's TAS
+		  works this way: its whole game runs on one clock that its TAS speed slows down.) A pause also puts
+		  the kit's clock back on the last recorded frame, so pausing never gives the kit an extra frame.
+		- Sync Kit Objects (on): beat blocks follow the TAS time with the kit's own rules (the group that is
+		  on, the indicator, the ding), so a recording and its test always have the same beat and a paused
+		  TAS stops beating. Turret bullets are saved in the TAS (where and when each one was fired, its
+		  speed and lifetime): they fly the same way while recording, paused (frozen, also on any frame you
+		  go back to) and testing, stop at walls and hit your character with the kit's damage. A pushbox a
+		  spawner makes is hidden on the frames before it was spawned.
+		- The speed hack slows the world too: every constraint and body mover (spinners, moving platforms,
+		  swings, pushers, the jump launcher's push), conveyors and the motion of free parts.
+		- Idle (key 1) leaves the lighting as it is (before: it went back to the lighting at the TAS's start).
+		- File format v5 (bullets, spawns, the speed hack factor): older versions refuse it, v1 - v4 files load
+		  as before, and TAS files from before V2.38.14 keep the kit's own behaviour.
+		- Checked in the Roblox client (EToH kit test place): beat blocks right on every recorded, paused and
+		  tested frame, bullets where the saved events put them, the launcher's push 0.125 s of TAS time with
+		  or without a pause, spinners / conveyor / platform at half speed in 0.5x slow motion.
 
 	V2.38.13 changes (short): speed hack (slow motion while recording)
 		- Settings > Speed Hack slows the game down while you record in Create mode, like a video played
@@ -144,7 +167,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.13"
+local VERSION = "V2.38.14"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

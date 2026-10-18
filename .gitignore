@@ -4,4 +4,5 @@ src/HappaTAS_Executor.lua
 tests/diff_*.txt
 # personal notes for Claude: kept on your own computer, never published
 CLAUDE.md
+claude/
 build/

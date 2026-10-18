@@ -416,7 +416,7 @@ check(nF6 > 1300, "checked " .. nF6 .. " frames")
 check(wP6 <= 0.03, string.format("half way between frames within 0.03 studs (worst %.4f at frame %s)", wP6, tostring(wF6)))
 check(wR6 <= 0.004, string.format("and within 0.004 in rotation (worst %.5f)", wR6))
 
-section("save / load: file version 4, the client object data comes back the same")
+section("save / load: file version 5 (V2.38.14: a TAS made with Sync Kit Objects on saves its kit rules),\n  the client object data comes back the same")
 -- (saving / loading yields every 1500 frames: run it in a thread of its own while frames go on)
 local function runAsync(fn)
 	local done, res = false, nil
@@ -427,9 +427,9 @@ local function runAsync(fn)
 end
 local okS, nfS, nbS, info = runAsync(function() return Store.SaveSlot("coclock", C.data) end)
 check(okS, "saved")
-eq(info and info.version, 4, "file version 4 (v3 client object frames)")
+eq(info and info.version, 5, "file version 5 (v3 client object frames + the kit table)")
 local raw = M.fs["HappaTasPort/1234567/coclock.tas"]
-check(raw ~= nil and string.byte(raw, 5) == 4, "version byte 4 in the file")
+check(raw ~= nil and string.byte(raw, 5) == 5, "version byte 5 in the file")
 local okL, back = runAsync(function() return Store.LoadSlot("coclock") end)
 check(okL and #back == #C.data, "loaded " .. tostring(okL and #back))
 local same = okL
