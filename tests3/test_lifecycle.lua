@@ -60,6 +60,62 @@ do
 	eq(part2.Transparency, 0.8, "a value the game wrote since is kept")
 end
 
+section("scopes: one module's things can be undone on their own")
+do
+	local life = Lifecycle.new()
+	local order = {}
+	life:own(function() order[#order + 1] = "root" end)
+	local rec = life:scope("recorder")
+	eq(rec.name, "recorder", "a scope has its module's name")
+	rec:own(function() order[#order + 1] = "rec" end)
+	rec:cleanup()
+	eq(table.concat(order, ","), "rec", "cleaning a scope undoes only its things")
+	life:cleanup()
+	eq(table.concat(order, ","), "rec,root", "the scope isn't undone twice; the rest is undone on cleanup")
+	local life2 = Lifecycle.new()
+	local s2 = life2:scope("kit")
+	local ran = false
+	s2:own(function() ran = true end)
+	life2:cleanup()
+	check(ran, "cleaning the parent cleans its scopes")
+end
+
+section("drop: undo one thing now (short-lived parts, per-respawn connections)")
+do
+	local life = Lifecycle.new()
+	local n = 0
+	local f = function() n = n + 1 end
+	life:own(f)
+	eq(life:drop(f), true, "drop finds it")
+	eq(n, 1, "undone at once")
+	life:cleanup()
+	eq(n, 1, "not undone again on cleanup")
+	eq(#life.items, 0, "nothing kept")
+	eq(life:drop(f), false, "dropping something unknown is false")
+	local part = Instance.new("Part")
+	part.Transparency = 0
+	life:setProp(part, "Transparency", 0.5)
+	life:forgetProps(part)
+	life:cleanup()
+	eq(part.Transparency, 0.5, "forgetProps: that part's writes are no longer put back")
+end
+
+section("anything owned after cleanup is undone at once")
+do
+	local life = Lifecycle.new()
+	life:cleanup()
+	local ev = M.newSignal("late")
+	local c = life:connect(ev, function() end)
+	check(not c.Connected, "a connection made after Unload is disconnected at once")
+	local ran = false
+	life:own(function() ran = true end)
+	check(ran, "a cleanup function owned after Unload runs at once")
+	local s = life:scope("late")
+	local ran2 = false
+	s:own(function() ran2 = true end)
+	check(ran2, "a scope made after Unload undoes at once too")
+end
+
 section("errors: once per message, at most 25 printed")
 do
 	local printed = {}
