@@ -15,44 +15,33 @@ local function fn(...)
 end
 Env.fn = fn
 
--- (globals read through this script's own environment with a normal lookup: many executors provide
--- their functions through the environment's metatable, which rawget would miss; a missing name is nil)
-local G = getfenv(1)
-local function g(name)
-	local ok, v = pcall(function() return G[name] end)
-	if ok then return v end
-	return nil
-end
-local synT = type(g("syn")) == "table" and g("syn") or {}
+-- (each name is a plain global reference: it goes through this script's environment and its metatable,
+-- where many executors put their functions; a missing name is nil. getfenv / rawget are never used:
+-- getfenv switches Luau's fast paths off for the whole environment)
+local synT = type(syn) == "table" and syn or {}
 
-local getgenvF = fn(g("getgenv"))
+local getgenvF = fn(getgenv)
 Env.genv = (getgenvF and getgenvF()) or _G
 
-local LOOKUP = {
-	writefile = { "writefile" }, readfile = { "readfile" }, isfile = { "isfile" }, isfolder = { "isfolder" },
-	makefolder = { "makefolder" }, listfiles = { "listfiles" }, delfile = { "delfile" }, appendfile = { "appendfile" },
-	lz4compress = { "lz4compress" }, lz4decompress = { "lz4decompress" },
-	gethui = { "gethui" }, cloneref = { "cloneref", "clonereference" },
-	getgc = { "getgc" }, filtergc = { "filtergc" },
-	getconnections = { "getconnections", "getsignals", "get_signal_cons" },
-	hookfunction = { "hookfunction", "replaceclosure" }, restorefunction = { "restorefunction" },
-	iscclosure = { "iscclosure" }, getloadedmodules = { "getloadedmodules" },
-	setreadonly = { "setreadonly" }, isreadonly = { "isreadonly" },
-	isactive = { "isrbxactive", "isgameactive", "iswindowactive" },
-	keypress = { "keypress", "keydown" }, keyrelease = { "keyrelease", "keyup" },
-	mouse1press = { "mouse1press", "mouse1down" }, mouse1release = { "mouse1release", "mouse1up" },
-	mouse2press = { "mouse2press", "mouse2down" }, mouse2release = { "mouse2release", "mouse2up" },
-	mousemoveabs = { "mousemoveabs" }, mousemoverel = { "mousemoverel" }, mousescroll = { "mousescroll" },
-	getcustomasset = { "getcustomasset", "getsynasset" }, identifyexecutor = { "identifyexecutor", "getexecutorname" },
-}
-for field, names in pairs(LOOKUP) do
-	local found = nil
-	for _, n in ipairs(names) do
-		found = fn(g(n))
-		if found then break end
-	end
-	Env[field] = found
-end
+Env.writefile, Env.readfile, Env.isfile = fn(writefile), fn(readfile), fn(isfile)
+Env.isfolder, Env.makefolder, Env.listfiles = fn(isfolder), fn(makefolder), fn(listfiles)
+Env.delfile, Env.appendfile = fn(delfile), fn(appendfile)
+Env.lz4compress, Env.lz4decompress = fn(lz4compress), fn(lz4decompress)
+Env.gethui = fn(gethui)
+Env.cloneref = fn(cloneref, clonereference)
+Env.getgc, Env.filtergc = fn(getgc), fn(filtergc)
+Env.getconnections = fn(getconnections, getsignals, get_signal_cons)
+Env.hookfunction = fn(hookfunction, replaceclosure)
+Env.restorefunction = fn(restorefunction)
+Env.iscclosure, Env.getloadedmodules = fn(iscclosure), fn(getloadedmodules)
+Env.setreadonly, Env.isreadonly = fn(setreadonly), fn(isreadonly)
+Env.isactive = fn(isrbxactive, isgameactive, iswindowactive)
+Env.keypress, Env.keyrelease = fn(keypress, keydown), fn(keyrelease, keyup)
+Env.mouse1press, Env.mouse1release = fn(mouse1press, mouse1down), fn(mouse1release, mouse1up)
+Env.mouse2press, Env.mouse2release = fn(mouse2press, mouse2down), fn(mouse2release, mouse2up)
+Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
+Env.getcustomasset = fn(getcustomasset, getsynasset)
+Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
 if not Env.gethui then Env.gethui = fn(synT.gethui) end
 
 local FEATURES = {

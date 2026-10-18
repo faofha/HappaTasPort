@@ -26,6 +26,13 @@ if bash tools/build3.sh --src tests3/fixtures/cycle --check >/dev/null 2>&1; the
 else
   echo "cycle check: caught"
 fi
+# (getfenv / setfenv switch Luau's fast paths off for the whole environment: about 5x slower math / table
+# calls everywhere, measured in review; HappaTAS 3 must never call them)
+if grep -nE "(getfenv|setfenv)\(" src2/HappaTAS3.lua; then
+  echo "deopt guard: getfenv / setfenv found in the build"; fail=1
+else
+  echo "deopt guard: clean"
+fi
 bash tools/build3.sh --release wow3 >/dev/null || { echo "release build failed"; fail=1; }
 run main wow3
 [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOMETHING FAILED"; exit 1; }
