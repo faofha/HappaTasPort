@@ -58,10 +58,10 @@ local function Unload()
 		pcall(function() LocalPlayer.AutoJumpEnabled = restore.autoJump end)
 	end
 	Janitor.cleanup()
-	if rawget(genv, HANDLE_KEY) == handle then genv[HANDLE_KEY] = nil end
+	if rawget(genv, "__HappaTAS") == handle then genv["__HappaTAS"] = nil end
 end
 handle.Unload = Unload
-genv[HANDLE_KEY] = handle -- only the version and Unload are shared, nothing else is reachable
+genv["__HappaTAS"] = handle -- only the version and Unload are shared, nothing else is reachable
 
 if CONFIG.DisableAutoJump then
 	pcall(function() LocalPlayer.AutoJumpEnabled = false end)
@@ -77,6 +77,8 @@ ClientObjects.Start()
 Buttons.Start()
 Lighting.Start()
 SpeedHack.Start()
+KitClock.Start()
+KitObjects.Start()
 Profiler.Start()
 
 local function onCharacter(char)

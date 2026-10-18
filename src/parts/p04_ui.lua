@@ -269,7 +269,15 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4090)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4260)},{
+						LV("963", " 10/18/26 - 2.38.14"),
+						LI("963_1", "   -   Kit scripts on the TAS clock: pause / slow motion stop them"),
+						LI("963_2", "   -   Jump launcher push no longer cut short by a pause"),
+						LI("963_3", "   -   Beat blocks follow the TAS time (same beat in playback)"),
+						LI("963_4", "   -   Turret bullets saved in the TAS, hits and damage replayed"),
+						LI("963_5", "   -   Pushboxes hidden on frames before they were spawned"),
+						LI("963_6", "   -   Speed Hack slows spinners, platforms, conveyors too"),
+						LI("963_7", "   -   Idle (1) leaves the lighting as it is"),
 						LV("964", " 10/17/26 - 2.38.13"),
 						LI("964_1", "   -   Speed Hack: slow motion while recording (Settings)"),
 						LI("964_2", "   -   Slow recordings are saved and tested at normal speed"),
@@ -553,11 +561,16 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 					H("36", "Button & Obby Mechanism Sync", 135, true, {
 						{ 48, "Direct integration with EToH Kit v6.1.3 button and timer mechanisms: timed switches, pressure plates, countdown doors, and disappearing segments." },
 						{ 67, "Every press and release is saved with its frame. While paused the kit timer is frozen, scrubbing restores the button exactly, and testing runs the timer on the TAS clock." } }),
-					H("38", "Speed Hack (Slow Motion)", 212, true, {
+					H("38", "Speed Hack (Slow Motion)", 231, true, {
 						{ 48, "Slows your character down while you record in Create mode, like a video played slower. Turn it on in Settings > Speed Hack." },
 						{ 48, "Speed 0.5 = half speed (0.1 to 1). Bind a key to Toggle Speed Hack in Controls to switch it on and off while recording." },
 						{ 48, "The TAS is saved in normal time, so Test plays it at normal speed. Paused, Idle and Test always run at normal speed." },
-						{ 48, "Gravity, walk speed, jump power and animations slow down. Moving parts and other players keep their speed; timed buttons follow the TAS clock." } }),
+						{ 67, "Gravity, walk speed, jump power, animations and the world slow down: spinners, moving platforms, swings, conveyors, pushers and the EToH kit's timers. Other players keep their speed." } }),
+					H("39", "EToH Kit Objects", 226, true, {
+						{ 67, "Settings > World Sync > Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the TAS clock, so they stop while paused and slow down with the speed hack." },
+						{ 48, "A jump launcher's push, moving platforms, vanishers, falling platforms and spawner cooldowns keep the same timing whether you pause or not." },
+						{ 67, "Sync Kit Objects: beat blocks follow the TAS time (the same beat when testing), turret bullets are saved in the TAS with their hits and damage, pushboxes are hidden before they were spawned." },
+						{ 24, "TAS files from before V2.38.14 keep the kit's own behaviour." } }),
 					H("37", "Frustum Culling & Sandboxing", 135, true, {
 						{ 48, "Frustum culling filters out invisible and off-screen client objects unless within a 25-stud interaction radius, drastically reducing file size and recording lag." },
 						{ 67, "Roblox services are reached through cloneref (a second reference to the same object, not the game's own). The interface sits in gethui or syn.protect_gui; native LZ4 compresses files." } })

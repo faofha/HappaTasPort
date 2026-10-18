@@ -11,7 +11,7 @@ OUT="tests/run_${NAME}.lua"
   echo 'local function __SCRIPT__()'
   sed -e 's/^\(\s*\)Debug           = false,/\1Debug           = true,/' ${SEDX:+-e "$SEDX"} "$SCRIPT"
   echo ''
-  echo '__T = { Profiler = Profiler, Settings = Settings, Store = Store, Core = Core, CONFIG = CONFIG, UI = UI, Controls = Controls, InputSys = InputSys, ClientObjects = ClientObjects, Buttons = Buttons, Cursor = Cursor, Bridge = Bridge, Menu = Menu, VERSION = VERSION, SpeedHack = SpeedHack, AnimEngine = AnimEngine }'
+  echo '__T = { Profiler = Profiler, Settings = Settings, Store = Store, Core = Core, CONFIG = CONFIG, UI = UI, Controls = Controls, InputSys = InputSys, ClientObjects = ClientObjects, Buttons = Buttons, Cursor = Cursor, Bridge = Bridge, Menu = Menu, VERSION = VERSION, SpeedHack = SpeedHack, AnimEngine = AnimEngine, KitClock = KitClock, KitObjects = KitObjects, Codec = Codec, Lighting = Lighting }'
   echo 'end'
   cat tests/test_util.lua
   [ -n "$PRE" ] && echo "$PRE"   # optional Lua line(s) run before the test (e.g. PRE='BENCH_PROFILE = true')

@@ -891,3 +891,134 @@ function M.touch(state, x, y)
 		end
 	end
 end
+
+-- ------------------------------------------------------------------------------------------------ V2.38.14 kit tests
+-- constraints / body movers with the properties the speed hack's world scales (Roblox's defaults)
+cls("Constraint", "Instance", { Attachment0 = nil, Attachment1 = nil, Enabled = true, Visible = false, Color = BrickColor.new("Medium stone grey") })
+cls("HingeConstraint", "Constraint", { ActuatorType = Enum.ActuatorType.None, AngularVelocity = 0, MotorMaxTorque = 0,
+	MotorMaxAcceleration = math.huge, AngularSpeed = 0, ServoMaxTorque = 0, AngularResponsiveness = 45, TargetAngle = 0 })
+cls("PrismaticConstraint", "Constraint", { ActuatorType = Enum.ActuatorType.None, Velocity = 0, MotorMaxForce = 0,
+	MotorMaxAcceleration = math.huge, Speed = 0, ServoMaxForce = 0, LinearResponsiveness = 45, TargetPosition = 0 })
+cls("AlignPosition", "Constraint", { MaxVelocity = math.huge, Responsiveness = 10, MaxForce = 10000, MaxAxesForce = Vector3.new(10000, 10000, 10000),
+	RigidityEnabled = false, Position = Vector3.zero, Mode = nil })
+cls("AlignOrientation", "Constraint", { MaxAngularVelocity = math.huge, Responsiveness = 10, MaxTorque = 10000, RigidityEnabled = false, CFrame = CFrame.new() })
+cls("LinearVelocity", "Constraint", { VectorVelocity = Vector3.zero, LineVelocity = 0, PlaneVelocity = Vector2.zero, MaxForce = 1000,
+	MaxAxesForce = Vector3.new(1000, 1000, 1000), MaxPlanarAxesForce = Vector2.new(1000, 1000), ForceLimitsEnabled = true,
+	ForceLimitMode = nil, VelocityConstraintMode = nil })
+cls("VectorForce", "Constraint", { Force = Vector3.zero, ApplyAtCenterOfMass = false, RelativeTo = nil })
+cls("RopeConstraint", "Constraint", { Length = 5, WinchEnabled = false, WinchSpeed = 2, WinchForce = 10000, WinchResponsiveness = 45 })
+cls("SpringConstraint", "Constraint", { Stiffness = 0, Damping = 0, MaxForce = math.huge, FreeLength = 1 })
+cls("BodyMover", "Instance")
+cls("BodyVelocity", "BodyMover", { Velocity = Vector3.zero, MaxForce = Vector3.new(4000, 4000, 4000), P = 1250 })
+
+-- tags (CollectionService)
+do
+	local function tagsOf(i) local d = i._d; d.tags = d.tags or {}; return d.tags end
+	M.Inst.HasTag = function(self, t) return tagsOf(self)[t] == true end
+	M.Inst.AddTag = function(self, t) tagsOf(self)[t] = true end
+	M.Inst.RemoveTag = function(self, t) tagsOf(self)[t] = nil end
+	M.Inst.GetTags = function(self) local o = {} for t in pairs(tagsOf(self)) do o[#o + 1] = t end return o end
+	C.CollectionService.Methods.GetTagged = function(_, t)
+		local o = {}
+		for _, d in ipairs(game:GetDescendants()) do if d:HasTag(t) then o[#o + 1] = d end end
+		return o
+	end
+	local added = {}
+	C.CollectionService.Methods.GetInstanceAddedSignal = function(_, t)
+		added[t] = added[t] or M.newSignal("TagAdded:" .. t)
+		return added[t]
+	end
+end
+
+-- distance from the character's head (Roblox docs), 0 without a character
+C.Player.Methods.DistanceFromCharacter = function(self, p)
+	local ch = self.Character
+	local h = ch and (ch:FindFirstChild("Head") or ch:FindFirstChild("HumanoidRootPart"))
+	if not h then return 0 end
+	return (h.Position - p).Magnitude
+end
+
+-- spatial queries on axis-aligned boxes (rotations ignored): the parts' boxes against a box / a swept box
+do
+	local function excluded(part, params)
+		if params and params.FilterType ~= Enum.RaycastFilterType.Include then
+			for _, x in ipairs(params.FilterDescendantsInstances or {}) do
+				if part == x or part:IsDescendantOf(x) then return true end
+			end
+		end
+		return false
+	end
+	local function candidates(params)
+		local out = {}
+		for _, d in ipairs(workspace:GetDescendants()) do
+			if d:IsA("BasePart") and d.CanQuery ~= false and d.ClassName ~= "Terrain" and not excluded(d, params) then
+				if not (params and params.RespectCanCollide and not d.CanCollide) then out[#out + 1] = d end
+			end
+		end
+		return out
+	end
+	local function overlap(c1, h1, c2, h2)
+		return math.abs(c1.X - c2.X) <= h1.X + h2.X and math.abs(c1.Y - c2.Y) <= h1.Y + h2.Y and math.abs(c1.Z - c2.Z) <= h1.Z + h2.Z
+	end
+	M.boxQueries = 0
+	C.Workspace.Methods.GetPartBoundsInBox = function(_, cf, size, params)
+		M.boxQueries = M.boxQueries + 1
+		local out, h = {}, size / 2
+		for _, p in ipairs(candidates(params)) do
+			if overlap(cf.Position, h, p.Position, p.Size / 2) then out[#out + 1] = p end
+		end
+		return out
+	end
+	M.casts = 0
+	-- a box from cf along dir: the first part it touches (slab test of the ray against each part's box grown by
+	-- the cast box); parts the box already overlaps at the start are not hit (like Roblox's shapecasts)
+	C.Workspace.Methods.Blockcast = function(_, cf, size, dir, params)
+		M.casts = M.casts + 1
+		local o, h = cf.Position, size / 2
+		local best, bestT = nil, math.huge
+		for _, p in ipairs(candidates(params)) do
+			local ph = p.Size / 2 + h
+			local c = p.Position
+			if not overlap(o, h, c, p.Size / 2) then
+				local tmin, tmax = 0, 1
+				local ok = true
+				for _, ax in ipairs({ "X", "Y", "Z" }) do
+					local d0, lo, hi = dir[ax], c[ax] - ph[ax], c[ax] + ph[ax]
+					if math.abs(d0) < 1e-12 then
+						if o[ax] < lo or o[ax] > hi then ok = false break end
+					else
+						local t1, t2 = (lo - o[ax]) / d0, (hi - o[ax]) / d0
+						if t1 > t2 then t1, t2 = t2, t1 end
+						tmin = math.max(tmin, t1); tmax = math.min(tmax, t2)
+						if tmin > tmax then ok = false break end
+					end
+				end
+				if ok and tmin < bestT then best, bestT = p, tmin end
+			end
+		end
+		if not best then return nil end
+		return { Instance = best, Position = o + dir * bestT, Distance = dir.Magnitude * bestT, Normal = Vector3.yAxis, Material = best.Material }
+	end
+end
+
+-- ModuleScripts the "game" ran (tests set M.modules[ms] = what it returned), require / getloadedmodules
+M.modules = {}
+local realRequire = require
+require = function(m)
+	if typeof(m) == "Instance" then
+		local v = M.modules[m]
+		if v == nil then error("mock: module " .. m:GetFullName() .. " was never run", 2) end
+		return v
+	end
+	return realRequire(m)
+end
+getloadedmodules = function()
+	local o = {}
+	for m in pairs(M.modules) do o[#o + 1] = m end
+	return o
+end
+iscclosure = function(f) return debug.info(f, "s") == "[C]" end
+-- read-only tables (the kit's Utility tables are frozen): rawset still works in the mock, the flag is checked
+M.readonly = setmetatable({}, { __mode = "k" })
+isreadonly = function(t) return M.readonly[t] == true end
+setreadonly = function(t, v) M.readonly[t] = v and true or nil end

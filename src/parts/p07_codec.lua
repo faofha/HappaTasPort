@@ -9,7 +9,16 @@
 --    v3 adds:    FC VP TL TS BE BK          (extra flags, viewport, tools, tool names, buttons, button table)
 --    v4:         the v3 columns; the client object frames use their v3 layout (clocks + screw motion), so
 --                older versions refuse the file instead of playing its client objects wrong
---  FC bits: 1 viewport changed, 2 tool events, 4 died this frame, 8 button events
+--    v5 adds:    KE SK KK                  (kit events, speed hack factor, kit table: rules version + keys)
+--                KE per frame: varint count, then per event a type byte and its fields:
+--                  1 turret bullet fired: varint turret id, varint bullet number, 3 zigzag position x1000,
+--                    3 zigzag rotation (axis x angle) x100000, 3 zigzag velocity x1000, varint lifetime x1000
+--                  2 bullet ended: varint bullet number, varint damage x1000
+--                  3 pushbox spawner: varint spawner id, byte 1 spawned / 0 there when the TAS started
+--                SK per frame: varint factor x10000 (frames recorded in slow motion)
+--                KK: varint rules version (1 = kit objects on the TAS clock), varint count, { varint id, key }
+--  FC bits: 1 viewport changed, 2 tool events, 4 died this frame, 8 button events, 16 kit events,
+--           32 speed hack factor
 --  Old v1 / v2 / v3 files load exactly like before.
 -- ================================================================================================
 local Codec = {}
@@ -19,11 +28,13 @@ do
 	Codec.ScrollBase = 10000
 
 	local COLUMNS_V1 = { "FA", "FB", "DT", "TA", "PX", "PY", "PZ", "ROT", "LV", "AV", "ST", "CR", "CP", "ZM", "PO", "JT", "SP", "AN", "MS", "IN", "MB" }
-	local COLUMNS_V2, COLUMNS_V3 = {}, {}
+	local COLUMNS_V2, COLUMNS_V3, COLUMNS_V5 = {}, {}, {}
 	for i, n in ipairs(COLUMNS_V1) do COLUMNS_V2[i] = n; COLUMNS_V3[i] = n end
 	for _, n in ipairs({ "CO", "OB" }) do COLUMNS_V2[#COLUMNS_V2 + 1] = n; COLUMNS_V3[#COLUMNS_V3 + 1] = n end
 	for _, n in ipairs({ "FC", "VP", "TL", "TS", "BE", "BK" }) do COLUMNS_V3[#COLUMNS_V3 + 1] = n end
-	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3 }
+	for i, n in ipairs(COLUMNS_V3) do COLUMNS_V5[i] = n end
+	for _, n in ipairs({ "KE", "SK", "KK" }) do COLUMNS_V5[#COLUMNS_V5 + 1] = n end
+	local COLUMNS_FOR = { COLUMNS_V1, COLUMNS_V2, COLUMNS_V3, COLUMNS_V3, COLUMNS_V5 }
 
 	local TOOL_CODE = { Equip = 1, Unequip = 2, Activate = 3, Deactivate = 4 }
 	local TOOL_NAME = { "Equip", "Unequip", "Activate", "Deactivate" }
@@ -157,11 +168,14 @@ do
 	end
 	Codec.Lz4Decompress = lz4Decompress
 
-	-- frames: list of frame tables, objects: { {id, key} } client objects, buttons: { {id, key} } buttons
-	function Codec.Encode(frames, progress, objects, buttons)
+	-- frames: list of frame tables, objects: { {id, key} } client objects, buttons: { {id, key} } buttons,
+	-- kit: { version, keys = { {id, key} } } (KitObjects.Export)
+	function Codec.Encode(frames, progress, objects, buttons, kit)
 		local total = #frames
 		local cols = {}
-		for _, name in ipairs(COLUMNS_V3) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
+		for _, name in ipairs(COLUMNS_V5) do cols[name] = (name == "FA" or name == "FB" or name == "FC") and table.create(total) or {} end
+		local KE, SKc = cols.KE, cols.SK
+		local v5 = kit ~= nil and (kit.version or 0) >= 1
 		local coParts = {}
 		local hasCO, coV3 = false, false
 		local FA, FB, DT, TA, PX, PY, PZ = cols.FA, cols.FB, cols.DT, cols.TA, cols.PX, cols.PY, cols.PZ
@@ -400,6 +414,36 @@ do
 					putVar(BE, math.max(0, q(e[3] or 0, 1000)))
 				end
 			end
+			local ke = f.KE
+			if type(ke) == "table" and #ke > 0 then
+				fc = fc + 16
+				v5 = true
+				putVar(KE, #ke)
+				for k = 1, #ke do
+					local e = ke[k]
+					local typ = e[1]
+					KE[#KE + 1] = typ
+					if typ == 1 then
+						putVar(KE, e[2]); putVar(KE, e[3])
+						putZig(KE, q(e[4], 1000)); putZig(KE, q(e[5], 1000)); putZig(KE, q(e[6], 1000))
+						putZig(KE, q(e[7], 100000)); putZig(KE, q(e[8], 100000)); putZig(KE, q(e[9], 100000))
+						putZig(KE, q(e[10], 1000)); putZig(KE, q(e[11], 1000)); putZig(KE, q(e[12], 1000))
+						putVar(KE, math.max(0, q(e[13], 1000)))
+					elseif typ == 2 then
+						putVar(KE, e[2]); putVar(KE, math.max(0, q(e[3] or 0, 1000)))
+					elseif typ == 3 then
+						putVar(KE, e[2]); KE[#KE + 1] = (e[3] == 0) and 0 or 1
+					else
+						error("unknown kit event " .. tostring(typ), 0)
+					end
+				end
+			end
+			local sk = tonumber(f.SK)
+			if sk and sk ~= 1 and sk > 0 then
+				fc = fc + 32
+				v5 = true
+				putVar(SKc, q(sk, 10000))
+			end
 			if fc ~= 0 then v3 = true end
 
 			FA[#FA + 1] = fa
@@ -416,6 +460,7 @@ do
 		if hasCO or (objects and #objects > 0) then version = 2 end
 		if v3 then version = 3 end
 		if coV3 then version = 4 end
+		if v5 then version = 5 end
 		if version >= 2 then
 			local OB = cols.OB
 			putVar(OB, #(objects or {}))
@@ -433,6 +478,16 @@ do
 			for _, b in ipairs(buttons or {}) do
 				putVar(BK, b.id)
 				putStr(BK, b.key)
+			end
+		end
+		if version >= 5 then
+			local KK = cols.KK
+			putVar(KK, (kit and kit.version) or 0)
+			local keys = (kit and kit.keys) or {}
+			putVar(KK, #keys)
+			for _, k in ipairs(keys) do
+				putVar(KK, k.id)
+				putStr(KK, k.key)
 			end
 		end
 
@@ -477,7 +532,7 @@ do
 		if not Codec.IsCompact(data) then error("not a HappaTAS binary file", 0) end
 		if #data > CONFIG.MaxFileBytes then error("file is too big", 0) end
 		local version, flags = byte(data, 5), byte(data, 6)
-		if version ~= 1 and version ~= 2 and version ~= 3 and version ~= 4 then error("unsupported file version " .. tostring(version), 0) end
+		if version < 1 or version > 5 then error("unsupported file version " .. tostring(version), 0) end
 		local rd = newReader(data, 7)
 		local total = getVar(rd)
 		local rawLen = getVar(rd)
@@ -679,6 +734,34 @@ do
 					end
 					f.BT = list
 				end
+				if floor(fc / 16) % 2 == 1 then
+					if not R.KE then error("kit events are missing", 0) end
+					local cnt = getVar(R.KE)
+					if cnt > colLen(R.KE) + 1 then error("kit event list is broken", 0) end
+					local list = {}
+					for k = 1, cnt do
+						local typ = getByte(R.KE)
+						if typ == 1 then
+							local e = { 1, getVar(R.KE), getVar(R.KE) }
+							for m = 4, 6 do e[m] = getZig(R.KE) / 1000 end
+							for m = 7, 9 do e[m] = getZig(R.KE) / 100000 end
+							for m = 10, 12 do e[m] = getZig(R.KE) / 1000 end
+							e[13] = getVar(R.KE) / 1000
+							list[k] = e
+						elseif typ == 2 then
+							list[k] = { 2, getVar(R.KE), getVar(R.KE) / 1000 }
+						elseif typ == 3 then
+							list[k] = { 3, getVar(R.KE), getByte(R.KE) }
+						else
+							error("unknown kit event " .. tostring(typ), 0)
+						end
+					end
+					f.KE = list
+				end
+				if floor(fc / 32) % 2 == 1 then
+					if not R.SK then error("speed factors are missing", 0) end
+					f.SK = getVar(R.SK) / 10000
+				end
 			end
 			if pVX > 0 and pVY > 0 then
 				f.VX, f.VY = pVX / 10, pVY / 10
@@ -696,7 +779,7 @@ do
 		end
 
 		for name, rdr in pairs(R) do
-			if name ~= "OB" and name ~= "TS" and name ~= "BK" and rdr.p ~= rdr.n + 1 then
+			if name ~= "OB" and name ~= "TS" and name ~= "BK" and name ~= "KK" and rdr.p ~= rdr.n + 1 then
 				error("column " .. name .. " was not read completely", 0)
 			end
 		end
@@ -717,7 +800,19 @@ do
 		local objects = R.OB and readTable(R.OB, "object") or nil
 		local buttons = R.BK and readTable(R.BK, "button") or nil
 		if R.TS and R.TS.p ~= R.TS.n + 1 then error("tool table was not read completely", 0) end
-		return frames, objects, buttons
+		local kit = nil
+		if R.KK then
+			local KK = R.KK
+			kit = { version = getVar(KK), keys = {} }
+			local cnt = getVar(KK)
+			if cnt > colLen(KK) then error("kit table is broken", 0) end
+			for k = 1, cnt do
+				local id = getVar(KK)
+				kit.keys[k] = { id = id, key = getStr(KK) }
+			end
+			if KK.p ~= KK.n + 1 then error("kit table was not read completely", 0) end
+		end
+		return frames, objects, buttons, kit
 	end
 end
 

@@ -53,6 +53,10 @@ local SettingsTable = {
 	{ name = "Frustum Culling CO",       default = 1, section = "World Sync" },
 	{ name = "Sync Button Timers",       default = 1, section = "World Sync" },
 	{ name = "Sync Lighting",            default = 1, section = "World Sync" },
+	-- the EToH kit (KitClock / KitObjects): its scripts' waits and timers on the TAS clock; beat blocks, turret
+	-- bullets and pushbox spawns worked out from the TAS
+	{ name = "Kit Scripts On TAS Clock", default = 1, section = "World Sync" },
+	{ name = "Sync Kit Objects",         default = 1, section = "World Sync", label = "Sync Kit Objects (Beat Blocks, Turrets)" },
 
 	{ name = "Show Stats (Idle)",        default = 1, section = "Interface" },
 	{ name = "Show Stats (Create)",      default = 1, section = "Interface" },

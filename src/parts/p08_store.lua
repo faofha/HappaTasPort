@@ -176,7 +176,10 @@ do
 		end
 		local okO, objects = pcall(ClientObjects.ExportObjects, frames)
 		local okB, buttons = pcall(Buttons.ExportKeys, frames)
-		local okE, bytes, info = pcall(Codec.Encode, frames, progress, okO and objects or nil, okB and buttons or nil)
+		-- (the TAS's own table: it knows which kit rules it was made with)
+		local okK, kit = pcall(KitObjects.Export, allFrames)
+		local okE, bytes, info = pcall(Codec.Encode, frames, progress, okO and objects or nil, okB and buttons or nil,
+			okK and kit or nil)
 		if not okE then return false, tostring(bytes) end
 		local ok, path = writeSlotFile(name, bytes)
 		if not ok then return false, path end
@@ -244,7 +247,7 @@ do
 		end
 
 		if Codec.IsCompact(raw) then
-			local okD, frames, objects, buttons = pcall(Codec.Decode, raw, progress)
+			local okD, frames, objects, buttons, kit = pcall(Codec.Decode, raw, progress)
 			if not okD then
 				local why = tostring(frames):gsub("^[^:]*:%d+: ", "")
 				return false, "The slot file is damaged (" .. why .. ")"
@@ -257,9 +260,14 @@ do
 				local okI, err = pcall(Buttons.ImportKeys, frames, buttons)
 				if not okI then warnf("could not map the buttons of this slot:", tostring(err)) end
 			end
+			-- (a file from before V2.38.14 has no kit table: its TAS keeps the kit's own behaviour)
+			local okK, errK = pcall(KitObjects.Import, frames, kit)
+			if not okK then warnf("could not map the kit objects of this slot:", tostring(errK)) end
 			return true, frames
 		end
-		return loadLegacyJson(raw, progress)
+		local okL, frames = loadLegacyJson(raw, progress)
+		if okL and type(frames) == "table" then frames.KitVersion = 0 end
+		return okL, frames
 	end
 
 	function Store.DeleteSlot(name)

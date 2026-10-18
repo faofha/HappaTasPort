@@ -416,6 +416,12 @@ do
 
 	function CO.IsEnabled() return enabled end
 	function CO.IsReady() return enabled and scanDone end
+	-- every registered part that is still in the game (the speed hack's world uses it)
+	function CO.EachPart(fn)
+		for _, part in pairs(parts) do
+			if part.Parent then fn(part) end
+		end
+	end
 
 	function CO.Enable()
 		if enabled then return end
@@ -1683,6 +1689,10 @@ do
 			play.kind = "show"
 			advanceTo(data, frame, cleanTouched())
 			local t = frameTime(data, frame)
+			-- a frame recorded in slow motion (speed hack, SK = its factor) has slowed velocities: they go back
+			-- in normal units, the speed hack slows the world again when the slow motion goes on
+			local sk = tonumber(data[frame].SK) or 1
+			if sk <= 0 then sk = 1 end
 			for id, s in pairs(play.cur) do
 				local part = parts[id]
 				if part and part.Parent and hasPose(s) then
@@ -1707,8 +1717,8 @@ do
 								L = W * (L:Dot(W) / w2) + W:Cross(com - ctr)
 							end
 						end
-						part.AssemblyLinearVelocity = L
-						part.AssemblyAngularVelocity = W
+						part.AssemblyLinearVelocity = L / sk
+						part.AssemblyAngularVelocity = W / sk
 					end
 				end
 			end
