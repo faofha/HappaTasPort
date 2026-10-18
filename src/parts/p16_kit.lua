@@ -12,8 +12,12 @@
 --  boost, a pushbox spawner's cooldown... stop while the TAS is paused and slow down with the speed hack,
 --  the way Eternal Obbying's TAS does it: its whole game runs on one clock (the session's pace = the TAS
 --  speed x the time warp feeds the fixed simulation steps), so slowing the clock slows everything.
---  Not covered: RunService events (their dt is real: the kit's Zipline ride and Sequencer timeline) and
---  tweens a kit script makes with TweenService directly. The kit's Button script keeps the real os.clock:
+--  Frame events: kit scripts that move things by the dt of RunService.Heartbeat / PostSimulation (the Zipline
+--  ride, the Sequencer's timeline, KeyGroup's keys) get the kit clock's time for the frame
+--  too: while the clock doesn't run at 1x, the kit's own listeners on those signals (found with getconnections:
+--  their function's environment is a kit module's) are disabled and HappaTAS calls them every frame with
+--  dt x the rate (Frame Step: the time of the physics step that ran, 0 when it was held).
+--  Not covered: tweens a kit script makes with TweenService directly. The kit's Button script keeps the real os.clock:
 --  Sync Button Timers already moves its timers onto the TAS clock.
 --  Undone on Unload: the environments get their own task / os back, waiting kit threads finish their wait
 --  in real time, running tweens jump to their end.
@@ -37,6 +41,12 @@ do
 		R0 = now
 		rate = r
 		KC.rate = r
+	end
+
+	-- the speed hack's Frame Step: the clock is stopped (rate 0) and moves on by each physics step that ran
+	function KC.Advance(d)
+		d = tonumber(d) or 0
+		if d > 0 then K0 = K0 + d end
 	end
 
 	-- Pausing in Create mode puts the character back on the last recorded frame: the physics step after it
@@ -279,9 +289,9 @@ do
 		return env
 	end
 
-	local function patchEnv(env, withClock)
+	local function patchEnv(env, withClock, name)
 		if patched[env] then return end
-		patched[env] = { task = rawget(env, "task"), os = rawget(env, "os") }
+		patched[env] = { task = rawget(env, "task"), os = rawget(env, "os"), name = name }
 		rawset(env, "task", fakeTask)
 		if withClock then rawset(env, "os", fakeOs) end
 		KC.patched = KC.patched + 1
@@ -323,7 +333,7 @@ do
 				if d:IsA("ModuleScript") and loaded[d] then
 					local env = envOf(d)
 					if env and not patched[env] then
-						patchEnv(env, not SKIP_CLOCK[d.Name])
+						patchEnv(env, not SKIP_CLOCK[d.Name], d.Name)
 						n = n + 1
 					end
 				end
@@ -350,6 +360,62 @@ do
 	end
 
 	local enabled = false
+	-- ------------------------------------------------------------------------------------- frame events
+	local SIGNALS = { "Heartbeat", "PostSimulation" }
+	-- left on Roblox's own call: the Morpher turns a lerp step into a velocity (distance / the frame's real dt,
+	-- the velocity the physics needs, also slowed down), DistanceCulling does no time maths
+	local SKIP_FRAME = { Morpher = true, DistanceCulling = true }
+	local taken = { Heartbeat = {}, PostSimulation = {} } -- signal name -> { function -> the kit's connection }
+	local function kitFunction(f)
+		if type(f) ~= "function" or (Env.iscclosure and Env.iscclosure(f)) then return false end
+		local ok, env = pcall(getfenv, f)
+		local p = ok and patched[env]
+		return p ~= nil and p ~= false and not SKIP_FRAME[p.name]
+	end
+	-- the kit's time for this frame (dt = the signal's real dt)
+	function KC.FrameDt(dt)
+		if SpeedHack.Stepping() then return SpeedHack.StepDt() end
+		return (tonumber(dt) or 0) * rate
+	end
+	local function giveBack(name)
+		for _, c in pairs(taken[name]) do pcall(function() c:Enable() end) end
+		taken[name] = {}
+	end
+	-- the kit's listeners on the signal (newly connected ones are taken over, disconnected ones dropped), then
+	-- each one called with the kit's dt
+	local function runFrame(name, dt)
+		local mine = taken[name]
+		local wantNow = enabled and Env.getconnections ~= nil and (rate ~= 1 or SpeedHack.Stepping())
+		if not wantNow then
+			if next(mine) then giveBack(name) end
+			return
+		end
+		local okL, list = pcall(Env.getconnections, RunService[name])
+		if not okL or type(list) ~= "table" then return end
+		local seen = {}
+		for _, c in ipairs(list) do
+			local okF, f = pcall(function() return c.Function end)
+			if okF and f and (mine[f] or kitFunction(f)) then
+				if not mine[f] then
+					if not pcall(function() c:Disable() end) then f = nil end
+					if f then mine[f] = c end
+				end
+				if f then seen[f] = true end
+			end
+		end
+		local kdt = KC.FrameDt(dt)
+		for f in pairs(mine) do
+			if not seen[f] then
+				mine[f] = nil -- (the kit disconnected it)
+			else
+				-- (a kit function runs on a thread of its own: game code would take this thread's CoreGui access)
+				local okS, err = pcall(realTask.spawn, f, kdt)
+				if not okS then reportError("kit clock", err) end
+			end
+		end
+	end
+	KC.FrameEvents = taken
+
 	function KC.Enable()
 		if enabled then return end
 		enabled = true
@@ -365,6 +431,7 @@ do
 		end
 		patched = {}
 		KC.patched = 0
+		for _, name in ipairs(SIGNALS) do giveBack(name) end
 		unpatchTween()
 		endTweens()
 		releaseWaits()
@@ -410,8 +477,14 @@ do
 		Settings.Changed("Kit Scripts On TAS Clock", function(v)
 			if v ~= 0 then KC.Enable() else KC.Disable() end
 		end)
-		on(RunService.Heartbeat, function()
+		on(RunService.Heartbeat, function(dt)
 			local ok, err = pcall(KC.Step)
+			if not ok then reportError("kit clock", err) end
+			ok, err = pcall(runFrame, "Heartbeat", dt)
+			if not ok then reportError("kit clock", err) end
+		end)
+		on(RunService.PostSimulation, function(dt)
+			local ok, err = pcall(runFrame, "PostSimulation", dt)
 			if not ok then reportError("kit clock", err) end
 		end)
 		-- the kit may still be loading when HappaTAS starts (and towers can add repository modules later):
@@ -454,6 +527,9 @@ end
 --
 --  Pushbox spawners: the spawn is saved; a box spawned later in the TAS is hidden (no collision) when you go
 --  back to before it was spawned, until the kit spawns one again.
+--
+--  Bounce pads and jump launchers: their effect (sound, particle burst) is saved when the kit plays it and
+--  played again while testing (the kit only plays it on a real touch, and playback poses the character).
 --
 --  Your character: forces a kit script puts on it (the jump launcher's LinearVelocity...) are switched off
 --  while testing (the replay already moves the character), and removed when you unpause at a frame from
@@ -526,6 +602,7 @@ do
 		for snd, m in pairs(muted) do pcall(function() snd.Volume = m.vol end) end
 		muted = {}
 	end
+	local ownSounds = setmetatable({}, { __mode = "k" }) -- the copies HappaTAS plays itself
 	local function playCopy(snd, parent)
 		if not (snd and parent and parent.Parent) then return end
 		local m = muted[snd]
@@ -533,6 +610,7 @@ do
 		if vol <= 0 then return end
 		pcall(function()
 			local c = snd:Clone()
+			ownSounds[c] = true
 			c.Volume = vol
 			c.Parent = parent
 			c:Play()
@@ -1108,6 +1186,58 @@ do
 		end
 	end
 
+	-- --------------------------------------------------------------------------------------------- effects
+	-- Bounce pads (Interactables/BouncePad) and jump launchers (Interactables/JumpLauncher) play their effect from
+	-- their Touched handler: a sound (the kit's playSoundFromInstance puts a copy of it into the part), a particle
+	-- burst and a flash the kit tweens back. Playback moves the character itself, so the kit never sees a touch
+	-- and nothing showed: the effect is saved as an event when the kit's sound copy appears while recording
+	-- (event 4: the object, which sound) and Test plays it again (the sound, the BounceParticle burst; the flash
+	-- comes back with Sync Client Objects, which records the part's colour / transparency / size). A sound the
+	-- kit plays itself while testing is muted (the TAS has its own).
+	local FX_SOUNDS = { "BounceSound", "Tick", "Bounce" } -- event code = index
+	local FX_CODE = { BounceSound = 1, Tick = 2, Bounce = 3 }
+	local FX_PARTICLE = { BounceSound = true, Bounce = true } -- (the launcher's Tick is only a sound)
+	local fxObjects, fxOf = {}, {}
+	local function addFx(cfg)
+		local part = cfg.Parent
+		if not (part and part:IsA("BasePart")) or fxOf[part] then return end
+		local key = ClientObjects.KeyOf(part)
+		if not key then return end
+		local o = { part = part, cfg = cfg, key = key, id = idFor(key), conns = {} }
+		o.conns[1] = part.ChildAdded:Connect(function(child)
+			if not (FX_CODE[child.Name] and child:IsA("Sound")) or ownSounds[child] or not cur.on then return end
+			if cur.mode == 3 then
+				pcall(function() child.Volume = 0 end)
+			elseif cur.rec and cur.data and #cur.data > 0 then
+				addEvent(cur.data[#cur.data], { 4, o.id, FX_CODE[child.Name] })
+			end
+		end)
+		o.conns[2] = part.AncestryChanged:Connect(function()
+			if part:IsDescendantOf(workspace) then return end
+			for _, c in ipairs(o.conns) do c:Disconnect() end
+			fxOf[part] = nil
+			for i = #fxObjects, 1, -1 do if fxObjects[i] == o then table.remove(fxObjects, i) end end
+		end)
+		fxOf[part] = o
+		fxObjects[#fxObjects + 1] = o
+	end
+	local function playFx(id, code)
+		local key, name = reg.idToKey[id], FX_SOUNDS[code]
+		if not (key and name) then return end
+		for _, o in ipairs(fxObjects) do
+			if o.key == key and o.part.Parent then
+				local snd, burst = nil, nil
+				for _, d in ipairs(o.part:GetDescendants()) do
+					-- (the kit's sound: in the pad's configuration / the launcher's Sounds folder, not a copy)
+					if not snd and d.Name == name and d:IsA("Sound") and d.Parent ~= o.part then snd = d end
+					if not burst and d.Name == "BounceParticle" and d:IsA("ParticleEmitter") then burst = d end
+				end
+				if snd then playCopy(snd, o.part) end
+				if burst and FX_PARTICLE[name] then pcall(function() burst:Emit(1) end) end
+			end
+		end
+	end
+
 	-- testing: the frames playback went through since last time (fire sounds and the damage of the TAS)
 	local replayedTo = nil
 	local function replayEvents(data, f)
@@ -1122,6 +1252,8 @@ do
 						for _, t in ipairs(turrets) do if t.key == key then playCopy(t.fireSnd, t.part) end end
 					elseif e[1] == 2 and (e[3] or 0) > 0 then
 						dealDamage(e[3])
+					elseif e[1] == 4 then
+						playFx(e[2], e[3])
 					end
 				end
 			end
@@ -1213,9 +1345,11 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- finding objects
-	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner }
+	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner,
+		BouncePadConfiguration = addFx, LauncherConfiguration = addFx }
 	local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
-		["CO_Interactables/PushboxSpawn"] = addSpawner }
+		["CO_Interactables/PushboxSpawn"] = addSpawner, ["CO_Interactables/BouncePad"] = addFx,
+		["CO_Interactables/JumpLauncher"] = addFx }
 
 	local function consider(inst, kitTables)
 		local add = CONFIGS[inst.Name]
@@ -1327,7 +1461,7 @@ do
 		for _, fr in ipairs(frames) do
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if e[1] == 1 or e[1] == 3 then used[e[2]] = true end
+					if e[1] == 1 or e[1] == 3 or e[1] == 4 then used[e[2]] = true end
 				end
 			end
 		end
@@ -1345,7 +1479,7 @@ do
 		for _, fr in ipairs(frames) do
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if (e[1] == 1 or e[1] == 3) and map[e[2]] then e[2] = map[e[2]] end
+					if (e[1] == 1 or e[1] == 3 or e[1] == 4) and map[e[2]] then e[2] = map[e[2]] end
 				end
 			end
 		end
@@ -1389,6 +1523,7 @@ do
 			for _, g in ipairs(beats) do for _, c in ipairs(g.conns) do c:Disconnect() end end
 			for _, t in ipairs(turrets) do for _, c in ipairs(t.conns) do c:Disconnect() end end
 			for _, s in ipairs(spawners) do for _, c in ipairs(s.conns) do c:Disconnect() end end
+			for _, o in ipairs(fxObjects) do for _, c in ipairs(o.conns) do c:Disconnect() end end
 			if holder then pcall(function() holder:Destroy() end) end
 		end)
 	end

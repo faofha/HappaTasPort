@@ -1014,6 +1014,11 @@ do
 		if enabled and scanDone then updateVisibility(playerPosNow(), true) end
 	end
 
+	-- a physics step the speed hack's Frame Step held everything for: like a pause, physics parts didn't move
+	function CO.SkipSim(dt)
+		base.skip = base.skip + (tonumber(dt) or 0)
+	end
+
 	-- tNow = TotalTime of the frame being recorded (TAS clock); simNow / wallNow = time() and os.clock()
 	-- when that frame started (its render step); frame = the frame table the result goes into
 	function CO.Record(playerPos, tNow, simNow, wallNow, frame, data)

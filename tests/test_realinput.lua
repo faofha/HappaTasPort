@@ -31,6 +31,9 @@ do
 	local zc = Instance.new("ModuleScript"); zc.Name = "ZoomController"; zc.Parent = cm
 	local camCtrl = setmetatable({ currentSubjectDistance = 12.5 }, ctrlClass)
 	local cams = { activeCameraController = camCtrl, activeMouseLockController = lockCtrl }
+	-- (like the client: the garbage collector scan finds the cameras table before the bridge looks for the
+	-- PlayerModule; the camera script must be patched anyway - found live in V2.38.16)
+	M.gcTables[#M.gcTables + 1] = cams
 	local mods = { [pm] = { GetCameras = function() return cams end }, [bc] = BaseCamera, [zc] = ZoomController }
 	local realRequire = require
 	require = function(x)
@@ -215,6 +218,12 @@ do
 	eq(M.callHooked(origUMB, {}), "base", "the hooked function still runs the original (through the copy)")
 	eq(baseCalls, 1, "once")
 	eq(M.callHooked(origZU, 0.5), 0.5, "ZoomController.Update passes its value through")
+	-- (V2.38.16) the zoom spring on the TAS clock: its dt x the speed hack's rate while recording
+	__T.Bridge.timeRate = 0.5
+	eq(M.callHooked(origZU, 0.5), 0.25, "slow motion: the zoom spring gets half the frame time")
+	__T.Bridge.timeRate = 2
+	eq(M.callHooked(origZU, 0.5), 1, "fast motion: twice the frame time")
+	__T.Bridge.timeRate = 1
 	rawget(getgenv(), "__HappaTAS").Unload()
 	M.steps(2)
 	check(M.hooks[origUMB] == nil and M.hooks[origZU] == nil, "Unload restores them (restorefunction)")

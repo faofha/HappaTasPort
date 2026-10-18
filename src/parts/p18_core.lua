@@ -205,7 +205,7 @@ do
 			return
 		end
 		lastStatPaused, lastStatFD, lastStatFN, lastStatSH = pausedNow, FrameData, frameNo, sh
-		setText(f["1"], " Frame: " .. frameNo .. ((sh < 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
+		setText(f["1"], " Frame: " .. frameNo .. ((sh ~= 1) and ("   (Speed Hack " .. r(sh, 1000) .. "x)") or ""))
 		if FrameData and FrameData.FrameTime and FrameData.Cframe and NumberToState[FrameData.State] then
 			local cf, lin, ang = FrameData.Cframe, FrameData.Velocity.Linear, FrameData.Velocity.Angular
 			setText(f["2"], " Frame Time: " .. FrameData.FrameTime)
@@ -1041,19 +1041,23 @@ do
 
 	-- ---------------------------------------------------------------------------------------- PreRender
 	local function preRender(dt)
+		SpeedHack.FrameStart()
 		Profiler.FrameBegin(dt)
 		Profiler.Begin("HappaTAS")
 		local data, mode = C.data, C.mode
 		if not (mode == 2 and (not C.paused or C.FirstFrameRecord)) then InputSys.Clear() end
 
 		if mode == 2 and C.CharLoaded() then
-			if not C.paused and C.NotDead() and not C.FirstFrameRecord then
+			-- (speed hack Frame Step: only a frame whose physics step ran is a new frame, its time = the time
+			-- that step simulated)
+			local stepT = SpeedHack.StepTime()
+			if not C.paused and C.NotDead() and not C.FirstFrameRecord and (stepT == nil or stepT > 0) then
 				Profiler.Begin("Record")
 				local HRP = C.HRP
 				local n = #data
 				-- (speed hack: this frame's physics ran recScale times slower than normal)
 				local k = C.recScale
-				local dtN = C.LastFrameTime * k
+				local dtN = stepT or C.LastFrameTime * k
 				local ft = r(dtN, 1000000)
 				local total = (n >= 1 and data[n].TotalTime) and r(data[n].TotalTime + dtN, 1000000) or ft
 				local lin, ang = HRP.AssemblyLinearVelocity, HRP.AssemblyAngularVelocity
@@ -1100,6 +1104,7 @@ do
 		local hum = C.Humanoid
 		local recording = mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() and hum.Health > 0
 		C.recScale = SpeedHack.Update(recording, hum, C.HRP, mode ~= 3)
+		Bridge.timeRate = SpeedHack.anim -- (the camera's zoom spring on the TAS clock)
 		-- the kit's objects on the TAS time of the frame shown (beat blocks, bullets...), and the kit's clock:
 		-- the TAS clock while recording (x the speed hack), stopped while paused, the playback speed in Test
 		Profiler.Begin("Kit")
@@ -1109,7 +1114,8 @@ do
 			local f = rec and #data or C.frame
 			local fr = data[f]
 			KitObjects.Frame(2, data, f, fr and fr.TotalTime or 0, rec and #data > 0)
-			kitRate = rec and C.recScale or 0
+			-- (Frame Step: stopped, moved on by each physics step that runs, see SpeedHack.StepBegin)
+			kitRate = (rec and not SpeedHack.Stepping()) and C.recScale or 0
 		elseif mode == 3 then
 			KitObjects.Frame(3, data, C.frame, C.TestingTimer, false)
 			kitRate = math.max(0, Settings.Get("Playback Speed"))
@@ -1148,7 +1154,7 @@ do
 		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 	end
 
-	local function preSimulation()
+	local function preSimulation(dt)
 		Profiler.Begin("HappaTAS")
 		KitObjects.Reassert()
 		local data = C.data
@@ -1163,6 +1169,8 @@ do
 			end
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
+		-- speed hack Frame Step: does this physics step run, or is everything held for it
+		SpeedHack.StepBegin(dt)
 		Profiler.End("HappaTAS")
 	end
 
@@ -1249,6 +1257,7 @@ do
 	end
 
 	local function heartbeat(dt)
+		SpeedHack.StepEnd() -- (Frame Step: whatever was held for the physics step goes on)
 		Profiler.Heartbeat()
 		Profiler.Begin("HappaTAS")
 		local mode, data = C.mode, C.data
@@ -1343,9 +1352,14 @@ do
 			local ok, err = pcall(preRender, dt)
 			if not ok then reportError("PreRender", err) end
 		end)
-		on(rs.PreSimulation, function()
-			local ok, err = pcall(preSimulation)
+		on(rs.PreSimulation, function(dt)
+			local ok, err = pcall(preSimulation, dt)
 			if not ok then reportError("PreSimulation", err) end
+		end)
+		-- (Frame Step: held parts are let go as soon as the physics step is over)
+		on(rs.PostSimulation, function()
+			local ok, err = pcall(SpeedHack.StepEnd)
+			if not ok then reportError("PostSimulation", err) end
 		end)
 		on(rs.Heartbeat, function(dt)
 			local ok, err = pcall(heartbeat, dt)

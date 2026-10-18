@@ -51,6 +51,24 @@ function T.Clock() return os.clock() end
 function T.WaitOnce(d) return task.wait(d) end
 return T
 ]])
+-- like the kit's Zipline ride: moves by the Heartbeat's dt
+local _, Ride = kitModule(physicsF, "Ride", [[
+local RunService = game:GetService("RunService")
+local R = { dist = 0, calls = 0 }
+function R.Start(speed)
+	R.conn = RunService.Heartbeat:Connect(function(dt) R.dist = R.dist + speed * dt; R.calls = R.calls + 1 end)
+end
+function R.Stop() R.conn:Disconnect() end
+return R
+]])
+-- the Morpher: its Heartbeat turns a step into a velocity with the real dt (left alone)
+local _, MorphKit = kitModule(inter, "Morpher", [[
+local RunService = game:GetService("RunService")
+local Mo = { dts = {} }
+Mo.conn = RunService.Heartbeat:Connect(function(dt) Mo.dts[#Mo.dts + 1] = dt end)
+function Mo.Count() return #Mo.dts end
+return Mo
+]])
 local _, Button, buttonEnv = kitModule(inter, "Button", [[
 local B = {}
 function B.Clock() return os.clock() end
@@ -190,7 +208,7 @@ local function newTAS() idle(); Core.SetTAS({}); steps(1) end
 
 section("kit clock: the kit's module environments get HappaTAS's task / os, Functions.tween is replaced")
 check(KC.IsEnabled(), "Kit Scripts On TAS Clock is on by default")
-eq(KC.patched, 6, "the 6 kit modules on the clock")
+eq(KC.patched, 8, "the 8 kit modules on the clock")
 check(rawget(timerEnv, "task") ~= nil and rawget(timerEnv, "task").wait ~= task.wait, "a repository module's task.wait is the kit clock's")
 check(rawget(timerEnv, "os") ~= nil and rawget(timerEnv, "os").clock ~= mockOs.clock, "and its os.clock")
 check(rawget(buttonEnv, "task") ~= nil, "the Button script's task too")
@@ -243,6 +261,74 @@ click()
 steps(2)
 S.Set("Speed Hack", 0)
 eq(KC.rate, 0, "paused again: rate 0")
+
+end
+do
+section("kit clock: kit listeners on Heartbeat get the kit's dt (the Zipline ride, the Sequencer)")
+newTAS()
+Ride.Start(10)
+steps(60)
+near(Ride.dist, 10, 1e-6, "Idle: real time (60 frames of 1/60 s at 10 studs/s)")
+eq(next(KC.FrameEvents.Heartbeat), nil, "Idle: the kit's listener is left alone")
+create()
+local d0 = Ride.dist
+local m0 = MorphKit.Count()
+steps(30)
+near(Ride.dist, d0, 1e-9, "paused: the ride doesn't move")
+eq(MorphKit.Count() - m0, 30, "paused: the Morpher's listener still runs once a frame, on Roblox's call")
+near(MorphKit.dts[#MorphKit.dts], 1 / 60, 1e-9, "with the real dt (its velocities are distance / real dt)")
+check(next(KC.FrameEvents.Heartbeat) ~= nil, "paused: HappaTAS calls the kit's listener itself")
+S.Set("Speed Hack", 1)
+S.Set("Speed Hack Speed", 0.5)
+click()
+steps(2)
+d0 = Ride.dist
+steps(60)
+near(Ride.dist - d0, 5, 1e-6, "0.5x: half the distance in the same real time")
+S.Set("Speed Hack Speed", 2)
+steps(2)
+d0 = Ride.dist
+steps(60)
+near(Ride.dist - d0, 20, 1e-6, "2x: twice the distance")
+S.Set("Speed Hack Speed", 0.5)
+S.Set("Speed Hack Frame Step", 1)
+steps(2)
+d0 = Ride.dist
+steps(60)
+near(Ride.dist - d0, 5, 1e-6, "Frame Step 0.5x: the distance of the steps that ran")
+S.Set("Speed Hack Frame Step", 0)
+click()
+steps(2)
+S.Set("Speed Hack", 0)
+local c0 = Ride.calls
+Ride.Stop()
+steps(10)
+eq(Ride.calls, c0, "a listener the kit disconnected isn't called again")
+idle()
+steps(2)
+eq(next(KC.FrameEvents.Heartbeat), nil, "Idle: nothing taken over")
+-- without getconnections nothing changes
+M.noGetConnections = true
+Ride.Start(10)
+create()
+d0 = Ride.dist
+steps(10)
+near(Ride.dist - d0, 10 * 10 / 60, 1e-6, "no getconnections: the kit's listener runs in real time as before")
+Ride.Stop()
+idle()
+M.noGetConnections = nil
+-- back at 1x with the kit's listener still connected: it gets its own connection back
+Ride.Start(10)
+create()
+steps(5)
+check(next(KC.FrameEvents.Heartbeat) ~= nil, "paused: taken over")
+idle()
+steps(2)
+eq(next(KC.FrameEvents.Heartbeat), nil, "back at 1x: given back")
+d0 = Ride.dist
+steps(60)
+near(Ride.dist - d0, 10, 1e-6, "back at 1x: the kit's own listener runs in real time again (once a frame)")
+Ride.Stop()
 
 end
 do
@@ -711,6 +797,101 @@ C.inputs.Back1F()
 steps(2)
 idle()
 eq(boxPart.Transparency, 0, "Idle: shown again")
+
+end
+-- ------------------------------------------------------------------------------------------------ effects
+do
+section("bounce pads / jump launchers: the effect is saved and played again while testing")
+-- the kit's bounce pad: its sound in its configuration, a BounceParticle; the kit's playSoundFromInstance puts a
+-- copy of the sound into the pad and plays it (Interactables/BouncePad bounce())
+local pad = part(CP, "BouncePad", Vector3.new(-40, 1, 0), Vector3.new(4, 1, 4))
+local padCfg = Instance.new("Configuration"); padCfg.Name = "BouncePadConfiguration"
+local padSnd = Instance.new("Sound"); padSnd.Name = "BounceSound"; padSnd.Volume = 0.7; padSnd.TimeLength = 0.5
+padSnd.Parent = padCfg
+padCfg.Parent = pad
+local att = Instance.new("Attachment"); att.Name = "ParticleAtt"; att.Parent = pad
+local padBurst = Instance.new("ParticleEmitter"); padBurst.Name = "BounceParticle"; padBurst.Parent = att
+-- a jump launcher: Sounds folder (Tick on entering, Bounce on the launch), Particles.BounceParticle
+local lModel = Instance.new("Model"); lModel.Name = "JumpGroup"; lModel.Parent = CP
+local launcher = part(lModel, "JumpLauncher", Vector3.new(-50, 1, 0), Vector3.new(4, 1, 4))
+local lCfg = Instance.new("Configuration"); lCfg.Name = "LauncherConfiguration"; lCfg.Parent = launcher
+local lSounds = Instance.new("Folder"); lSounds.Name = "Sounds"; lSounds.Parent = launcher
+local tick = Instance.new("Sound"); tick.Name = "Tick"; tick.Volume = 0.4; tick.TimeLength = 0.2; tick.Parent = lSounds
+local bounce = Instance.new("Sound"); bounce.Name = "Bounce"; bounce.Volume = 0.8; bounce.TimeLength = 0.4; bounce.Parent = lSounds
+local lAtt = Instance.new("Attachment"); lAtt.Name = "Particles"; lAtt.Parent = launcher
+local lBurst = Instance.new("ParticleEmitter"); lBurst.Name = "BounceParticle"; lBurst.Parent = lAtt
+steps(2) -- (new kit objects are looked at a little later)
+local function kitPlay(snd, into)
+	local c = snd:Clone(); c.Parent = into; c:Play()
+	return c
+end
+newTAS()
+create()
+click()
+steps(20)
+kitPlay(padSnd, pad); padBurst:Emit(1)
+local padF = #C.data
+steps(15)
+kitPlay(tick, launcher)
+local tickF = #C.data
+steps(10)
+kitPlay(bounce, launcher); lBurst:Emit(1)
+local bounceF = #C.data
+steps(20)
+click()
+steps(2)
+local got = {}
+for f, fr in ipairs(C.data) do
+	for _, e in ipairs(fr.KE or {}) do if e[1] == 4 then got[#got + 1] = { f, e[3] } end end
+end
+eq(#got, 3, "3 effects saved")
+eq(got[1] and got[1][1], padF, "the bounce pad's on its frame")
+eq(got[1] and got[1][2], 1, "as BounceSound")
+eq(got[2] and got[2][1], tickF, "the launcher's Tick on its frame")
+eq(got[2] and got[2][2], 2, "as Tick")
+eq(got[3] and got[3][1], bounceF, "the launch on its frame")
+eq(got[3] and got[3][2], 3, "as Bounce")
+-- testing: each one again when playback passes its frame
+M.emitLog = {}
+local testCopies = {}
+local lCopies = {}
+local cc = pad.ChildAdded:Connect(function(ch) if ch:IsA("Sound") then testCopies[#testCopies + 1] = ch end end)
+local cl = launcher.ChildAdded:Connect(function(ch) if ch:IsA("Sound") then lCopies[#lCopies + 1] = ch.Name end end)
+key(Enum.KeyCode.Three)
+steps(30)
+local kitCopy = kitPlay(padSnd, pad) -- (the kit plays its own while testing: muted, the TAS has its own)
+steps(80)
+cc:Disconnect()
+cl:Disconnect()
+eq(#testCopies, 2, "Test: the pad's sound played (+ the kit's own copy)")
+eq(table.concat(lCopies, ","), "Tick,Bounce", "Test: the launcher's Tick, then its Bounce")
+eq(kitCopy.Volume, 0, "Test: the kit's own sound is muted")
+local padEmits, lEmits = 0, 0
+for _, e in ipairs(M.emitLog) do
+	if e[1] == padBurst then padEmits = padEmits + 1 elseif e[1] == lBurst then lEmits = lEmits + 1 end
+end
+eq(padEmits, 1, "Test: the pad's particle burst")
+eq(lEmits, 1, "Test: the launcher's burst on the launch only (not on Tick)")
+local ourPad = nil
+for _, c in ipairs(testCopies) do if c ~= kitCopy then ourPad = c end end
+check(ourPad ~= nil and math.abs(ourPad.Volume - 0.7) < 1e-9, "Test: HappaTAS's copy plays at the sound's volume")
+idle()
+-- save / load: ids by key
+local okS2
+M.resume(coroutine.create(function() okS2 = Store.SaveSlot("fx", C.data) end))
+steps(5)
+local loadedFx
+M.resume(coroutine.create(function() local ok, fr = Store.LoadSlot("fx"); loadedFx = ok and fr end))
+steps(5)
+check(okS2 and loadedFx ~= nil, "saved and loaded")
+local got2 = {}
+for f, fr in ipairs(loadedFx or {}) do
+	for _, e in ipairs(fr.KE or {}) do if e[1] == 4 then got2[#got2 + 1] = { f, e[2], e[3] } end end
+end
+eq(#got2, 3, "the 3 effects come back")
+local key1 = got2[1] and KO.Reg.idToKey[got2[1][2]]
+check(key1 ~= nil and key1:find("BouncePad", 1, true) ~= nil, "the pad's id points at the pad (" .. tostring(key1) .. ")")
+eq(got2[3] and got2[3][3], 3, "the launch's sound code")
 
 end
 -- ------------------------------------------------------------------------------------------------ forces

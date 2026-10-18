@@ -497,6 +497,55 @@ CO.ShowFrame(d6, 2)
 near((still.Position - screw(0.55)).Magnitude, 0, 1e-3, "v3 on game time (0.55 s)")
 CO.Release()
 
+section("speed hack Frame Step (V2.38.16): held physics steps don't count on the physics clock")
+-- a box sliding at 6 studs/s, moved by the (mock) physics only while it isn't anchored: recorded at 0.5x with
+-- Frame Step it moves on the steps that run, and its own clock (simulation time without the held steps) runs
+-- with it, so one key and its velocity explain the whole slide
+spinOn = false
+M.simDt = nil
+local slideBox = part("Slide Box", false, CFrame.new(base + Vector3.new(0, 8, 0)), Vector3.new(2, 2, 2))
+slideBox.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+M.freeParts = { slideBox }
+local g3 = 0
+while not CO.Reg.keyToId["ClientObjects/Slide Box"] and g3 < 300 do M.step(1 / 60); g3 = g3 + 1 end
+local boxId = CO.Reg.keyToId["ClientObjects/Slide Box"]
+check(boxId ~= nil, "the box is registered")
+local boxTruth = {}
+local boxLog = RS.PreSimulation:Connect(function()
+	if not recording() then return end
+	local fd = C.data[#C.data]
+	if fd and fd.Cframe then boxTruth[#C.data] = boxTruth[#C.data] or slideBox.Position end
+end)
+S.Set("Speed Hack", 1)
+S.Set("Speed Hack Speed", 0.5)
+S.Set("Speed Hack Frame Step", 1)
+key(Enum.KeyCode.Two, 2)
+local n8 = #C.data
+M.services.UserInputService.InputBegan:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.Begin), false)
+M.services.UserInputService.InputEnded:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.End), false)
+for _ = 1, 240 do M.step(1 / 60) end
+M.services.UserInputService.InputBegan:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.Begin), false)
+M.services.UserInputService.InputEnded:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.End), false)
+for _ = 1, 2 do M.step(1 / 60) end
+boxLog:Disconnect()
+S.Set("Speed Hack Frame Step", 0)
+S.Set("Speed Hack", 0)
+local n9 = #C.data
+check(n9 - n8 >= 110 and n9 - n8 <= 122, "about 120 frames recorded from 240 real frames (" .. (n9 - n8) .. ")")
+local bst = keyStats(C.data, n8 + 1, n9)[boxId]
+check(bst ~= nil and bst.keys >= 1 and bst.keys <= 3, "the sliding box needs 1 - 3 keys (" .. (bst and bst.keys or 0) .. ")")
+local worstB, nb = 0, 0
+for f = n8 + 1, n9 do
+	if boxTruth[f] then
+		CO.ShowFrame(C.data, f)
+		worstB = math.max(worstB, (slideBox.Position - boxTruth[f]).Magnitude)
+		nb = nb + 1
+	end
+end
+check(nb > 100 and worstB <= 0.02, string.format("paused on each of %d frames: the box where it was (worst %.4f)", nb, worstB))
+CO.Release()
+M.freeParts = {}
+
 spinOn = false
 drive:Disconnect()
 log:Disconnect()

@@ -11,6 +11,7 @@
 --    unpausing in first person.
 -- ================================================================================================
 do
+	Bridge.timeRate = 1 -- how fast the TAS clock runs against real time while recording (speed hack)
 	local UserGameSettings
 	pcall(function() UserGameSettings = UserSettings():GetService("UserGameSettings") end)
 
@@ -94,8 +95,9 @@ do
 		if UIS.MouseBehavior ~= b then pcall(function() UIS.MouseBehavior = b end) end
 	end
 
+	local restored = false -- Bridge.Restore ran (Unload): the camera script is never patched again
 	local function applyPatches(playerModule)
-		if patchedModule == playerModule then return end
+		if restored or patchedModule == playerModule then return end
 		patchedModule = playerModule
 		local camMod = playerModule:FindFirstChild("CameraModule")
 		if not camMod then return end
@@ -233,6 +235,10 @@ do
 							end
 							return res
 						end
+						-- (speed hack: the zoom spring runs on the TAS clock, so a zoom recorded in slow / fast
+						-- motion plays back at its normal speed)
+						local k = Bridge.timeRate
+						if k ~= 1 and type(renderDt) == "number" then renderDt = renderDt * k end
 						return orig(renderDt, ...)
 					end
 				end)
@@ -319,9 +325,11 @@ do
 	end
 
 	local function resolve()
-		if cameras and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil) then
-			return cameras
-		end
+		local known = cameras ~= nil
+			and (rawget(cameras, "activeCameraController") ~= nil or rawget(cameras, "activeTransparencyController") ~= nil)
+		-- (the camera script's patches go in even when the garbage collector scan found the cameras first: with
+		-- filtergc it finishes before the first look, and the patches were never made - found live in V2.38.16)
+		if known and (restored or (patchedModule ~= nil and patchedModule.Parent)) then return cameras end
 		local now = os.clock()
 		if now - lastResolveTry < 1 then return cameras end
 		lastResolveTry = now
@@ -329,6 +337,7 @@ do
 		local pm = ps and ps:FindFirstChild("PlayerModule")
 		if not pm then return cameras end
 		applyPatches(pm)
+		if known then return cameras end
 		local ok, mod = pcall(require, pm)
 		if not ok or type(mod) ~= "table" then return cameras end
 		local cams
@@ -737,6 +746,7 @@ do
 	end
 
 	function Bridge.Restore()
+		restored = true
 		pcall(Bridge.ResetGhost)
 		shiftlockBlocked = false
 		snapZoom = false; camFreezeZoom = false

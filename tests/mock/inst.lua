@@ -63,7 +63,7 @@ function sigMt.Fire(s, ...)
 		for i = 1, math.floor(n / 2) do list[i], list[n - i + 1] = list[n - i + 1], list[i] end
 	end
 	for _, c in ipairs(list) do
-		if c.Connected then
+		if c.Connected and not c._disabled then
 			local co = coroutine.create(c._fn)
 			local ok, err = coroutine.resume(co, ...)
 			if not ok then

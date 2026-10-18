@@ -474,6 +474,12 @@ C.AnimationTrack.Methods.GetMarkerReachedSignal = function() return M.newSignal(
 C.AnimationTrack.Methods.GetTimeOfKeyframe = function() return 0 end
 C.Sound.Methods.Play = function(self) self.Playing = true; self.IsPlaying = true; M.soundPlays = (M.soundPlays or 0) + 1 end
 C.Sound.Methods.Stop = function(self) self.Playing = false; self.IsPlaying = false end
+-- (M.emits = particles emitted, M.emitLog = { emitter, count })
+C.ParticleEmitter.Methods.Emit = function(self, n)
+	M.emits = (M.emits or 0) + (n or 16)
+	M.emitLog = M.emitLog or {}
+	M.emitLog[#M.emitLog + 1] = { self, n }
+end
 C.Sound.Methods.Pause = function(self) self.Playing = false end
 C.Sound.Methods.Resume = function(self) self.Playing = true end
 C.Tool.Methods.Activate = function(self) self.Activated:Fire() end
@@ -625,10 +631,18 @@ local function humanoidStep(hrp, hum, dt)
 	hrp.CFrame = hrp.CFrame.Rotation + np
 	hrp.AssemblyLinearVelocity = Vector3.new(hv.X, vy, hv.Z)
 end
+-- M.freeParts: parts that move on by their velocity while they are not anchored (M.physicsLog gets
+-- { part, anchored } for each of them every physics step: what the physics saw)
+M.freeParts = {}
 function M.physics(dt)
+	for _, p in ipairs(M.freeParts) do
+		if M.physicsLog then M.physicsLog[#M.physicsLog + 1] = { p, p.Anchored } end
+		if p.Parent and not p.Anchored then p.CFrame = p.CFrame + p.AssemblyLinearVelocity * dt end
+	end
 	local ch = player.Character
 	if not ch then return end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
+	if M.physicsLog and hrp then M.physicsLog[#M.physicsLog + 1] = { hrp, hrp.Anchored } end
 	if not hrp or hrp.Anchored then return end
 	if M.humanoidPhysics then
 		local hum = ch:FindFirstChildOfClass("Humanoid")
@@ -770,6 +784,22 @@ filtergc = function(kind, options, one)
 	return out
 end
 identifyexecutor = function() return "MockExec", "1.0" end
+-- getconnections (Real docs: connection objects with Enabled, Function, Disable, Enable...; a new object for
+-- each call, like Real's). M.noGetConnections hides it
+getconnections = function(sig)
+	if M.noGetConnections then error("getconnections is not available") end
+	local out = {}
+	for _, c in ipairs(sig._conns or {}) do
+		out[#out + 1] = {
+			Function = c._fn, Enabled = not c._disabled,
+			Disable = function() c._disabled = true end,
+			Enable = function() c._disabled = false end,
+			Disconnect = function() c:Disconnect() end,
+		}
+	end
+	M.getconnectionsCalls = (M.getconnectionsCalls or 0) + 1
+	return out
+end
 
 -- print / warn capture
 local realPrint = print

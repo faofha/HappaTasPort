@@ -1,10 +1,35 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.15
+	Version: V2.38.16
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.16 changes (short): fast motion, Frame Step slow motion, zoom, bounce pad / launcher effects
+		- Speed hack: speeds above 1 (up to 4x: fast motion while recording, saved and tested at normal speed
+		  like slow motion). Settings > Speed Hack > Speed 0.1 - 4.
+		- Speed hack Frame Step (Settings > Speed Hack, below 1x): nothing is scaled. Roblox runs its normal
+		  physics on some frames only (one in two at 0.5x) and everything that moves is held still for the
+		  physics step of the others; only the frames whose step ran are recorded, with that step's time.
+		  Walking, jumping and falling are exactly like normal speed, and a platform you push yourself (the
+		  kit's Pushing Platform) speeds up like at normal speed instead of far too fast; the moment you bump
+		  into it can still play out differently. Smooth (the scaled slow motion) stays the default.
+		- The camera's zoom spring runs on the TAS clock: a zoom recorded in slow / fast motion plays back at
+		  its normal speed (before: 2x too fast at 0.5x, too slow at 2x).
+		- Bounce pads and jump launchers: their effect (sound, particle burst) is saved when the kit plays it
+		  and played again while testing (the kit only plays it on a real touch). File event 4.
+		- Kit scripts that move things by RunService's frame time (the Zipline ride, the Sequencer) follow the
+		  TAS clock too (paused, slow / fast motion, Frame Step), through getconnections.
+		- Swings: their Boost is slowed with the world, like a bounce pad's Power.
+		- The game's camera script is patched again (zoom spring, mouse behaviour, camera freeze while paused):
+		  since V2.38.2 the garbage collector scan found the cameras before the bridge looked for the
+		  PlayerModule, and the patches were never made (found in the client).
+		- Checked in the Roblox client (EToH kit test place): Frame Step walks and jumps exactly like 1x (same
+		  height, states and times); the Pushing Platform accelerates the same once pushed, but the moment the
+		  character hits it plays out differently (it lands on the slower of 1x's outcomes, and a push can stall);
+		  the zoom spring runs at the speed hack's rate; bounce pad effects saved and played in Test. Holding
+		  the world costs about 0.5 ms per held frame (16 parts in the test place).
 
 	V2.38.15 changes (short): bounce pads in slow motion, client objects saved from their start
 		- Speed hack: a bounce pad (EToH kit) sets your velocity to its Power itself, so with the slowed
@@ -180,7 +205,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.15"
+local VERSION = "V2.38.16"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {
