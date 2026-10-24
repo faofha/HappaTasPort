@@ -1,9 +1,14 @@
 config
 platform/env
 platform/gamecall
+platform/typing
 kernel/lifecycle
 kernel/errors
 kernel/state
 kernel/bus
 kernel/pipeline
+engine/util
+engine/keys
+engine/settings
+engine/controls
 main
