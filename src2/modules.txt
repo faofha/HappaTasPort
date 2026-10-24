@@ -19,6 +19,7 @@ world/character
 world/camera
 world/inputs
 world/cursor
+world/animation
 engine/modes
 engine/frame
 main
