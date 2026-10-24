@@ -137,32 +137,6 @@ function Frame.start(E)
 		E.plugins:call("onPlayedFrame", tl, E.frame)
 	end
 
-	local function finishTest()
-		local n = tl:count()
-		local last = (n > 0) and n or nil
-		local endZoom = (last and E.cam:zoomAt(tl, last)) or (E.pose and E.pose.Zoom) or E.cs:getZoom()
-		local endShift = last and E.cam:shiftAt(tl, last) or nil
-		E.cs:resetGhost()
-		pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
-		E.inputs:replayEnd()
-		E.plugins:call("onEndPlayback")
-		E.plugins:call("onRelease")
-		E.tools:replayEnd()
-		E.mode, E.frame = 1, 1
-		E.char:anchor(false)
-		E.cs:setCameraFreeze(false, false)
-		E.cs:lockShiftlock(false)
-		E.anim:lock(false)
-		E.cs:setFreeMouse(false)
-		E.cs:restoreAfterTest(endZoom, endShift)
-		E.guardFrames = 45
-		E.plugins:call("onCursorReset")
-		if not E.quitTest and n > 0 and E.settings:on("showCompletionMessage") then
-			M_:status("TAS Completed [Time: " .. Util.toTime(tl:get("TotalTime", n, 1)) .. "]")
-		end
-		M_:publish()
-	end
-
 	local function heartbeat(dt)
 		local mode = E.mode
 		if mode ~= 3 and E.inputs:isReplaying() then E.inputs:replayEnd() end
@@ -205,7 +179,7 @@ function Frame.start(E)
 				playbackStep(dt)
 				M_:publish()
 			elseif mode == 3 then
-				finishTest()
+				M_:finishTest()
 			end
 		end
 		E.lastFrameTime = dt
@@ -249,6 +223,8 @@ function Frame.start(E)
 	-- ---------------------------------------------------------------------------------------- keys
 	local uis = Env.svc("UserInputService")
 	local function is(inp, control) return E.controls:matches(inp, control) end
+	local KEY_ACTIONS = { "idle", "create", "test", "unpause", "pause", "unpause1", "return", "back1", "forward1", "back",
+		"forward", "deleteTas", "optimize", "lookAround", "toggleSpeedHack" }
 	E.life:connect(uis.JumpRequest, function()
 		local ch = E.char
 		if ch.hum and E.mode == 2 and E.frame > 1 and ch:canCoyoteJump() then
@@ -260,22 +236,13 @@ function Frame.start(E)
 		if E.inputs:isOverOwnUI(inp) then return end -- a click on a HappaTAS window is for the window
 		if proc and not E.settings:on("ignoreGameProcessed") then return end
 		if not E.char.hum then return end
-		local mode, paused, n, merge = E.mode, E.paused, tl:count(), E.merge
-		if is(inp, "idle") and not merge then M_:idle()
-		elseif is(inp, "create") and not merge then M_:create()
-		elseif is(inp, "test") and n > 0 and not merge then M_:test()
-		elseif is(inp, "unpause") and mode == 2 and paused then M_:unpause()
-		elseif is(inp, "pause") and mode == 2 and not paused then M_:pause()
-		elseif is(inp, "unpause1") and mode == 2 and paused then M_:unpause1()
-		elseif is(inp, "return") and mode == 2 and n > 0 then M_:returnToPause()
-		elseif is(inp, "back1") and mode == 2 and n > 1 and E.frame > 1 then M_:back1()
-		elseif is(inp, "forward1") and mode == 2 and E.frame < n then M_:forward1()
-		elseif is(inp, "back") and mode == 2 then M_:back()
-		elseif is(inp, "forward") and mode == 2 then M_:forward()
-		elseif is(inp, "deleteTas") and not merge then M_:deleteTas()
-		elseif is(inp, "optimize") then M_:optimize()
-		elseif is(inp, "lookAround") and mode == 2 and paused and E.settings:on("lockCameraPaused") then M_:toggleLookAround()
-		elseif is(inp, "toggleSpeedHack") then E.settings:set("speedHack", E.settings:on("speedHack") and 0 or 1) end
+		-- the first control this key is bound to whose transition is allowed now (V2.38.16's order)
+		for _, c in ipairs(KEY_ACTIONS) do
+			if is(inp, c) and M_:allowed(c) then
+				M_:request(c)
+				return
+			end
+		end
 	end)
 	E.life:connect(uis.InputEnded, function(inp)
 		if is(inp, "back") then E.back = false end

@@ -453,6 +453,77 @@ function Modes:toggleLookAround()
 	E.guardFrames = 45
 end
 
+-- the end of Test: everything handed back, Idle
+function Modes:finishTest()
+	local E = self.E
+	local tl = E.tl
+	local n = tl:count()
+	local last = (n > 0) and n or nil
+	local endZoom = (last and E.cam:zoomAt(tl, last)) or (E.pose and E.pose.Zoom) or E.cs:getZoom()
+	local endShift = last and E.cam:shiftAt(tl, last) or nil
+	E.cs:resetGhost()
+	pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
+	E.inputs:replayEnd()
+	E.plugins:call("onEndPlayback")
+	E.plugins:call("onRelease")
+	E.tools:replayEnd()
+	E.mode, E.frame = 1, 1
+	E.char:anchor(false)
+	E.cs:setCameraFreeze(false, false)
+	E.cs:lockShiftlock(false)
+	E.anim:lock(false)
+	E.cs:setFreeMouse(false)
+	E.cs:restoreAfterTest(endZoom, endShift)
+	E.guardFrames = 45
+	E.plugins:call("onCursorReset")
+	if not E.quitTest and n > 0 and E.settings:on("showCompletionMessage") then
+		self:status("TAS Completed [Time: " .. Util.toTime(tl:get("TotalTime", n, 1)) .. "]")
+	end
+	self:publish()
+end
+
+-- ------------------------------------------------------------------------------------------------ requests
+-- whether a transition is allowed now (V2.38.16's conditions); keys, buttons and the timeline all ask
+local ALLOWED = {
+	idle = function(E) return not E.merge end,
+	create = function(E) return not E.merge end,
+	test = function(E) return E.tl:count() > 0 and not E.merge end,
+	unpause = function(E) return E.mode == 2 and E.paused end,
+	pause = function(E) return E.mode == 2 and not E.paused end,
+	unpause1 = function(E) return E.mode == 2 and E.paused end,
+	["return"] = function(E) return E.mode == 2 and E.tl:count() > 0 end,
+	back1 = function(E) return E.mode == 2 and E.tl:count() > 1 and E.frame > 1 end,
+	forward1 = function(E) return E.mode == 2 and E.frame < E.tl:count() end,
+	back = function(E) return E.mode == 2 end,
+	forward = function(E) return E.mode == 2 end,
+	deleteTas = function(E) return not E.merge end,
+	optimize = function() return true end,
+	lookAround = function(E) return E.mode == 2 and E.paused and E.settings:on("lockCameraPaused") end,
+	toggleSpeedHack = function() return true end,
+	seek = function(E) return (E.mode == 2 and E.paused) or E.mode == 3 end,
+}
+local RUN = {
+	idle = function(m) m:idle() end, create = function(m, o) m:create(o and o.force) end, test = function(m) m:test() end,
+	unpause = function(m) m:unpause() end, pause = function(m) m:pause() end, unpause1 = function(m) m:unpause1() end,
+	["return"] = function(m) m:returnToPause() end, back1 = function(m) m:back1() end, forward1 = function(m) m:forward1() end,
+	back = function(m) m:back() end, forward = function(m) m:forward() end, deleteTas = function(m, o) m:deleteTas(o and o.mobile) end,
+	optimize = function(m, o) m:optimize(o and o.mobile) end, lookAround = function(m) m:toggleLookAround() end,
+	toggleSpeedHack = function(m) local s = m.E.settings; s:set("speedHack", s:on("speedHack") and 0 or 1) end,
+	seek = function(m, o) m:seek(o and o.frame or m.E.frame) end,
+}
+
+function Modes:allowed(action)
+	local f = ALLOWED[action]
+	return f ~= nil and f(self.E) == true
+end
+
+-- runs a transition when it is allowed now; false when it isn't (or the action is unknown)
+function Modes:request(action, opts)
+	if not self:allowed(action) then return false end
+	RUN[action](self, opts)
+	return true
+end
+
 -- replaces the run (a loaded file); in Create the character goes to its last frame
 function Modes:setRun(frames)
 	local E = self.E

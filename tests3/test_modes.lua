@@ -159,6 +159,39 @@ key(Enum.KeyCode.Three)
 eq(E.mode, 3, "a 2-frame run plays")
 M.steps(10)
 eq(E.mode, 1, "and ends")
+section("request: each transition checks that it is allowed")
+do
+	local m = E.modes
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	eq(m:request("pause"), false, "no Pause in Idle")
+	eq(m:request("back1"), false, "no stepping in Idle")
+	eq(E.mode, 1, "still Idle")
+	eq(m:request("create"), true, "Create")
+	eq(E.mode, 2, "in Create")
+	M.steps(2)
+	eq(m:request("pause"), false, "no Pause while paused")
+	eq(m:request("unpause"), true, "Unpause")
+	M.steps(4)
+	eq(m:request("unpause"), false, "no Unpause while recording")
+	eq(m:request("lookAround"), false, "no Look Around while recording")
+	eq(m:request("pause"), true, "Pause")
+	M.steps(2)
+	E.modes:seek(1)
+	eq(m:request("back1"), false, "no step back on frame 1")
+	eq(m:request("forward1"), true, "step forward")
+	E.merge = true
+	eq(m:request("idle"), false, "no Idle while merging")
+	eq(m:request("test"), false, "no Test while merging")
+	E.merge = false
+	eq(m:request("nonsense"), false, "an unknown action")
+	eq(m:request("test"), true, "Test")
+	eq(E.mode, 3, "testing")
+	local g = 0
+	while E.mode == 3 and g < 600 do M.step(1 / 60); g = g + 1 end
+	eq(E.mode, 1, "Test ends through the mode machine")
+end
+
 section("a plugin that keeps failing doesn't switch the engine off")
 do
 	local disabled = {}
