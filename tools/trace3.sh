@@ -5,6 +5,7 @@
 #   TGROUPS="mode F W.char"      trace groups compared (default: every group)
 #   FIELDS="Cframe State"       V2 frame fields compared in the F group (default: all)
 #   SIDES="v2 v2"               which builds run as side a and side b (default: "v2 v3")
+#   UPTO="tag"                  compare only the lines before the first one with this step tag
 # Prints "SAME (N lines)" or "DIFFERENT:" and the first differing lines (exit 2).
 # Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit b1569bd (V2.38.16),
 # never the working tree's src/parts.
@@ -53,8 +54,9 @@ run_side() { # SIDE NAME
     echo "side $2 ($1) failed:"; grep -E "FAIL|ERROR|error" "$T/raw_$2.txt" | head -10; tail -3 "$T/raw_$2.txt"; exit 1
   fi
   # keep the compared groups, and in F lines (T|F|tag|i|Field|value) only the compared fields
-  awk -F'|' -v groups=" $TGROUPS " -v fields=" $FIELDS " '
+  awk -F'|' -v groups=" $TGROUPS " -v fields=" $FIELDS " -v upto="$UPTO" '
     $1 != "T" { next }
+    upto != "" && $3 == upto { exit }
     index(groups, " " $2 " ") == 0 { next }
     $2 == "F" && fields != " all " && index(fields, " " $5 " ") == 0 { next }
     { print }' "$T/raw_$2.txt" > "$T/out_$2.txt"

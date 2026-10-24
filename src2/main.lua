@@ -10,6 +10,15 @@ local Errors = import("kernel/errors")
 local State = import("kernel/state")
 local Bus = import("kernel/bus")
 local Pipeline = import("kernel/pipeline")
+local Settings = import("engine/settings")
+local Controls = import("engine/controls")
+local Typing = import("platform/typing")
+local Timeline = import("engine/timeline")
+local Plugins = import("engine/plugins")
+local Stubs = import("engine/stubs")
+local Modes = import("engine/modes")
+local Frame = import("engine/frame")
+local Character = import("world/character")
 
 local Main = {}
 local kernel = nil
@@ -23,6 +32,36 @@ end
 
 -- (V2.38.x's Unload could take its thread's access to CoreGui away: each older copy unloads on a
 -- thread of its own)
+-- the engine: settings, the run's timeline, the world plugins, the mode machine and the frame loop, all
+-- owned by one lifecycle scope. On Unload the character is let go first (Idle, unanchored).
+local function startEngine(k)
+	local life = k.life:scope("engine")
+	local E = { life = life, errs = k.errs, bus = k.bus, state = k.state, pipe = k.pipe }
+	E.settings = Settings.new(k.errs)
+	E.controls = Controls.new()
+	E.typing = Typing.new(life)
+	E.tl = Timeline.new()
+	E.tl:addColumn("FrameTime", "f64", 1, { key = "FrameTime" })
+	E.tl:addColumn("TotalTime", "f64", 1, { key = "TotalTime" })
+	E.plugins = Plugins.new(k.errs)
+	E.cs = Stubs.cameraScript()
+	E.cam = Stubs.camera()
+	E.inputs = Stubs.inputs()
+	E.anim = Stubs.animation()
+	E.tools = Stubs.tools()
+	E.char = E.plugins:add(Character.new(E))
+	E.modes = Modes.new(E)
+	Frame.start(E)
+	E.char:start()
+	life:own(function()
+		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end
+		local hrp = E.char.hrp
+		if hrp and hrp.Parent then hrp.Anchored = false end
+		E.plugins:call("unload")
+	end)
+	return E
+end
+
 local function unloadOlder()
 	local genv = Env.genv
 	for _, key in ipairs({ "__HappaTAS", "__HappaTAS3" }) do
@@ -48,8 +87,9 @@ function Main.Start()
 		k.bus = Bus.new(errs)
 		k.pipe = Pipeline.new(life, errs, k.bus)
 		k.pipe:start()
+		k.engine = startEngine(k)
 		if CONFIG.Debug then
-			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env }
+			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env, engine = k.engine }
 			share("__HappaTAS3_T", k.debug, errs)
 			print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
 		end

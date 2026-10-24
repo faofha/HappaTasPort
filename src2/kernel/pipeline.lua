@@ -1,8 +1,9 @@
 -- ================================================================================================
 --  PIPELINE  (HappaTAS 3 kernel): the one place that decides what runs in each Roblox event, in what
 --  order. Stages, in the order measured in the client: PreRender, PreSimulation, physics,
---  PostSimulation, then LateRender (BindToRenderStep at Last + 1). A frame without a physics step has
---  no PreSimulation / PostSimulation (Roblox steps physics at 240 Hz), so those handlers aren't called.
+--  PostSimulation, Heartbeat, then LateRender (BindToRenderStep at Last + 1). A frame without a physics
+--  step has no PreSimulation / PostSimulation (Roblox steps physics at 240 Hz), so those handlers aren't
+--  called; Heartbeat runs every frame.
 --  Handlers run by ascending order number (ties in the order they were added), each on a thread of its
 --  own: an error or a yield is reported and the next handler still runs; when a handler's last 5 calls
 --  all failed, every handler of its module (all stages) is switched off (bus event "moduleDisabled" with
@@ -12,7 +13,7 @@ local Env = import("platform/env")
 
 local Pipeline = {}
 Pipeline.__index = Pipeline
-local STAGES = { "PreRender", "PreSimulation", "PostSimulation", "LateRender" }
+local STAGES = { "PreRender", "PreSimulation", "PostSimulation", "Heartbeat", "LateRender" }
 local MAX_FAILS = 5
 local LATE_BIND = "HappaTAS3Late"
 
@@ -104,6 +105,7 @@ function Pipeline:start()
 	life:connect(rs.PreRender, function(dt) self:run("PreRender", dt) end)
 	life:connect(rs.PreSimulation, function(dt) self:run("PreSimulation", dt) end)
 	life:connect(rs.PostSimulation, function(dt) self:run("PostSimulation", dt) end)
+	life:connect(rs.Heartbeat, function(dt) self:run("Heartbeat", dt) end)
 	local okB = pcall(function()
 		rs:BindToRenderStep(LATE_BIND, Enum.RenderPriority.Last.Value + 1, function(dt) self:run("LateRender", dt) end)
 	end)

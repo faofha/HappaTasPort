@@ -12,4 +12,9 @@ engine/keys
 engine/settings
 engine/controls
 engine/timeline
+engine/plugins
+engine/stubs
+world/character
+engine/modes
+engine/frame
 main

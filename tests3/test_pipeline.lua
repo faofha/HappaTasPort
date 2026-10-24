@@ -61,6 +61,21 @@ s = table.concat(log, ",")
 check(s:find("c", 1, true) == nil and s:find("d", 1, true) == nil, "no physics handlers (" .. s .. ")")
 check(s:find("a", 1, true) ~= nil, "render handlers still ran")
 
+section("Heartbeat: after PostSimulation, every frame, also without a physics step")
+do
+	local hb = {}
+	local rmA = pipe:add("PostSimulation", 10, "hbPost", function() hb[#hb + 1] = "post" end)
+	local rmB = pipe:add("Heartbeat", 10, "hbBeat", function() hb[#hb + 1] = "beat" end)
+	M.step(1 / 60)
+	eq(table.concat(hb, ","), "post,beat", "Heartbeat handlers run after PostSimulation")
+	hb = {}
+	M.simDt = function() return 0 end
+	M.step(1 / 240)
+	M.simDt = nil
+	eq(table.concat(hb, ","), "beat", "Heartbeat runs in a frame without a physics step")
+	rmA(); rmB()
+end
+
 section("an erroring handler: others keep running, printed once, switched off after 5 frames in a row")
 local disabled = {}
 bus:on("moduleDisabled", function(name, err) disabled[#disabled + 1] = name end)
