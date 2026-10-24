@@ -33,6 +33,9 @@ do
 	M.steps(10)
 	local perFrame = (creates - c0 - base) / 10
 	check(perFrame <= 1, "10 handlers in one stage make at most 1 thread a frame (" .. perFrame .. ")")
+	c0 = creates
+	M.steps(10)
+	eq(creates - c0 - base, 0, "a runner is reused from frame to frame: no new thread once running")
 	for _, rm in ipairs(removers) do rm() end
 end
 

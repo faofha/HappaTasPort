@@ -14,7 +14,7 @@ local function measure(name, n, perFrame)
 	for _ = 1, 30 do if perFrame then perFrame() end; M.step(1 / 60) end -- warm up
 	local best = math.huge
 	local rd, wr
-	for _ = 1, 3 do -- (the fastest of 3 runs: less noise from the machine)
+	for _ = 1, 5 do -- (the fastest of 5 runs: less noise from the machine)
 		local r0, w0 = M.propReads, M.propWrites
 		local t0 = M.realClock()
 		for _ = 1, n do
@@ -32,9 +32,9 @@ local function click()
 end
 local function key(kc) M.pressKey(kc); M.releaseKey(kc) end
 
-measure("idle", 300)
+measure("idle", 1000)
 hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
-measure("idle moving", 300)
+measure("idle moving", 1000)
 hrp.AssemblyLinearVelocity = Vector3.zero
 key(Enum.KeyCode.Two)
 M.steps(5)
