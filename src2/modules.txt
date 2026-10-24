@@ -16,6 +16,7 @@ engine/timeline
 engine/plugins
 engine/stubs
 world/character
+world/camera
 engine/modes
 engine/frame
 main
