@@ -229,6 +229,11 @@ function Frame.start(E)
 		end
 		E.plugins:call("lateRender")
 		E.cam:updateMouseMode()
+		-- the NohBoard cursor, on the frame shown (Test, or paused with a locked camera)
+		local f = E.frame
+		local shown = (E.mode == 3 or (E.mode == 2 and E.paused and tl:count() > 0 and M_:setCam() and not E.lookAround))
+			and f >= 1 and f <= tl:count()
+		E.cursor:update(tl, shown and f or nil)
 	end
 
 	pipe:add("PreRender", 0, "engine.deferred", function() M_:resumeDeferred() end, MOD)
