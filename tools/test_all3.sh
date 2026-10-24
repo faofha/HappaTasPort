@@ -1,6 +1,7 @@
 #!/bin/bash
 # HappaTAS 3: build and run every headless suite (tests3/), the executor variants, the import-cycle
-# check, then the release build (wow3) through the start / unload suite.
+# check, the trace against V2.38.16 (every phase 2 frame field), the bench against V2.38.16, then the
+# release build (wow3) through the start / unload suites.
 #   bash tools/test_all3.sh
 cd "$(dirname "$0")/.."
 LUAU="${LUAU:-$(command -v luau || echo /home/claude/tools/luau/luau)}"
@@ -33,6 +34,14 @@ if grep -nE "(getfenv|setfenv)\(" src2/HappaTAS3.lua; then
 else
   echo "deopt guard: clean"
 fi
+P2FIELDS="FrameTime TotalTime Cframe Velocity State Died CamCframe Zoom ShiftLock Input MX MY UVX UVY VX VY Anim Tools"
+tr=$(FIELDS="$P2FIELDS" bash tools/trace3.sh 2>&1 | head -12)
+echo "trace: $(echo "$tr" | head -1)"
+echo "$tr" | grep -q "^SAME" || { fail=1; echo "$tr"; }
+bo=$(bash tools/bench3.sh 2>&1)
+echo "bench: $(echo "$bo" | tail -1)"
+echo "$bo" | grep -q "^BENCH OK" || { fail=1; echo "$bo"; }
 bash tools/build3.sh --release wow3 >/dev/null || { echo "release build failed"; fail=1; }
 run main wow3
+run engine wow3
 [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOMETHING FAILED"; exit 1; }

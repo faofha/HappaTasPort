@@ -1,8 +1,9 @@
 -- ================================================================================================
 --  PIPELINE  (HappaTAS 3 kernel): the one place that decides what runs in each Roblox event, in what
 --  order. Stages, in the order measured in the client: PreRender, PreSimulation, physics,
---  PostSimulation, then LateRender (BindToRenderStep at Last + 1). A frame without a physics step has
---  no PreSimulation / PostSimulation (Roblox steps physics at 240 Hz), so those handlers aren't called.
+--  PostSimulation, Heartbeat, then LateRender (BindToRenderStep at Last + 1). A frame without a physics
+--  step has no PreSimulation / PostSimulation (Roblox steps physics at 240 Hz), so those handlers aren't
+--  called; Heartbeat runs every frame.
 --  Handlers run by ascending order number (ties in the order they were added), each on a thread of its
 --  own: an error or a yield is reported and the next handler still runs; when a handler's last 5 calls
 --  all failed, every handler of its module (all stages) is switched off (bus event "moduleDisabled" with
@@ -12,14 +13,14 @@ local Env = import("platform/env")
 
 local Pipeline = {}
 Pipeline.__index = Pipeline
-local STAGES = { "PreRender", "PreSimulation", "PostSimulation", "LateRender" }
+local STAGES = { "PreRender", "PreSimulation", "PostSimulation", "Heartbeat", "LateRender" }
 local MAX_FAILS = 5
 local LATE_BIND = "HappaTAS3Late"
 
 function Pipeline.new(life, errs, bus)
 	local stages = {}
 	for _, s in ipairs(STAGES) do stages[s] = {} end
-	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, seq = 0, stopped = false, frame = 0 }, Pipeline)
+	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, runners = {}, kept = {}, seq = 0, stopped = false, frame = 0 }, Pipeline)
 end
 
 local function removeEntry(list, e)
@@ -42,6 +43,9 @@ function Pipeline:add(stage, order, name, fn, module)
 	return function() removeEntry(list, e) end
 end
 
+-- a module that is never switched off after errors (the engine: its errors are reported, the frame goes on)
+function Pipeline:keep(module) self.kept[module] = true end
+
 function Pipeline:disableModule(module, err)
 	for _, s in ipairs(STAGES) do
 		local list = self.stages[s]
@@ -56,10 +60,10 @@ local function cancel(co)
 	if not pcall(task.cancel, co) then pcall(coroutine.close, co) end
 end
 
--- One runner thread per stage per frame runs the handlers one after another: each handler is resumed in
--- it and the runner yields DONE when the handler returns (a new thread per call was ~12,000 threads a
--- second at 240 FPS: garbage-collection lag). A handler that errors kills the runner, one that yields
--- leaves it suspended somewhere else: either way it is dropped and the next handler gets a new one.
+-- One runner thread per stage runs the handlers one after another: each handler is resumed in it and the
+-- runner yields DONE when the handler returns (a new thread per call was ~12,000 threads a second at 240
+-- FPS: garbage-collection lag). The runner is kept for the next frame. A handler that errors kills it, one
+-- that yields leaves it suspended somewhere else: either way it is dropped and the next handler gets a new one.
 local DONE = {}
 local function runnerLoop(fn, dt)
 	while true do
@@ -73,7 +77,8 @@ function Pipeline:run(stage, dt)
 	if stage == "PreRender" then self.frame = self.frame + 1 end
 	local list = self.stages[stage]
 	if #list == 0 then return end
-	local runner = nil
+	local runner = self.runners[stage]
+	self.runners[stage] = nil -- (taken while running: a nested run of the same stage makes its own)
 	for _, e in ipairs(table.clone(list)) do
 		if self.stopped then return end
 		if e.on then
@@ -92,10 +97,11 @@ function Pipeline:run(stage, dt)
 			else
 				e.fails = e.fails + 1
 				self.errs:report(e.name, err)
-				if e.fails >= MAX_FAILS then self:disableModule(e.module, err) end
+				if e.fails >= MAX_FAILS and not self.kept[e.module] then self:disableModule(e.module, err) end
 			end
 		end
 	end
+	self.runners[stage] = runner
 end
 
 function Pipeline:start()
@@ -104,6 +110,7 @@ function Pipeline:start()
 	life:connect(rs.PreRender, function(dt) self:run("PreRender", dt) end)
 	life:connect(rs.PreSimulation, function(dt) self:run("PreSimulation", dt) end)
 	life:connect(rs.PostSimulation, function(dt) self:run("PostSimulation", dt) end)
+	life:connect(rs.Heartbeat, function(dt) self:run("Heartbeat", dt) end)
 	local okB = pcall(function()
 		rs:BindToRenderStep(LATE_BIND, Enum.RenderPriority.Last.Value + 1, function(dt) self:run("LateRender", dt) end)
 	end)

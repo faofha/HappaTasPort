@@ -2,6 +2,7 @@
 # Build tests3/run_NAME.lua = mock + HappaTAS 3 (Debug on, `import` exposed as __T3) + test_util + test_NAME
 #   bash tools/build_test3.sh NAME [BUILD]     (BUILD defaults to src2/HappaTAS3.lua, built first)
 #   PRE='lua' runs code before the script boots (e.g. to fake an executor without getgenv)
+#   SEDX='sed expr' changes the script first (mutation checks: the suite must fail)
 set -e
 cd "$(dirname "$0")/.."
 NAME="$1"
@@ -17,7 +18,7 @@ OUT="tests3/run_${NAME}.lua"
   echo 'local os = setmetatable({ clock = function() return M.clock() end }, { __index = os })'
   [ -n "$PRE" ] && echo "$PRE"
   echo 'local function __SCRIPT__()'
-  sed -e '0,/Debug = false,/s//Debug = true,/' "$SCRIPT"   # (config's first Debug line: the release has no comments)
+  sed -e '0,/Debug = false,/s//Debug = true,/' ${SEDX:+-e "$SEDX"} "$SCRIPT"   # (config's first Debug line: the release has no comments)
   echo ''
   echo '__T3 = import'
   echo 'end'

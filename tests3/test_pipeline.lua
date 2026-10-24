@@ -33,6 +33,9 @@ do
 	M.steps(10)
 	local perFrame = (creates - c0 - base) / 10
 	check(perFrame <= 1, "10 handlers in one stage make at most 1 thread a frame (" .. perFrame .. ")")
+	c0 = creates
+	M.steps(10)
+	eq(creates - c0 - base, 0, "a runner is reused from frame to frame: no new thread once running")
 	for _, rm in ipairs(removers) do rm() end
 end
 
@@ -60,6 +63,21 @@ M.simDt = nil
 s = table.concat(log, ",")
 check(s:find("c", 1, true) == nil and s:find("d", 1, true) == nil, "no physics handlers (" .. s .. ")")
 check(s:find("a", 1, true) ~= nil, "render handlers still ran")
+
+section("Heartbeat: after PostSimulation, every frame, also without a physics step")
+do
+	local hb = {}
+	local rmA = pipe:add("PostSimulation", 10, "hbPost", function() hb[#hb + 1] = "post" end)
+	local rmB = pipe:add("Heartbeat", 10, "hbBeat", function() hb[#hb + 1] = "beat" end)
+	M.step(1 / 60)
+	eq(table.concat(hb, ","), "post,beat", "Heartbeat handlers run after PostSimulation")
+	hb = {}
+	M.simDt = function() return 0 end
+	M.step(1 / 240)
+	M.simDt = nil
+	eq(table.concat(hb, ","), "beat", "Heartbeat runs in a frame without a physics step")
+	rmA(); rmB()
+end
 
 section("an erroring handler: others keep running, printed once, switched off after 5 frames in a row")
 local disabled = {}
@@ -93,6 +111,20 @@ check(recOff, "moduleDisabled names the module")
 local recPostAt = recPost
 M.steps(3)
 eq(recPost, recPostAt, "the module's handler in another stage stopped too")
+
+section("a kept module is never switched off")
+do
+	local off = false
+	bus:on("moduleDisabled", function(name) if name == "core" then off = true end end)
+	pipe:keep("core")
+	local after = 0
+	local rmE = pipe:add("PreRender", 50, "core.bad", function() error("core broke") end, "core")
+	local rmA = pipe:add("PreRender", 51, "core.after", function() after = after + 1 end, "core")
+	M.steps(8)
+	check(not off, "not switched off after 8 failing frames")
+	eq(after, 8, "its other handlers keep running")
+	rmE(); rmA()
+end
 
 section("a handler that yields")
 local afterYield = 0

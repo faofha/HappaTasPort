@@ -10,6 +10,21 @@ local Errors = import("kernel/errors")
 local State = import("kernel/state")
 local Bus = import("kernel/bus")
 local Pipeline = import("kernel/pipeline")
+local Settings = import("engine/settings")
+local Controls = import("engine/controls")
+local Typing = import("platform/typing")
+local Timeline = import("engine/timeline")
+local Plugins = import("engine/plugins")
+local Modes = import("engine/modes")
+local Frame = import("engine/frame")
+local Character = import("world/character")
+local CameraScript = import("platform/camerascript")
+local Camera = import("world/camera")
+local Inputs = import("world/inputs")
+local Cursor = import("world/cursor")
+local Animation = import("world/animation")
+local Tools = import("world/tools")
+local Merge = import("engine/merge")
 
 local Main = {}
 local kernel = nil
@@ -23,6 +38,43 @@ end
 
 -- (V2.38.x's Unload could take its thread's access to CoreGui away: each older copy unloads on a
 -- thread of its own)
+-- the engine: settings, the run's timeline, the world plugins, the mode machine and the frame loop, all
+-- owned by one lifecycle scope. On Unload the character is let go first (Idle, unanchored).
+local function startEngine(k)
+	local life = k.life:scope("engine")
+	local E = { life = life, errs = k.errs, bus = k.bus, state = k.state, pipe = k.pipe }
+	E.settings = Settings.new(k.errs)
+	E.controls = Controls.new()
+	E.typing = Typing.new(life)
+	E.tl = Timeline.new()
+	E.tl:addColumn("FrameTime", "f64", 1, { key = "FrameTime" })
+	E.tl:addColumn("TotalTime", "f64", 1, { key = "TotalTime" })
+	E.plugins = Plugins.new(k.errs)
+	local guard = function(obj, name) return Plugins.guard(k.errs, obj, name) end
+	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modalOpen ~= nil and E.modalOpen() end, getMode = function() return E.mode end }), "cameraScript")
+	E.char = guard(E.plugins:add(Character.new(E)), "character")
+	E.cam = guard(E.plugins:add(Camera.new(E)), "camera")
+	E.inputs = guard(E.plugins:add(Inputs.new(E)), "inputs")
+	E.cursor = guard(E.plugins:add(Cursor.new(E)), "cursor")
+	E.anim = guard(E.plugins:add(Animation.new(E)), "animation")
+	E.tools = guard(E.plugins:add(Tools.new(E)), "tools")
+	E.mergeRun = guard(E.plugins:add(Merge.new(E)), "merge")
+	E.modes = Modes.new(E)
+	k.pipe:keep("engine") -- (one failing call is reported; the engine's frame always goes on)
+	E.inputs:start() -- (before the engine's key dispatch, as in V2.38.16)
+	Frame.start(E)
+	E.cs:start()
+	E.char:start()
+	life:own(function()
+		pcall(E.modes.cancelDeferred, E.modes)
+		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end
+		local hrp = E.char.hrp
+		if hrp and hrp.Parent then hrp.Anchored = false end
+		E.plugins:call("onUnload")
+	end)
+	return E
+end
+
 local function unloadOlder()
 	local genv = Env.genv
 	for _, key in ipairs({ "__HappaTAS", "__HappaTAS3" }) do
@@ -48,8 +100,9 @@ function Main.Start()
 		k.bus = Bus.new(errs)
 		k.pipe = Pipeline.new(life, errs, k.bus)
 		k.pipe:start()
+		k.engine = startEngine(k)
 		if CONFIG.Debug then
-			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env }
+			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env, engine = k.engine }
 			share("__HappaTAS3_T", k.debug, errs)
 			print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
 		end
