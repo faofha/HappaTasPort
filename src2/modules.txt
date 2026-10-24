@@ -14,12 +14,12 @@ engine/settings
 engine/controls
 engine/timeline
 engine/plugins
-engine/stubs
 world/character
 world/camera
 world/inputs
 world/cursor
 world/animation
+world/tools
 engine/modes
 engine/frame
 main
