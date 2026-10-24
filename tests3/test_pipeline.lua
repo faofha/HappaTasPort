@@ -112,6 +112,20 @@ local recPostAt = recPost
 M.steps(3)
 eq(recPost, recPostAt, "the module's handler in another stage stopped too")
 
+section("a kept module is never switched off")
+do
+	local off = false
+	bus:on("moduleDisabled", function(name) if name == "core" then off = true end end)
+	pipe:keep("core")
+	local after = 0
+	local rmE = pipe:add("PreRender", 50, "core.bad", function() error("core broke") end, "core")
+	local rmA = pipe:add("PreRender", 51, "core.after", function() after = after + 1 end, "core")
+	M.steps(8)
+	check(not off, "not switched off after 8 failing frames")
+	eq(after, 8, "its other handlers keep running")
+	rmE(); rmA()
+end
+
 section("a handler that yields")
 local afterYield = 0
 pipe:add("PreSimulation", 5, "yielder", function() task.wait() end)

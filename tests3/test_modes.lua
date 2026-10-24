@@ -159,6 +159,36 @@ key(Enum.KeyCode.Three)
 eq(E.mode, 3, "a 2-frame run plays")
 M.steps(10)
 eq(E.mode, 1, "and ends")
+section("a plugin that keeps failing doesn't switch the engine off")
+do
+	local disabled = {}
+	E.bus:on("moduleDisabled", function(name) disabled[#disabled + 1] = name end)
+	local cam = E.plugins:get("camera")
+	local realHold = cam.holdPaused
+	cam.holdPaused = function() error("camera broke") end
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	click(); M.steps(4); click()
+	M.steps(12)
+	eq(#disabled, 0, "no module switched off")
+	local n = E.tl:count()
+	click(); M.steps(4)
+	check(E.tl:count() > n, "recording still works")
+	click(); M.steps(2)
+	local f = E.frame
+	key(Enum.KeyCode.F)
+	eq(E.frame, f - 1, "stepping back still works")
+	local reported = 0
+	for _, l in ipairs(M.logs) do if l:find("camera broke", 1, true) then reported = reported + 1 end end
+	eq(reported, 1, "the error is reported once")
+	cam.holdPaused = realHold
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	local kept = {}
+	for _, l in ipairs(M.logs) do if not l:find("camera broke", 1, true) then kept[#kept + 1] = l end end
+	M.logs = kept
+end
+
 section("a transition right after an unpause finishes it (jumping back on, not stuck in the first frame)")
 key(Enum.KeyCode.One)
 key(Enum.KeyCode.Two)

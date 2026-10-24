@@ -32,6 +32,33 @@ end
 
 function Plugins:get(name) return self.byName[name] end
 
+-- The engine calls the phase 2 plugins (and the camera script) by name, in V2.38.16's order. Each of those
+-- calls goes through a guard: an error is reported once per message as "name.method" and the call returns
+-- nothing, so one failing plugin never stops the engine's frame. Fields read and written through the guard
+-- are the object's own.
+function Plugins.guard(errs, obj, name)
+	local proxy = {}
+	local function make(k)
+		local label = name .. "." .. tostring(k)
+		local function finish(ok, ...)
+			if ok then return ... end
+			errs:report(label, (...))
+			return nil
+		end
+		return function(_, ...) return finish(pcall(obj[k], obj, ...)) end
+	end
+	return setmetatable(proxy, {
+		__index = function(_, k)
+			local v = obj[k]
+			if type(v) ~= "function" then return v end
+			local w = make(k)
+			rawset(proxy, k, w)
+			return w
+		end,
+		__newindex = function(_, k, v) obj[k] = v end,
+	})
+end
+
 function Plugins:call(hook, ...)
 	for _, p in ipairs(self.list) do
 		local f = p[hook]

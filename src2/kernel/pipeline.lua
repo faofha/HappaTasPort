@@ -20,7 +20,7 @@ local LATE_BIND = "HappaTAS3Late"
 function Pipeline.new(life, errs, bus)
 	local stages = {}
 	for _, s in ipairs(STAGES) do stages[s] = {} end
-	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, runners = {}, seq = 0, stopped = false, frame = 0 }, Pipeline)
+	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, runners = {}, kept = {}, seq = 0, stopped = false, frame = 0 }, Pipeline)
 end
 
 local function removeEntry(list, e)
@@ -42,6 +42,9 @@ function Pipeline:add(stage, order, name, fn, module)
 	table.insert(list, at, e)
 	return function() removeEntry(list, e) end
 end
+
+-- a module that is never switched off after errors (the engine: its errors are reported, the frame goes on)
+function Pipeline:keep(module) self.kept[module] = true end
 
 function Pipeline:disableModule(module, err)
 	for _, s in ipairs(STAGES) do
@@ -94,7 +97,7 @@ function Pipeline:run(stage, dt)
 			else
 				e.fails = e.fails + 1
 				self.errs:report(e.name, err)
-				if e.fails >= MAX_FAILS then self:disableModule(e.module, err) end
+				if e.fails >= MAX_FAILS and not self.kept[e.module] then self:disableModule(e.module, err) end
 			end
 		end
 	end
