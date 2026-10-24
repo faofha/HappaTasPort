@@ -6,6 +6,7 @@
 #   FIELDS="Cframe State"       V2 frame fields compared in the F group (default: all)
 #   SIDES="v2 v2"               which builds run as side a and side b (default: "v2 v3")
 #   UPTO="tag"                  compare only the lines before the first one with this step tag
+#   SCENARIO=bench              another session in tests3/trace/ (tools/bench3.sh uses this)
 # Prints "SAME (N lines)" or "DIFFERENT:" and the first differing lines (exit 2).
 # Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit b1569bd (V2.38.16),
 # never the working tree's src/parts.
@@ -43,7 +44,7 @@ build_side() { # SIDE OUT
       echo '__T3 = import'
     fi
     echo 'end'
-    cat tests/test_util.lua "$T/adapter_$side.lua" "$T/scenario.lua"
+    cat tests/test_util.lua "$T/adapter_$side.lua" "$T/${SCENARIO:-scenario}.lua"
   } > "$out"
 }
 
