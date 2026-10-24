@@ -24,5 +24,5 @@ function A.optimizeTwice()
 	E.modes:optimize()
 	M.steps(120)
 end
-function A.merge(frames, where) if E.modes.merge then E.modes:merge(frames, where) end end
-function A.mergeClick() if E.modes.mergeClick then E.modes:mergeClick() end end
+function A.merge(frames, where) E.mergeRun:startMerge(frames, where) end
+function A.mergeClick() E.mergeRun:finishMerge() end

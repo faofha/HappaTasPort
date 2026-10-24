@@ -20,6 +20,7 @@ world/inputs
 world/cursor
 world/animation
 world/tools
+engine/merge
 engine/modes
 engine/frame
 main

@@ -28,7 +28,7 @@ function Cursor.new(E)
 		st = { fake = false, realHidden = false, hideAt = nil, icon = nil, prevIcon = true, test = false, wasLocked = false,
 			anchorX = 0, anchorY = 0, virtX = 0, virtY = 0, lastYaw = nil, lastPitch = nil, lastFrame = nil, lastVersion = nil } }, Cursor)
 	pcall(function() self.ugs = UserSettings():GetService("UserGameSettings") end)
-	E.life:own(function() self:cursorReset() end)
+	E.life:own(function() self:onCursorReset() end)
 	return self
 end
 
@@ -106,7 +106,7 @@ function Cursor:showReal()
 	pcall(function() self.uis.MouseIconEnabled = st.prevIcon ~= false end)
 end
 
-function Cursor:cursorReset()
+function Cursor:onCursorReset()
 	self:showReal()
 	self:hideFake()
 	local st = self.st
@@ -189,7 +189,7 @@ function Cursor:update(tl, f)
 	local E, st = self.E, self.st
 	self.frameNo = self.frameNo + 1
 	if not E.settings:on("nohboardCursor") or not self.uis.MouseEnabled then
-		if st.fake or st.realHidden then self:cursorReset() end
+		if st.fake or st.realHidden then self:onCursorReset() end
 		return
 	end
 	local mode = E.mode
@@ -198,9 +198,9 @@ function Cursor:update(tl, f)
 		self:testStep(tl, f)
 		return
 	end
-	if st.test then self:cursorReset() end
+	if st.test then self:onCursorReset() end
 	if mode ~= 2 then
-		if st.fake or st.realHidden then self:cursorReset() end
+		if st.fake or st.realHidden then self:onCursorReset() end
 		return
 	end
 	local cs = E.cs

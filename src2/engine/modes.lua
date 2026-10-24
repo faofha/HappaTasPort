@@ -70,10 +70,10 @@ function Modes:loadFrame(i, unpausing, backtrack)
 		E.cam:update(i)
 		if E.mode == 2 then
 			if self:setCam() and not E.lookAround then E.cs:updateGhost(E.cam:zoomAt(tl, i), 0, true) end
-			E.plugins:call("showFrame", tl, i)
+			E.plugins:call("onShowFrame", tl, i)
 		end
 	else
-		E.plugins:call("restoreUnpause", tl, i)
+		E.plugins:call("onRestoreUnpause", tl, i)
 		if self:setCam() then
 			local z = E.cam:zoomAt(tl, i)
 			E.cs:setZoom(z, true)
@@ -93,7 +93,7 @@ function Modes:removeCutFrames()
 	local E = self.E
 	if E.tl:count() > E.frame then
 		E.tl:cut(E.frame)
-		E.plugins:call("dataChanged")
+		E.plugins:call("onDataChanged")
 	end
 end
 
@@ -159,9 +159,9 @@ function Modes:idle()
 	E.cs:lockShiftlock(false)
 	E.anim:lock(false)
 	E.cs:setFreeMouse(false)
-	E.plugins:call("release")
+	E.plugins:call("onRelease")
 	E.tools:replayEnd()
-	E.plugins:call("cursorReset")
+	E.plugins:call("onCursorReset")
 	E.cs:refreshMouse(E.modalOpen and E.modalOpen())
 	E.guardFrames = 45
 	self:publish()
@@ -172,7 +172,7 @@ function Modes:create(force)
 	if self:doubleInput() and not force then return end
 	E.deferred = nil
 	if E.inputs:isReplaying() then E.inputs:replayEnd() end
-	E.plugins:call("endPlayback")
+	E.plugins:call("onEndPlayback")
 	E.tools:replayEnd()
 	camType(Enum.CameraType.Custom)
 	local tl = E.tl
@@ -188,7 +188,7 @@ function Modes:create(force)
 		if self:setCam() then E.cs:updateGhost(z, 0, true) else E.cs:resetGhost(true) end
 	else
 		E.cs:resetGhost(true)
-		E.plugins:call("pause", 0)
+		E.plugins:call("onPause", 0)
 	end
 	E.char:anchor(true)
 	E.cs:lockShiftlock(n > 0)
@@ -223,9 +223,9 @@ function Modes:test()
 	E.poseT = nil
 	if speed > 0 then
 		E.inputs:replayBegin(tl, E.frame)
-		E.plugins:call("playbackBegin", tl, E.frame)
+		E.plugins:call("onPlaybackBegin", tl, E.frame)
 	end
-	E.plugins:call("playbackBeginAlways", tl, E.frame)
+	E.plugins:call("onPlaybackBeginAlways", tl, E.frame)
 	E.tools:replayBegin(tl, E.frame, E.char.model)
 	self:publish()
 end
@@ -233,7 +233,7 @@ end
 local function beginRecordingAt(self)
 	local E = self.E
 	E.inputs:beginRecording(E.tl, E.merge and E.mergeBaseHeld or nil)
-	E.plugins:call("beginRecording", E.tl, E.tl:count())
+	E.plugins:call("onBeginRecording", E.tl, E.tl:count())
 	E.tools:clear()
 end
 
@@ -241,7 +241,7 @@ end
 local function unpauseFrom(self)
 	local E = self.E
 	self:removeCutFrames()
-	E.plugins:call("unpause", E.tl, E.tl:count())
+	E.plugins:call("onUnpause", E.tl, E.tl:count())
 	E.lookAround = false
 	E.anim:lock(false)
 	local n = E.tl:count()
@@ -292,8 +292,8 @@ function Modes:pause()
 	E.frame = n
 	E.cs:lockShiftlock(n > 0)
 	self:loadFrame(n)
-	E.plugins:call("rewind", tl, n) -- (the step after the last frame is thrown away: the kit's clock too)
-	E.plugins:call("pause", self:totalAt(n))
+	E.plugins:call("onRewind", tl, n) -- (the step after the last frame is thrown away: the kit's clock too)
+	E.plugins:call("onPause", self:totalAt(n))
 	self:publish()
 end
 
@@ -355,8 +355,8 @@ function Modes:resumeDeferred()
 		E.frame = n
 		E.cs:lockShiftlock(n > 0)
 		self:loadFrame(n, false, true)
-		E.plugins:call("rewind", tl, n)
-		E.plugins:call("pause", self:totalAt(n))
+		E.plugins:call("onRewind", tl, n)
+		E.plugins:call("onPause", self:totalAt(n))
 		self:publish()
 	end
 end
@@ -407,8 +407,8 @@ function Modes:deleteTas(mobile)
 	if os.clock() < self.confirmDelete then
 		self.confirmDelete = 0
 		E.tl:cut(0)
-		E.plugins:call("dataChanged")
-		E.plugins:call("reset")
+		E.plugins:call("onDataChanged")
+		E.plugins:call("onReset")
 		E.lastPause = 1
 		E.frame = 0
 		self:status("TAS Deleted")
@@ -428,7 +428,7 @@ function Modes:optimize(mobile)
 	if os.clock() < self.confirmOptimize then
 		self.confirmOptimize = 0
 		E.tl:optimize()
-		E.plugins:call("dataChanged")
+		E.plugins:call("onDataChanged")
 		self:status("TAS Optimized")
 	else
 		self.confirmOptimize = os.clock() + CONFIRM_SECONDS
@@ -446,8 +446,8 @@ end
 function Modes:setRun(frames)
 	local E = self.E
 	E.tl:replaceFromV2(frames or {})
-	E.plugins:call("dataChanged")
-	E.plugins:call("loaded", E.tl)
+	E.plugins:call("onDataChanged")
+	E.plugins:call("onLoaded", E.tl)
 	if E.mode == 2 then
 		local n = E.tl:count()
 		E.frame = n

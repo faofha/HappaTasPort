@@ -5,10 +5,12 @@
 --    attach(char)              a new character
 --    begin(tl, i)              PreRender: frame i was just appended (recording)
 --    fill(tl, i)               PreSimulation, or Heartbeat when the frame had no physics step
---    showFrame(tl, i)          paused on frame i (Create)
---    restoreUnpause(tl, i)     unpausing from frame i
---    playTo(tl, i, t)          Test: frame i at playback time t (nil without interpolation)
---    afterPhysics(tl, i), lateRender(), enter(mode), leave(mode), unload()
+--    lateRender()              the end of the render step
+--  and the "on..." hooks at V2.38.16's call sites (onShowFrame(tl, i) paused on frame i, onRestoreUnpause,
+--  onPlayTo(tl, i, t), onPause(t), onRewind, onRelease, onEndPlayback, onPlaybackBegin(Always),
+--  onBeginRecording, onUnpause, onStep(t), onPausedTick, onHeartbeatStart(mode), onFrameEnd(dt),
+--  onCreateStats(tl, f), onPlayedFrame, onAfterPhysics, onDataChanged, onReset, onLoaded, onCursorReset,
+--  onUnload). A plugin's own methods must not use these names (the registry would call them).
 --  Each call is protected: an error is reported once per message (the frame goes on).
 -- ================================================================================================
 local Plugins = {}

@@ -24,6 +24,7 @@ local Inputs = import("world/inputs")
 local Cursor = import("world/cursor")
 local Animation = import("world/animation")
 local Tools = import("world/tools")
+local Merge = import("engine/merge")
 
 local Main = {}
 local kernel = nil
@@ -56,6 +57,7 @@ local function startEngine(k)
 	E.cursor = E.plugins:add(Cursor.new(E))
 	E.anim = E.plugins:add(Animation.new(E))
 	E.tools = E.plugins:add(Tools.new(E))
+	E.mergeRun = E.plugins:add(Merge.new(E))
 	E.modes = Modes.new(E)
 	E.inputs:start() -- (before the engine's key dispatch, as in V2.38.16)
 	Frame.start(E)
@@ -65,7 +67,7 @@ local function startEngine(k)
 		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end
 		local hrp = E.char.hrp
 		if hrp and hrp.Parent then hrp.Anchored = false end
-		E.plugins:call("unload")
+		E.plugins:call("onUnload")
 	end)
 	return E
 end

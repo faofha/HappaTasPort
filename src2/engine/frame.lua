@@ -54,7 +54,7 @@ function Frame.start(E)
 			E.cam:update(p)
 			if M_:setCam() then E.cs:updateGhost(p.Zoom, dt, false) end
 		end
-		E.plugins:call("frameEnd", dt)
+		E.plugins:call("onFrameEnd", dt)
 	end
 
 	local function preSimulation(dt)
@@ -93,7 +93,7 @@ function Frame.start(E)
 			if f > 0 then E.inputs:replayTo(tl, f) end
 			if f + 1 > n or f == 0 then return end
 			E.inputs:replayMouse(tl, f)
-			E.plugins:call("playTo", tl, f, E.testTime)
+			E.plugins:call("onPlayTo", tl, f, E.testTime)
 			if tl:get("FrameTime", f + 1, 1) > 0.1 then
 				holdPose(f) -- a lag spike was recorded here: hold the frame instead of sliding through it
 				return
@@ -118,7 +118,7 @@ function Frame.start(E)
 			if f > tl:count() then return end
 			E.inputs:replayTo(tl, f)
 			E.inputs:replayMouse(tl, f)
-			E.plugins:call("playTo", tl, f, nil)
+			E.plugins:call("onPlayTo", tl, f, nil)
 			local frameTime = tl:get("FrameTime", f, 1)
 			if E.freezeRemaining > dt then
 				holdPose(f)
@@ -134,7 +134,7 @@ function Frame.start(E)
 			E.tools:replayFrame(tl, f, ch.model)
 			E.tools:step(ch.model, ch.hum)
 		end
-		E.plugins:call("playedFrame", tl, E.frame)
+		E.plugins:call("onPlayedFrame", tl, E.frame)
 	end
 
 	local function finishTest()
@@ -145,8 +145,8 @@ function Frame.start(E)
 		E.cs:resetGhost()
 		pcall(function() workspace.CurrentCamera.CameraType = Enum.CameraType.Custom end)
 		E.inputs:replayEnd()
-		E.plugins:call("endPlayback")
-		E.plugins:call("release")
+		E.plugins:call("onEndPlayback")
+		E.plugins:call("onRelease")
 		E.tools:replayEnd()
 		E.mode, E.frame = 1, 1
 		E.char:anchor(false)
@@ -156,7 +156,7 @@ function Frame.start(E)
 		E.cs:setFreeMouse(false)
 		E.cs:restoreAfterTest(endZoom, endShift)
 		E.guardFrames = 45
-		E.plugins:call("cursorReset")
+		E.plugins:call("onCursorReset")
 		if not E.quitTest and n > 0 and E.settings:on("showCompletionMessage") then
 			M_:status("TAS Completed [Time: " .. Util.toTime(tl:get("TotalTime", n, 1)) .. "]")
 		end
@@ -166,13 +166,13 @@ function Frame.start(E)
 	local function heartbeat(dt)
 		local mode = E.mode
 		if mode ~= 3 and E.inputs:isReplaying() then E.inputs:replayEnd() end
-		E.plugins:call("heartbeatStart", mode)
+		E.plugins:call("onHeartbeatStart", mode)
 		local ch = E.char
 		if ch:loaded() then
 			if mode == 2 then
 				local n = tl:count()
 				if E.paused then
-					E.plugins:call("pausedTick")
+					E.plugins:call("onPausedTick")
 					if n > 1 and E.back and E.frame > 1 then
 						E.frame = E.frame - 1
 						M_:loadFrame(E.frame, false, true)
@@ -183,7 +183,7 @@ function Frame.start(E)
 						M_:loadFrame(E.frame, false, true)
 						M_:publish()
 					end
-					E.plugins:call("step", M_:totalAt(E.frame))
+					E.plugins:call("onStep", M_:totalAt(E.frame))
 				else
 					if E.firstFrame and n == 1 then
 						local t = round(E.lastFrameTime * E.recScale, 1000000)
@@ -196,11 +196,11 @@ function Frame.start(E)
 					if tl:count() > 0 and not tl:isFilled(tl:count()) then tl:removeLast() end
 					n = tl:count()
 					E.frame = n
-					if n > 0 and not E.firstFrame then E.plugins:call("afterPhysics", tl, n) end
-					E.plugins:call("step", M_:totalAt(n))
+					if n > 0 and not E.firstFrame then E.plugins:call("onAfterPhysics", tl, n) end
+					E.plugins:call("onStep", M_:totalAt(n))
 					M_:publish()
 				end
-				E.plugins:call("createStats", tl, E.frame)
+				E.plugins:call("onCreateStats", tl, E.frame)
 			elseif mode == 3 and E.frame + 1 <= tl:count() and E.testTime >= 0 then
 				playbackStep(dt)
 				M_:publish()
