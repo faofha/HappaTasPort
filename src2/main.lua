@@ -64,6 +64,7 @@ local function startEngine(k)
 	E.cs:start()
 	E.char:start()
 	life:own(function()
+		pcall(E.modes.cancelDeferred, E.modes)
 		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end
 		local hrp = E.char.hrp
 		if hrp and hrp.Parent then hrp.Anchored = false end

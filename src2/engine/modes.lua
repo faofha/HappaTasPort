@@ -149,7 +149,7 @@ Modes.camType = camType
 
 function Modes:idle()
 	local E = self.E
-	E.deferred = nil
+	self:cancelDeferred()
 	E.cs:resetGhost()
 	camType(Enum.CameraType.Custom)
 	E.mode, E.frame = 1, 1
@@ -170,7 +170,7 @@ end
 function Modes:create(force)
 	local E = self.E
 	if self:doubleInput() and not force then return end
-	E.deferred = nil
+	self:cancelDeferred()
 	if E.inputs:isReplaying() then E.inputs:replayEnd() end
 	E.plugins:call("onEndPlayback")
 	E.tools:replayEnd()
@@ -199,6 +199,7 @@ end
 function Modes:test()
 	local E = self.E
 	if self:doubleInput() then return end
+	self:cancelDeferred()
 	local tl = E.tl
 	local n = tl:count()
 	if n < 2 then self:status("There is not enough TAS data to test.", true) return end
@@ -280,7 +281,7 @@ end
 function Modes:pause()
 	local E = self.E
 	if self:doubleInput() then return end
-	E.deferred = nil
+	self:cancelDeferred()
 	E.anim:lock(true)
 	E.paused = true
 	local cam = workspace.CurrentCamera
@@ -314,6 +315,16 @@ function Modes:unpause1()
 	noJump(E)
 	E.deferred = { kind = "unpause1", armed = false, frames = count }
 	self:publish()
+end
+
+-- another transition (or Unload) before a deferred step finished: the step ends here, jumping back on and
+-- out of the first recorded frame (V2's waiting thread always ran to its end)
+function Modes:cancelDeferred()
+	local E = self.E
+	if not E.deferred then return end
+	E.deferred = nil
+	self:endNoJump()
+	E.firstFrame = false
 end
 
 -- the deferred steps (Frame calls these at PreRender order 0, see Modes.new)
