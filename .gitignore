@@ -13,3 +13,9 @@ src2/.check3.lua
 tests3/run_*.lua
 wow3
 tests3/fixtures/*/HappaTAS3.lua
+
+# HappaTAS 3 trace parity outputs
+tests3/trace/ref/
+tests3/trace/out_*.txt
+tests3/trace/raw_*.txt
+tests3/trace/run_*.lua
