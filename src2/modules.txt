@@ -51,6 +51,13 @@ ui/tween
 ui/layout
 ui/kit/glass
 ui/kit/window
+ui/kit/base
+ui/kit/button
+ui/kit/toggle
+ui/kit/slider
+ui/kit/segmented
+ui/kit/field
+ui/kit/row
 ui/windows
 ui/app
 main

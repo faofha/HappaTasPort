@@ -186,6 +186,9 @@ function Windows:build(id)
 	local win = Window.build(self.ui.theme, self.ui.root.layer, def.title)
 	win.id, win.def, win.rects, win.min, win.z = id, def, {}, false, 0
 	self.windows[id] = win
+	-- (what the window's controls get: the theme, tweens, typing, and pointer rects in the window's layer)
+	win.ctx = { E = self.E, ui = self.ui, win = win, theme = self.ui.theme, tween = self.ui.tween, typing = self.E.typing,
+		pointer = { add = function(r, z) return self:addRect(win, r, 10 + (z or 0)) end, remove = function(r) self:removeRect(win, r) end } }
 	self:addRect(win, { gui = win.panel, onPress = function() self:focus(id) end }, 1)
 	local dragFrom = nil
 	self:addRect(win, { gui = win.titleBar,
