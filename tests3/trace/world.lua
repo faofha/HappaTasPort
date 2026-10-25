@@ -319,4 +319,70 @@ key(Enum.KeyCode.One)
 M.steps(3)
 modeLine("D.end")
 
+-- ---------------------------------------------------------------------------------------------- part E
+-- the Kit Clock: a kit module (its own environment, like the kit's) moves a platform every 0.25 s with
+-- task.wait, starts a 0.4 s push with task.delay and reads os.clock; recorded at 1x, paused, at 0.5x, tested
+local RSt = M.services.ReplicatedStorage
+local fw = Instance.new("Folder"); fw.Name = "Framework"; fw.Parent = RSt
+local kitF = Instance.new("Folder"); kitF.Name = "Kit"; kitF.Parent = fw
+local repo = Instance.new("Folder"); repo.Name = "Repository"; repo.Parent = kitF
+local ms = Instance.new("ModuleScript"); ms.Name = "Mover"; ms.Parent = repo
+local env = setmetatable({ script = ms }, { __index = setmetatable({ os = os }, { __index = getfenv(1) }) })
+local chunk = loadstring([[
+local Mo = { steps = 0, pushes = 0, clock0 = os.clock() }
+function Mo.Loop(p)
+	while true do
+		task.wait(0.25)
+		p.CFrame = p.CFrame + Vector3.new(0, 0, 1)
+		Mo.steps = Mo.steps + 1
+		if Mo.steps % 4 == 0 then
+			task.delay(0.4, function() Mo.pushes = Mo.pushes + 1 end)
+		end
+	end
+end
+function Mo.Clock() return os.clock() - Mo.clock0 end
+return Mo
+]], "=Mover")
+setfenv(chunk, env)
+local Mover = chunk()
+M.modules[ms] = Mover
+local plat = Instance.new("Part"); plat.Name = "KitPlatform"; plat.Anchored = true; plat.CFrame = CFrame.new(30, 3, 30); plat.Parent = workspace
+A.setSetting("Kit Scripts On TAS Clock", 0)
+M.steps(2)
+A.setSetting("Kit Scripts On TAS Clock", 1)
+M.steps(3)
+local loop = task.spawn(Mover.Loop, plat)
+local function kt(tag)
+	out("W.kit", tag, A.mode(), A.frame(), tostring(plat.CFrame.Position), Mover.steps, Mover.pushes, num(Mover.Clock()))
+end
+for i = 1, 30 do M.step(1 / 60); if i % 10 == 0 then kt("idle" .. i) end end
+key(Enum.KeyCode.Two)
+M.steps(3)
+click()
+for i = 1, 120 do M.step(1 / 60); if i % 6 == 0 then kt("rec" .. i) end end
+click()
+for i = 1, 60 do M.step(1 / 60); if i % 15 == 0 then kt("paused" .. i) end end
+A.setSetting("Speed Hack Speed", 0.5)
+A.setSetting("Speed Hack", 1)
+click()
+for i = 1, 120 do M.step(1 / 60); if i % 6 == 0 then kt("slow" .. i) end end
+click()
+M.steps(3)
+A.setSetting("Speed Hack", 0)
+kt("paused2")
+key(Enum.KeyCode.Three)
+M.steps(1)
+n = 0
+while A.mode() == 3 and n < 400 do
+	M.step(1 / 60)
+	n = n + 1
+	if n % 6 == 0 then kt("play" .. n) end
+end
+out("mode", "E.played", n)
+M.steps(3)
+kt("idle2")
+task.cancel(loop)
+plat:Destroy()
+modeLine("E.end")
+
 finish()

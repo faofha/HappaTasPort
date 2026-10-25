@@ -38,6 +38,7 @@ world/clientobjects
 world/buttons
 world/lighting
 world/time/control
+world/kit/clock
 engine/merge
 engine/modes
 engine/frame

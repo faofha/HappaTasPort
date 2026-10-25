@@ -30,6 +30,7 @@ function Frame.start(E)
 		tl:setFilled(n)
 	end
 
+	local lastRate = 1
 	local function preRender(dt)
 		E.plugins:call("onFrameStart")
 		local mode = E.mode
@@ -63,7 +64,11 @@ function Frame.start(E)
 		local hum = ch.hum
 		local recording = mode == 2 and (not E.paused or E.firstFrame) and ch:loaded() and hum.Health > 0
 		E.recScale = E.time:update(recording, hum, ch.hrp, mode ~= 3)
-		E.cs.timeRate = E.time.anim -- (the camera's zoom spring on the TAS clock)
+		local rate = E.time.anim
+		if rate ~= lastRate then -- (the camera's zoom spring on the TAS clock)
+			lastRate = rate
+			E.cs.timeRate = rate
+		end
 		-- the kit's objects on the TAS time of the frame shown, and the kit's clock: the TAS clock while
 		-- recording (x the speed hack), stopped while paused, the playback speed in Test
 		local kitRate = 1
@@ -100,14 +105,17 @@ function Frame.start(E)
 			ch.hum:Move(ch.hrp.AssemblyLinearVelocity)
 		end
 		-- Frame Step: does this physics step run, or is everything held for it; the humanoid's controllers
-		-- and coyote timer on the TAS clock (the frames time control is on for)
+		-- and coyote timer on the TAS clock (the frames time control is on for). (Outside Create there is
+		-- nothing to step or hold: time control is back to normal there, see TimeControl:update)
+		if E.mode ~= 2 then return end
 		E.time:stepBegin(dt)
-		if E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded() then
-			E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1)
+		if not E.paused or E.firstFrame then
+			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end
 	end
 
 	local function postSimulation(dt)
+		if E.mode ~= 2 then return end -- (see preSimulation)
 		E.time:stepEnd()
 		local ch = E.char
 		local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
