@@ -19,6 +19,7 @@ persist/value
 persist/lz4
 persist/codec6
 persist/v2reader
+persist/library
 engine/plugins
 world/character
 world/camera

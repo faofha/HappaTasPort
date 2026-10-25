@@ -114,4 +114,10 @@ function Files:delete(path)
 	return true
 end
 
+function Files:deleteFolder(path)
+	local ok, err = call(self.Env.delfolder, path)
+	if not ok then return false, err end
+	return true
+end
+
 return Files
