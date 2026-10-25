@@ -33,6 +33,12 @@ eq(#tracks, 1, "one track")
 eq(tracks[1].Animation.AnimationId, WALK, "walk")
 near(tracks[1].Speed, 16 / 14.5, 1e-9, "speed 16 / 14.5")
 
+section("running(speed): the walk animation from the humanoid clock's speed (V2.38.17)")
+A:running(8)
+near(playing()[1].Speed, 8 / 14.5, 1e-9, "speed 8 / 14.5")
+A:running(16)
+near(playing()[1].Speed, 16 / 14.5, 1e-9, "back to 16 / 14.5")
+
 section("recording: the animation numbers and the second frame's start state")
 key(Enum.KeyCode.Two)
 M.steps(2)

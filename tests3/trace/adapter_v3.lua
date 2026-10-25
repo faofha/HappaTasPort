@@ -18,6 +18,8 @@ function A.frameV2(i) return E.tl:toV2(i) end
 function A.frames() return E.tl:toV2All() end
 function A.setSetting(name, v) E.settings:set(Settings.byV2[name].key, v) end
 function A.char() return E.char.hrp, E.char.hum end
+function A.coReady() return E.co:isReady() end
+function A.coCount() return (E.co:counts()) end
 function A.optimizeTwice()
 	E.modes:optimize()
 	M.steps(2)

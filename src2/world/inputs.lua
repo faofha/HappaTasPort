@@ -6,8 +6,7 @@
 --  Columns: Input (list), Mouse (MX, MY, UVX, UVY), Viewport (list { VX, VY }: only when it changed).
 --  Keys bound to HappaTAS controls are never recorded or replayed. Nothing is recorded while the player
 --  types or a click lands on a HappaTAS window.
---  Replay: Windows "extended" keys go through VirtualInputManager (Real's keypress sends them without the
---  extended flag: Up came out as KeypadEight...), the others through keypress; keys held while the Roblox
+--  Replay: every key through keypress / keyrelease (V2.38.17: no VirtualInputManager); keys held while the Roblox
 --  window wasn't active are pressed when it is again; the real mouse is aimed through a measured fit
 --  (Real's mousemoveabs scales with integer maths) and each move is flushed with a 1 px step.
 -- ================================================================================================
@@ -56,7 +55,7 @@ local KEYLIST = {
 local ID_M1, ID_M2 = 96, 97
 Inputs.ID_M1, Inputs.ID_M2 = ID_M1, ID_M2
 
-local KEY_BY_ENUM, KEY_VK, KEY_SHORT, KEY_KC = {}, {}, {}, {}
+local KEY_BY_ENUM, KEY_VK, KEY_SHORT = {}, {}, {}
 for id, k in ipairs(KEYLIST) do
 	KEY_SHORT[id] = k[3]
 	if k[1] then
@@ -64,13 +63,9 @@ for id, k in ipairs(KEYLIST) do
 		if ok and item then
 			KEY_BY_ENUM[item] = id
 			KEY_VK[id] = k[2]
-			KEY_KC[id] = item
 		end
 	end
 end
--- Windows "extended" keys: Real's keypress sends their scancode without the extended-key flag
-local EXTENDED = { [0x21] = true, [0x22] = true, [0x23] = true, [0x24] = true, [0x25] = true, [0x26] = true,
-	[0x27] = true, [0x28] = true, [0x2D] = true, [0x2E] = true, [0x6F] = true, [0xA3] = true, [0xA5] = true }
 local MOUSE_BUTTON = { [Enum.UserInputType.MouseButton1] = true, [Enum.UserInputType.MouseButton2] = true,
 	[Enum.UserInputType.MouseButton3] = true }
 local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
@@ -88,10 +83,10 @@ local CAL_SPREAD = 150 -- px between the lowest and highest sample before the fi
 
 function Inputs.new(E)
 	local self = setmetatable({ E = E, held = {}, queue = {}, ownWindows = {}, mouseOverOwn = nil,
-		onLive = nil, onReplay = nil, controlIds = nil, controlKey = nil, lastVX = nil, lastVY = nil,
-		replay = { active = false, applied = 0, injected = {}, state = {}, recent = {}, lastMX = nil, lastMY = nil },
+		controlIds = nil, controlKey = nil, lastVX = nil, lastVY = nil,
+		replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil },
 		cal = { x = newAxis(), y = newAxis(), vx = 0, vy = 0, pend = nil },
-		uis = Env.svc("UserInputService"), gui = Env.svc("GuiService"), vim = Env.svc("VirtualInputManager") }, Inputs)
+		uis = Env.svc("UserInputService"), gui = Env.svc("GuiService") }, Inputs)
 	self.available = {
 		keys = Env.keypress ~= nil and Env.keyrelease ~= nil,
 		clicks = Env.mouse1press ~= nil and Env.mouse1release ~= nil and Env.mouse2press ~= nil and Env.mouse2release ~= nil,
@@ -173,13 +168,6 @@ function Inputs:start()
 		if self.held[id] then return end
 		self.held[id] = true
 		self:pushEvent(id)
-		-- a key / click the replay pressed itself comes back here like real input
-		local t = self.replay.recent[id]
-		if t then
-			self.replay.recent[id] = nil
-			if os.clock() - t < 0.5 then return end
-		end
-		if self.onLive then self.onLive(id, isMouseId(id), id == ID_M2) end
 	end)
 	E.life:connect(uis.InputEnded, function(inp)
 		local id = Inputs.idOf(inp)
@@ -284,22 +272,16 @@ function Inputs:allowed(id)
 	return self.available.keys and s:on("replayKeyboard") and KEY_VK[id] ~= nil
 end
 
--- an extended key through VirtualInputManager (false: not one, or no VirtualInputManager)
-function Inputs:vimKey(id, down)
-	local vim, kc = self.vim, KEY_KC[id]
-	if not (vim and kc and EXTENDED[KEY_VK[id]]) then return false end
-	return (pcall(vim.SendKeyEvent, vim, down, kc, false, game))
-end
 function Inputs:sendDown(id)
 	return (pcall(function()
 		if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press()
-		elseif not self:vimKey(id, true) then Env.keypress(KEY_VK[id]) end
+		else Env.keypress(KEY_VK[id]) end
 	end))
 end
 function Inputs:sendUp(id)
 	pcall(function()
 		if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release()
-		elseif not self:vimKey(id, false) then Env.keyrelease(KEY_VK[id]) end
+		else Env.keyrelease(KEY_VK[id]) end
 	end)
 end
 
@@ -309,7 +291,6 @@ function Inputs:press(id)
 	if rp.injected[id] or not self:allowed(id) or not self:windowActive() then return end
 	if self:sendDown(id) then
 		rp.injected[id] = true
-		rp.recent[id] = os.clock()
 	end
 end
 function Inputs:release(id)
@@ -329,7 +310,6 @@ function Inputs:applyEvent(e)
 		end
 	elseif e > 0 then
 		self:press(e)
-		if self.onReplay then self.onReplay(e, isMouseId(e), e == ID_M2) end
 	else
 		self:release(-e)
 	end

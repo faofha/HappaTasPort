@@ -30,14 +30,21 @@ function Frame.start(E)
 		tl:setFilled(n)
 	end
 
+	local lastRate = 1
+	local kitCur = E.kitObjects.cur -- (the kit objects' state: Idle has nothing to release once they are off)
 	local function preRender(dt)
+		E.plugins:call("onFrameStart")
 		local mode = E.mode
 		if not (mode == 2 and (not E.paused or E.firstFrame)) then E.inputs:clear() end
 		local ch = E.char
 		if mode == 2 and ch:loaded() then
-			if not E.paused and ch:notDead() and not E.firstFrame then
+			E.time:frameStart() -- (Frame Step is only ever on in Create)
+			-- (Frame Step: only a frame whose physics step ran is a new frame, its time = the time that step
+			-- simulated)
+			local stepT = E.time:stepTime()
+			if not E.paused and ch:notDead() and not E.firstFrame and (stepT == nil or stepT > 0) then
 				local n = tl:count()
-				local dtN = E.lastFrameTime * E.recScale
+				local dtN = stepT or E.lastFrameTime * E.recScale
 				local ft = round(dtN, 1000000)
 				local total = (n >= 1) and round(tl:get("TotalTime", n, 1) + dtN, 1000000) or ft
 				E.recSim, E.recWall = time(), os.clock()
@@ -54,10 +61,39 @@ function Frame.start(E)
 			E.cam:update(p)
 			if M_:setCam() then E.cs:updateGhost(p.Zoom, dt, false) end
 		end
+		-- time control: on while the character records (Create, unpaused or the first frame of an unpause,
+		-- alive), for the physics step that comes next (V2.38.17 p18_core.lua 1107-1130)
+		local hum = ch.hum
+		local recording = mode == 2 and (not E.paused or E.firstFrame) and ch:loaded() and hum.Health > 0
+		E.recScale = E.time:update(recording, hum, ch.hrp, mode ~= 3)
+		local rate = E.time.anim
+		if rate ~= lastRate then -- (the camera's zoom spring on the TAS clock)
+			lastRate = rate
+			E.cs.timeRate = rate
+		end
+		-- the kit's objects on the TAS time of the frame shown, and the kit's clock: the TAS clock while
+		-- recording (x the speed hack), stopped while paused, the playback speed in Test
+		local kitRate = 1
+		if mode == 2 then
+			local rec = not E.paused or E.firstFrame
+			local n = tl:count()
+			local f = rec and n or E.frame
+			local t = (f >= 1 and f <= n) and tl:get("TotalTime", f, 1) or 0
+			E.kitObjects:frame(2, tl, f, t, rec and n > 0)
+			-- (Frame Step: stopped, moved on by each physics step that runs)
+			kitRate = (rec and not E.time:stepping()) and E.recScale or 0
+		elseif mode == 3 then
+			E.kitObjects:frame(3, tl, E.frame, E.testTime, false)
+			kitRate = math.max(0, E.settings:get("playbackSpeed"))
+		elseif kitCur.on then
+			E.kitObjects:frame(1, tl, 0, 0, false)
+		end
+		E.kitClock:setRate(kitRate)
 		E.plugins:call("onFrameEnd", dt)
 	end
 
 	local function preSimulation(dt)
+		E.plugins:call("onPreSimulation", dt)
 		local ch = E.char
 		if E.mode == 2 and ch:loaded() and not E.paused and not E.firstFrame and ch:notDead() then
 			fillFrame()
@@ -70,6 +106,22 @@ function Frame.start(E)
 			end
 			ch.hum:Move(ch.hrp.AssemblyLinearVelocity)
 		end
+		-- Frame Step: does this physics step run, or is everything held for it; the humanoid's controllers
+		-- and coyote timer on the TAS clock (the frames time control is on for). (Outside Create there is
+		-- nothing to step or hold: time control is back to normal there, see TimeControl:update)
+		if E.mode ~= 2 then return end
+		E.time:stepBegin(dt)
+		if not E.paused or E.firstFrame then
+			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
+		end
+	end
+
+	local function postSimulation(dt)
+		if E.mode ~= 2 then return end -- (see preSimulation)
+		E.time:stepEnd()
+		local ch = E.char
+		local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
+		E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
 	end
 
 	-- ---------------------------------------------------------------------------------------- playback
@@ -138,6 +190,7 @@ function Frame.start(E)
 	end
 
 	local function heartbeat(dt)
+		E.time:stepEnd() -- (Frame Step: whatever was held for the physics step goes on)
 		local mode = E.mode
 		if mode ~= 3 and E.inputs:isReplaying() then E.inputs:replayEnd() end
 		E.plugins:call("onHeartbeatStart", mode)
@@ -213,6 +266,7 @@ function Frame.start(E)
 	pipe:add("PreRender", 0, "engine.deferred", function() M_:resumeDeferred() end, MOD)
 	pipe:add("PreRender", 50, "engine.preRender", preRender, MOD)
 	pipe:add("PreSimulation", 50, "engine.preSimulation", preSimulation, MOD)
+	pipe:add("PostSimulation", 50, "engine.postSimulation", postSimulation, MOD)
 	pipe:add("Heartbeat", 50, "engine.heartbeat", heartbeat, MOD)
 	pipe:add("Heartbeat", 90, "engine.armDeferred", function()
 		local d = E.deferred

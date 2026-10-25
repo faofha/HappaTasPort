@@ -4,7 +4,17 @@
 --  feature it serves switches itself off (Env.has). Services come through cloneref when the executor
 --  has it (a second reference to the same service, not the game's own).
 -- ================================================================================================
+local CONFIG = import("config")
 local Env = {}
+
+-- a Debug note, printed once per text (a feature that switched itself off for a missing executor function)
+local noted = {}
+function Env.debugNote(text)
+	if CONFIG.Debug and not noted[text] then
+		noted[text] = true
+		print("[HappaTAS3] " .. text)
+	end
+end
 
 local function fn(...)
 	for i = 1, select("#", ...) do
@@ -44,6 +54,34 @@ Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mouse
 Env.getcustomasset = fn(getcustomasset, getsynasset)
 Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
 if not Env.gethui then Env.gethui = fn(synT.gethui) end
+
+-- the environment of a game function (the Kit Clock puts its own task / os into the EToH kit's module
+-- environments). The function that gives it is found by a computed name in Roblox's environment (getrenv), the
+-- executor's (getgenv) or _G: Luau switches its fast paths off for any script that names it, and HappaTAS 3's
+-- own code never does (tools/test_all3.sh checks the build). Only used on kit functions; nil without it.
+do
+	local name = "get" .. "fenv"
+	local getrenvF = fn(getrenv)
+	local found = nil
+	if getrenvF then
+		local ok, f = pcall(function() return getrenvF()[name] end)
+		if ok and type(f) == "function" then found = f end
+	end
+	if not found then
+		local ok, f = pcall(function() return Env.genv[name] end)
+		if ok and type(f) == "function" then found = f end
+	end
+	if not found then
+		local ok, f = pcall(function() return _G[name] end)
+		if ok and type(f) == "function" then found = f end
+	end
+	if found then
+		Env.envOf = function(f)
+			if type(f) ~= "function" or (Env.iscclosure and Env.iscclosure(f)) then return nil end
+			return found(f)
+		end
+	end
+end
 
 local FEATURES = {
 	files = { "writefile", "readfile", "isfile", "isfolder", "makefolder" },

@@ -144,6 +144,23 @@ do
 	camsAvailable = true
 end
 
+section("no getgc fallback without filtergc (V2.38.17)")
+do
+	local Env = __T3("platform/env")
+	local savedF = Env.filtergc
+	Env.filtergc = nil
+	local g0 = M.gcCalls.getgc
+	local life4 = Lifecycle.new("cs4")
+	local cs4 = CameraScript.new(life4, Errors.new(function() end), {})
+	cs4:start()
+	M.steps(80)
+	eq(M.gcCalls.getgc, g0, "getgc(true) never called")
+	eq(#cs4.zoomControllers, 0, "no zoom controllers without filtergc")
+	cs4:restore()
+	life4:cleanup()
+	Env.filtergc = savedF
+end
+
 section("without hookfunction the table field is swapped, and put back")
 do
 	local Env = __T3("platform/env")

@@ -42,6 +42,7 @@ function Persist:save(name, folder, asAttempt)
 	local clean = Files.cleanName(name)
 	if not clean then return false, "Invalid name" end
 	if asAttempt then clean = E.library:nextAttemptName(clean, folder) end
+	E.plugins:call("onSave", E.tl) -- (the plugins' id tables into tl.meta before the file is built)
 	E.busy = "saving"
 	task.spawn(function()
 		task.wait() -- (the work starts on the next frame: the caller's frame isn't held up)
@@ -74,7 +75,11 @@ function Persist:load(path)
 			local data, err = E.library:read(path)
 			if not data then error(err or "the file could not be read", 0) end
 			fresh = Timeline.newLike(E.tl)
-			return Run.load(fresh, data)
+			local header = Run.load(fresh, data)
+			-- (the file's ids translated to this session's on the new run, before the engine takes it: V2 did
+			-- it in Store.LoadSlot, before SetTAS; a translation may yield, the run in use is never half done)
+			E.plugins:call("onLoading", fresh)
+			return header
 		end)
 		if ok then
 			E.tl:adopt(fresh)

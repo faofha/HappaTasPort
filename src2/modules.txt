@@ -30,6 +30,16 @@ world/inputs
 world/cursor
 world/animation
 world/tools
+world/co/format
+world/co/registry
+world/co/recorder
+world/co/player
+world/clientobjects
+world/buttons
+world/lighting
+world/time/control
+world/kit/clock
+world/kit/objects
 engine/merge
 engine/modes
 engine/frame

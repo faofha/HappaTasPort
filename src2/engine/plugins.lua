@@ -10,14 +10,17 @@
 --  onPlayTo(tl, i, t), onPause(t), onRewind, onRelease, onEndPlayback, onPlaybackBegin(Always),
 --  onBeginRecording, onUnpause, onStep(t), onPausedTick, onHeartbeatStart(mode), onFrameEnd(dt),
 --  onCreateStats(tl, f), onPlayedFrame, onAfterPhysics, onDataChanged, onReset, onLoaded, onCursorReset,
---  onUnload). A plugin's own methods must not use these names (the registry would call them).
+--  onUnload), and phase 4's onFrameStart (first in PreRender), onPreSimulation(dt) (first in PreSimulation),
+--  onCut(tl, n) (frames after n were cut when unpausing), onSave(tl) (before a file is built),
+--  onLoading(tl) (a loaded run before the engine takes it: its ids translated, may yield). A plugin's own methods must not use these names (the registry would call them).
 --  Each call is protected: an error is reported once per message (the frame goes on).
 -- ================================================================================================
 local Plugins = {}
 Plugins.__index = Plugins
 
 function Plugins.new(errs)
-	return setmetatable({ list = {}, byName = {}, errs = errs }, Plugins)
+	-- (byHook: for each hook, the plugins that have it, in order; made on the first call, dropped by add / remove)
+	return setmetatable({ list = {}, byName = {}, byHook = {}, errs = errs }, Plugins)
 end
 
 function Plugins:add(p)
@@ -27,7 +30,18 @@ function Plugins:add(p)
 	end
 	table.insert(self.list, at, p)
 	self.byName[p.name] = p
+	self.byHook = {}
 	return p
+end
+
+function Plugins:remove(name)
+	local p = self.byName[name]
+	if not p then return end
+	for i, q in ipairs(self.list) do
+		if q == p then table.remove(self.list, i) break end
+	end
+	self.byName[name] = nil
+	self.byHook = {}
 end
 
 function Plugins:get(name) return self.byName[name] end
@@ -60,12 +74,18 @@ function Plugins.guard(errs, obj, name)
 end
 
 function Plugins:call(hook, ...)
-	for _, p in ipairs(self.list) do
-		local f = p[hook]
-		if f then
-			local ok, err = pcall(f, p, ...)
-			if not ok then self.errs:report(p.name .. "." .. hook, err) end
+	local list = self.byHook[hook]
+	if not list then
+		list = {}
+		for _, p in ipairs(self.list) do
+			if p[hook] then list[#list + 1] = p end
 		end
+		self.byHook[hook] = list
+	end
+	for i = 1, #list do
+		local p = list[i]
+		local ok, err = pcall(p[hook], p, ...)
+		if not ok then self.errs:report(p.name .. "." .. hook, err) end
 	end
 end
 

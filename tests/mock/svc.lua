@@ -48,6 +48,9 @@ cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2, GlobalShadows = tr
 	EnvironmentSpecularScale = 1, ExposureCompensation = 0, FogStart = 0, FogEnd = 100000, GeographicLatitude = 0,
 	ShadowSoftness = 0.2, Ambient = Color3.new(0, 0, 0), OutdoorAmbient = Color3.fromRGB(128, 128, 128),
 	ColorShift_Bottom = Color3.new(0, 0, 0), ColorShift_Top = Color3.new(0, 0, 0), FogColor = Color3.fromRGB(192, 192, 192) })
+-- (two of the lighting effects Sync Lighting records: HappaTAS 3's lighting tests)
+cls("ColorCorrectionEffect", "Instance", { Brightness = 0, Contrast = 0, Saturation = 0, TintColor = Color3.new(1, 1, 1), Enabled = true })
+cls("BloomEffect", "Instance", { Intensity = 1, Size = 24, Threshold = 2, Enabled = true })
 cls("ReplicatedStorage", "Instance")
 cls("ReplicatedFirst", "Instance")
 cls("SoundService", "Instance", { RespectFilteringEnabled = true })

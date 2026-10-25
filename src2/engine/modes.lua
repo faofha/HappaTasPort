@@ -94,6 +94,7 @@ function Modes:removeCutFrames()
 	if E.tl:count() > E.frame then
 		E.tl:cut(E.frame)
 		E.plugins:call("onDataChanged")
+		E.plugins:call("onCut", E.tl, E.frame)
 	end
 end
 
@@ -149,6 +150,7 @@ Modes.camType = camType
 
 function Modes:idle()
 	local E = self.E
+	E.time:coyoteReset(E.char.hum)
 	self:cancelDeferred()
 	E.cs:resetGhost()
 	camType(Enum.CameraType.Custom)
@@ -284,6 +286,7 @@ function Modes:pause()
 	self:cancelDeferred()
 	E.anim:lock(true)
 	E.paused = true
+	E.time:coyoteReset(E.char.hum) -- (its state is kept with each frame: CY)
 	local cam = workspace.CurrentCamera
 	E.pausedCamCF = cam and cam.CFrame or E.pausedCamCF
 	E.pausedZoom = E.cs:getZoom()
@@ -361,6 +364,7 @@ function Modes:resumeDeferred()
 		E.deferred = nil
 		E.anim:lock(true)
 		E.paused = true
+		E.time:coyoteReset(E.char.hum) -- (its state is kept with each frame: CY)
 		local tl = E.tl
 		local n = tl:count()
 		E.frame = n
@@ -529,7 +533,10 @@ end
 
 -- replaces the run (a loaded file); in Create the character goes to its last frame
 function Modes:setRun(frames)
-	self.E.tl:replaceFromV2(frames or {})
+	frames = frames or {}
+	self.E.tl:replaceFromV2(frames)
+	-- (a new run, like V2's SetTAS with the table given: only its own KitVersion comes with it)
+	self.E.tl.meta = { kitVersion = frames.KitVersion }
 	self:runLoaded()
 end
 

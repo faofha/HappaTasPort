@@ -1,0 +1,2 @@
+VARIANT="plain"
+VARIANT="bare"; filtergc = nil; getconnections = nil; getloadedmodules = nil; hookfunction = nil; restorefunction = nil
