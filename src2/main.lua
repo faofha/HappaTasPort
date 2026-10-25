@@ -36,6 +36,7 @@ local Library = import("persist/library")
 local Run = import("persist/run")
 local Persist = import("persist/persist")
 local SettingsFile = import("persist/settingsfile")
+local UIApp = import("ui/app")
 
 local Main = {}
 local kernel = nil
@@ -90,6 +91,7 @@ local function startEngine(k)
 	Frame.start(E)
 	E.cs:start()
 	E.char:start()
+	UIApp.start(E) -- (the interface: E.ui; its own scope, undone after the character is let go)
 	life:own(function()
 		pcall(E.modes.cancelDeferred, E.modes)
 		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end
