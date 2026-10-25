@@ -16,6 +16,8 @@ engine/controls
 engine/timeline
 persist/bytes
 persist/value
+persist/lz4
+persist/codec6
 engine/plugins
 world/character
 world/camera
