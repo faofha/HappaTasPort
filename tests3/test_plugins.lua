@@ -98,10 +98,28 @@ do
 	E.library = saved
 	E.modes:request("idle")
 	M.steps(2)
-	for _, p in ipairs({ "p45", "p56" }) do
-		for i, q in ipairs(E.plugins.list) do if q.name == p then table.remove(E.plugins.list, i) break end end
-		E.plugins.byName[p] = nil
-	end
+	E.plugins:remove("p45")
+	E.plugins:remove("p56")
+end
+
+section("hook lists: a plugin added later is called, a removed one isn't")
+do
+	local Plugins = __T3("engine/plugins")
+	local errs = __T3("kernel/errors").new(function() end)
+	local reg = Plugins.new(errs)
+	local calls = {}
+	reg:add({ name = "a", order = 10, onX = function() calls[#calls + 1] = "a" end })
+	reg:call("onX")
+	reg:add({ name = "b", order = 5, onX = function() calls[#calls + 1] = "b" end })
+	reg:call("onX")
+	eq(table.concat(calls, ","), "a,b,a", "b joins in its order")
+	calls = {}
+	reg:remove("a")
+	reg:call("onX")
+	eq(table.concat(calls, ","), "b", "a no longer called")
+	eq(reg:get("a"), nil, "and gone by name")
+	reg:call("onNothing")
+	check(true, "a hook nobody has is fine")
 end
 
 section("columns marked save = false are not saved")

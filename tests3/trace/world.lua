@@ -190,4 +190,80 @@ M.steps(2)
 lt("off")
 modeLine("B.end")
 
+-- ---------------------------------------------------------------------------------------------- part C
+-- time control, Smooth: walking, a jump, a spinner (hinge motor), a conveyor (anchored part with a
+-- velocity), a free box, a VectorForce and a bounce pad's kit config, recorded at 0.5x and at 2x, tested
+M.humanoidPhysics = true
+M.robloxController = true
+local _, hum = A.char()
+local cfolder = Instance.new("Folder"); cfolder.Name = "ClientParts"; cfolder.Parent = workspace
+local function cpart(name, cf, anchored)
+	local p = Instance.new("Part"); p.Name = name; p.Size = Vector3.new(2, 1, 2); p.CFrame = cf; p.Anchored = anchored; p.Parent = cfolder
+	return p
+end
+local hub = cpart("Spinner", CFrame.new(20, 3, 0), false)
+local hinge = Instance.new("HingeConstraint"); hinge.ActuatorType = Enum.ActuatorType.Motor; hinge.AngularVelocity = -1.5
+hinge.MotorMaxTorque = 1e6; hinge.Parent = hub
+local conveyor = cpart("Conveyor", CFrame.new(-20, 3, 0), true)
+conveyor.AssemblyLinearVelocity = Vector3.new(0, 0, 10)
+local box = cpart("Box", CFrame.new(0, 10, 20), false)
+local push = Instance.new("VectorForce"); push.Force = Vector3.new(0, 0, 4000); push.Parent = box
+local padInst = Instance.new("Configuration"); padInst.Name = "BouncePadConfiguration"
+local padCfg = { __instance = padInst, __defaults = {}, Power = 100 }
+M.gcTables[#M.gcTables + 1] = padCfg
+local function tw(tag)
+	local hrp2 = A.char()
+	out("W.time", tag, A.mode(), A.frame(), num(workspace.Gravity), num(hum.WalkSpeed), num(hum.JumpPower),
+		num(hinge.AngularVelocity), num(hinge.MotorMaxTorque), tostring(conveyor.AssemblyLinearVelocity), tostring(push.Force),
+		num(padCfg.Power), num(box.AssemblyLinearVelocity.Y))
+	out("W.char", tag, tostring(hrp2.CFrame.Position), tostring(hrp2.AssemblyLinearVelocity), tostring(hum:GetState()))
+end
+local function runC(speed, tag)
+	A.setSetting("Speed Hack Speed", speed)
+	A.setSetting("Speed Hack", 1)
+	key(Enum.KeyCode.One)
+	M.steps(3)
+	key(Enum.KeyCode.Backspace); M.steps(2); key(Enum.KeyCode.Backspace); M.steps(2)
+	hrp.CFrame = CFrame.new(0, 3, 0)
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hum.MoveDirection = Vector3.zero
+	box.CFrame = CFrame.new(0, 10, 20)
+	box.AssemblyLinearVelocity = Vector3.zero
+	M.resetHumanoidModel()
+	M.resetRobloxController()
+	key(Enum.KeyCode.Two)
+	M.steps(3)
+	click()
+	for i = 1, 90 do
+		if i == 2 then hum.MoveDirection = Vector3.new(1, 0, 0) end
+		if i == 30 then M.jumpNow = true end
+		if i == 60 then local v = hrp.AssemblyLinearVelocity; hrp.AssemblyLinearVelocity = Vector3.new(v.X, padCfg.Power, v.Z) end
+		M.step(1 / 60)
+		if i % 6 == 0 then tw(tag .. ".rec" .. i) end
+	end
+	click()
+	M.steps(3)
+	tw(tag .. ".paused")
+	hum.MoveDirection = Vector3.zero
+	frames(tag .. ".recorded", { "FrameTime", "TotalTime", "SK" })
+	A.setSetting("Speed Hack", 0)
+	key(Enum.KeyCode.Three)
+	M.steps(1)
+	local m = 0
+	while A.mode() == 3 and m < 400 do
+		M.step(1 / 60)
+		m = m + 1
+		if m % 6 == 0 then tw(tag .. ".play" .. m) end
+	end
+	out("mode", tag .. ".played", m)
+	M.steps(3)
+end
+runC(0.5, "C05")
+runC(2, "C2")
+A.setSetting("Speed Hack Speed", 0.5)
+M.humanoidPhysics = false
+M.robloxController = false
+cfolder:Destroy()
+modeLine("C.end")
+
 finish()
