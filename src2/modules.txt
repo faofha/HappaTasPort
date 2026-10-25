@@ -48,5 +48,9 @@ ui/root
 ui/pointer
 ui/theme
 ui/tween
+ui/layout
+ui/kit/glass
+ui/kit/window
+ui/windows
 ui/app
 main
