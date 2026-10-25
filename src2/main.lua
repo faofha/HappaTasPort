@@ -25,6 +25,11 @@ local Cursor = import("world/cursor")
 local Animation = import("world/animation")
 local Tools = import("world/tools")
 local Merge = import("engine/merge")
+local Files = import("platform/files")
+local Library = import("persist/library")
+local Run = import("persist/run")
+local Persist = import("persist/persist")
+local SettingsFile = import("persist/settingsfile")
 
 local Main = {}
 local kernel = nil
@@ -45,6 +50,10 @@ local function startEngine(k)
 	local E = { life = life, errs = k.errs, bus = k.bus, state = k.state, pipe = k.pipe }
 	E.settings = Settings.new(k.errs)
 	E.controls = Controls.new()
+	-- (saved settings and keys before any plugin reads them)
+	E.files = Files.new(Env)
+	E.settingsFile = SettingsFile.new(E.files, E.settings, E.controls, life)
+	E.settingsFile:load()
 	E.typing = Typing.new(life)
 	E.tl = Timeline.new()
 	E.tl:addColumn("FrameTime", "f64", 1, { key = "FrameTime" })
@@ -59,6 +68,10 @@ local function startEngine(k)
 	E.anim = guard(E.plugins:add(Animation.new(E)), "animation")
 	E.tools = guard(E.plugins:add(Tools.new(E)), "tools")
 	E.mergeRun = guard(E.plugins:add(Merge.new(E)), "merge")
+	-- (data no plugin records yet, from V2 files: kept for phase 4; the library of this place's runs)
+	Run.registerCarry(E.tl)
+	E.library = Library.new(E.files, "HappaTasPort/" .. tostring(game.PlaceId))
+	E.persist = Persist.new(E)
 	E.modes = Modes.new(E)
 	k.pipe:keep("engine") -- (one failing call is reported; the engine's frame always goes on)
 	E.inputs:start() -- (before the engine's key dispatch, as in V2.38.16)
@@ -73,6 +86,44 @@ local function startEngine(k)
 		E.plugins:call("onUnload")
 	end)
 	return E
+end
+
+-- Saving and loading from the executor's console, until the phase 5 Library window:
+--   Save(name, folder?)   SaveAttempt(name, folder?)   Load(path)   List()
+-- Save / Load start the work and return true, "started" (the result shows as a status message), or false
+-- and why. Without file functions each returns false, "Saving is unavailable on this executor".
+local UNAVAILABLE = "Saving is unavailable on this executor"
+local function addSaveApi(handle, k)
+	local function engine()
+		local E = k.engine
+		if not E then return nil, "HappaTAS isn't running" end
+		if not E.files.available then return nil, UNAVAILABLE end
+		return E
+	end
+	handle.Save = function(name, folder)
+		local E, why = engine()
+		if not E then return false, why end
+		return E.persist:save(name, folder)
+	end
+	handle.SaveAttempt = function(name, folder)
+		local E, why = engine()
+		if not E then return false, why end
+		return E.persist:save(name, folder, true)
+	end
+	handle.Load = function(path)
+		local E, why = engine()
+		if not E then return false, why end
+		return E.persist:load(path)
+	end
+	handle.List = function()
+		local E, why = engine()
+		if not E then return false, why end
+		local out = {}
+		for _, e in ipairs(E.library:list()) do
+			out[#out + 1] = { path = e.path, name = e.name, frames = e.frames, length = e.length, saved = e.saved }
+		end
+		return out
+	end
 end
 
 local function unloadOlder()
@@ -93,6 +144,7 @@ function Main.Start()
 	local life = Lifecycle.new("HappaTAS3")
 	local handle = { Version = CONFIG.VERSION, Unload = Main.Unload }
 	local k = { errs = errs, life = life, handle = handle }
+	addSaveApi(handle, k)
 	kernel = k
 	share("__HappaTAS3", handle, errs)
 	local ok, err = pcall(function()
