@@ -30,7 +30,10 @@ world/inputs
 world/cursor
 world/animation
 world/tools
+world/co/format
 world/co/registry
+world/co/recorder
+world/clientobjects
 engine/merge
 engine/modes
 engine/frame

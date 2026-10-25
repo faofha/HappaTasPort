@@ -37,7 +37,7 @@ build_side() { # SIDE OUT
     if [ "$side" = v2 ]; then
       sed -e 's/^\(\s*\)Debug           = false,/\1Debug           = true,/' "$REF/src/HappaTAS_Executor.lua"
       echo ''
-      echo '__T = { Settings = Settings, Core = Core, Controls = Controls, InputSys = InputSys, Bridge = Bridge, AnimEngine = AnimEngine, Codec = Codec, Store = Store }'
+      echo '__T = { Settings = Settings, Core = Core, Controls = Controls, InputSys = InputSys, Bridge = Bridge, AnimEngine = AnimEngine, Codec = Codec, Store = Store, ClientObjects = ClientObjects }'
     else
       bash tools/build3.sh >/dev/null
       sed -e '0,/Debug = false,/s//Debug = true,/' src2/HappaTAS3.lua

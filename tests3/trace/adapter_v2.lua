@@ -16,6 +16,8 @@ function A.frameV2(i) return __T.Core.GetTAS()[i] end
 function A.frames() return __T.Core.GetTAS() end
 function A.setSetting(name, v) __T.Settings.Set(name, v) end
 function A.char() return C.HRP, C.Humanoid end
+function A.coReady() return __T.ClientObjects.IsReady() end
+function A.coCount() return (__T.ClientObjects.Counts()) end
 -- Optimize asks for a second press while its status text fades (the first call waits)
 function A.optimizeTwice()
 	M.resume(coroutine.create(function() C.inputs.Optimize() end))
