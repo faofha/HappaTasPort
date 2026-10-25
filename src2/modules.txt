@@ -33,6 +33,7 @@ world/tools
 world/co/format
 world/co/registry
 world/co/recorder
+world/co/player
 world/clientobjects
 engine/merge
 engine/modes

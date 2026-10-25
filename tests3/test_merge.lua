@@ -32,7 +32,7 @@ end
 section("no plugin method uses a registry hook's name")
 do
 	local expected = { begin = { character = true, camera = true, inputs = true }, fill = { character = true, animation = true, tools = true, clientobjects = true },
-		attach = { animation = true, tools = true }, lateRender = {} }
+		attach = { animation = true, tools = true }, lateRender = { clientobjects = true } }
 	local ok, bad = true, ""
 	for _, p in ipairs(E.plugins.list) do
 		for hook, owners in pairs(expected) do

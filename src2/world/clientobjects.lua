@@ -9,6 +9,7 @@
 local Format = import("world/co/format")
 local Registry = import("world/co/registry")
 local Recorder = import("world/co/recorder")
+local Player = import("world/co/player")
 
 local byte, sub = string.byte, string.sub
 local ClientObjects = { name = "clientobjects", order = 45 }
@@ -20,6 +21,8 @@ function ClientObjects.new(E)
 	local self = setmetatable({ E = E, settings = E.settings, dataVersion = 0, stampN = 0, onStartsAdded = nil }, ClientObjects)
 	self.reg = Registry.new(function(text) if E.modes then E.modes:status(text) end end)
 	self.rec = Recorder.new(self.reg, self)
+	self.player = Player.new(self.reg, self)
+	self.onStartsAdded = function() self.player:resetCheckpoints() end
 	E.tl:addColumn("v2CO", "list", 1, { key = "CO", keep = true })
 	-- (which recorded frame a timeline frame is: the recorder's start states and its "go on from here" check;
 	-- in memory only, moved with the frames by cuts and optimize, absent from loaded frames)
@@ -72,6 +75,23 @@ function ClientObjects:onDataChanged()
 	self.dataVersion = self.dataVersion + 1
 	if self.player then self.player:invalidate() end
 end
+
+-- ------------------------------------------------------------------------------------------------ playback
+function ClientObjects:onPlaybackBegin(tl, f) self.player:playbackBegin(tl, f) end
+function ClientObjects:onPlayTo(tl, f, t) self.player:playbackTo(tl, f, t) end
+function ClientObjects:onPausedTick() self.player:tick() end
+function ClientObjects:lateRender() self.player:renderStep() end
+function ClientObjects:onEndPlayback() self.player:endPlayback() end
+function ClientObjects:onShowFrame(tl, i) self.player:showFrame(tl, i) end
+function ClientObjects:onRestoreUnpause(tl, i) self.player:restoreUnpause(tl, i) end
+-- (V2 p18_core 1281-1282: playback ends outside Test, Idle lets every part go)
+function ClientObjects:onHeartbeatStart(mode)
+	local pl = self.player
+	if mode ~= 3 and pl:isTesting() then pl:endPlayback() end
+	if mode == 1 and pl:isHolding() then pl:release() end
+end
+function ClientObjects:isHolding() return self.player:isHolding() end
+function ClientObjects:isTesting() return self.player:isTesting() end
 
 -- ------------------------------------------------------------------------------------------------ for other plugins
 function ClientObjects:keyOf(inst) return self.reg:keyOf(inst) end

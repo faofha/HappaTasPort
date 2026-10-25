@@ -40,6 +40,10 @@ P2FIELDS="FrameTime TotalTime Cframe Velocity State Died CamCframe Zoom ShiftLoc
 tr=$(FIELDS="$P2FIELDS" bash tools/trace3.sh 2>&1 | head -12)
 echo "trace: $(echo "$tr" | head -1)"
 echo "$tr" | grep -q "^SAME" || { fail=1; echo "$tr"; }
+# client objects: V2's diffco trace (records byte for byte, part states, Test, save / load)
+tc=$(SCENARIO=diffco TGROUPS="mode F W.co" FIELDS="CO" bash tools/trace3.sh 2>&1 | head -12)
+echo "diffco trace: $(echo "$tc" | head -1)"
+echo "$tc" | grep -q "^SAME" || { fail=1; echo "$tc"; }
 bo=$(bash tools/bench3.sh 2>&1)
 echo "bench: $(echo "$bo" | tail -1)"
 echo "$bo" | grep -q "^BENCH OK" || { fail=1; echo "$bo"; }
