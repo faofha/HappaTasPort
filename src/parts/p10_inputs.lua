@@ -48,7 +48,7 @@ do
 	local ID_M1, ID_M2 = 96, 97
 	InputSys.ID_M1, InputSys.ID_M2 = ID_M1, ID_M2
 
-	local KEY_BY_ENUM, KEY_VK, KEY_SHORT, KEY_KC = {}, {}, {}, {}
+	local KEY_BY_ENUM, KEY_VK, KEY_SHORT = {}, {}, {}
 	for id, k in ipairs(KEYLIST) do
 		KEY_SHORT[id] = k[3]
 		if k[1] then
@@ -56,17 +56,9 @@ do
 			if ok and item then
 				KEY_BY_ENUM[item] = id
 				KEY_VK[id] = k[2]
-				KEY_KC[id] = item
 			end
 		end
 	end
-	-- Windows "extended" keys: their scancode needs the extended-key flag. Real's keypress sends the key's
-	-- scancode with KEYEVENTF_SCANCODE only (Real docs), so in the Roblox client Up came out as KeypadEight,
-	-- Left as KeypadFour, Home as KeypadSeven, RightControl as LeftControl, ... (tested). These keys are
-	-- replayed through VirtualInputManager:SendKeyEvent, which gives Roblox the exact KeyCode (tested too).
-	local EXTENDED = { [0x21] = true, [0x22] = true, [0x23] = true, [0x24] = true, [0x25] = true, [0x26] = true,
-		[0x27] = true, [0x28] = true, [0x2D] = true, [0x2E] = true, [0x6F] = true, [0xA3] = true, [0xA5] = true }
-
 	local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
 
 	-- keys bound to HappaTAS controls are never recorded or replayed
@@ -145,15 +137,6 @@ do
 		if live.held[id] then return end
 		live.held[id] = true
 		pushEvent(id)
-		-- a key / click the replay pressed itself comes back here like real input (found in the live
-		-- client: Sound Mode 0 = live only played the replayed keys, 2 played them twice)
-		local rp = InputSys.Replay
-		local t = rp and rp.recent[id]
-		if t then
-			rp.recent[id] = nil
-			if os.clock() - t < 0.5 then return end
-		end
-		if Sounds.PlayLive then Sounds.PlayLive(id, isMouseId(id), id == ID_M2) end
 	end
 
 	local function onEnded(inp, proc)
@@ -238,8 +221,7 @@ do
 	end
 
 	-- ------------------------------------------------------------------------------------ replay
-	-- recent: id -> os.clock() of the last press the replay sent (recognised when it comes back as input)
-	local replay = { active = false, applied = 0, injected = {}, state = {}, recent = {}, lastMX = nil, lastMY = nil }
+	local replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil }
 	InputSys.Replay = replay
 
 	local function allowed(id)
@@ -248,22 +230,16 @@ do
 		return InputSys.Available.Keys and Settings.On("Replay Keyboard") and KEY_VK[id] ~= nil
 	end
 
-	-- an extended key through VirtualInputManager (false: not one, or no VirtualInputManager)
-	local function vimKey(id, down)
-		local vim, kc = Env.VirtualInput, KEY_KC[id]
-		if not (vim and kc and EXTENDED[KEY_VK[id]]) then return false end
-		return (pcall(vim.SendKeyEvent, vim, down, kc, false, game))
-	end
 	local function sendDown(id)
 		return (pcall(function()
 			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press()
-			elseif not vimKey(id, true) then Env.keypress(KEY_VK[id]) end
+			else Env.keypress(KEY_VK[id]) end
 		end))
 	end
 	local function sendUp(id)
 		pcall(function()
 			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release()
-			elseif not vimKey(id, false) then Env.keyrelease(KEY_VK[id]) end
+			else Env.keyrelease(KEY_VK[id]) end
 		end)
 	end
 
@@ -272,7 +248,6 @@ do
 		if replay.injected[id] or not allowed(id) or not Env.WindowActive() then return end
 		if sendDown(id) then
 			replay.injected[id] = true
-			replay.recent[id] = os.clock()
 		end
 	end
 	local function release(id)
@@ -291,7 +266,6 @@ do
 			end
 		elseif e > 0 then
 			press(e)
-			if Sounds.PlayReplay then Sounds.PlayReplay(e, isMouseId(e), e == ID_M2) end
 		else
 			release(-e)
 		end

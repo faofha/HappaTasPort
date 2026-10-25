@@ -1,7 +1,6 @@
 -- ================================================================================================
 -- Real's input and garbage-collector functions, as measured in the Roblox client (V2.38.2):
---  * keypress sends scancodes without the extended-key flag: Up came out as KeypadEight, Home as
---    KeypadSeven, RightControl as LeftControl -> those keys go through VirtualInputManager
+--  * every key is replayed through the executor's keypress / keyrelease (VirtualInputManager is not used)
 --  * input functions send nothing while the Roblox window isn't active -> held keys are pressed when it is
 --  * mousemoveabs scales with integer maths and Roblox shows a move only at the next mouse event -> every
 --    move is followed by a 1 px step back and forth, and aimed through the measured fit
@@ -67,12 +66,8 @@ end
 S.Set("Replay Keyboard", 1)
 S.Set("Window Guarding", 1)
 
-section("extended keys go through VirtualInputManager with their exact KeyCode")
+section("every key, extended ones too, goes through keypress / keyrelease; VirtualInputManager is never used")
 do
-	local began = {}
-	local conn = M.services.UserInputService.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.Keyboard then began[inp.KeyCode.Name] = true end
-	end)
 	local data = {
 		{ Input = { id(Enum.KeyCode.Up), id(Enum.KeyCode.W), id(Enum.KeyCode.RightControl), id(Enum.KeyCode.Home), id(Enum.KeyCode.Left) } },
 		{ Input = { -id(Enum.KeyCode.Up), -id(Enum.KeyCode.W), -id(Enum.KeyCode.RightControl), -id(Enum.KeyCode.Home), -id(Enum.KeyCode.Left) } },
@@ -80,33 +75,15 @@ do
 	M.inputLog = {}
 	IS.ReplayBegin(data, 1)
 	IS.ReplayTo(data, 1)
-	check(sent("vimkey", true, "Up"), "Up pressed through VirtualInputManager")
-	check(sent("vimkey", true, "RightControl"), "RightControl too")
-	check(sent("vimkey", true, "Home"), "Home too")
-	check(sent("vimkey", true, "Left"), "Left too")
-	check(sent("keypress", 0x57), "W (not extended) still through keypress")
-	check(not sent("keypress", 0x26) and not sent("keypress", 0xA3) and not sent("keypress", 0x24) and not sent("keypress", 0x25),
-		"no keypress for the extended keys (Real would send KeypadEight, LeftControl, KeypadSeven, KeypadFour)")
-	check(began.Up and began.RightControl and began.Home and began.Left, "Roblox sees Up, RightControl, Home and Left")
+	check(sent("keypress", 0x26) and sent("keypress", 0xA3) and sent("keypress", 0x24) and sent("keypress", 0x25) and sent("keypress", 0x57),
+		"Up, RightControl, Home, Left and W pressed through keypress")
 	IS.ReplayTo(data, 2)
-	check(sent("vimkey", false, "Up") and sent("vimkey", false, "RightControl") and sent("vimkey", false, "Home"), "released through VirtualInputManager")
-	check(sent("keyrelease", 0x57), "W released through keyrelease")
+	check(sent("keyrelease", 0x26) and sent("keyrelease", 0xA3) and sent("keyrelease", 0x24) and sent("keyrelease", 0x25) and sent("keyrelease", 0x57),
+		"and released through keyrelease")
 	IS.ReplayEnd()
-	conn:Disconnect()
-end
-
-section("if VirtualInputManager refuses, keypress is used")
-do
-	M.vimFail = true
-	local data = { { Input = { id(Enum.KeyCode.Up) } }, { Input = { -id(Enum.KeyCode.Up) } } }
-	M.inputLog = {}
-	IS.ReplayBegin(data, 1)
-	IS.ReplayTo(data, 1)
-	check(sent("keypress", 0x26), "Up falls back to keypress")
-	IS.ReplayTo(data, 2)
-	check(sent("keyrelease", 0x26), "and keyrelease")
-	IS.ReplayEnd()
-	M.vimFail = false
+	local vim = 0
+	for _, e in ipairs(M.inputLog) do if e[1] == "vimkey" then vim = vim + 1 end end
+	eq(vim, 0, "VirtualInputManager was never called")
 end
 
 section("a key pressed while the Roblox window wasn't active is pressed when it is active again")

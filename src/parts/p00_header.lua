@@ -1,10 +1,24 @@
 --[[
 	HappaTAS - Executor Port (single file, client side only)
-	Version: V2.38.16
+	Version: V2.38.17
 
 	What this file is:
 		One LocalScript-style file for executors. It records and replays TAS runs on the client and
 		saves them as compact .tas files in   <executor workspace>/HappaTasPort/<PlaceId>/
+
+	V2.38.17 changes (short): no sounds, keys through keypress only, the humanoid on the TAS clock
+		- Sounds removed (the keyboard / click sounds, their settings and help page). Old Settings.json files
+		  with sound settings still load (those keys are dropped on the next save).
+		- Keys are replayed with the executor's keypress / keyrelease only (no VirtualInputManager).
+		- Speed hack: Roblox's humanoid controllers run on real time, so in slow / fast motion the walk / stop
+		  slide, turning, jumps and the coyote time were off. They now follow the TAS clock on Roblox's own
+		  1/240 s step grid (measured in the client: jump 7.27 studs and slide 0.147 studs at 0.5x, 1x, 2x and
+		  4x; Roblox's Jumping state pushing the corrected speed back up is left out; gravity above Roblox's
+		  1000 limit is added in the air). Turning (AutoRotate) too: Roblox's yaw controller was measured in the
+		  client (a PD controller with spin, the angle at most 1 rad in the air) and runs per game step (a 170
+		  degree turn: 0.343 s at 1x, 0.346 / 0.349 / 0.350 s at 0.5x / 2x / 4x).
+		- Coyote time (Roblox's rule: a jump from Running until 0.13 s off the floor, Freefall after 0.125 s)
+		  on the TAS clock, and kept across a pause (frozen while paused, the rest of it after unpausing).
 
 	V2.38.16 changes (short): fast motion, Frame Step slow motion, zoom, bounce pad / launcher effects
 		- Speed hack: speeds above 1 (up to 4x: fast motion while recording, saved and tested at normal speed
@@ -110,9 +124,7 @@
 
 	V2.38.2 changes (short): every function in Real's documentation checked against HappaTAS, the ones
 	that help are used now (measured in the Roblox client)
-		- Keys: Real's keypress sends a key's scancode without the "extended key" flag, so Up arrived as
-		  Keypad 8, Left as Keypad 4, Home as Keypad 7, Right Ctrl as Left Ctrl and so on. These keys are
-		  replayed through Roblox's VirtualInputManager, which gives Roblox the exact key.
+		- Keyboard input is replayed through the executor's keypress / keyrelease functions.
 		- Mouse: Roblox showed an injected move only when the next mouse event came (every move one move
 		  late, the last one never). Each move is followed by a 1 pixel step right and back.
 		- Mouse: Real's mousemoveabs scales with whole-number maths, so the cursor landed up to 0.4 % (x) /
@@ -205,7 +217,7 @@
 	       no network code, interface under gethui() / CoreGui, only an Unload handle in getgenv.
 ]]
 
-local VERSION = "V2.38.16"
+local VERSION = "V2.38.17"
 
 -- ------------------------------------------------------------------------------------------------ config
 local CONFIG = {

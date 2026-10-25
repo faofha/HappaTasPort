@@ -581,6 +581,7 @@ do
 
 	-- --------------------------------------------------------------------------------------------- modes
 	function inputs.Idle()
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid)
 		Bridge.ResetGhost()
 		camType(Enum.CameraType.Custom)
 		C.mode, C.frame = 1, 1
@@ -671,6 +672,8 @@ do
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
 		Lighting.Resume(data, #data)
+		-- the coyote timer goes on from the frame the recording continues from (see SpeedHack.Humanoid)
+		SpeedHack.Humanoid.CoyoteRestore(data[#data] and data[#data].CY)
 	end
 	-- unpausing: cut the frames after the current one, camera back on the last frame
 	local function unpauseFrom(data)
@@ -716,6 +719,7 @@ do
 		if C.DoubleInput() then return end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid) -- (its state is kept with each frame: CY)
 		local cam = workspace.CurrentCamera
 		C.pausedCamCF = cam and cam.CFrame or C.pausedCamCF
 		C.pausedZoom = Bridge.GetZoom()
@@ -749,6 +753,7 @@ do
 		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid) -- (its state is kept with each frame: CY)
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
@@ -1151,6 +1156,7 @@ do
 		fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
 		Profiler.End("Buttons")
 		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
+		fd.CY = SpeedHack.Humanoid.CoyoteState() -- (the coyote timer at the start of this frame: kept in memory, not saved)
 		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 	end
 
@@ -1171,7 +1177,17 @@ do
 		end
 		-- speed hack Frame Step: does this physics step run, or is everything held for it
 		SpeedHack.StepBegin(dt)
+		-- the humanoid's controllers and coyote timer on the TAS clock (see SpeedHack.Humanoid)
+		-- (the same frames the speed hack is on for: recording, its first frame too)
+		if C.mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() then
+			SpeedHack.Humanoid.Pre(dt, C.Humanoid, C.HRP, SpeedHack.scale ~= 1)
+		end
 		Profiler.End("HappaTAS")
+	end
+	local function postSimulation(dt)
+		SpeedHack.StepEnd()
+		local recording = C.mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded()
+		SpeedHack.Humanoid.Post(dt, C.Humanoid, C.HRP, recording)
 	end
 
 	-- ---------------------------------------------------------------------------------------- Heartbeat
@@ -1357,8 +1373,8 @@ do
 			if not ok then reportError("PreSimulation", err) end
 		end)
 		-- (Frame Step: held parts are let go as soon as the physics step is over)
-		on(rs.PostSimulation, function()
-			local ok, err = pcall(SpeedHack.StepEnd)
+		on(rs.PostSimulation, function(dt)
+			local ok, err = pcall(postSimulation, dt)
 			if not ok then reportError("PostSimulation", err) end
 		end)
 		on(rs.Heartbeat, function(dt)

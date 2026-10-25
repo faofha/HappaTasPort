@@ -520,6 +520,8 @@ instMt.__newindex = function(self, k, v)
 	end
 	if (k == "Size" or k == "Position") and d.isGui and typeof(v) ~= "UDim2" then error(k .. " expects UDim2 on " .. d.class.Name, 2) end
 	if k == "Text" and v ~= nil then v = tostring(v) end
+	-- (Roblox keeps workspace.Gravity at 1000 or less, measured in the client)
+	if k == "Gravity" and d.class.Name == "Workspace" and type(v) == "number" and v > 1000 then v = 1000 end
 	if d.isPart and (k == "Position" or k == "Orientation" or k == "Rotation") then
 		local cf = d.props.CFrame or CFrame.new()
 		if k == "Position" then

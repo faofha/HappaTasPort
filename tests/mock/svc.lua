@@ -409,6 +409,8 @@ C.Humanoid.Methods.ChangeState = function(self, st)
 	if type(st) == "number" then st = Enum.HumanoidStateType:FromValue(st) elseif type(st) == "string" then st = Enum.HumanoidStateType[st] end
 	local d = rawget(self, "_d")
 	local old = d.state
+	-- M.refuseScriptFreefall: a script can't end a jump (Jumping -> Freefall outside the physics step)
+	if M.refuseScriptFreefall and not M.inPhysics and old == Enum.HumanoidStateType.Jumping and st == Enum.HumanoidStateType.Freefall then return end
 	d.state = st
 	if old ~= st then self.StateChanged:Fire(old, st) end
 end
@@ -631,6 +633,143 @@ local function humanoidStep(hrp, hum, dt)
 	hrp.CFrame = hrp.CFrame.Rotation + np
 	hrp.AssemblyLinearVelocity = Vector3.new(hv.X, vy, hv.Z)
 end
+-- M.robloxController = true (with M.humanoidPhysics): Roblox's humanoid controllers as measured in the client
+-- (V2.38.17): walking closes 62.5 % of the speed gap per 1/240 s step (a fraction of a step for the rest of the
+-- frame), at most 741.6 studs/s^2 on the floor and 143 in the air; AutoRotate turns towards the move direction
+-- (a PD controller with spin, see the turning below); a jump works from Running until 0.13 s after the floor is
+-- lost (real time), Running turns into Freefall after 0.125 s; FloorMaterial turns Air when the floor is lost; the
+-- jump input turns the state Jumping after the step, the Jumping state pushes the vertical speed up to the jump speed at each step's start until a step starts there (then Freefall). Everything in Roblox's 1/240 s
+-- steps (the velocity changes at a step's start, then the position moves at it; a frame that isn't whole steps
+-- ends with a fraction of one). M.floorEdgeX: no floor at x >= edge.
+M.robloxController = false
+M.floorEdgeX = nil
+local RC = { engOff = 0, jumpedAir = false, applied = false }
+function M.resetRobloxController() RC.engOff, RC.jumpedAir, RC.applied, RC.lastRun, RC.prev, RC.finish = 0, false, true, nil, "reset", false end
+local function robloxStep(hrp, hum, dt)
+	local JUMPING = Enum.HumanoidStateType.Jumping
+	-- (whole steps up to a few nanoseconds of noise, like the client's dt, are whole steps)
+	local steps = dt * 240
+	if math.abs(steps - math.floor(steps + 0.5)) < 1e-3 then steps = math.floor(steps + 0.5); dt = steps / 240 end
+	local g = workspace.Gravity
+	local v = hrp.AssemblyLinearVelocity
+	local pos = hrp.Position
+	local y0 = M.floorY + 3
+	local look = hrp.CFrame.LookVector
+	local yaw = math.atan2(-look.X, -look.Z)
+	local hasFloor = (M.floorEdgeX == nil) or pos.X < M.floorEdgeX
+	local onFloor = hasFloor and pos.Y <= y0 + 1e-6 and v.Y <= 1e-9
+	if onFloor then RC.engOff, RC.jumpedAir, RC.applied = 0, false, false end
+	if M.jumpNow then M.jumpNow, hum.Jump = false, true end -- (the jump button: Jump stays set until a jump takes it)
+	local st = hum:GetState()
+	if RC.prev == "reset" then
+		RC.prev, RC.finish = st, false
+		-- (a state left from before a reset is not a jump)
+		if st == JUMPING then hum:ChangeState(Enum.HumanoidStateType.Running); st = hum:GetState() end
+	end
+	local vy = onFloor and 0 or v.Y
+	-- (a jump finished at a step's start: Freefall from the next frame, measured in the client)
+	if RC.finish then
+		RC.finish = false
+		if st == JUMPING then hum:ChangeState(Enum.HumanoidStateType.Freefall); st = hum:GetState() end
+	end
+	-- walking (fractional steps of 1/240 s)
+	local md = hum.MoveDirection
+	local target = Vector3.new(md.X, 0, md.Z) * hum.WalkSpeed
+	local hv = Vector3.new(v.X, 0, v.Z)
+	local disp = Vector3.zero
+	local cap = onFloor and 741.6 or 143
+	local left = steps
+	while left > 1e-9 do
+		local f = math.min(1, left)
+		local err = target - hv
+		local m = err.Magnitude
+		if m > 1e-9 then hv = hv + err * (math.min(m * 0.625 * f, cap / 240 * f) / m) end
+		disp = disp + hv * (f / 240)
+		left = left - f
+	end
+	-- turning (AutoRotate, measured in the client): each step the spin becomes 0.58312 x spin + 10/3 x the angle
+	-- left (the angle at the frame's start, at most 1 rad in the air), then the yaw moves at it
+	local spin = hrp.AssemblyAngularVelocity.Y
+	if hum.AutoRotate then
+		local e = 0
+		if md.Magnitude > 1e-6 then
+			local want = math.atan2(-md.X, -md.Z)
+			e = (want - yaw + math.pi) % (2 * math.pi) - math.pi
+		end
+		if st == JUMPING or st == Enum.HumanoidStateType.Freefall then e = math.max(-1, math.min(1, e)) end
+		local left = steps
+		while left > 1e-9 do
+			local f = math.min(1, left)
+			spin = spin + f * ((0.58312 - 1) * spin + 10 / 3 * e)
+			yaw = yaw + spin * f / 240
+			left = left - f
+		end
+	end
+	-- vertical, Roblox's stepping (1/240 s steps, a fraction for the last one: the velocity changes at a step's
+	-- start, then the position moves at it). Roblox's Jumping state (Eternal Obbying's copy: jumpingComputeForce,
+	-- jumpFinished): a step that starts below the jump speed is pushed up to it and held there for the step; one that
+	-- starts at it finishes the jump
+	local dyv = 0
+	if not onFloor or st == JUMPING then
+		local jv = hum.UseJumpPower and hum.JumpPower or math.sqrt(2 * g * hum.JumpHeight)
+		local left = steps
+		while left > 1e-9 do
+			local f = math.min(1, left)
+			if hum:GetState() == JUMPING and not RC.finish and jv - vy > 1e-3 then
+				if not RC.jumpedAir then hum.Jumping:Fire(true) end
+				RC.jumpedAir = true
+				M.jumpPushes = (M.jumpPushes or 0) + 1
+				vy, onFloor = jv, false
+			else
+				if hum:GetState() == JUMPING then RC.finish = true end
+				vy = vy - g * f / 240
+			end
+			dyv = dyv + vy * f / 240
+			left = left - f
+		end
+	end
+	local ny = pos.Y + dyv
+	local np = Vector3.new(pos.X + disp.X, ny, pos.Z + disp.Z)
+	if not onFloor then RC.engOff = RC.engOff + dt end
+	if hasFloor and ny <= y0 and pos.Y >= y0 - 1e-6 then
+		np = Vector3.new(np.X, y0, np.Z)
+		vy = 0
+		if hum:GetState() ~= Enum.HumanoidStateType.Running then hum:ChangeState(Enum.HumanoidStateType.Running) end
+		RC.engOff, RC.jumpedAir, RC.applied = 0, false, false
+	elseif not onFloor or not hasFloor then
+		if not hasFloor and onFloor == false and RC.engOff == 0 then RC.engOff = dt end
+	end
+	-- the jump input turns the state Jumping after the step (the client shows Jumping in PreSimulation before the
+	-- jump's first push, measured). Roblox's state table (Eternal Obbying's copy): from Running (not Freefall) a jump
+	-- works until 0.13 s off the floor (JUMP_MAX_TIME_OFF_FLOOR), checked before Running turns into Freefall once
+	-- it is more than 0.125 s off the floor (OFF_FLOOR_GRACE)
+	local wants = hum.Jump
+	local grounded = hasFloor and np.Y <= y0 + 1e-6 and vy <= 1e-9
+	local stEnd = hum:GetState()
+	local canJump = stEnd == Enum.HumanoidStateType.Running or stEnd == Enum.HumanoidStateType.RunningNoPhysics or stEnd == Enum.HumanoidStateType.Landed
+	if wants and canJump and hum:GetStateEnabled(JUMPING) and not RC.jumpedAir and (grounded or RC.engOff <= 0.13) then
+		hum.Jump = false
+		hum:ChangeState(JUMPING)
+	elseif not grounded and stEnd == Enum.HumanoidStateType.Running and RC.engOff > 0.125 and hum:GetStateEnabled(Enum.HumanoidStateType.Freefall) then
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	end
+	-- the Running event reports the speed on the floor when it changes (like the plain model)
+	if np.Y <= y0 + 1e-6 and vy == 0 and hasFloor then
+		local sp = hv.Magnitude
+		if RC.lastRun == nil or math.abs(sp - RC.lastRun) > 1e-6 then
+			RC.lastRun = sp
+			hum.Running:Fire(sp)
+		end
+	else
+		RC.lastRun = nil
+	end
+	-- (FloorMaterial turns Air on the frame the fall starts, measured in the client)
+	hum.FloorMaterial = RC.engOff > 0 and Enum.Material.Air or Enum.Material.Plastic
+	RC.prev = hum:GetState()
+	hrp.CFrame = CFrame.new(np) * CFrame.Angles(0, yaw, 0)
+	hrp.AssemblyLinearVelocity = Vector3.new(hv.X, vy, hv.Z)
+	hrp.AssemblyAngularVelocity = Vector3.new(0, spin, 0)
+end
 -- M.freeParts: parts that move on by their velocity while they are not anchored (M.physicsLog gets
 -- { part, anchored } for each of them every physics step: what the physics saw)
 M.freeParts = {}
@@ -646,7 +785,9 @@ function M.physics(dt)
 	if not hrp or hrp.Anchored then return end
 	if M.humanoidPhysics then
 		local hum = ch:FindFirstChildOfClass("Humanoid")
-		if hum then humanoidStep(hrp, hum, dt) end
+		M.inPhysics = true
+		if hum and M.robloxController then robloxStep(hrp, hum, dt) elseif hum then humanoidStep(hrp, hum, dt) end
+		M.inPhysics = false
 		return
 	end
 	local v = hrp.AssemblyLinearVelocity

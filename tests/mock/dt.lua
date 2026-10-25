@@ -433,6 +433,21 @@ do
 	TweenInfo = { new = function(t, s, d, rc, rev, del)
 		return setmetatable({ Time = t or 1, EasingStyle = s, EasingDirection = d, RepeatCount = rc or 0, Reverses = rev or false, DelayTime = del or 0 }, tmt)
 	end }
+	-- Random: a seeded generator (a fixed default seed keeps test runs repeatable)
+	local rndmt = { __type = "Random" }
+	rndmt.__index = {
+		NextNumber = function(self, a, b)
+			self.s = (self.s * 1103515245 + 12345) % 2147483648
+			local u = self.s / 2147483648
+			if a == nil then return u end
+			return a + (b - a) * u
+		end,
+		NextInteger = function(self, a, b)
+			self.s = (self.s * 1103515245 + 12345) % 2147483648
+			return a + math.floor(self.s / 2147483648 * (b - a + 1))
+		end,
+	}
+	Random = { new = function(seed) return setmetatable({ s = math.floor(tonumber(seed) or 12345) % 2147483648 }, rndmt) end }
 	local rpmt = { __type = "RaycastParams" }
 	RaycastParams = { new = function() return setmetatable({ FilterDescendantsInstances = {}, IgnoreWater = false, RespectCanCollide = false }, rpmt) end }
 	local opmt = { __type = "OverlapParams" }
@@ -488,7 +503,7 @@ do
 		Font = { Legacy = 0, Arial = 1, ArialBold = 2, SourceSans = 3, SourceSansBold = 4, SourceSansLight = 5, SourceSansItalic = 6,
 			Bodoni = 7, Garamond = 8, Cartoon = 9, Code = 10, Highway = 11, SciFi = 12, Arcade = 13, Fantasy = 14, Antique = 15,
 			SourceSansSemibold = 16, Gotham = 17, GothamMedium = 18, GothamBold = 19, GothamBlack = 20, RobotoMono = 41, Roboto = 37, Unknown = 100 },
-		Material = { Plastic = 256, SmoothPlastic = 272, Neon = 288, Wood = 512, Glass = 1568, ForceField = 1584, Metal = 1088 },
+		Material = { Air = 1792, Plastic = 256, SmoothPlastic = 272, Neon = 288, Wood = 512, Glass = 1568, ForceField = 1584, Metal = 1088 },
 		FillDirection = { Horizontal = 0, Vertical = 1 },
 		SortOrder = { Name = 0, Custom = 1, LayoutOrder = 2 },
 		HorizontalAlignment = { Center = 0, Left = 1, Right = 2 },

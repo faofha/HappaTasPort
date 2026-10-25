@@ -69,11 +69,6 @@ local SettingsTable = {
 	{ name = "MicroProfiler Text Offset", default = 0, section = "Interface", kind = "number", label = "MicroProfiler Text Offset (px, - = up)", min = -6, max = 6, integer = true },
 	{ name = "Allow PlayerGui Interface", default = 0, section = "Interface", label = "Allow Visible Interface (PlayerGui)" },
 
-	{ name = "Enable Keyboard Sounds",   default = 0, section = "Sounds", label = "Keyboard Sounds" },
-	{ name = "Enable Click Sounds",      default = 0, section = "Sounds", label = "Mouse Click Sounds" },
-	{ name = "Sound Trigger Mode",       default = 0, section = "Sounds", kind = "number", label = "Sound Mode (0 Live 1 Play 2 Both)", min = 0, max = 2, integer = true },
-	{ name = "Sound Volume",             default = 50, section = "Sounds", kind = "number", label = "Sound Volume (0-100)", min = 0, max = 100 },
-	{ name = "Dynamic Pitch Variation",  default = 1, section = "Sounds" },
 }
 
 local Settings = { values = {}, defs = {}, listeners = {}, onAnyChange = nil }

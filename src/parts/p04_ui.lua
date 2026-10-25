@@ -260,16 +260,23 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 				{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,1,-60)},{
 					HD("2UpdateLogN", "Update Log", 14),
 					{"UIListLayout","UIListLayout",44,{}},
-					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,90)},{
+					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108)},{
 						UC,
 						LV("0", " Happy_Liam/happa - Main Scripter/UI Design"),
 						UL9,
 						LV("2", " plusgiant5 - Tasability creator"),
-						LV("1", " TestMicrowaveDinner - Scripting Help")
+						LV("1", " TestMicrowaveDinner - Scripting Help"),
+						LV("3", " Skittlesuna - Playtester")
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4508)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4618)},{
+						LV("960", " 10/25/26 - 2.38.17"),
+						LI("960_1", "   -   Sounds removed (keyboard / click sounds)"),
+						LI("960_2", "   -   Keys replayed with keypress / keyrelease only"),
+						LI("960_3", "   -   Speed Hack: walking, turning, jumps and gravity on the TAS clock"),
+						LI("960_4", "   -   Speed Hack: coyote time as at normal speed"),
+						LI("960_5", "   -   Coyote time kept across a pause"),
 						LV("961", " 10/18/26 - 2.38.16"),
 						LI("961_1", "   -   Speed Hack: speeds above 1 (fast motion, up to 4x)"),
 						LI("961_2", "   -   Speed Hack Frame Step: normal physics in slow motion"),
@@ -319,7 +326,6 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 						LI("969_2", "   -   Screen countdown freezes strictly on pause without advancing"),
 						LI("969_3", "   -   Scrubbing backwards accurately restores and reverses top timer UI"),
 						LI("969_4", "   -   ModuleScript & Attribute config support for EToH kits"),
-						LI("969_5", "   -   All legacy references migrated to EToH"),
 						LV("970", " 10/16/26 - 2.38.7"),
 						LI("970_1", "   -   Timed buttons: PlayerGui EffectGui.TimerList synchronized"),
 						LI("970_2", "   -   Screen timer freezes while paused and follows TAS frame scrubbing"),
@@ -556,10 +562,6 @@ do -- (the style / tree helpers are locals of this block: the main chunk is clos
 						{ 48, "Aggregate Infinite counts frames; picking it starts Avg and Max again. Custom > TAS Timeline shows your TAS (green = current frame, click to jump)." },
 						{ 44, "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves frames to HappaTasPort. Pause or Ctrl+P freezes it." },
 						{ 48, "Hover a menu to open it, click a line to pick it. If the text sits too high or low, change Settings > MicroProfiler Text Offset (- = up)." } }),
-					H("32", "Keyboard & Click Sounds", 140, true, {
-						{ 48, "Custom mechanical keyboard and mouse click sound feedback. Configure volume, enable keyboard sounds, and enable click sounds in Settings." },
-						{ 48, "Sound Trigger Mode lets you select when audio plays: 0 for live recording, 1 for playback replay, or 2 for both. Dynamic Pitch Variation modulates sound pitch based on typing pace and key hold time." },
-						{ 24, "Sounds automatically suppress when typing in textboxes or navigating menus." } }),
 					H("33", "Mouse UV Normalization", 110, true, {
 						{ 48, "Normalizes cursor positions to camera viewport UV coordinates (0 to 1) after subtracting GuiService topbar insets." },
 						{ 42, "Provides 1:1 cross-resolution aiming: replays on different screen resolutions or window sizes aim and click at the exact sub-pixel world location." } }),

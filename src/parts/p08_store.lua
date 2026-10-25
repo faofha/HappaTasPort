@@ -341,18 +341,5 @@ do
 		if not ok then return false, tostring(err) end
 		return true, path
 	end
-
-	-- optional custom sound files: HappaTasPort/Sounds/<name>.(mp3|ogg|wav)
-	function Store.CustomAsset(name)
-		if not Env.HasFiles or not Env.getcustomasset then return nil end
-		for _, ext in ipairs({ ".mp3", ".ogg", ".wav" }) do
-			local p = ROOT .. "/Sounds/" .. name .. ext
-			if fileExists(p) then
-				local ok, id = call(Env.getcustomasset, p)
-				if ok and type(id) == "string" and id ~= "" then return id end
-			end
-		end
-		return nil
-	end
 end
 

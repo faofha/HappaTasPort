@@ -377,6 +377,10 @@ do
 
 		function self.Lock(lock) LockAnimations = lock end
 
+		-- the speed hack put the humanoid's walking on the TAS clock (SpeedHack.Humanoid): the Running event
+		-- reported the engine's speed before that, so the walk animation gets the corrected speed (real units)
+		function self.Running(speed) onRunning(speed) end
+
 		-- the speed hack's factor changed: the playing tracks take it on
 		function self.Rescale()
 			local k = hack()
