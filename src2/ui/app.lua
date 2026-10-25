@@ -9,6 +9,8 @@
 local Env = import("platform/env")
 local Root = import("ui/root")
 local Pointer = import("ui/pointer")
+local Theme = import("ui/theme")
+local Tween = import("ui/tween")
 
 local UI = {}
 UI.__index = UI
@@ -24,6 +26,8 @@ function UI.start(E)
 		return self
 	end
 	self.pointer = Pointer.new(E, self.root, life)
+	self.theme = Theme.new(E, life)
+	self.tween = Tween.new(E, life)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
 	E.modalOpen = function() return self:anyWindowOpen() end
 	life:own(function()

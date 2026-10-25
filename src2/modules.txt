@@ -46,5 +46,7 @@ engine/frame
 ui/write
 ui/root
 ui/pointer
+ui/theme
+ui/tween
 ui/app
 main
