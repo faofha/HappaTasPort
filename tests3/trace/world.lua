@@ -129,4 +129,65 @@ key(Enum.KeyCode.Backspace)
 M.steps(2)
 modeLine("A.end")
 
+-- ---------------------------------------------------------------------------------------------- part B
+-- a light changer: ClockTime, FogColor, an effect's Saturation and a new BloomEffect while recording
+local lighting = game:GetService("Lighting")
+local cc = Instance.new("ColorCorrectionEffect"); cc.Name = "CC"; cc.Parent = lighting
+local function lt(tag)
+	local e = {}
+	for _, ch in ipairs(lighting:GetChildren()) do
+		if ch:IsA("ColorCorrectionEffect") then e[#e + 1] = ch.Name .. ":" .. num(ch.Saturation) .. ":" .. tostring(ch.Enabled)
+		elseif ch:IsA("BloomEffect") then e[#e + 1] = ch.Name .. ":" .. num(ch.Intensity) end
+	end
+	table.sort(e)
+	out("W.lt", tag, A.mode(), A.frame(), num(lighting.ClockTime), tostring(lighting.FogColor), num(lighting.Brightness), table.concat(e, ";"))
+end
+A.setSetting("Sync Lighting", 1)
+M.steps(3)
+key(Enum.KeyCode.Two)
+M.steps(3)
+click()
+M.steps(2)
+local bloom
+for i = 1, 80 do
+	if i == 15 then lighting.ClockTime = 18 end
+	if i == 30 then lighting.FogColor = Color3.fromRGB(10, 20, 30); cc.Saturation = -0.5 end
+	if i == 45 then bloom = Instance.new("BloomEffect"); bloom.Name = "Bloom"; bloom.Parent = lighting end
+	if i == 60 then bloom.Intensity = 3; lighting.Brightness = 1 end
+	M.step(1 / 60)
+	if i % 5 == 0 then lt("rec" .. i) end
+end
+click()
+M.steps(3)
+lt("paused")
+M.pressKey(Enum.KeyCode.R)
+for i = 1, 40 do M.step(1 / 60); if i % 4 == 0 then lt("back" .. i) end end
+M.releaseKey(Enum.KeyCode.R)
+M.steps(2)
+-- unpause in the middle: the frames after it are cut
+click()
+for i = 1, 20 do
+	if i == 10 then lighting.ClockTime = 6 end
+	M.step(1 / 60)
+	if i % 5 == 0 then lt("rec2-" .. i) end
+end
+click()
+M.steps(3)
+lt("paused2")
+key(Enum.KeyCode.Three)
+M.steps(1)
+n = 0
+while A.mode() == 3 and n < 400 do
+	M.step(1 / 60)
+	n = n + 1
+	if n % 4 == 0 then lt("play" .. n) end
+end
+out("mode", "B.played", n)
+M.steps(3)
+lt("idle")
+A.setSetting("Sync Lighting", 0)
+M.steps(2)
+lt("off")
+modeLine("B.end")
+
 finish()

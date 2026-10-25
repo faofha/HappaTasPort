@@ -44,6 +44,12 @@ echo "$tr" | grep -q "^SAME" || { fail=1; echo "$tr"; }
 tc=$(SCENARIO=diffco TGROUPS="mode F W.co" FIELDS="CO" bash tools/trace3.sh 2>&1 | head -12)
 echo "diffco trace: $(echo "$tc" | head -1)"
 echo "$tc" | grep -q "^SAME" || { fail=1; echo "$tc"; }
+# the world plugins: buttons, lighting, time control, the kit (tests3/trace/world.lua, against V2.38.17)
+WGROUPS="mode F W.char W.co W.bt W.lt W.time W.kit"
+WFIELDS="FrameTime TotalTime Cframe Velocity State SK CO BT KE"
+tw=$(SCENARIO=world TGROUPS="$WGROUPS" FIELDS="$WFIELDS" bash tools/trace3.sh 2>&1 | head -12)
+echo "world trace: $(echo "$tw" | head -1)"
+echo "$tw" | grep -q "^SAME" || { fail=1; echo "$tw"; }
 bo=$(bash tools/bench3.sh 2>&1)
 echo "bench: $(echo "$bo" | tail -1)"
 echo "$bo" | grep -q "^BENCH OK" || { fail=1; echo "$bo"; }

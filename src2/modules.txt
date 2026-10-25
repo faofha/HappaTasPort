@@ -36,6 +36,7 @@ world/co/recorder
 world/co/player
 world/clientobjects
 world/buttons
+world/lighting
 engine/merge
 engine/modes
 engine/frame
