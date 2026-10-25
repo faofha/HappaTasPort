@@ -94,6 +94,7 @@ function Modes:removeCutFrames()
 	if E.tl:count() > E.frame then
 		E.tl:cut(E.frame)
 		E.plugins:call("onDataChanged")
+		E.plugins:call("onCut", E.tl, E.frame)
 	end
 end
 

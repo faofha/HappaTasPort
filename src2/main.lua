@@ -68,6 +68,13 @@ local function startEngine(k)
 	E.anim = guard(E.plugins:add(Animation.new(E)), "animation")
 	E.tools = guard(E.plugins:add(Tools.new(E)), "tools")
 	E.mergeRun = guard(E.plugins:add(Merge.new(E)), "merge")
+	-- (time control and the kit: the engine calls them by name; no-ops until their plugins replace them)
+	E.time = guard({ scale = 1, anim = 1,
+		stepTime = function() return nil end, update = function() return 1 end, stepping = function() return false end,
+		frameStart = function() end, stepBegin = function() end, stepEnd = function() end,
+		humanoidPre = function() end, humanoidPost = function() end }, "time")
+	E.kitClock = guard({ rate = 1, setRate = function() end, advance = function() end }, "kitClock")
+	E.kitObjects = guard({ frame = function() end }, "kitObjects")
 	-- (data no plugin records yet, from V2 files: kept for phase 4; the library of this place's runs)
 	Run.registerCarry(E.tl)
 	E.library = Library.new(E.files, "HappaTasPort/" .. tostring(game.PlaceId))

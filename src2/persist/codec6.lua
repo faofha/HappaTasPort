@@ -156,7 +156,8 @@ function Codec6.encode(tl, header, progress)
 	local n = tl:count()
 	local cols = {}
 	for _, col in ipairs(tl.order) do
-		if col.name ~= "_filled" then cols[#cols + 1] = col end
+		-- (a column marked save = false lives in memory only: lighting snapshots, the coyote state)
+		if col.name ~= "_filled" and not (col.v2 and col.v2.save == false) then cols[#cols + 1] = col end
 	end
 	-- per f64 component a writer and the value before
 	local state = {}

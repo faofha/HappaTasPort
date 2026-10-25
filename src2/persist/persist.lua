@@ -42,6 +42,7 @@ function Persist:save(name, folder, asAttempt)
 	local clean = Files.cleanName(name)
 	if not clean then return false, "Invalid name" end
 	if asAttempt then clean = E.library:nextAttemptName(clean, folder) end
+	E.plugins:call("onSave", E.tl) -- (the plugins' id tables into tl.meta before the file is built)
 	E.busy = "saving"
 	task.spawn(function()
 		task.wait() -- (the work starts on the next frame: the caller's frame isn't held up)

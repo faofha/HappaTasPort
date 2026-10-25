@@ -10,7 +10,8 @@
 --  onPlayTo(tl, i, t), onPause(t), onRewind, onRelease, onEndPlayback, onPlaybackBegin(Always),
 --  onBeginRecording, onUnpause, onStep(t), onPausedTick, onHeartbeatStart(mode), onFrameEnd(dt),
 --  onCreateStats(tl, f), onPlayedFrame, onAfterPhysics, onDataChanged, onReset, onLoaded, onCursorReset,
---  onUnload). A plugin's own methods must not use these names (the registry would call them).
+--  onUnload), and phase 4's onFrameStart (first in PreRender), onPreSimulation(dt) (first in PreSimulation),
+--  onCut(tl, n) (frames after n were cut when unpausing), onSave(tl) (before a file is built). A plugin's own methods must not use these names (the registry would call them).
 --  Each call is protected: an error is reported once per message (the frame goes on).
 -- ================================================================================================
 local Plugins = {}
