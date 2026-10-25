@@ -58,6 +58,10 @@ ui/kit/slider
 ui/kit/segmented
 ui/kit/field
 ui/kit/row
+ui/kit/popover
+ui/kit/dropdown
+ui/kit/colorpicker
+ui/kit/bezier
 ui/windows
 ui/app
 main

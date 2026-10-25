@@ -12,6 +12,7 @@ local Pointer = import("ui/pointer")
 local Theme = import("ui/theme")
 local Tween = import("ui/tween")
 local Windows = import("ui/windows")
+local Layout = import("ui/layout")
 
 local UI = {}
 UI.__index = UI
@@ -27,6 +28,7 @@ function UI.start(E)
 		return self
 	end
 	self.pointer = Pointer.new(E, self.root, life)
+	Layout.probeParent = self.root.gui
 	self.theme = Theme.new(E, life)
 	self.tween = Tween.new(E, life)
 	self.wm = Windows.new(E, self)

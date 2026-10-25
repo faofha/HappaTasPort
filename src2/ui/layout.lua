@@ -1,7 +1,8 @@
 -- ================================================================================================
 --  LAYOUT  (HappaTAS 3 ui): the interface places its children itself (no UIListLayout / AutomaticSize:
 --  exact positions in the mock, no layout pass in Roblox). vstack / hstack set Positions only, through
---  W.set; sizes are their owners'. textWidth measures with one hidden TextLabel (cached).
+--  W.set; sizes are their owners'. textWidth measures with one hidden TextLabel (cached) that lives at the
+--  interface's top (Layout.probeParent, set by the app), never inside a control.
 -- ================================================================================================
 local W = import("ui/write")
 
@@ -55,6 +56,7 @@ end
 
 local cache = {}
 local probe = nil
+Layout.probeParent = nil
 -- the width text takes in font (a Font) at size, measured once
 function Layout.textWidth(text, font, size, parent)
 	local key = tostring(font.Family) .. "|" .. tostring(font.Weight) .. "|" .. size .. "|" .. text
@@ -66,7 +68,7 @@ function Layout.textWidth(text, font, size, parent)
 		probe.Visible = false
 		probe.BackgroundTransparency = 1
 		probe.Size = UDim2.new(0, 10000, 0, 100)
-		probe.Parent = parent
+		probe.Parent = Layout.probeParent or parent
 	end
 	probe.FontFace, probe.TextSize, probe.Text = font, size, text
 	w = math.ceil(probe.TextBounds.X)
