@@ -140,6 +140,35 @@ do
 	check(statuses[#statuses]:find("Loaded", 1, true) ~= nil, "status: " .. tostring(statuses[#statuses]))
 end
 
+section("a loaded run's ids are this session's before the engine takes it")
+do
+	-- (V2 translated in Store.LoadSlot, before SetTAS: the frames the engine shows are never half translated)
+	local exp = FIXTURES["kitspeed.tas"].expected
+	local ids = sessionIds(exp.kit)
+	local differ = false
+	for fileId, sid in pairs(ids) do if fileId ~= sid then differ = true end end
+	check(differ, "the fixture's kit ids differ from this session's (the check means something)")
+	local seen = nil
+	local realAdopt = E.tl.adopt
+	E.tl.adopt = function(tl, fresh)
+		local ok = true
+		for i, f in ipairs(exp.frames) do
+			if not deepEqual(fresh:getList("v2KE", i), mappedKE(f.KE, ids)) then ok = false break end
+		end
+		seen = ok
+		return realAdopt(tl, fresh)
+	end
+	E.persist:load("kitspeed.tas")
+	waitIdle()
+	E.tl.adopt = nil
+	check(seen == true, "kit events already translated when the run is adopted (" .. tostring(seen) .. ")")
+	local same = true
+	for i, f in ipairs(exp.frames) do
+		if not deepEqual(E.tl:getList("v2KE", i), mappedKE(f.KE, ids)) then same = false break end
+	end
+	check(same, "and translated once (not twice) after the load")
+end
+
 section("legacy files load too")
 for _, name in ipairs({ "plain.tas", "legacy.json", "wrapped.tas" }) do
 	E.persist:load(name)

@@ -4,7 +4,17 @@
 --  feature it serves switches itself off (Env.has). Services come through cloneref when the executor
 --  has it (a second reference to the same service, not the game's own).
 -- ================================================================================================
+local CONFIG = import("config")
 local Env = {}
+
+-- a Debug note, printed once per text (a feature that switched itself off for a missing executor function)
+local noted = {}
+function Env.debugNote(text)
+	if CONFIG.Debug and not noted[text] then
+		noted[text] = true
+		print("[HappaTAS3] " .. text)
+	end
+end
 
 local function fn(...)
 	for i = 1, select("#", ...) do

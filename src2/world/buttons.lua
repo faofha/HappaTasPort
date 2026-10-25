@@ -1847,7 +1847,8 @@ function Buttons:onSave(tl)
 	tl.meta = tl.meta or {}
 	tl.meta.v2buttons = B.ExportKeys(tl)
 end
-function Buttons:onLoaded(tl)
+-- (a run being loaded, before the engine takes it: persist/persist.lua)
+function Buttons:onLoading(tl)
 	local list = tl.meta and tl.meta.v2buttons
 	if type(list) == "table" then B.ImportKeys(tl, list) end
 end

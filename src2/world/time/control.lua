@@ -210,7 +210,10 @@ do
 	local cfgScan, cfgScanIn = true, 0 -- look again (a kit object was added), in that many slowed frames
 	local function scanConfigs()
 		cfgScan = false
-		if not Env.filtergc then return end
+		if not Env.filtergc then
+			Env.debugNote("filtergc unavailable; kit config values (bounce pads, swings) are not scaled by the speed hack")
+			return
+		end
 		local ok, found = pcall(Env.filtergc, "table", { Keys = { "__instance", "__defaults" } })
 		if not ok or type(found) ~= "table" then return end
 		for _, t in ipairs(found) do

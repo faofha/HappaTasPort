@@ -271,6 +271,46 @@ S.Set("Speed Hack Frame Step", 0)
 sameTAS(fast, fastFS, "2x with Frame Step on = 2x scaled")
 S.Set("Speed Hack Speed", 0.5)
 
+section("one recording through 0.5x Smooth, 2x, Frame Step 0.25x and off (Review Focus 5)")
+do
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.5)
+	S.Set("Speed Hack Frame Step", 0)
+	local seenM = {}
+	local ev = {
+		[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
+		[50] = function() S.Set("Speed Hack Speed", 2) end,
+		[100] = function() S.Set("Speed Hack Frame Step", 1); S.Set("Speed Hack Speed", 0.25) end,
+		[130] = function() seenM.held = hrp.Anchored end,
+		[180] = function() S.Set("Speed Hack", 0) end,
+		[200] = function() seenM.g, seenM.w, seenM.j, seenM.an, seenM.scale = workspace.Gravity, hum.WalkSpeed, hum.JumpPower, hrp.Anchored, SH.scale end,
+	}
+	local run = record({ table.unpack(DTS, 1, 220) }, 1, ev)
+	S.Set("Speed Hack Frame Step", 0)
+	S.Set("Speed Hack Speed", 0.5)
+	check(#run > 150, "frames recorded (" .. #run .. ")")
+	local worstT, minV, maxV, nonPos = 0, 1e9, 0, 0
+	for i = 2, #run do
+		worstT = math.max(worstT, math.abs(run[i].TotalTime - (run[i - 1].TotalTime + run[i].FrameTime)))
+		if run[i].FrameTime <= 0 then nonPos = nonPos + 1 end
+		if i >= 12 then
+			local vx = run[i].Velocity.Linear[1]
+			minV, maxV = math.min(minV, vx), math.max(maxV, vx)
+		end
+	end
+	check(worstT < 2e-6, string.format("TotalTime continuous (worst %.2e)", worstT))
+	eq(nonPos, 0, "every frame has a positive frame time")
+	near(minV, 16, 1e-3, "recorded walking speed the normal 16 throughout (min)")
+	near(maxV, 16, 1e-3, "recorded walking speed the normal 16 throughout (max)")
+	eq(seenM.held, false, "Frame Step: the character isn't anchored between frames")
+	eq(seenM.scale, 1, "off: no scaling")
+	near(seenM.g, G0, 1e-9, "off: normal gravity")
+	near(seenM.w, 16, 1e-9, "off: WalkSpeed 16")
+	near(seenM.j, 50, 1e-9, "off: JumpPower 50")
+	eq(seenM.an, false, "off: nothing anchored")
+	S.Set("Speed Hack", 1)
+end
+
 section("the humanoid on the TAS clock (V2.38.17): walk / stop, turning, coyote time, gravity above 1000")
 -- every scenario recorded at speed s with real frames of 1/60 s is the same TAS as at normal speed with frames
 -- of s/60 s (the mock's humanoid has Roblox's controllers: speed gap 62.5 % per 1/240 s step, caps 741.6 / 143,

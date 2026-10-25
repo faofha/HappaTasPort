@@ -808,6 +808,31 @@ near(L.ClockTime, 20, 1e-9, "Idle (key 1): the lighting stays exactly as it was 
 
 end
 
+section("the frames view keeps no memory per frame (a long run read through it)")
+do
+	-- (V2's kit code reads the run frame by frame; one proxy kept per frame index was ~250 bytes a frame for
+	-- the rest of the session: 35 MB for 10 minutes at 240 FPS)
+	local Timeline = __T3("engine/timeline")
+	local tl = Timeline.newLike(E.tl)
+	local fr = {}
+	for i = 1, 20000 do fr[i] = { TotalTime = i / 240, FrameTime = 1 / 240 } end
+	tl:replaceFromV2(fr)
+	fr = nil
+	local view = E.plugins:get("kitobjects").framesOf(tl)
+	collectgarbage("collect")
+	local m0 = collectgarbage("count")
+	local seen = 0
+	for f = 1, #view do
+		local p = view[f]
+		if p and p.KE == nil and p.TotalTime then seen = seen + 1 end
+	end
+	collectgarbage("collect")
+	local kb = collectgarbage("count") - m0
+	eq(seen, 20000, "every frame read through the view")
+	check(kb < 300, string.format("memory kept after reading 20000 frames: %.0f KB", kb))
+	near(view[123].TotalTime, 123 / 240, 1e-9, "a frame read again after the collection")
+end
+
 if beatConn then beatConn:Disconnect() end
 end
 kitTests()

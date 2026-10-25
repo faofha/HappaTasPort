@@ -324,7 +324,10 @@ do
 	-- the kit's modules the game already loaded (getloadedmodules: requiring a module the game never ran
 	-- would run it a second time in HappaTAS's thread)
 	local function scan()
-		if not (Env.getloadedmodules and Env.envOf) then return 0 end
+		if not (Env.getloadedmodules and Env.envOf) then
+			Env.debugNote("getloadedmodules unavailable; the Kit Clock is off (the kit's scripts keep real time)")
+			return 0
+		end
 		local okL, list = pcall(Env.getloadedmodules)
 		if not okL or type(list) ~= "table" then return 0 end
 		local loaded = {}
@@ -394,6 +397,9 @@ do
 		-- (Frame Step's flag read straight from time control: this runs twice a frame)
 		local wantNow = enabled and Env.getconnections ~= nil and (rate ~= 1 or (KC.timeFS ~= nil and KC.timeFS.on))
 		if not wantNow then
+			if enabled and rate ~= 1 and not Env.getconnections then
+				Env.debugNote("getconnections unavailable; the kit's frame listeners keep real time")
+			end
 			if next(mine) then giveBack(name) end
 			return
 		end

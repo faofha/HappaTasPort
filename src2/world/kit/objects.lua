@@ -18,34 +18,32 @@ local KitObjects = {}
 
 -- ------------------------------------------------------------------------------------------------ frames view
 -- V2's kit code works on a frames table: #data, data[i].KE / TotalTime / FrameTime / SK, data.KitVersion. The
--- view gives it the timeline that way: one view per timeline (V2 compares the table it was given), one proxy per
--- frame index, reading the timeline when used (so cuts, loads and new frames are seen at once)
+-- view gives it the timeline that way: one view per timeline (V2 compares the table it was given), a proxy per
+-- frame read, reading the timeline when used (so cuts, loads and new frames are seen at once). A proxy is a
+-- one-field table { i } with the view's shared metatable, made when read and never kept: V2's code compares no
+-- frames and holds none across frames (one kept per frame index was ~300 bytes a frame)
 local views = setmetatable({}, { __mode = "k" })
-local function frameProxy(tl, i)
-	return setmetatable({}, {
-		__index = function(_, k)
+local function framesOf(tl)
+	local v = views[tl]
+	if v then return v end
+	local frameMeta = {
+		__index = function(p, k)
+			local i = rawget(p, 1)
 			if k == "KE" then return tl:getList("v2KE", i) end
 			if k == "TotalTime" or k == "FrameTime" then return tl:get(k, i, 1) end
 			if k == "SK" then return tl.cols.v2SK and tl:getList("v2SK", i) or nil end
 			return nil
 		end,
-		__newindex = function(_, k, v)
-			if k == "KE" then tl:setList("v2KE", i, v) end
+		__newindex = function(p, k, val)
+			if k == "KE" then tl:setList("v2KE", rawget(p, 1), val) end
 		end,
-	})
-end
-local function framesOf(tl)
-	local v = views[tl]
-	if v then return v end
-	local proxies = {}
+	}
 	v = setmetatable({}, {
 		__len = function() return tl:count() end,
 		__index = function(_, k)
 			if type(k) == "number" then
 				if k < 1 or k > tl:count() or k % 1 ~= 0 then return nil end
-				local p = proxies[k]
-				if not p then p = frameProxy(tl, k); proxies[k] = p end
-				return p
+				return setmetatable({ k }, frameMeta)
 			end
 			if k == "KitVersion" then return tl.meta and tl.meta.kitVersion end
 			return nil
@@ -172,7 +170,10 @@ do
 	-- gets its real size back
 	local function kitBeatTables()
 		local out = {}
-		if not Env.filtergc then return out end
+		if not Env.filtergc then
+			Env.debugNote("filtergc unavailable; beat block sizes / materials come from the parts as they are")
+			return out
+		end
 		local ok, fns = pcall(Env.filtergc, "function", { Constants = { "IndicatorInterval" } })
 		if not ok or type(fns) ~= "table" then return out end
 		for _, fn in ipairs(fns) do
@@ -381,7 +382,10 @@ do
 	-- the kit's bullet templates (Interactables/Turret keeps each one in its fireBullet closure, out of the game)
 	local function kitBulletTemplates()
 		local out = {}
-		if not Env.filtergc then return out end
+		if not Env.filtergc then
+			Env.debugNote("filtergc unavailable; turret bullets are copied from the kit's own bullets")
+			return out
+		end
 		local ok, fns = pcall(Env.filtergc, "function", { Constants = { "BulletOffset" } })
 		if not ok or type(fns) ~= "table" then return out end
 		for _, fn in ipairs(fns) do
@@ -1085,11 +1089,12 @@ function KitObjectsPlugin:onSave(tl)
 end
 -- a run loaded from a file: its kit table translated to this session's ids (a V2 file without one, older than
 -- V2.38.14, comes with kitVersion 0 from the reader: the kit's own behaviour)
-function KitObjectsPlugin:onLoaded(tl)
+-- (onLoading: the run being loaded, before the engine takes it, persist/persist.lua)
+function KitObjectsPlugin:onLoading(tl)
 	local meta = tl.meta or {}
 	if type(meta.v2kit) == "table" then KO.Import(framesOf(tl), meta.v2kit) end
-	KO.Invalidate()
 end
+function KitObjectsPlugin:onLoaded() KO.Invalidate() end
 function KitObjectsPlugin:versionOf(tl) return KO.VersionOf(framesOf(tl)) end
 function KitObjectsPlugin:counts() return KO.Counts() end
 

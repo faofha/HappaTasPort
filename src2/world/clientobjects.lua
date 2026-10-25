@@ -165,7 +165,8 @@ function ClientObjects:onSave(tl)
 	tl.meta.v2objects = self:exportObjects(tl)
 end
 
-function ClientObjects:onLoaded(tl)
+-- (a run being loaded, before the engine takes it: persist/persist.lua)
+function ClientObjects:onLoading(tl)
 	local objects = tl.meta and tl.meta.v2objects
 	if type(objects) == "table" then self:importObjects(tl, objects) end
 end
