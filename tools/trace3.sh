@@ -1,5 +1,5 @@
 #!/bin/bash
-# Trace parity: runs one scripted session (tests3/trace/scenario.lua) on V2.38.16 and on HappaTAS 3 in the
+# Trace parity: runs one scripted session (tests3/trace/scenario.lua) on V2.38.17 and on HappaTAS 3 in the
 # headless mock, and diffs what each one recorded and did.
 #   bash tools/trace3.sh
 #   TGROUPS="mode F W.char"      trace groups compared (default: every group)
@@ -9,12 +9,12 @@
 #   SCENARIO=bench              another session in tests3/trace/ (tools/bench3.sh uses this)
 #   SCENARIO_PRE="lua"          Lua run before the session (tools/savebench3.sh: BENCH_FRAMES = n)
 # Prints "SAME (N lines)" or "DIFFERENT:" and the first differing lines (exit 2).
-# Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit b1569bd (V2.38.16),
+# Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit aaa21b6 (V2.38.17),
 # never the working tree's src/parts.
 set -e
 cd "$(dirname "$0")/.."
 LUAU="${LUAU:-$(command -v luau || echo /home/claude/tools/luau/luau)}"
-REF_COMMIT=b1569bd
+REF_COMMIT=aaa21b6
 T=tests3/trace
 REF=$T/ref
 TGROUPS="${TGROUPS:-mode F W.char W.cam W.input W.anim W.tool}"

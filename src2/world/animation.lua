@@ -385,6 +385,10 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 
 	function self.Lock(lock) LockAnimations = lock end
 
+	-- V2.38.17: the humanoid clock (time control) puts the walking on the TAS clock; the Running event reports
+	-- the engine's speed, so the walk animation gets the corrected speed (real units) through this
+	function self.Running(speed) onRunning(speed) end
+
 	-- the speed hack's factor changed: the playing tracks take it on
 	function self.Rescale()
 		local k = hack()
@@ -566,6 +570,12 @@ function Animation:loadFrame(tl, i, unpausing, backtrack)
 	end
 	if not backSpeed then backSpeed = 1 end
 	self:set(dataAt(tl, i), backAnim, (not unpausing) and 0 or backSpeed, backtrack and animTime or nil)
+end
+
+-- the walking speed from the humanoid clock (V2.38.17 AnimEngine.Running)
+function Animation:running(speed)
+	local e = self.current
+	if e then e.Running(speed) end
 end
 
 -- the speed hack's factor changed: the playing tracks take it on

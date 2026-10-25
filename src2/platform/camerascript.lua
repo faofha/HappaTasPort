@@ -14,6 +14,7 @@
 --    value), else the table field is swapped. They go in even when the GC scan found the cameras first,
 --    and never again after restore() (Unload).
 -- ================================================================================================
+local CONFIG = import("config")
 local Env = import("platform/env")
 local GameCall = import("platform/gamecall")
 
@@ -274,8 +275,8 @@ function CameraScript.new(life, errs, hooks)
 			end
 		end
 	end
-	-- filtergc matches tables natively (only those with these keys come back); getgc(true) puts every object
-	-- in one table and can freeze a big game, so it is only used without filtergc
+	-- filtergc matches tables natively (only those with these keys come back). V2.38.17: no getgc(true)
+	-- fallback (it puts every object in one table and can freeze a big game; Real refuses whole-heap scans)
 	local GC_KEYS = { "currentSubjectDistance", "activeCameraController", "activeTransparencyController", "activeMouseLockController", "isMouseLocked", "transparencyDirty" }
 	local function scanFiltered()
 		for _, key in ipairs(GC_KEYS) do
@@ -290,20 +291,12 @@ function CameraScript.new(life, errs, hooks)
 	local function scanGC()
 		if gcDone then return end
 		gcDone = true
-		if Env.filtergc then
-			local ok, done = pcall(scanFiltered)
-			if ok and done then return end
+		if not Env.filtergc then
+			if CONFIG.Debug then print("[HappaTAS3] filtergc unavailable; camera scan skipped") end
+			return
 		end
-		if not Env.getgc then return end
-		pcall(function()
-			local n = 0
-			for _, t in ipairs(Env.getgc(true)) do
-				if type(t) == "table" then pcall(checkTable, t) end
-				n = n + 1
-				if n % 20000 == 0 then task.wait() end
-				if life.unloading then break end
-			end
-		end)
+		local ok, done = pcall(scanFiltered)
+		if CONFIG.Debug and not (ok and done) then print("[HappaTAS3] filtergc camera scan failed") end
 	end
 
 	local function resolve()

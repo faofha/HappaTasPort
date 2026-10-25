@@ -1,6 +1,6 @@
 -- ================================================================================================
 -- HappaTAS 3, phase 2: the inputs plugin (recording keys / clicks / wheel / mouse, replay through the
--- executor's functions, VirtualInputManager for extended keys, the window-focus rule, the real-mouse fit)
+-- executor's functions (keypress only since V2.38.17), the window-focus rule, the real-mouse fit)
 -- Sections ported from V2.38.16's tests/test_realinput.lua and tests/test_typing.lua.
 -- ================================================================================================
 check(boot(30), "boots")
@@ -93,12 +93,8 @@ M.steps(2)
 
 E.settings:set("replayKeyboard", 1)
 E.settings:set("windowGuarding", 1)
-section("extended keys go through VirtualInputManager with their exact KeyCode")
+section("keys replay through keypress only (V2.38.17)")
 do
-	local began = {}
-	local conn = UIS.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.Keyboard then began[inp.KeyCode.Name] = true end
-	end)
 	local tl = run({
 		{ Input = { id(Enum.KeyCode.Up), id(Enum.KeyCode.W), id(Enum.KeyCode.RightControl), id(Enum.KeyCode.Home), id(Enum.KeyCode.Left) } },
 		{ Input = { -id(Enum.KeyCode.Up), -id(Enum.KeyCode.W), -id(Enum.KeyCode.RightControl), -id(Enum.KeyCode.Home), -id(Enum.KeyCode.Left) } },
@@ -106,29 +102,14 @@ do
 	M.inputLog = {}
 	IS:replayBegin(tl, 1)
 	IS:replayTo(tl, 1)
-	check(sent("vimkey", true, "Up") and sent("vimkey", true, "RightControl") and sent("vimkey", true, "Home") and sent("vimkey", true, "Left"),
-		"Up, RightControl, Home, Left through VirtualInputManager")
-	check(sent("keypress", 0x57), "W (not extended) through keypress")
-	check(not sent("keypress", 0x26) and not sent("keypress", 0xA3), "no keypress for extended keys")
-	check(began.Up and began.RightControl, "Roblox sees Up and RightControl")
+	check(sent("keypress", 0x26) and sent("keypress", 0x57) and sent("keypress", 0xA3) and sent("keypress", 0x24) and sent("keypress", 0x25),
+		"Up, W, RightControl, Home, Left through keypress")
+	local vim = false
+	for _, e in ipairs(M.inputLog) do if e[1] == "vimkey" then vim = true end end
+	check(not vim, "nothing through VirtualInputManager")
 	IS:replayTo(tl, 2)
-	check(sent("vimkey", false, "Up") and sent("keyrelease", 0x57), "released the same ways")
+	check(sent("keyrelease", 0x26) and sent("keyrelease", 0x57) and sent("keyrelease", 0xA3), "released through keyrelease")
 	IS:replayEnd()
-	conn:Disconnect()
-end
-
-section("if VirtualInputManager refuses, keypress is used")
-do
-	M.vimFail = true
-	local tl = run({ { Input = { id(Enum.KeyCode.Up) } }, { Input = { -id(Enum.KeyCode.Up) } } })
-	M.inputLog = {}
-	IS:replayBegin(tl, 1)
-	IS:replayTo(tl, 1)
-	check(sent("keypress", 0x26), "Up falls back to keypress")
-	IS:replayTo(tl, 2)
-	check(sent("keyrelease", 0x26), "and keyrelease")
-	IS:replayEnd()
-	M.vimFail = false
 end
 
 section("a key held while the window wasn't active is pressed when it is")
@@ -165,22 +146,6 @@ do
 	check(ok, "no error")
 	check(not sent("keypress", 0x57), "nothing sent")
 	IS.available.keys = keys
-end
-
-section("a replayed key that comes back as input is not a live key")
-do
-	local live = {}
-	IS.onLive = function(kid) live[#live + 1] = kid end
-	local tl = run({ { Input = { id(Enum.KeyCode.Q) } }, { Input = { -id(Enum.KeyCode.Q) } } })
-	E.controls:set("optimize", "None")
-	IS:replayBegin(tl, 1)
-	IS:replayTo(tl, 1)
-	M.pressKey(Enum.KeyCode.Q); M.releaseKey(Enum.KeyCode.Q)
-	eq(#live, 0, "the replay's own press")
-	M.pressKey(Enum.KeyCode.E); M.releaseKey(Enum.KeyCode.E)
-	IS:replayEnd()
-	E.controls:set("optimize", "Q")
-	IS.onLive = nil
 end
 
 section("real mouse: each move is flushed, and aimed through the measured fit")
