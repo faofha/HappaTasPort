@@ -512,7 +512,9 @@ local RUN = {
 	seek = function(m, o) m:seek(o and o.frame or m.E.frame) end,
 }
 
+-- (nothing while a save or load runs: E.busy, persist/persist.lua)
 function Modes:allowed(action)
+	if self.E.busy then return false end
 	local f = ALLOWED[action]
 	return f ~= nil and f(self.E) == true
 end
@@ -526,8 +528,13 @@ end
 
 -- replaces the run (a loaded file); in Create the character goes to its last frame
 function Modes:setRun(frames)
+	self.E.tl:replaceFromV2(frames or {})
+	self:runLoaded()
+end
+
+-- after the timeline got a loaded run (V2 Core.SetTAS without a merge: LastPause stays)
+function Modes:runLoaded()
 	local E = self.E
-	E.tl:replaceFromV2(frames or {})
 	E.plugins:call("onDataChanged")
 	E.plugins:call("onLoaded", E.tl)
 	if E.mode == 2 then

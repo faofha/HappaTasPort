@@ -20,6 +20,8 @@ persist/lz4
 persist/codec6
 persist/v2reader
 persist/library
+persist/run
+persist/persist
 engine/plugins
 world/character
 world/camera

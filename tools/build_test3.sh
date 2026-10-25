@@ -18,7 +18,7 @@ OUT="tests3/run_${NAME}.lua"
   echo 'local os = setmetatable({ clock = function() return M.clock() end }, { __index = os })'
   [ -n "$PRE" ] && echo "$PRE"
   # (a suite whose first line says "-- needs: v2fixtures" gets FIXTURES: tests3/fixtures/v2, tools/make_v2_fixtures3.sh)
-  if head -1 "tests3/test_${NAME}.lua" | grep -q "needs: v2fixtures"; then python3 tools/fixtures3_lua.py tests3/fixtures/v2; fi
+  if head -1 "tests3/test_${NAME}.lua" | grep -q "needs:.*v2fixtures"; then python3 tools/fixtures3_lua.py tests3/fixtures/v2; fi
   echo 'local function __SCRIPT__()'
   sed -e '0,/Debug = false,/s//Debug = true,/' ${SEDX:+-e "$SEDX"} "$SCRIPT"   # (config's first Debug line: the release has no comments)
   echo ''

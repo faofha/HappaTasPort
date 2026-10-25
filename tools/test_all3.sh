@@ -8,7 +8,7 @@ LUAU="${LUAU:-$(command -v luau || echo /home/claude/tools/luau/luau)}"
 fail=0
 bash tools/build3.sh --check >/dev/null || { echo "build3 --check failed"; fail=1; }
 # (a suite whose first line says "-- needs: fsfail" gets tests3/fsfail.lua before the script boots)
-pre_for() { head -1 "tests3/test_$1.lua" | grep -q "needs: fsfail" && cat tests3/fsfail.lua; }
+pre_for() { head -1 "tests3/test_$1.lua" | grep -q "needs:.*fsfail" && cat tests3/fsfail.lua; }
 run() { # NAME [BUILD]
   PRE="$(pre_for "$1")" bash tools/build_test3.sh "$1" "$2" >/dev/null || { fail=1; echo "$1: build failed"; return; }
   out=$(cd tests3 && "$LUAU" "run_$1.lua" 2>&1)
