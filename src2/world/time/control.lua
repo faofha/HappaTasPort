@@ -995,6 +995,8 @@ function TimeControl.new(E)
 	engine = E
 	local self = setmetatable({ E = E, scale = 1, anim = 1, SH = SH }, TimeControl)
 	E.tl:addColumn("v2SK", "list", 1, { key = "SK", keep = true })
+	-- (the coyote timer at the start of each frame: in memory only, like V2)
+	E.tl:addColumn("CY", "list", 1, { key = "CY", save = false })
 	-- (the animations' game time: the real dt x the factor, or with Frame Step the time of the step that ran)
 	E.anim.gameDt = function(_, dt) return SH.GameDt(dt) end
 	E.life:own(E.settings:changed("speedHack", function(v)
@@ -1037,6 +1039,14 @@ function TimeControl:stepEnd() SH.StepEnd() end
 function TimeControl:humanoidPre(dt, hum, root, scaled) SH.Humanoid.Pre(dt, hum, root, scaled) end
 function TimeControl:humanoidPost(dt, hum, root, recording) SH.Humanoid.Post(dt, hum, root, recording) end
 function TimeControl:onFrameStart() SH.FrameStart() end
+
+-- the coyote timer (V2.38.17): kept with each frame, restored when the recording goes on from a frame, reset
+-- by Idle and every pause
+function TimeControl:coyoteReset(hum) SH.Humanoid.CoyoteReset(hum) end
+function TimeControl:fill(tl, n) tl:setList("CY", n, SH.Humanoid.CoyoteState()) end
+function TimeControl:onBeginRecording(tl, n)
+	SH.Humanoid.CoyoteRestore((n >= 1 and n <= tl:count()) and tl:getList("CY", n) or nil)
+end
 
 -- the frame's factor (V2: SK = the factor its physics ran with, r(k, 10000), nil at 1x)
 function TimeControl:begin(tl, i)

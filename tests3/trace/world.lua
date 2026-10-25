@@ -260,10 +260,63 @@ local function runC(speed, tag)
 end
 runC(0.5, "C05")
 runC(2, "C2")
+modeLine("C.end")
+
+-- ---------------------------------------------------------------------------------------------- part D
+-- Frame Step at 0.5x and 0.25x (the same walk / jump / world), then walking off an edge with a pause inside
+-- the coyote window and a jump after unpausing
+A.setSetting("Speed Hack Frame Step", 1)
+runC(0.5, "D05")
+runC(0.25, "D025")
+A.setSetting("Speed Hack Frame Step", 0)
+local function edge(speed, tag)
+	A.setSetting("Speed Hack Speed", speed)
+	A.setSetting("Speed Hack", speed == 1 and 0 or 1)
+	key(Enum.KeyCode.One)
+	M.steps(3)
+	key(Enum.KeyCode.Backspace); M.steps(2); key(Enum.KeyCode.Backspace); M.steps(2)
+	hrp.CFrame = CFrame.new(0, 3, 0)
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hum.MoveDirection = Vector3.zero
+	M.resetHumanoidModel()
+	M.resetRobloxController()
+	M.floorEdgeX = 6
+	key(Enum.KeyCode.Two)
+	M.steps(3)
+	click()
+	hum.MoveDirection = Vector3.new(1, 0, 0)
+	local left, k = nil, 0
+	for _ = 1, 600 do
+		M.step(1 / 240)
+		k = k + 1
+		if not left and hrp.Position.X >= 6 then left = k end
+		if left and k - left >= math.floor(0.05 * 240 / speed) then break end
+	end
+	click()
+	M.steps(20)
+	tw(tag .. ".paused")
+	click()
+	hum.Jump = true
+	for i = 1, 60 do
+		M.step(1 / 240)
+		if i % 6 == 0 then tw(tag .. ".after" .. i) end
+	end
+	hum.Jump = false
+	hum.MoveDirection = Vector3.zero
+	click()
+	M.steps(3)
+	frames(tag .. ".recorded", { "FrameTime", "TotalTime", "SK", "State" })
+	M.floorEdgeX = nil
+end
+edge(1, "E1")
+edge(0.5, "E05")
+A.setSetting("Speed Hack", 0)
 A.setSetting("Speed Hack Speed", 0.5)
 M.humanoidPhysics = false
 M.robloxController = false
 cfolder:Destroy()
-modeLine("C.end")
+key(Enum.KeyCode.One)
+M.steps(3)
+modeLine("D.end")
 
 finish()

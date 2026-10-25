@@ -150,6 +150,7 @@ Modes.camType = camType
 
 function Modes:idle()
 	local E = self.E
+	E.time:coyoteReset(E.char.hum)
 	self:cancelDeferred()
 	E.cs:resetGhost()
 	camType(Enum.CameraType.Custom)
@@ -285,6 +286,7 @@ function Modes:pause()
 	self:cancelDeferred()
 	E.anim:lock(true)
 	E.paused = true
+	E.time:coyoteReset(E.char.hum) -- (its state is kept with each frame: CY)
 	local cam = workspace.CurrentCamera
 	E.pausedCamCF = cam and cam.CFrame or E.pausedCamCF
 	E.pausedZoom = E.cs:getZoom()
@@ -362,6 +364,7 @@ function Modes:resumeDeferred()
 		E.deferred = nil
 		E.anim:lock(true)
 		E.paused = true
+		E.time:coyoteReset(E.char.hum) -- (its state is kept with each frame: CY)
 		local tl = E.tl
 		local n = tl:count()
 		E.frame = n

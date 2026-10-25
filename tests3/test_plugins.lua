@@ -211,6 +211,7 @@ do
 	function stub:humanoidPre() calls[#calls + 1] = "pre" end
 	function stub:stepEnd() calls[#calls + 1] = "stepEnd" end
 	function stub:humanoidPost() calls[#calls + 1] = "post" end
+	function stub:coyoteReset() end
 	E.time = stub
 	E.modes:request("create")
 	M.steps(2)

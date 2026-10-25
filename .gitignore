@@ -26,3 +26,4 @@ tests3/fixtures/v2gen_out.txt
 tests3/fixtures/local/
 tests3/trace/v2file.lua
 tests3/bench/run_*.lua
+tests3/trace/bench_*.txt
