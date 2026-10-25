@@ -1038,7 +1038,6 @@ function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 function TimeControl:stepEnd() SH.StepEnd() end
 function TimeControl:humanoidPre(dt, hum, root, scaled) SH.Humanoid.Pre(dt, hum, root, scaled) end
 function TimeControl:humanoidPost(dt, hum, root, recording) SH.Humanoid.Post(dt, hum, root, recording) end
-function TimeControl:onFrameStart() SH.FrameStart() end
 
 -- the coyote timer (V2.38.17): kept with each frame, restored when the recording goes on from a frame, reset
 -- by Idle and every pause

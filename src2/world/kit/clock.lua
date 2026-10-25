@@ -391,7 +391,8 @@ do
 	-- each one called with the kit's dt
 	local function runFrame(name, dt)
 		local mine = taken[name]
-		local wantNow = enabled and Env.getconnections ~= nil and (rate ~= 1 or engine.time:stepping())
+		-- (Frame Step's flag read straight from time control: this runs twice a frame)
+		local wantNow = enabled and Env.getconnections ~= nil and (rate ~= 1 or (KC.timeFS ~= nil and KC.timeFS.on))
 		if not wantNow then
 			if next(mine) then giveBack(name) end
 			return
@@ -516,6 +517,7 @@ KitClockPlugin.__index = KitClockPlugin
 function KitClockPlugin.new(E)
 	engine = E
 	local self = setmetatable({ E = E, KC = KC, rate = 1 }, KitClockPlugin)
+	KC.timeFS = E.time.SH and E.time.SH.FS
 	E.life:own(function() KC.Disable() end)
 	E.life:own(E.settings:changed("kitScriptsOnTasClock", function(v)
 		if v ~= 0 then KC.Enable() else KC.Disable() end

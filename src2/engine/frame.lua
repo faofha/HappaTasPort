@@ -31,12 +31,14 @@ function Frame.start(E)
 	end
 
 	local lastRate = 1
+	local kitCur = E.kitObjects.cur -- (the kit objects' state: Idle has nothing to release once they are off)
 	local function preRender(dt)
 		E.plugins:call("onFrameStart")
 		local mode = E.mode
 		if not (mode == 2 and (not E.paused or E.firstFrame)) then E.inputs:clear() end
 		local ch = E.char
 		if mode == 2 and ch:loaded() then
+			E.time:frameStart() -- (Frame Step is only ever on in Create)
 			-- (Frame Step: only a frame whose physics step ran is a new frame, its time = the time that step
 			-- simulated)
 			local stepT = E.time:stepTime()
@@ -83,7 +85,7 @@ function Frame.start(E)
 		elseif mode == 3 then
 			E.kitObjects:frame(3, tl, E.frame, E.testTime, false)
 			kitRate = math.max(0, E.settings:get("playbackSpeed"))
-		else
+		elseif kitCur.on then
 			E.kitObjects:frame(1, tl, 0, 0, false)
 		end
 		E.kitClock:setRate(kitRate)

@@ -1058,7 +1058,7 @@ KitObjectsPlugin.__index = KitObjectsPlugin
 
 function KitObjectsPlugin.new(E)
 	engine = E
-	local self = setmetatable({ E = E, KO = KO, framesOf = framesOf }, KitObjectsPlugin)
+	local self = setmetatable({ E = E, KO = KO, framesOf = framesOf, cur = KO.cur }, KitObjectsPlugin)
 	E.tl:addColumn("v2KE", "list", 1, { key = "KE", keep = true })
 	KO.StartHooks()
 	E.life:own(E.settings:changed("syncKitObjects", function(v)
