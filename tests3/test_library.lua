@@ -1,6 +1,6 @@
 -- needs: fsfail
 -- ================================================================================================
--- HappaTAS 3, phase 3: the library (listing with library.json, folders, attempts, sort / search, safe
+-- HappaTAS 3, phase 3: the library (listing with library.cache, folders, attempts, sort / search, safe
 -- saving, rename / move / delete)
 -- ================================================================================================
 check(boot(3), "boots")
@@ -65,7 +65,7 @@ section("listing")
 FSFAIL.log = {}
 local list = L:list()
 local m = byPath(list)
-eq(#list, 9, "nine runs (no .txt / .tmp / ~rename / .html / library.json)")
+eq(#list, 9, "nine runs (no .txt / .tmp / ~rename / .html / library.cache)")
 check(m["Run.tas"] and m["Run.tas"].frames == 240 and m["Run.tas"].length == 1.0 and m["Run.tas"].version == 6, "v6 header info")
 eq(m["Run.tas"].saved, 300, "saved date")
 eq(m["Run.tas"].script, "3.0.0-dev", "script version")
@@ -77,7 +77,8 @@ check(m["Tower A/Stage 1.tas"] and m["Tower A/Stage 1.tas"].folder == "Tower A",
 eq(m["Tower A/Hard/Jump.tas"].folder, "Tower A/Hard", "two levels deep")
 eq(m["Run (2).tas"].attempt, 2, "attempt number")
 eq(m["Run (2).tas"].base, "Run", "attempt base")
-check(files:exists(ROOT .. "/library.json"), "library.json written")
+check(files:exists(ROOT .. "/library.cache"), "library.cache written")
+check(not files:exists(ROOT .. "/library.json"), "no library.json (V2 would list it as a slot)")
 FSFAIL.log = {}
 local list2 = L:list()
 eq(#list2, 9, "the same list again")
@@ -85,8 +86,8 @@ eq(FSFAIL.count("read", "%.tas$") + FSFAIL.count("read", "%.json$") - FSFAIL.cou
 files:delete(ROOT .. "/Run 10.tas")
 local list3 = byPath(L:list())
 eq(list3["Run 10.tas"], nil, "a deleted file is gone from the list")
-local cache = files:read(ROOT .. "/library.json")
-check(cache and not cache:find("Run 10", 1, true), "and from library.json")
+local cache = files:read(ROOT .. "/library.cache")
+check(cache and not cache:find("Run 10", 1, true), "and from library.cache")
 FSFAIL.log = {}
 L:refresh()
 check(FSFAIL.count("read", "Run%.tas$") >= 1, "refresh reads every header again")
@@ -183,5 +184,37 @@ do
 	check((L:deleteFolder("Tower B/Easy")), "an empty folder is deleted")
 	check(not files:isFolder(ROOT .. "/Tower B/Easy"), "gone")
 	check(not L:read("missing.tas"), "reading a missing run returns nil")
+end
+section("attempts of attempts")
+do
+	files:makeFolder(ROOT .. "/Att")
+	files:write(ROOT .. "/Att/Run.tas", v6file(5))
+	files:write(ROOT .. "/Att/Run (2).tas", v6file(5))
+	files:write(ROOT .. "/Att/Run (2) (2).tas", v6file(5))
+	files:write(ROOT .. "/Att/Solo (2).tas", v6file(5))
+	files:write(ROOT .. "/Att/Solo (2) (2).tas", v6file(5))
+	local inAtt = {}
+	for _, e in ipairs(L:list()) do if e.folder == "Att" then inAtt[#inAtt + 1] = e end end
+	local okG, gs = pcall(function() return L:groups(inAtt) end)
+	check(okG, "groups with an attempt of an attempt (" .. tostring(not okG and gs or "") .. ")")
+	local byRun = {}
+	for _, g in ipairs(okG and gs or {}) do byRun[g.run.name] = g end
+	eq(byRun.Run and #byRun.Run.attempts, 2, "Run (2) (2) goes with Run")
+	eq(byRun["Run (2)"], nil, "Run (2) is not a run of its own")
+	eq(byRun["Solo (2)"] and #byRun["Solo (2)"].attempts, 1, "without a Solo, Solo (2) is the run")
+	eq(L:nextAttemptName("Run (2)", "Att"), "Run (3)", "an attempt of an attempt counts from the run")
+	eq(L:nextAttemptName("Solo (2)", "Att"), "Solo (2) (3)", "no Solo: Solo (2) is the run")
+end
+
+section("a .tas and a legacy .json never share a name")
+do
+	files:write(ROOT .. "/Legacy B.json", "{}")
+	files:write(ROOT .. "/A1.tas", v6file(5))
+	check(not L:rename("A1.tas", "Legacy B"), "renaming a .tas onto a legacy slot's name is refused")
+	check(not L:rename("Legacy B.json", "a1"), "renaming a legacy slot onto a run's name is refused")
+	files:makeFolder(ROOT .. "/Other2")
+	files:write(ROOT .. "/Other2/legacy b.tas", v6file(5))
+	check(not L:move("Other2/legacy b.tas", ""), "moving a .tas next to a legacy slot of that name is refused")
+	eq(files:read(ROOT .. "/Legacy B.json"), "{}", "the legacy slot is untouched")
 end
 finish()

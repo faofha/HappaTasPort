@@ -1,6 +1,6 @@
 -- ================================================================================================
 --  LIBRARY  (HappaTAS 3 persist): the runs of one place, HappaTasPort/<PlaceId>/ and its folders (real
---  subfolders, at most 3 levels). Each run's header info is cached in <root>/library.json, so listing
+--  subfolders, at most 3 levels). Each run's header info is cached in <root>/library.cache, so listing
 --  reads only files it hasn't seen (Library:refresh reads every header again). Names follow V2's rules
 --  (Files.cleanName) and never clash on Windows: "run" and "Run" are the same name.
 --  Attempts: "Name (2)", "Name (3)"... next to "Name" belong to it (newest first).
@@ -17,7 +17,8 @@ local Library = {}
 Library.__index = Library
 
 local MAX_DEPTH = 3
-local CACHE = "library.json"
+-- (not .json: V2 lists every .json in the place folder as a legacy slot)
+local CACHE = "library.cache"
 local UNAVAILABLE = "Saving is unavailable on this executor"
 
 function Library.new(files, root)
@@ -200,18 +201,28 @@ function Library:groups(entries)
 	for _, e in ipairs(entries) do
 		runs[e.folder .. "\0" .. lower(e.name)] = e
 	end
+	-- (the run an attempt belongs to: "Run (2) (2)" -> "Run (2)" -> "Run", up to the first name that isn't an
+	-- attempt of a listed run)
+	local function rootOf(e)
+		local steps = 0
+		while e.attempt and steps < 64 do
+			local parent = runs[e.folder .. "\0" .. lower(e.base)]
+			if not parent then break end
+			e, steps = parent, steps + 1
+		end
+		return e
+	end
 	local groupOf = {}
 	for _, e in ipairs(entries) do
-		local parent = e.attempt and runs[e.folder .. "\0" .. lower(e.base)]
-		if not parent then
+		if rootOf(e) == e then
 			local g = { run = e, attempts = {} }
 			groupOf[e] = g
 			out[#out + 1] = g
 		end
 	end
 	for _, e in ipairs(entries) do
-		local parent = e.attempt and runs[e.folder .. "\0" .. lower(e.base)]
-		if parent then table.insert(groupOf[parent].attempts, e) end
+		local root = rootOf(e)
+		if root ~= e then table.insert(groupOf[root].attempts, e) end
 	end
 	for _, g in ipairs(out) do
 		table.sort(g.attempts, function(a, b) return a.attempt > b.attempt end)
@@ -231,6 +242,9 @@ end
 
 function Library:nextAttemptName(name, folder)
 	folder = cleanFolder(folder) or ""
+	-- (an attempt of "Run" counts on from "Run": "Run (3)", not "Run (2) (2)")
+	local runName = name:match("^(.*) %(%d+%)$")
+	if runName and (findCI(self, folder, runName, ".tas") or findCI(self, folder, runName, ".json")) then name = runName end
 	local want = lower(name)
 	local highest = 1
 	local abs = (folder == "") and self.root or (self.root .. "/" .. folder)
@@ -314,7 +328,8 @@ local function relocate(self, path, newFolder, newBase)
 	local data = files:read(self.root .. "/" .. from)
 	if not data then return false, "The file does not exist" end
 	local sameFile = lower(to) == lower(from)
-	if not sameFile and findCI(self, newFolder, newBase, ext) then
+	-- (a .tas and a legacy .json never share a name, like V2's RenameSlot)
+	if not sameFile and (findCI(self, newFolder, newBase, ".tas") or findCI(self, newFolder, newBase, ".json")) then
 		return false, "A run named " .. newBase .. " already exists there"
 	end
 	if newFolder ~= "" and not files:makeFolder(self.root .. "/" .. newFolder) then return false, "Could not make the folder" end

@@ -217,6 +217,35 @@ do
 	check(events[#events].ok == false, "a missing file fails through the bus")
 end
 
+section("Delete TAS: the next run doesn't keep the old run's info")
+do
+	E.persist:load("again.tas")
+	waitIdle()
+	check(E.tl.meta.kitVersion == 1 and E.tl.meta.created ~= nil and E.tl.meta.v2kit ~= nil, "a loaded run with its info")
+	E.modes:request("deleteTas")
+	M.steps(1)
+	E.modes:request("deleteTas")
+	M.steps(1)
+	eq(E.tl:count(), 0, "deleted")
+	eq(next(E.tl.meta), nil, "no info left from the deleted run")
+	E.modes:request("create")
+	M.steps(2)
+	E.modes:request("unpause")
+	M.steps(4)
+	E.modes:request("pause")
+	M.steps(2)
+	check(E.tl:count() > 0, "a new run recorded")
+	check((E.persist:save("fresh")), "saved")
+	waitIdle()
+	local h = Codec6.readHeader(files:read(ROOT .. "/fresh.tas"))
+	eq(h and h.kit, 0, "its header doesn't say kit rules from the old run")
+	E.persist:load("fresh.tas")
+	waitIdle()
+	eq(E.tl.meta.v2kit, nil, "no old kit table in it")
+	E.modes:request("idle")
+	M.steps(2)
+end
+
 section("no file functions")
 do
 	local saved = E.library.files.available

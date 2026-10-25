@@ -124,7 +124,7 @@ V2.38.16's codec and are converted in memory; a file is only rewritten as v6 whe
 ### 6.2 Library
 
 - Files stay in `HappaTasPort/<PlaceId>/`; folders are real subfolders.
-- `library.json` per place caches every file's header info; rebuilt from the headers when missing or stale.
+- `library.cache` per place caches every file's header info; rebuilt from the headers when missing or stale (not `.json`: V2 lists every `.json` in the place folder as a legacy slot).
 - Each run shows name, length, frames, saved date, size, script version, kit / speed hack use.
 - **Attempts:** "Save as new attempt" saves `Name (2)`, `(3)`...; attempts are grouped under the run, newest
   first.

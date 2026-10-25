@@ -418,6 +418,7 @@ function Modes:deleteTas(mobile)
 	if os.clock() < self.confirmDelete then
 		self.confirmDelete = 0
 		E.tl:cut(0)
+		E.tl.meta = {} -- (a new run: not the deleted one's created date, kit rules or V2 tables)
 		E.plugins:call("onDataChanged")
 		E.plugins:call("onReset")
 		E.lastPause = 1
