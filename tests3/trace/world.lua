@@ -385,4 +385,123 @@ task.cancel(loop)
 plat:Destroy()
 modeLine("E.end")
 
+-- ---------------------------------------------------------------------------------------------- part F
+-- kit objects: a beat block group (4 groups, Interval 1, indicator for the last 0.5 s) and a turret firing at a
+-- wall, with the kit's own loops (kit-style modules); recorded, paused and scrubbed, tested
+local visual = Instance.new("Folder"); visual.Name = "Visual"; visual.Parent = repo
+local inter = Instance.new("Folder"); inter.Name = "Interactables"; inter.Parent = repo
+local function kitModule(parent, name, src)
+	local m = Instance.new("ModuleScript"); m.Name = name; m.Parent = parent
+	local en = setmetatable({ script = m }, { __index = setmetatable({ os = os }, { __index = getfenv(1) }) })
+	local ch = loadstring(src, "=" .. m:GetFullName())
+	setfenv(ch, en)
+	local mod = ch()
+	M.modules[m] = mod
+	return m, mod
+end
+local bbMs, BeatKit = kitModule(visual, "BeatBlock", [[
+local B = {}
+function B.Loop(groups, n, start)
+	local beat = start
+	while true do
+		beat = beat % n + 1
+		for i, list in pairs(groups) do
+			for _, p in ipairs(list) do
+				p.CanCollide = (i == beat)
+				p.CanTouch = (i == beat)
+				p.Transparency = (i == beat) and 0 or 0.7
+			end
+		end
+		task.wait(1)
+	end
+end
+return B
+]])
+local ding = Instance.new("Sound"); ding.Name = "DefaultDingSound"; ding.Volume = 0.5; ding.TimeLength = 0.4; ding.Parent = bbMs
+local _, TurretKit = kitModule(inter, "Turret", [[
+local T = {}
+function T.Loop(model, part, rate, speed)
+	while true do
+		task.wait(1 / rate)
+		local m = Instance.new("Model"); m.Name = "Bullet"
+		local p = Instance.new("Part"); p.Name = "Bullet"; p.Size = Vector3.new(1, 1, 1); p.CFrame = part.CFrame; p.Parent = m
+		m.PrimaryPart = p
+		local lv = Instance.new("LinearVelocity"); lv.VectorVelocity = part.CFrame.LookVector * speed; lv.Parent = p
+		m.Parent = model
+	end
+end
+return T
+]])
+local CPF = Instance.new("Folder"); CPF.Name = "ClientParts"; CPF.Parent = workspace
+local bbFolder = Instance.new("Folder"); bbFolder.Name = "BeatBlockGroup"; bbFolder.Parent = CPF
+local bbCfg = Instance.new("Configuration"); bbCfg.Name = "BeatBlockConfiguration"
+for k, v in pairs({ Interval = 1, IndicatorInterval = 0.5, Indicator = true, IndicatorSize = Vector3.new(3, 3, 3),
+	OffTransparency = 0.7, OnTransparency = 0, OffCanCollide = false, OnCanCollide = true, OnCanTouch = true, OffCanTouch = false,
+	MaterialIndicator = Enum.Material.SmoothPlastic, IndicatorScaleMultiplier = 1, ToggleChildren = false }) do bbCfg:SetAttribute(k, v) end
+bbCfg:AddTag("CO_Visual/BeatBlock")
+bbCfg.Parent = bbFolder
+local beatParts, beatGroups = {}, {}
+for i = 1, 4 do
+	local p = Instance.new("Part"); p.Name = tostring(i); p.Size = Vector3.new(4, 4, 4); p.CFrame = CFrame.new(100 + i * 5, 2, 100)
+	p.Anchored = true; p.Material = Enum.Material.Plastic; p.Parent = bbFolder
+	beatParts[i] = p
+	beatGroups[i] = { p }
+end
+local turModel = Instance.new("Model"); turModel.Name = "Turret"; turModel.Parent = CPF
+local turPart = Instance.new("Part"); turPart.Name = "Turret"; turPart.Size = Vector3.new(2, 2, 2); turPart.Anchored = true
+turPart.CFrame = CFrame.lookAt(Vector3.new(0, 5, 50), Vector3.new(0, 5, 100)); turPart.Parent = turModel
+local fireSnd = Instance.new("Sound"); fireSnd.Name = "Fire"; fireSnd.Volume = 0.6; fireSnd.TimeLength = 0.3; fireSnd.Parent = turPart
+local turCfg = Instance.new("Configuration"); turCfg.Name = "TurretConfiguration"
+for k, v in pairs({ FireRate = 1, Speed = 50, MaxLifetime = 2, Damage = 5, Range = 500, DestroyOnTouch = true }) do turCfg:SetAttribute(k, v) end
+turCfg:AddTag("CO_Interactables/Turret")
+turCfg.Parent = turModel
+local wallF = Instance.new("Part"); wallF.Name = "Wall"; wallF.Size = Vector3.new(10, 10, 1); wallF.Anchored = true
+wallF.CFrame = CFrame.new(0, 5, 70); wallF.Parent = workspace
+A.setSetting("Sync Kit Objects", 0)
+M.steps(2)
+A.setSetting("Sync Kit Objects", 1)
+M.steps(3)
+local bLoop = task.spawn(BeatKit.Loop, beatGroups, 4, 2)
+local tLoop = task.spawn(TurretKit.Loop, turModel, turPart, 1, 50)
+local function kf(tag)
+	local b = {}
+	for i, p in ipairs(beatParts) do b[i] = string.format("%s:%s:%s:%s", num(p.Transparency), tostring(p.CanCollide), tostring(p.Size.X), tostring(p.Material)) end
+	local hf = workspace.CurrentCamera:FindFirstChild("HappaTASKit")
+	local bl = {}
+	if hf then for _, m in ipairs(hf:GetChildren()) do bl[#bl + 1] = tostring(m:GetPivot().Position) end end
+	table.sort(bl)
+	local kitB = 0
+	for _, c in ipairs(turModel:GetChildren()) do if c:IsA("Model") then kitB = kitB + 1 end end
+	out("W.kit", tag, A.mode(), A.frame(), table.concat(b, ";"), table.concat(bl, ";"), kitB, num(ding.Volume), num(fireSnd.Volume))
+end
+for i = 1, 20 do M.step(1 / 60); if i % 10 == 0 then kf("F.idle" .. i) end end
+key(Enum.KeyCode.One)
+M.steps(2)
+key(Enum.KeyCode.Backspace); M.steps(2); key(Enum.KeyCode.Backspace); M.steps(2)
+key(Enum.KeyCode.Two)
+M.steps(3)
+click()
+for i = 1, 180 do M.step(1 / 60); if i % 6 == 0 then kf("F.rec" .. i) end end
+click()
+M.steps(3)
+frames("F.recorded", { "KE" })
+M.pressKey(Enum.KeyCode.R)
+for i = 1, 40 do M.step(1 / 60); if i % 4 == 0 then kf("F.back" .. i) end end
+M.releaseKey(Enum.KeyCode.R)
+M.steps(2)
+key(Enum.KeyCode.Three)
+M.steps(1)
+n = 0
+while A.mode() == 3 and n < 400 do
+	M.step(1 / 60)
+	n = n + 1
+	if n % 6 == 0 then kf("F.play" .. n) end
+end
+out("mode", "F.played", n)
+M.steps(3)
+kf("F.idle2")
+task.cancel(bLoop)
+task.cancel(tLoop)
+modeLine("F.end")
+
 finish()

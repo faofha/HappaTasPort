@@ -533,7 +533,10 @@ end
 
 -- replaces the run (a loaded file); in Create the character goes to its last frame
 function Modes:setRun(frames)
-	self.E.tl:replaceFromV2(frames or {})
+	frames = frames or {}
+	self.E.tl:replaceFromV2(frames)
+	-- (a new run, like V2's SetTAS with the table given: only its own KitVersion comes with it)
+	self.E.tl.meta = { kitVersion = frames.KitVersion }
 	self:runLoaded()
 end
 

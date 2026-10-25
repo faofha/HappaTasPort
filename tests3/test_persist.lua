@@ -59,6 +59,40 @@ local function deepEqual(a, b, path)
 	return true
 end
 
+-- (kit events name their objects by id: a loaded file's ids are translated to this session's by its kit table,
+-- like V2's KO.Import; an id the table doesn't list stays as it is. ids: file id -> session id)
+local function mappedKE(list, ids)
+	if type(list) ~= "table" then return list end
+	local out = {}
+	for i, e in ipairs(list) do
+		local c = table.clone(e)
+		if (c[1] == 1 or c[1] == 3 or c[1] == 4) and ids[c[2]] then c[2] = ids[c[2]] end
+		out[i] = c
+	end
+	return out
+end
+local function sessionIds(kit)
+	local m = {}
+	local keyToId = E.kitObjects.KO.Reg.keyToId
+	for _, k in ipairs((kit and kit.keys) or {}) do m[k.id] = keyToId[k.key] end
+	return m
+end
+local function mappedFrames(frames, ids)
+	local out = {}
+	for i, f in ipairs(frames) do
+		local c = table.clone(f)
+		c.KE = mappedKE(f.KE, ids)
+		out[i] = c
+	end
+	return out
+end
+local function kitKeySet(kit)
+	local t = {}
+	for _, k in ipairs((kit and kit.keys) or {}) do t[#t + 1] = k.key end
+	table.sort(t)
+	return table.concat(t, ",")
+end
+
 section("carry columns")
 for _, key in ipairs({ "Mobile", "CO", "BT", "KE", "SK" }) do
 	local col = E.tl.cols["v2" .. key]
@@ -84,13 +118,16 @@ do
 	-- what the timeline holds is what it gets from V2's own frames
 	local ref = Timeline.newLike(E.tl)
 	ref:replaceFromV2(exp.frames)
-	local same, why = deepEqual(E.tl:toV2All(), ref:toV2All(), "frames")
+	local ids = sessionIds(exp.kit)
+	local same, why = deepEqual(E.tl:toV2All(), mappedFrames(ref:toV2All(), ids), "frames")
 	check(same, "the same as V2's frames through the timeline " .. tostring(why))
-	-- and the data with no plugin yet is V2's, frame for frame
+	-- and the plugins' data is V2's, frame for frame (kit events with this session's ids)
 	local carried = true
 	for i, f in ipairs(exp.frames) do
 		for _, key in ipairs({ "Mobile", "CO", "BT", "KE", "SK" }) do
-			if not deepEqual(E.tl:getList("v2" .. key, i), f[key]) then carried = false; check(false, "frame " .. i .. " " .. key) break end
+			local have, want = E.tl:getList("v2" .. key, i), f[key]
+			if key == "KE" then want = mappedKE(want, ids) end
+			if not deepEqual(have, want) then carried = false; check(false, "frame " .. i .. " " .. key) break end
 		end
 		if not carried then break end
 	end
@@ -135,7 +172,8 @@ do
 	E.persist:load("again.tas")
 	waitIdle()
 	check((deepEqual(E.tl:toV2All(), snapshot)), "every frame the same after v6")
-	check((deepEqual(E.tl.meta.v2kit, meta.v2kit)) and E.tl.meta.kitVersion == 1, "meta the same after v6")
+	check(kitKeySet(E.tl.meta.v2kit) == kitKeySet(meta.v2kit) and E.tl.meta.v2kit.version == meta.v2kit.version
+		and E.tl.meta.kitVersion == 1, "meta the same after v6 (the kit table's objects, by key)")
 	eq(E.tl.meta.created, h.created, "created kept")
 	-- an attempt
 	check((E.persist:save("again", nil, true)), "save as a new attempt")
@@ -219,6 +257,8 @@ end
 
 section("Delete TAS: the next run doesn't keep the old run's info")
 do
+	-- (Sync Kit Objects off: a new run made with it on is marked with the kit rules of its own)
+	E.settings:set("syncKitObjects", 0)
 	E.persist:load("again.tas")
 	waitIdle()
 	check(E.tl.meta.kitVersion == 1 and E.tl.meta.created ~= nil and E.tl.meta.v2kit ~= nil, "a loaded run with its info")
@@ -241,7 +281,8 @@ do
 	eq(h and h.kit, 0, "its header doesn't say kit rules from the old run")
 	E.persist:load("fresh.tas")
 	waitIdle()
-	eq(E.tl.meta.v2kit, nil, "no old kit table in it")
+	check(E.tl.meta.v2kit == nil or #E.tl.meta.v2kit.keys == 0, "no old kit objects in it")
+	E.settings:set("syncKitObjects", 1)
 	E.modes:request("idle")
 	M.steps(2)
 end

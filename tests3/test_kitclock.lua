@@ -410,8 +410,6 @@ check(done, "Completed:Wait() comes back")
 eq(tw.PlaybackState, Enum.PlaybackState.Completed, "PlaybackState Completed")
 
 end
--- ------------------------------------------------------------------------------------------------ beat blocks
-do
 
 section("Frame Step: the kit's clock moves on by the steps that run only")
 newTAS()
@@ -473,6 +471,7 @@ do
 	eq(KC.patched, 8, "patched again with it")
 end
 
+do
 section("unload: the kit gets its own task / os back, waiting kit threads finish in real time")
 idle()
 local late = nil

@@ -39,6 +39,7 @@ world/buttons
 world/lighting
 world/time/control
 world/kit/clock
+world/kit/objects
 engine/merge
 engine/modes
 engine/frame
