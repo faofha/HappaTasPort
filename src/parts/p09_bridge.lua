@@ -288,8 +288,7 @@ do
 		end
 	end
 	-- filtergc matches the tables natively, only the ones with these keys come back (Real docs).
-	-- getgc(true) first puts every object of the game's memory in one table, which can freeze the client
-	-- in a big game (Real's own tools refuse to run it); it is only used when there is no filtergc.
+	-- Use the bounded native filter only: Real rejects whole-heap scans before a script can run.
 	local GC_KEYS = { "currentSubjectDistance", "activeCameraController", "activeTransparencyController", "activeMouseLockController", "isMouseLocked", "transparencyDirty" }
 	local function scanFiltered()
 		for _, key in ipairs(GC_KEYS) do
@@ -304,24 +303,16 @@ do
 	local function scanGC()
 		if gcDone then return end
 		gcDone = true
-		if Env.filtergc then
-			local ok, done = pcall(scanFiltered)
-			if ok and done then
-				log(#zoomControllers .. " zoom controller(s) found (filtergc)")
-				return
-			end
+		if not Env.filtergc then
+			log("filtergc unavailable; camera scan skipped")
+			return
 		end
-		if not Env.getgc then return end
-		pcall(function()
-			local n = 0
-			for _, t in ipairs(Env.getgc(true)) do
-				if type(t) == "table" then pcall(checkTable, t) end
-				n = n + 1
-				if n % 20000 == 0 then task.wait() end
-				if Janitor.unloading then break end
-			end
-		end)
-		log(#zoomControllers .. " zoom controller(s) found")
+		local ok, done = pcall(scanFiltered)
+		if ok and done then
+			log(#zoomControllers .. " zoom controller(s) found (filtergc)")
+		else
+			log("filtergc camera scan failed")
+		end
 	end
 
 	local function resolve()

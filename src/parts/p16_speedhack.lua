@@ -165,6 +165,17 @@ do
 			end)
 		end)
 	end
+	-- gravity Roblox can't hold (workspace.Gravity stops at 1000): free assemblies get the rest each frame
+	function W.Kick(dy)
+		local done = {}
+		eachWorldPart(function(p)
+			if p.Anchored or charOf(p) then return end
+			local rootP = p.AssemblyRootPart or p
+			if done[rootP] or rootP.Anchored then return end
+			done[rootP] = true
+			pcall(function() rootP.AssemblyLinearVelocity = rootP.AssemblyLinearVelocity + Vector3.new(0, dy, 0) end)
+		end)
+	end
 	local function writeVel(v)
 		local p = v.part
 		pcall(function()
@@ -519,7 +530,8 @@ do
 		lastWalk, lastJump = h.WalkSpeed, h.JumpPower
 		local g = workspace.Gravity
 		if baseGravity == nil or (lastGravity ~= nil and not near(g, lastGravity)) then baseGravity = g end
-		local wantG = baseGravity * s * s
+		-- (Roblox keeps workspace.Gravity at 1000 or less: the rest is a force, see SH.Humanoid)
+		local wantG = SH.Humanoid.SetGravity(baseGravity * s * s)
 		if not near(g, wantG) then workspace.Gravity = wantG end
 		lastGravity = workspace.Gravity
 	end
@@ -538,6 +550,7 @@ do
 			if baseGravity and lastGravity and near(workspace.Gravity, lastGravity) then
 				pcall(function() workspace.Gravity = baseGravity end)
 			end
+			SH.Humanoid.ClearGravity()
 			if keepMomentum and s ~= 1 then scaleMomentum(root, 1 / s) end
 		end
 		local okW, errW = pcall(W.SetFactor, 1)
@@ -571,6 +584,7 @@ do
 			return 1
 		end
 		stopStep()
+		root = part
 		local ok, err = pcall(applyValues, h, s)
 		if not ok then
 			reportError("speed hack", err)
@@ -606,3 +620,409 @@ do
 	end
 end
 
+
+-- ================================================================================================
+--  THE HUMANOID ON THE TAS CLOCK  (V2.38.17)
+--  Roblox's humanoid runs its controllers on real time, so with the scaling above they ran s times too fast
+--  or too slow in game time (measured in the client at 0.5x / 2x / 4x: the walk / stop slide changed with
+--  s^2, a 180-degree turn and the coyote window with s). They are put back on the game clock here, with the
+--  controller Roblox uses (measured in the client at 240 FPS, the same numbers as Eternal Obbying's copy), on
+--  Roblox's own 1x step grid in game time (each 1/240 s step the velocity changes first, then the position moves
+--  at it; below 1x a frame is part of a step, so the grid's phase goes on from frame to frame):
+--   * walking: each step closes 62.5 % of the gap to MoveDirection x WalkSpeed, at most WALK_CAP studs/s^2 on
+--     the floor (Plastic; other floors: learned from what the engine does) and AIR_CAP in the air. After each
+--     physics frame the horizontal velocity and position get the difference between that controller run over
+--     the frame's game time and over its real time (a collision's part is kept).
+--   * turning (AutoRotate, measured in the client: Roblox's PD controller on the yaw): each step the spin becomes
+--     TURN_A x spin + TURN_B x the angle left (at most TURN_AIR rad in the air), then the yaw moves at it; a
+--     frame of several steps keeps the angle it started with for all of them. The angle the engine used is
+--     worked out from the spin it ended with (any target: the move direction, the camera in shift lock, a game
+--     script); the game runs the same controller per game step, and the yaw and spin get the difference.
+--   * coyote time (Roblox's state table, Eternal Obbying's copy): from Running a jump works until the character
+--     is JUMP_MAX_TIME_OFF_FLOOR (0.13 s) off the floor, and Running turns into Freefall after OFF_FLOOR_GRACE
+--     (0.125 s), so in practice the window is the grace. HappaTAS keeps both on the game clock: late jumps the
+--     engine would still allow are blocked, jumps it would refuse inside the game-time window are made
+--     (ChangeState(Jumping)), Freefall comes at the game-time grace. The timer also survives a pause (its
+--     state is kept with each recorded frame).
+--   * jumps: Roblox's Jumping state pushes the vertical speed up to the jump speed at the start of each step and
+--     holds it there for the step, until a step starts at it (then Freefall). In game time the jump is held for
+--     one game step, a push back up to the same speed after HappaTAS's correction is left out, and the jump is
+--     finished once the game's hold is over.
+--   * gravity: Roblox clamps workspace.Gravity at 1000, so above ~2.26x (196.2 x s^2 > 1000) the rest is added
+--     to the character's vertical speed and height after each frame in the air, and to free world parts.
+--  Only while the scaled slow / fast motion is on (Frame Step runs Roblox's normal physics and needs none of
+--  this), except the coyote timer after a pause (any speed).
+-- ================================================================================================
+do
+	local SH = SpeedHack
+	local HC = {}
+	SH.Humanoid = HC
+	local STEP = 1 / 240
+	local GAIN = 0.625            -- of the speed gap closed per physics step
+	local WALK_CAP = 741.6        -- studs/s^2 on a Plastic floor
+	local AIR_CAP = 143           -- studs/s^2 in the air
+	local TURN_A = 0.58312        -- AutoRotate: the spin kept per step (damping)
+	local TURN_B = 10 / 3         -- AutoRotate: rad/s of spin per rad of angle left, per step
+	local TURN_AIR = 1            -- AutoRotate in the air: the angle left counts up to this (rad)
+	local COYOTE = 0.13           -- s of game time after the floor is lost
+	local GRACE = 0.125           -- s after the floor is lost before Running turns into Freefall
+	local MAX_GRAVITY = 1000      -- Roblox's limit for workspace.Gravity
+	HC.WALK_CAP, HC.AIR_CAP, HC.TURN_A, HC.TURN_B, HC.COYOTE = WALK_CAP, AIR_CAP, TURN_A, TURN_B, COYOTE
+	local Air = Enum.Material.Air
+	local JUMPING = Enum.HumanoidStateType.Jumping
+	local FREEFALL = Enum.HumanoidStateType.Freefall
+	local TURNING = { [Enum.HumanoidStateType.Running] = true, [Enum.HumanoidStateType.RunningNoPhysics] = true,
+		[Enum.HumanoidStateType.Freefall] = true, [Enum.HumanoidStateType.Jumping] = true, [Enum.HumanoidStateType.Landed] = true }
+	local MOVING = { [Enum.HumanoidStateType.Running] = true, [Enum.HumanoidStateType.RunningNoPhysics] = true,
+		[Enum.HumanoidStateType.Freefall] = true, [Enum.HumanoidStateType.Jumping] = true, [Enum.HumanoidStateType.Landed] = true }
+	local caps = {}               -- floor material -> the cap the engine showed on it
+	local pre = nil               -- PreSimulation: the state the frame's physics starts from
+	local cy = { off = nil, jumped = false, restored = false, disabled = false, noFall = false } -- off = game time since the floor was lost
+	HC.coyote = cy
+
+	local function yawOf(cf)
+		local l = cf.LookVector
+		return math.atan2(-l.X, -l.Z)
+	end
+	local function wrap(a)
+		a = (a + math.pi) % (2 * math.pi)
+		return a - math.pi
+	end
+	-- Roblox's stepping: each 1/240 s step the velocity changes first (change(v, f, moved so far), f = the part of
+	-- a step), then
+	-- the position moves at it for the step. From `phase` (time into the current step; 0 = a step starts) over time
+	-- t. keep: the phase goes on to the next call (Roblox's whole steps, and the game-time grid below 1x: a frame there
+	-- is part of a step); without it the last step is a fraction of a step (only the mock's uneven frames have that).
+	local function stepping(v, t, phase, keep, change)
+		local disp = v * 0
+		local eps = STEP * 1e-6
+		while t > eps do
+			local take
+			if phase <= eps then
+				phase = 0
+				take = math.min(STEP, t)
+				v = change(v, keep and 1 or take / STEP, disp)
+			else
+				take = math.min(STEP - phase, t)
+			end
+			disp = disp + v * take
+			phase, t = phase + take, t - take
+			if phase >= STEP - eps then phase = 0 end
+		end
+		return v, disp, keep and phase or 0
+	end
+	HC.Stepping = stepping
+	-- the walking controller as a step's change
+	local function walker(target, cap)
+		return function(v, f)
+			local err = target - v
+			local m = err.Magnitude
+			if m > 1e-9 then v = v + err * (math.min(m * GAIN * f, cap * STEP * f) / m) end
+			return v
+		end
+	end
+	-- gravity as a step's change; pin.n steps first held at pin.vt (a jump's push)
+	local function faller(g, pin)
+		return function(v, f)
+			if pin.n > 0 then
+				pin.n = pin.n - 1
+				return pin.vt
+			end
+			return v - g * STEP * f
+		end
+	end
+
+	-- ------------------------------------------------------------------------------------------- gravity
+	-- the gravity the speed hack wants: what workspace.Gravity can hold; the rest is added after each physics
+	-- frame in the air (HC.Post). (A VectorForce was tried live: Roblox's jump keeps pushing against it, a 4x
+	-- jump went 12.9 studs high instead of 7.3.)
+	local extra = 0
+	function HC.SetGravity(want)
+		extra = math.max(0, want - MAX_GRAVITY)
+		return math.min(want, MAX_GRAVITY)
+	end
+	function HC.Extra() return extra end
+	function HC.ClearGravity() extra = 0 end
+
+	-- ------------------------------------------------------------------------------------------- coyote time
+	local function setFreefall(hum, on)
+		if on then
+			if cy.noFall then
+				cy.noFall = false
+				pcall(function() hum:SetStateEnabled(FREEFALL, true) end)
+			end
+		elseif not cy.noFall then
+			cy.noFall = true
+			pcall(function() hum:SetStateEnabled(FREEFALL, false) end)
+		end
+	end
+	local function setJumping(hum, on)
+		if on then
+			if cy.disabled then
+				cy.disabled = false
+				pcall(function() hum:SetStateEnabled(JUMPING, true) end)
+			end
+		elseif not cy.disabled then
+			cy.disabled = true
+			pcall(function() hum:SetStateEnabled(JUMPING, false) end)
+		end
+	end
+	-- the timer's state for a recorded frame (nil = on the floor)
+	function HC.CoyoteState()
+		if cy.off == nil then return nil end
+		return { cy.off, cy.jumped and 1 or 0 }
+	end
+	-- unpausing from a recorded frame: its timer as it was
+	function HC.CoyoteRestore(state)
+		if type(state) == "table" then
+			cy.off, cy.jumped, cy.restored = tonumber(state[1]) or 0, state[2] == 1, true
+		else
+			cy.off, cy.jumped, cy.restored = nil, false, false
+		end
+	end
+	function HC.CoyoteReset(hum)
+		cy.off, cy.jumped, cy.restored = nil, false, false
+		cy.grid, cy.pinN, cy.vt, cy.finish = 0, nil, nil, nil
+		if hum then
+			setJumping(hum, true)
+			setFreefall(hum, true)
+		end
+	end
+
+	-- PreSimulation while recording: the coyote rule for the step that comes, the state the frame starts from.
+	-- scaled = the scaled slow / fast motion is on
+	function HC.Pre(dt, hum, root, scaled)
+		pre = nil
+		cy.vy0 = nil
+		if not (hum and root and root.Parent) or root.Anchored then return end
+		cy.vy0 = root.AssemblyLinearVelocity.Y
+		if cy.finish then
+			cy.finish = nil
+			if hum:GetState() == JUMPING then pcall(function() hum:ChangeState(FREEFALL) end) end
+		end
+		local stateBefore = hum:GetState()
+		local s = SH.scale
+		local enforce = (scaled and s ~= 1) or cy.restored
+		cy.enforce = enforce
+		if cy.off ~= nil and enforce then
+			if hum:GetState() == JUMPING then cy.jumped = true end
+			-- (the engine decides on a jump at the end of the step: the game's window then; a jump the engine
+			-- would no longer make is made in HC.Post)
+			setJumping(hum, (not cy.jumped) and cy.off + dt * s <= COYOTE)
+			-- Running turns into Freefall GRACE seconds after the floor is lost, in game time too: not by the
+			-- engine's real-time grace (HC.Post switches it, after the step's jump, like Roblox's state table)
+			local st = hum:GetState()
+			setFreefall(hum, not (st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.RunningNoPhysics))
+		else
+			if cy.disabled then setJumping(hum, true) end
+			if cy.noFall then setFreefall(hum, true) end
+		end
+		if not scaled or s == 1 then cy.grid = 0; return end
+		local floor = hum.FloorMaterial
+		pre = { v = root.AssemblyLinearVelocity, w = root.AssemblyAngularVelocity.Y, yaw = yawOf(root.CFrame), floor = floor, s = s, hum = hum, root = root,
+			state = stateBefore, airborne = cy.off ~= nil or stateBefore == JUMPING or stateBefore == FREEFALL }
+		-- gravity above Roblox's limit for the free world parts (the character has its VectorForce)
+		if extra > 0 and SH.World and SH.World.Kick then SH.World.Kick(-extra * dt) end
+	end
+
+	-- PostSimulation: the coyote timer moves on (recording), the controllers on the game clock (scaled motion)
+	function HC.Post(dt, hum, root, recording)
+		if recording and hum and root and root.Parent and not root.Anchored then
+			-- the floor is lost when gravity alone changed the vertical speed this frame (on something, the
+			-- floor holds it): that frame exactly. FloorMaterial turns Air ~3.2 frames later, a fallback.
+			local vy1 = root.AssemblyLinearVelocity.Y
+			local gEff = workspace.Gravity -- (the engine's own gravity: the rest is added after this check)
+			local falling = cy.vy0 ~= nil and math.abs(vy1) > 1e-3
+				and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
+			if hum.FloorMaterial ~= Air and not falling then
+				if cy.off ~= nil then
+					-- (landed: a jump held down is taken on this step; it was off for the step, so it is made here)
+					local blocked = cy.disabled
+					cy.off, cy.jumped, cy.restored = nil, false, false
+					cy.pinN, cy.vt, cy.finish = nil, nil, nil -- (the next push is a new jump)
+					setJumping(hum, true)
+					setFreefall(hum, true)
+					if blocked and hum.Jump and hum:GetState() ~= JUMPING then pcall(function() hum:ChangeState(JUMPING) end) end
+				end
+			else
+				local s = SH.scale
+				if cy.off == nil then
+					-- (lost during this frame: FloorMaterial turns Air on that frame too, measured)
+					cy.off = dt * s
+				else
+					cy.off = cy.off + dt * s
+				end
+				if hum:GetState() == JUMPING then cy.jumped = true end
+				-- the engine's own window is over (slow motion, or after a pause): a jump inside the game's window
+				-- is made here, at the end of the step like the engine's own (only from Running, like Roblox's
+				-- state table: once Running has turned into Freefall there is no jump)
+				local stJ = hum:GetState()
+				if cy.enforce and not cy.jumped and cy.off <= COYOTE and hum.Jump
+					and (stJ == Enum.HumanoidStateType.Running or stJ == Enum.HumanoidStateType.RunningNoPhysics) then
+					cy.jumped = true
+					setJumping(hum, true)
+					pcall(function() hum:ChangeState(JUMPING) end)
+				end
+				-- no jump on this step and the grace is over: Freefall (Roblox checks the jump first)
+				stJ = hum:GetState()
+				if cy.enforce and cy.off > GRACE and (stJ == Enum.HumanoidStateType.Running or stJ == Enum.HumanoidStateType.RunningNoPhysics) then
+					setFreefall(hum, true)
+					pcall(function() hum:ChangeState(FREEFALL) end)
+				end
+			end
+		end
+		local p = pre
+		pre = nil
+		-- (a frame with no physics step: nothing to correct, and the turn ratio would be 0 / 0)
+		if not dt or dt < 1e-5 then return end
+		if not p or p.root ~= root or p.hum ~= hum or not root.Parent or root.Anchored then return end
+		if not MOVING[p.state] then return end
+		local s = p.s
+		local n = dt / STEP
+		-- the frame's game time on Roblox's 1x step grid (whole steps: Roblox's dt always is, up to a few
+		-- nanoseconds of noise - measured live: taken as one more step that noise stopped every correction)
+		local whole = math.abs(n - math.floor(n + 0.5)) < 1e-3
+		if whole then
+			n = math.floor(n + 0.5)
+			dt = n * STEP
+		end
+		local T = s * dt
+		-- vertical: what the engine did (see below)
+		local stNow = hum:GetState()
+		local jumping = stNow == JUMPING or p.state == JUMPING
+		local gWs = workspace.Gravity
+		local vy0 = p.v.Y
+		local vy1 = root.AssemblyLinearVelocity.Y
+		local eFall = stepping(vy0, dt, 0, whole, faller(gWs, { n = 0 })) -- (gravity alone)
+		local pushed = jumping and vy1 > 1e-2 and vy1 > eFall + 1e-2
+		local zeroPush = stepping(0, dt, 0, whole, faller(gWs, { n = 1, vt = 0 })) -- (the end speed after a push to 0)
+		local jumpE = vy1 - zeroPush -- (the speed the engine held, if it pushed)
+		local first = pushed and cy.vt == nil
+		local again = pushed and cy.vt ~= nil and math.abs(jumpE - cy.vt * s) < 1e-2
+		local fell = math.abs(vy1 - eFall) < 1e-3 + 1e-5 * math.abs(vy0)
+		-- (a push: the game's held step is the next one on its grid, like Roblox's at 1x)
+		if first then cy.pinN, cy.vt = 1, jumpE / s end
+		local phase0 = whole and (cy.grid or 0) or 0
+		local _, _, phase1 = stepping(0, T, phase0, whole, function(v) return v end)
+		cy.grid = phase1
+		-- walking / stopping / air control
+		local v0 = Vector3.new(p.v.X, 0, p.v.Z)
+		local v1 = root.AssemblyLinearVelocity
+		local v1h = Vector3.new(v1.X, 0, v1.Z)
+		local md = hum.MoveDirection
+		local target = Vector3.new(md.X, 0, md.Z) * hum.WalkSpeed
+		-- which cap the engine used (FloorMaterial changes a few frames after the floor is lost or found):
+		-- the floor's or the air's, whichever explains the engine's result
+		local floorCap = (p.floor ~= Air and caps[p.floor]) or WALK_CAP
+		local gEnd, gDisp = stepping(v0, dt, 0, whole, walker(target, floorCap))
+		local aEnd, aDisp = stepping(v0, dt, 0, whole, walker(target, AIR_CAP))
+		local airborne = p.floor == Air or p.state == JUMPING or p.state == Enum.HumanoidStateType.Freefall
+		local cap, eEnd, eDisp = floorCap, gEnd, gDisp
+		local otherEnd, otherDisp, otherCap = aEnd, aDisp, AIR_CAP
+		if airborne then
+			cap, eEnd, eDisp = AIR_CAP, aEnd, aDisp
+			otherEnd, otherDisp, otherCap = gEnd, gDisp, floorCap
+		end
+		-- (the other one only when it clearly explains the engine's result better)
+		if (v1h - otherEnd).Magnitude < (v1h - eEnd).Magnitude - 1e-3 then cap, eEnd, eDisp = otherCap, otherEnd, otherDisp end
+		-- learn the cap of this floor from a frame the engine spent fully capped on it
+		if cap ~= AIR_CAP and p.floor ~= Air then
+			local err0 = target - v0
+			local m = err0.Magnitude
+			if m > cap * STEP * n / GAIN + 1 then
+				local along = (v1h - v0):Dot(err0 / m)
+				if along > 0 and math.abs(along - cap * STEP * n) > 0.05 * cap * STEP * n then
+					caps[p.floor] = along / (STEP * n)
+					cap = caps[p.floor]
+					eEnd, eDisp = stepping(v0, dt, 0, whole, walker(target, cap))
+				end
+			end
+		end
+		-- the same controller in normal units over the frame's game time, back to real units
+		local uEnd, uDisp = stepping(v0 / s, T, phase0, whole, walker(target / s, cap))
+		local dv = uEnd * s - eEnd
+		local dp = uDisp - eDisp
+		if dv.Magnitude > 1e-6 or dp.Magnitude > 1e-6 then
+			root.AssemblyLinearVelocity = Vector3.new(v1.X + dv.X, v1.Y, v1.Z + dv.Z)
+			root.CFrame = root.CFrame + Vector3.new(dp.X, 0, dp.Z)
+			-- (the walk animation follows the corrected speed, see AnimEngine Running)
+			local st = hum:GetState()
+			if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.RunningNoPhysics then
+				local e = AnimEngine.current
+				if e and e.Running then pcall(e.Running, Vector3.new(v1.X + dv.X, 0, v1.Z + dv.Z).Magnitude) end
+			end
+		end
+		-- jumps and gravity Roblox can't hold (see the header): the vertical motion in game time. The engine: a
+		-- jump held at full speed for one real step, then workspace.Gravity; the game: held for one step of game time,
+		-- then the whole gravity (gN, in normal units). The difference is added, like the walking.
+		-- Roblox's Jumping state pushes the speed up to the jump speed at the start of every step until a step starts
+		-- there (Eternal Obbying's copy: jumpingComputeForce), so a corrected speed below it is pushed back up (measured
+		-- live: a 4x jump went 12.5 studs high): such a push back to the same jump speed is not part of the game's
+		-- motion, and the jump is finished (Freefall) once the game's hold is over.
+		-- Only frames whose vertical motion is known are changed: the jump's push, the same push again, or gravity
+		-- alone (in the air); a floor, a landing or a ceiling is the engine's.
+		if first or again or fell then
+			local gN = (gWs + extra) / (s * s)
+			local eEndY, eDy = stepping(vy0, dt, 0, whole, faller(gWs, { n = (first or again) and 1 or 0, vt = jumpE }))
+			-- (the game continues from where it was: its held step, or the speed it had)
+			local pin = { n = cy.pinN or 0, vt = cy.vt }
+			local uEndY, iDy = stepping(vy0 / s, T, phase0, whole, faller(gN, pin))
+			cy.pinN = pin.n
+			local dvy, dy = uEndY * s - eEndY, iDy - eDy
+			if math.abs(dvy) > 1e-6 or math.abs(dy) > 1e-6 then
+				local v = root.AssemblyLinearVelocity
+				root.AssemblyLinearVelocity = Vector3.new(v.X, v.Y + dvy, v.Z)
+				root.CFrame = root.CFrame + Vector3.new(0, dy, 0)
+			end
+			-- the game's hold is over and the speed is below the jump speed: Roblox would finish the jump at the next
+			-- step, which here would push it again: Freefall from the next PreSimulation (like the engine's own finish)
+			if stNow == JUMPING and cy.vt and cy.pinN <= 0 and uEndY < cy.vt - 1e-4 then cy.finish = true end
+		elseif not jumping then
+			cy.pinN, cy.vt, cy.finish = nil, nil, nil
+		end
+		-- turning (AutoRotate, see the header)
+		if hum.AutoRotate and TURNING[p.state] then
+			local air = p.state == JUMPING or p.state == FREEFALL
+			local w0, w1 = p.w, root.AssemblyAngularVelocity.Y
+			-- the engine: the frame's steps with the angle it started with
+			local function held(e)
+				return function(w, f) return w + f * ((TURN_A - 1) * w + TURN_B * e) end
+			end
+			local wFree = stepping(w0, dt, 0, whole, held(0))
+			local wUnit = stepping(0, dt, 0, whole, held(1))
+			local eEng = wUnit > 1e-9 and (w1 - wFree) / wUnit or nil
+			if eEng and math.abs(eEng) <= math.pi + 0.01 then
+				-- (a capped frame in the air only says the angle was at least TURN_AIR: the move direction's, if
+				-- it is bigger the same way)
+				local e0 = eEng
+				if air and math.abs(eEng) >= TURN_AIR - 1e-3 then
+					local md = hum.MoveDirection
+					if md.Magnitude > 1e-3 then
+						local t = wrap(math.atan2(-md.X, -md.Z) - p.yaw)
+						if math.abs(t) > math.abs(eEng) and (t > 0) == (eEng > 0) then e0 = t end
+					end
+				end
+				local _, eDisp = stepping(w0, dt, 0, whole, held(eEng))
+				local cap = air and TURN_AIR or math.huge
+				-- the game: the same controller per game step, the angle left updated each step (the mock's
+				-- uneven frames: held for the frame, like the engine)
+				local uEnd, uDisp
+				if whole then
+					uEnd, uDisp = stepping(w0 / s, T, phase0, true, function(w, f, d)
+						local e = math.max(-cap, math.min(cap, e0 - d))
+						return w + f * ((TURN_A - 1) * w + TURN_B * e)
+					end)
+				else
+					uEnd, uDisp = stepping(w0 / s, T, 0, false, held(math.max(-cap, math.min(cap, e0))))
+				end
+				local dYaw, dW = uDisp - eDisp, uEnd * s - w1
+				if math.abs(dYaw) > 1e-7 or math.abs(dW) > 1e-6 then
+					local cf = root.CFrame
+					root.CFrame = CFrame.new(cf.Position) * CFrame.Angles(0, dYaw, 0) * cf.Rotation
+					local w = root.AssemblyAngularVelocity
+					root.AssemblyAngularVelocity = Vector3.new(w.X, w.Y + dW, w.Z)
+				end
+			end
+		end
+	end
+end

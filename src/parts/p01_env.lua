@@ -62,7 +62,6 @@ do
 	Env.delfile     = fn(delfile)
 	Env.lz4compress   = fn(lz4compress, synT.lz4compress)
 	Env.lz4decompress = fn(lz4decompress, synT.lz4decompress)
-	Env.getcustomasset = fn(getcustomasset, getsynasset)
 	Env.gethui      = fn(gethui)
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
@@ -85,9 +84,6 @@ do
 	Env.mousemoveabs = fn(mousemoveabs)
 	Env.mousemoverel = fn(mousemoverel)
 	Env.mousescroll  = fn(mousescroll)
-	-- Roblox's VirtualInputManager hands a key to Roblox's input with its exact KeyCode (used for the keys
-	-- the executor's keypress gets wrong, see the replay in InputSys)
-	Env.VirtualInput = svc("VirtualInputManager")
 
 	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
 		and Env.listfiles and Env.delfile and true or false
@@ -215,6 +211,6 @@ local ZERO3 = Vector3.zero
 -- ------------------------------------------------------------------------------------------------ module tables
 -- Declared up front so every module can call every other one (no forward-reference nil globals).
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
-local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
+local ClientObjects, Buttons, Lighting, ToolSync, Profiler = {}, {}, {}, {}, {}
 local Core, Menu, SpeedHack, KitClock, KitObjects = {}, {}, {}, {}, {}
 

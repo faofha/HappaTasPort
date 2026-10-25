@@ -8,8 +8,6 @@
 --     un-anchors its PrimaryPart every 0.2 s) is anchored again and put back on its recorded pose
 --   * an error inside a frame handler is printed once, not only in debug builds
 --   * rebinding a control: the key press that sets the new key doesn't also run the control's old action
---   * a key the replay pressed itself comes back as input: it plays no live key sound
---   * the default click sound is a real sound (the old asset id was a Place: Roblox printed load errors)
 
 -- ------------------------------------------------------------------------------------------- before boot
 -- a PlayerModule with a camera controller and a mouse lock controller that log the thread they run on
@@ -93,23 +91,6 @@ local prof = M.services.CoreGui:FindFirstChild("HappaProfiler")
 check(prof ~= nil and prof.AutoLocalize == false, "MicroProfiler overlay (in CoreGui, above the top bar): AutoLocalize off")
 S.Set("Show MicroProfiler", 0)
 
-section("default sounds are sound assets")
--- (checked in the live client with MarketplaceService:GetProductInfo: 9119713951 = audio "Switch 2 (SFX)",
--- 9119714049 = a Place; rbxasset://sounds/clickfast.wav loads, 0.288 s, it ships with the client)
-local soundFolder = C.Gui:FindFirstChild("Sounds")
-check(soundFolder ~= nil, "the sound pool exists")
-if soundFolder then
-	local keys, clicks, bad = 0, 0, 0
-	for _, s in ipairs(soundFolder:GetChildren()) do
-		if s.SoundId == "rbxassetid://9119714049" then bad = bad + 1 end
-		if s.Name:sub(1, 1) == "K" and s.SoundId == "rbxassetid://9119713951" then keys = keys + 1 end
-		if s.Name:sub(1, 1) == "C" and s.SoundId == "rbxasset://sounds/clickfast.wav" then clicks = clicks + 1 end
-	end
-	eq(keys, 6, "6 key sounds: Switch 2 (SFX)")
-	eq(clicks, 6, "6 click sounds: the client's clickfast.wav")
-	eq(bad, 0, "no sound uses the old id (a Place)")
-end
-
 section("the camera module runs in a thread of its own")
 check(Bridge.Controller() == ctrl, "the bridge found the mock camera controller")
 callLog = {}
@@ -175,47 +156,6 @@ for _, reverse in ipairs({ false, true }) do
 		eq(Controls.Get("Back"), "R", "bound back to R")
 	end
 	M.reverseSignals = false
-end
-
-section("a key the replay pressed itself doesn't play a live key sound")
-do
-	S.Set("Enable Keyboard Sounds", 1)
-	S.Set("Replay Keyboard", 1)
-	local function key(kc) M.pressKey(kc); M.releaseKey(kc); M.steps(2) end
-	local function click()
-		M.services.UserInputService.InputBegan:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.Begin), false)
-		M.services.UserInputService.InputEnded:Fire(M.input(Enum.UserInputType.MouseButton1, Enum.KeyCode.Unknown, Enum.UserInputState.End), false)
-		M.steps(2)
-	end
-	Core.SetTAS({})
-	key(Enum.KeyCode.Two)
-	click() -- record
-	M.steps(5)
-	S.Set("Sound Trigger Mode", 0)
-	M.soundPlays = 0
-	M.pressKey(Enum.KeyCode.W); M.steps(10); M.releaseKey(Enum.KeyCode.W); M.steps(10)
-	eq(M.soundPlays, 1, "a real key press while recording plays one sound (mode 0)")
-	click() -- pause
-	for _, mode in ipairs({ 0, 2 }) do
-		S.Set("Sound Trigger Mode", mode)
-		M.inputLog = {}
-		key(Enum.KeyCode.Three) -- test
-		local sent, g = false, 0
-		while not sent and g < 120 and C.mode == 3 do
-			M.step(1 / 60); g = g + 1
-			for _, e in ipairs(M.inputLog) do if e[1] == "keypress" and e[2] == 0x57 then sent = true end end
-		end
-		check(sent, "the replay pressed W (mode " .. mode .. ")")
-		M.soundPlays = 0
-		M.pressKey(Enum.KeyCode.W); M.steps(2) -- the injected press comes back as input (like Roblox)
-		eq(M.soundPlays, 0, "it plays no live sound (mode " .. mode .. ")")
-		local g2 = 0
-		while C.mode == 3 and g2 < 300 do M.step(1 / 60); g2 = g2 + 1 end
-		M.releaseKey(Enum.KeyCode.W); M.steps(2)
-		key(Enum.KeyCode.Two) -- back to Create (paused) for the next round
-	end
-	key(Enum.KeyCode.One)
-	S.Set("Sound Trigger Mode", 0)
 end
 
 section("a held part that a game script lets go is held again, on its recorded pose")

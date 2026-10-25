@@ -24,7 +24,7 @@ cat >> "$OUT" <<'EOF'
 
 rawset(genv, "__HappaTAS_T", { Core = Core, C = C, Settings = Settings, Controls = Controls, Store = Store,
 	Codec = Codec, Bridge = Bridge, InputSys = InputSys, Cursor = Cursor, AnimEngine = AnimEngine,
-	ClientObjects = ClientObjects, Buttons = Buttons, ToolSync = ToolSync, Sounds = Sounds, Profiler = Profiler,
+	ClientObjects = ClientObjects, Buttons = Buttons, ToolSync = ToolSync, Profiler = Profiler,
 	Menu = Menu, Typing = Typing, Env = Env, Gui = Gui, CONFIG = CONFIG, Janitor = Janitor, UI = UI,
 	Lighting = Lighting, SpeedHack = SpeedHack, KitClock = KitClock, KitObjects = KitObjects })
 EOF

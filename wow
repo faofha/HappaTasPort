@@ -1,7 +1,7 @@
--- HappaTAS Executor Port V2.38.16 - records and replays TAS runs on the client (executor script).
+-- HappaTAS Executor Port V2.38.17 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu (controls, settings, saves, help).
 -- Release build: comments and blank lines removed. The commented source is src/parts/ (HappaTasPort repository).
-local VERSION = "V2.38.16"
+local VERSION = "V2.38.17"
 local CONFIG = {
 	RootFolder      = "HappaTasPort",
 	TakeOverAnimate = true,
@@ -74,18 +74,17 @@ do
 	Env.delfile     = fn(delfile)
 	Env.lz4compress   = fn(lz4compress, synT.lz4compress)
 	Env.lz4decompress = fn(lz4decompress, synT.lz4decompress)
-	Env.getcustomasset = fn(getcustomasset, getsynasset)
 	Env.gethui      = fn(gethui)
 	Env.protectgui  = fn(synT.protect_gui)
 	Env.getgc       = fn(getgc)
-	Env.filtergc    = nil
-	Env.hookfunction    = nil
-	Env.iscclosure      = nil
-	Env.getloadedmodules = nil
-	Env.getconnections  = nil
-	Env.setreadonly     = nil
-	Env.isreadonly      = nil
-	Env.restorefunction = nil
+	Env.filtergc    = fn(filtergc)
+	Env.hookfunction    = fn(hookfunction, replaceclosure)
+	Env.iscclosure      = fn(iscclosure)
+	Env.getloadedmodules = fn(getloadedmodules)
+	Env.getconnections  = fn(getconnections, getsignals, get_signal_cons)
+	Env.setreadonly     = fn(setreadonly)
+	Env.isreadonly      = fn(isreadonly)
+	Env.restorefunction = fn(restorefunction)
 	Env.isactive    = fn(isrbxactive, isgameactive, iswindowactive)
 	Env.keypress     = fn(keypress, keydown)
 	Env.keyrelease   = fn(keyrelease, keyup)
@@ -94,9 +93,8 @@ do
 	Env.mouse2press  = fn(mouse2press, mouse2down)
 	Env.mouse2release= fn(mouse2release, mouse2up)
 	Env.mousemoveabs = fn(mousemoveabs)
-	Env.mousemoverel = nil
+	Env.mousemoverel = fn(mousemoverel)
 	Env.mousescroll  = fn(mousescroll)
-	Env.VirtualInput = nil
 	Env.HasFiles = Env.writefile and Env.readfile and Env.isfile and Env.isfolder and Env.makefolder
 		and Env.listfiles and Env.delfile and true or false
 	Env.HasLZ4 = (Env.lz4compress ~= nil and Env.lz4decompress ~= nil)
@@ -192,7 +190,7 @@ local function clampn(v, lo, hi)
 end
 local ZERO3 = Vector3.zero
 local Store, Bridge, InputSys, Cursor, AnimEngine = {}, {}, {}, {}, {}
-local ClientObjects, Buttons, Lighting, ToolSync, Sounds, Profiler = {}, {}, {}, {}, {}, {}
+local ClientObjects, Buttons, Lighting, ToolSync, Profiler = {}, {}, {}, {}, {}
 local Core, Menu, SpeedHack, KitClock, KitObjects = {}, {}, {}, {}, {}
 local ControlsTable = {
 	{ "Idle", "1" },
@@ -248,11 +246,6 @@ local SettingsTable = {
 	{ name = "MicroProfiler Scale",      default = 1, section = "Interface", kind = "number", label = "MicroProfiler Size (1 = Roblox)", min = 0.5, max = 4 },
 	{ name = "MicroProfiler Text Offset", default = 0, section = "Interface", kind = "number", label = "MicroProfiler Text Offset (px, - = up)", min = -6, max = 6, integer = true },
 	{ name = "Allow PlayerGui Interface", default = 0, section = "Interface", label = "Allow Visible Interface (PlayerGui)" },
-	{ name = "Enable Keyboard Sounds",   default = 0, section = "Sounds", label = "Keyboard Sounds" },
-	{ name = "Enable Click Sounds",      default = 0, section = "Sounds", label = "Mouse Click Sounds" },
-	{ name = "Sound Trigger Mode",       default = 0, section = "Sounds", kind = "number", label = "Sound Mode (0 Live 1 Play 2 Both)", min = 0, max = 2, integer = true },
-	{ name = "Sound Volume",             default = 50, section = "Sounds", kind = "number", label = "Sound Volume (0-100)", min = 0, max = 100 },
-	{ name = "Dynamic Pitch Variation",  default = 1, section = "Sounds" },
 }
 local Settings = { values = {}, defs = {}, listeners = {}, onAnyChange = nil }
 local Controls = { values = {}, listeners = {}, onAnyChange = nil }
@@ -643,16 +636,23 @@ do
 				{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,1,-60)},{
 					HD("2UpdateLogN", "Update Log", 14),
 					{"UIListLayout","UIListLayout",44,{}},
-					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,90)},{
+					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108)},{
 						UC,
 						LV("0", " Happy_Liam/happa - Main Scripter/UI Design"),
 						UL9,
 						LV("2", " plusgiant5 - Tasability creator"),
-						LV("1", " TestMicrowaveDinner - Scripting Help")
+						LV("1", " TestMicrowaveDinner - Scripting Help"),
+						LV("3", " Skittlesuna - Playtester")
 					}},
 					HD("4CreditsN", "Credits", 14),
 					HD("0ModelN", "Executor port - client side script", 14),
-					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4508)},{
+					{"Frame","3UpdateLog",46,{Position=u(0,0,0,0),Size=u(1,0,0,4618)},{
+						LV("960", " 10/25/26 - 2.38.17"),
+						LI("960_1", "   -   Sounds removed (keyboard / click sounds)"),
+						LI("960_2", "   -   Keys replayed with keypress / keyrelease only"),
+						LI("960_3", "   -   Speed Hack: walking, turning, jumps and gravity on the TAS clock"),
+						LI("960_4", "   -   Speed Hack: coyote time as at normal speed"),
+						LI("960_5", "   -   Coyote time kept across a pause"),
 						LV("961", " 10/18/26 - 2.38.16"),
 						LI("961_1", "   -   Speed Hack: speeds above 1 (fast motion, up to 4x)"),
 						LI("961_2", "   -   Speed Hack Frame Step: normal physics in slow motion"),
@@ -702,7 +702,6 @@ do
 						LI("969_2", "   -   Screen countdown freezes strictly on pause without advancing"),
 						LI("969_3", "   -   Scrubbing backwards accurately restores and reverses top timer UI"),
 						LI("969_4", "   -   ModuleScript & Attribute config support for EToH kits"),
-						LI("969_5", "   -   All legacy references migrated to EToH"),
 						LV("970", " 10/16/26 - 2.38.7"),
 						LI("970_1", "   -   Timed buttons: PlayerGui EffectGui.TimerList synchronized"),
 						LI("970_2", "   -   Screen timer freezes while paused and follows TAS frame scrubbing"),
@@ -939,10 +938,6 @@ do
 						{ 48, "Aggregate Infinite counts frames; picking it starts Avg and Max again. Custom > TAS Timeline shows your TAS (green = current frame, click to jump)." },
 						{ 44, "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves frames to HappaTasPort. Pause or Ctrl+P freezes it." },
 						{ 48, "Hover a menu to open it, click a line to pick it. If the text sits too high or low, change Settings > MicroProfiler Text Offset (- = up)." } }),
-					H("32", "Keyboard & Click Sounds", 140, true, {
-						{ 48, "Custom mechanical keyboard and mouse click sound feedback. Configure volume, enable keyboard sounds, and enable click sounds in Settings." },
-						{ 48, "Sound Trigger Mode lets you select when audio plays: 0 for live recording, 1 for playback replay, or 2 for both. Dynamic Pitch Variation modulates sound pitch based on typing pace and key hold time." },
-						{ 24, "Sounds automatically suppress when typing in textboxes or navigating menus." } }),
 					H("33", "Mouse UV Normalization", 110, true, {
 						{ 48, "Normalizes cursor positions to camera viewport UV coordinates (0 to 1) after subtracting GuiService topbar insets." },
 						{ 42, "Provides 1:1 cross-resolution aiming: replays on different screen resolutions or window sizes aim and click at the exact sub-pixel world location." } }),
@@ -2242,17 +2237,6 @@ do
 		if not ok then return false, tostring(err) end
 		return true, path
 	end
-	function Store.CustomAsset(name)
-		if not Env.HasFiles or not Env.getcustomasset then return nil end
-		for _, ext in ipairs({ ".mp3", ".ogg", ".wav" }) do
-			local p = ROOT .. "/Sounds/" .. name .. ext
-			if fileExists(p) then
-				local ok, id = call(Env.getcustomasset, p)
-				if ok and type(id) == "string" and id ~= "" then return id end
-			end
-		end
-		return nil
-	end
 end
 do
 	Bridge.timeRate = 1
@@ -2520,24 +2504,16 @@ do
 	local function scanGC()
 		if gcDone then return end
 		gcDone = true
-		if Env.filtergc then
-			local ok, done = pcall(scanFiltered)
-			if ok and done then
-				log(#zoomControllers .. " zoom controller(s) found (filtergc)")
-				return
-			end
+		if not Env.filtergc then
+			log("filtergc unavailable; camera scan skipped")
+			return
 		end
-		if not Env.getgc then return end
-		pcall(function()
-			local n = 0
-			for _, t in ipairs(Env.getgc(true)) do
-				if type(t) == "table" then pcall(checkTable, t) end
-				n = n + 1
-				if n % 20000 == 0 then task.wait() end
-				if Janitor.unloading then break end
-			end
-		end)
-		log(#zoomControllers .. " zoom controller(s) found")
+		local ok, done = pcall(scanFiltered)
+		if ok and done then
+			log(#zoomControllers .. " zoom controller(s) found (filtergc)")
+		else
+			log("filtergc camera scan failed")
+		end
 	end
 	local function resolve()
 		local known = cameras ~= nil
@@ -2991,7 +2967,7 @@ do
 	}
 	local ID_M1, ID_M2 = 96, 97
 	InputSys.ID_M1, InputSys.ID_M2 = ID_M1, ID_M2
-	local KEY_BY_ENUM, KEY_VK, KEY_SHORT, KEY_KC = {}, {}, {}, {}
+	local KEY_BY_ENUM, KEY_VK, KEY_SHORT = {}, {}, {}
 	for id, k in ipairs(KEYLIST) do
 		KEY_SHORT[id] = k[3]
 		if k[1] then
@@ -2999,12 +2975,9 @@ do
 			if ok and item then
 				KEY_BY_ENUM[item] = id
 				KEY_VK[id] = k[2]
-				KEY_KC[id] = item
 			end
 		end
 	end
-	local EXTENDED = { [0x21] = true, [0x22] = true, [0x23] = true, [0x24] = true, [0x25] = true, [0x26] = true,
-		[0x27] = true, [0x28] = true, [0x2D] = true, [0x2E] = true, [0x6F] = true, [0xA3] = true, [0xA5] = true }
 	local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
 	local controlIds, controlDirty = {}, true
 	Controls.Changed("*", function() controlDirty = true end)
@@ -3073,13 +3046,6 @@ do
 		if live.held[id] then return end
 		live.held[id] = true
 		pushEvent(id)
-		local rp = InputSys.Replay
-		local t = rp and rp.recent[id]
-		if t then
-			rp.recent[id] = nil
-			if os.clock() - t < 0.5 then return end
-		end
-		if Sounds.PlayLive then Sounds.PlayLive(id, isMouseId(id), id == ID_M2) end
 	end
 	local function onEnded(inp, proc)
 		local id = idOf(inp)
@@ -3151,28 +3117,23 @@ do
 		for i, id in ipairs(descIds) do descNames[i] = KEY_SHORT[id] or "?" end
 		return table.concat(descNames, " ")
 	end
-	local replay = { active = false, applied = 0, injected = {}, state = {}, recent = {}, lastMX = nil, lastMY = nil }
+	local replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil }
 	InputSys.Replay = replay
 	local function allowed(id)
 		if getControlIds()[id] then return false end
 		if isMouseId(id) then return InputSys.Available.Clicks and Settings.On("Replay Mouse Clicks") end
 		return InputSys.Available.Keys and Settings.On("Replay Keyboard") and KEY_VK[id] ~= nil
 	end
-	local function vimKey(id, down)
-		local vim, kc = Env.VirtualInput, KEY_KC[id]
-		if not (vim and kc and EXTENDED[KEY_VK[id]]) then return false end
-		return (pcall(vim.SendKeyEvent, vim, down, kc, false, game))
-	end
 	local function sendDown(id)
 		return (pcall(function()
 			if id == ID_M1 then Env.mouse1press() elseif id == ID_M2 then Env.mouse2press()
-			elseif not vimKey(id, true) then Env.keypress(KEY_VK[id]) end
+			else Env.keypress(KEY_VK[id]) end
 		end))
 	end
 	local function sendUp(id)
 		pcall(function()
 			if id == ID_M1 then Env.mouse1release() elseif id == ID_M2 then Env.mouse2release()
-			elseif not vimKey(id, false) then Env.keyrelease(KEY_VK[id]) end
+			else Env.keyrelease(KEY_VK[id]) end
 		end)
 	end
 	local function press(id)
@@ -3180,7 +3141,6 @@ do
 		if replay.injected[id] or not allowed(id) or not Env.WindowActive() then return end
 		if sendDown(id) then
 			replay.injected[id] = true
-			replay.recent[id] = os.clock()
 		end
 	end
 	local function release(id)
@@ -3198,7 +3158,6 @@ do
 			end
 		elseif e > 0 then
 			press(e)
-			if Sounds.PlayReplay then Sounds.PlayReplay(e, isMouseId(e), e == ID_M2) end
 		else
 			release(-e)
 		end
@@ -3868,6 +3827,7 @@ do
 			end
 		end
 		function self.Lock(lock) LockAnimations = lock end
+		function self.Running(speed) onRunning(speed) end
 		function self.Rescale()
 			local k = hack()
 			if currentAnimTrack then currentAnimTrack:AdjustSpeed(currentAnimSpeed * k) end
@@ -7721,79 +7681,6 @@ do
 	end)
 end
 do
-	local POOL = 6
-	local DEFAULT_KEY = "rbxassetid://9119713951"
-	local DEFAULT_CLICK = "rbxasset://sounds/clickfast.wav"
-	local keyPool, clickPool = {}, {}
-	local keyIndex, clickIndex = 1, 1
-	local lastKeyClock = 0
-	local holder
-	function Sounds.Init(parent)
-		if holder then return end
-		holder = Instance.new("Folder")
-		holder.Name = "Sounds"
-		holder.Parent = parent
-		local keyId = Store.CustomAsset("key") or DEFAULT_KEY
-		local clickId = Store.CustomAsset("click") or DEFAULT_CLICK
-		for i = 1, POOL do
-			local sk = Instance.new("Sound")
-			sk.Name = "K" .. i
-			sk.SoundId = keyId
-			sk.Volume = 0.5
-			sk.Parent = holder
-			keyPool[i] = sk
-			local sc = Instance.new("Sound")
-			sc.Name = "C" .. i
-			sc.SoundId = clickId
-			sc.Volume = 0.5
-			sc.Parent = holder
-			clickPool[i] = sc
-		end
-	end
-	local function volume()
-		return clampn(Settings.Get("Sound Volume") / 100, 0, 1)
-	end
-	local function allowed(isLive)
-		local m = Settings.Get("Sound Trigger Mode")
-		if isLive then return m == 0 or m == 2 end
-		return m == 1 or m == 2
-	end
-	local function playKey()
-		if not Settings.On("Enable Keyboard Sounds") or #keyPool == 0 then return end
-		local now = os.clock()
-		local pace = clampn(now - lastKeyClock, 0.04, 0.5)
-		lastKeyClock = now
-		local snd = keyPool[keyIndex]
-		keyIndex = (keyIndex % POOL) + 1
-		local pitch = 1
-		if Settings.On("Dynamic Pitch Variation") then
-			pitch = clampn(1 + (0.2 - pace) * 0.3 + (math.random() - 0.5) * 0.08, 0.88, 1.15)
-		end
-		snd.Volume = volume()
-		snd.PlaybackSpeed = pitch
-		snd:Play()
-	end
-	local function playClick(isRight)
-		if not Settings.On("Enable Click Sounds") or #clickPool == 0 then return end
-		local snd = clickPool[clickIndex]
-		clickIndex = (clickIndex % POOL) + 1
-		local pitch = isRight and 0.95 or 1.05
-		if Settings.On("Dynamic Pitch Variation") then pitch = pitch + (math.random() - 0.5) * 0.06 end
-		snd.Volume = volume()
-		snd.PlaybackSpeed = pitch
-		snd:Play()
-	end
-	local function play(isLive, isMouse, isRight)
-		if not holder or not allowed(isLive) then return end
-		if Typing.Active() then return end
-		pcall(function()
-			if isMouse then playClick(isRight) else playKey() end
-		end)
-	end
-	function Sounds.PlayLive(_, isMouse, isRight) play(true, isMouse, isRight) end
-	function Sounds.PlayReplay(_, isMouse, isRight) play(false, isMouse, isRight) end
-end
-do
 	local SH = SpeedHack
 	SH.scale = 1
 	SH.anim = 1
@@ -7917,6 +7804,16 @@ do
 				rootP.AssemblyLinearVelocity = rootP.AssemblyLinearVelocity * ratio
 				rootP.AssemblyAngularVelocity = rootP.AssemblyAngularVelocity * ratio
 			end)
+		end)
+	end
+	function W.Kick(dy)
+		local done = {}
+		eachWorldPart(function(p)
+			if p.Anchored or charOf(p) then return end
+			local rootP = p.AssemblyRootPart or p
+			if done[rootP] or rootP.Anchored then return end
+			done[rootP] = true
+			pcall(function() rootP.AssemblyLinearVelocity = rootP.AssemblyLinearVelocity + Vector3.new(0, dy, 0) end)
 		end)
 	end
 	local function writeVel(v)
@@ -8224,7 +8121,7 @@ do
 		lastWalk, lastJump = h.WalkSpeed, h.JumpPower
 		local g = workspace.Gravity
 		if baseGravity == nil or (lastGravity ~= nil and not near(g, lastGravity)) then baseGravity = g end
-		local wantG = baseGravity * s * s
+		local wantG = SH.Humanoid.SetGravity(baseGravity * s * s)
 		if not near(g, wantG) then workspace.Gravity = wantG end
 		lastGravity = workspace.Gravity
 	end
@@ -8240,6 +8137,7 @@ do
 			if baseGravity and lastGravity and near(workspace.Gravity, lastGravity) then
 				pcall(function() workspace.Gravity = baseGravity end)
 			end
+			SH.Humanoid.ClearGravity()
 			if keepMomentum and s ~= 1 then scaleMomentum(root, 1 / s) end
 		end
 		local okW, errW = pcall(W.SetFactor, 1)
@@ -8268,6 +8166,7 @@ do
 			return 1
 		end
 		stopStep()
+		root = part
 		local ok, err = pcall(applyValues, h, s)
 		if not ok then
 			reportError("speed hack", err)
@@ -8298,6 +8197,314 @@ do
 		if Settings.On("Speed Hack") then W.Track() end
 		Settings.Changed("Speed Hack", function(v) if v ~= 0 then W.Track() end end)
 		Janitor.add(function() SH.Restore(true) end)
+	end
+end
+do
+	local SH = SpeedHack
+	local HC = {}
+	SH.Humanoid = HC
+	local STEP = 1 / 240
+	local GAIN = 0.625
+	local WALK_CAP = 741.6
+	local AIR_CAP = 143
+	local TURN_A = 0.58312
+	local TURN_B = 10 / 3
+	local TURN_AIR = 1
+	local COYOTE = 0.13
+	local GRACE = 0.125
+	local MAX_GRAVITY = 1000
+	HC.WALK_CAP, HC.AIR_CAP, HC.TURN_A, HC.TURN_B, HC.COYOTE = WALK_CAP, AIR_CAP, TURN_A, TURN_B, COYOTE
+	local Air = Enum.Material.Air
+	local JUMPING = Enum.HumanoidStateType.Jumping
+	local FREEFALL = Enum.HumanoidStateType.Freefall
+	local TURNING = { [Enum.HumanoidStateType.Running] = true, [Enum.HumanoidStateType.RunningNoPhysics] = true,
+		[Enum.HumanoidStateType.Freefall] = true, [Enum.HumanoidStateType.Jumping] = true, [Enum.HumanoidStateType.Landed] = true }
+	local MOVING = { [Enum.HumanoidStateType.Running] = true, [Enum.HumanoidStateType.RunningNoPhysics] = true,
+		[Enum.HumanoidStateType.Freefall] = true, [Enum.HumanoidStateType.Jumping] = true, [Enum.HumanoidStateType.Landed] = true }
+	local caps = {}
+	local pre = nil
+	local cy = { off = nil, jumped = false, restored = false, disabled = false, noFall = false }
+	HC.coyote = cy
+	local function yawOf(cf)
+		local l = cf.LookVector
+		return math.atan2(-l.X, -l.Z)
+	end
+	local function wrap(a)
+		a = (a + math.pi) % (2 * math.pi)
+		return a - math.pi
+	end
+	local function stepping(v, t, phase, keep, change)
+		local disp = v * 0
+		local eps = STEP * 1e-6
+		while t > eps do
+			local take
+			if phase <= eps then
+				phase = 0
+				take = math.min(STEP, t)
+				v = change(v, keep and 1 or take / STEP, disp)
+			else
+				take = math.min(STEP - phase, t)
+			end
+			disp = disp + v * take
+			phase, t = phase + take, t - take
+			if phase >= STEP - eps then phase = 0 end
+		end
+		return v, disp, keep and phase or 0
+	end
+	HC.Stepping = stepping
+	local function walker(target, cap)
+		return function(v, f)
+			local err = target - v
+			local m = err.Magnitude
+			if m > 1e-9 then v = v + err * (math.min(m * GAIN * f, cap * STEP * f) / m) end
+			return v
+		end
+	end
+	local function faller(g, pin)
+		return function(v, f)
+			if pin.n > 0 then
+				pin.n = pin.n - 1
+				return pin.vt
+			end
+			return v - g * STEP * f
+		end
+	end
+	local extra = 0
+	function HC.SetGravity(want)
+		extra = math.max(0, want - MAX_GRAVITY)
+		return math.min(want, MAX_GRAVITY)
+	end
+	function HC.Extra() return extra end
+	function HC.ClearGravity() extra = 0 end
+	local function setFreefall(hum, on)
+		if on then
+			if cy.noFall then
+				cy.noFall = false
+				pcall(function() hum:SetStateEnabled(FREEFALL, true) end)
+			end
+		elseif not cy.noFall then
+			cy.noFall = true
+			pcall(function() hum:SetStateEnabled(FREEFALL, false) end)
+		end
+	end
+	local function setJumping(hum, on)
+		if on then
+			if cy.disabled then
+				cy.disabled = false
+				pcall(function() hum:SetStateEnabled(JUMPING, true) end)
+			end
+		elseif not cy.disabled then
+			cy.disabled = true
+			pcall(function() hum:SetStateEnabled(JUMPING, false) end)
+		end
+	end
+	function HC.CoyoteState()
+		if cy.off == nil then return nil end
+		return { cy.off, cy.jumped and 1 or 0 }
+	end
+	function HC.CoyoteRestore(state)
+		if type(state) == "table" then
+			cy.off, cy.jumped, cy.restored = tonumber(state[1]) or 0, state[2] == 1, true
+		else
+			cy.off, cy.jumped, cy.restored = nil, false, false
+		end
+	end
+	function HC.CoyoteReset(hum)
+		cy.off, cy.jumped, cy.restored = nil, false, false
+		cy.grid, cy.pinN, cy.vt, cy.finish = 0, nil, nil, nil
+		if hum then
+			setJumping(hum, true)
+			setFreefall(hum, true)
+		end
+	end
+	function HC.Pre(dt, hum, root, scaled)
+		pre = nil
+		cy.vy0 = nil
+		if not (hum and root and root.Parent) or root.Anchored then return end
+		cy.vy0 = root.AssemblyLinearVelocity.Y
+		if cy.finish then
+			cy.finish = nil
+			if hum:GetState() == JUMPING then pcall(function() hum:ChangeState(FREEFALL) end) end
+		end
+		local stateBefore = hum:GetState()
+		local s = SH.scale
+		local enforce = (scaled and s ~= 1) or cy.restored
+		cy.enforce = enforce
+		if cy.off ~= nil and enforce then
+			if hum:GetState() == JUMPING then cy.jumped = true end
+			setJumping(hum, (not cy.jumped) and cy.off + dt * s <= COYOTE)
+			local st = hum:GetState()
+			setFreefall(hum, not (st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.RunningNoPhysics))
+		else
+			if cy.disabled then setJumping(hum, true) end
+			if cy.noFall then setFreefall(hum, true) end
+		end
+		if not scaled or s == 1 then cy.grid = 0; return end
+		local floor = hum.FloorMaterial
+		pre = { v = root.AssemblyLinearVelocity, w = root.AssemblyAngularVelocity.Y, yaw = yawOf(root.CFrame), floor = floor, s = s, hum = hum, root = root,
+			state = stateBefore, airborne = cy.off ~= nil or stateBefore == JUMPING or stateBefore == FREEFALL }
+		if extra > 0 and SH.World and SH.World.Kick then SH.World.Kick(-extra * dt) end
+	end
+	function HC.Post(dt, hum, root, recording)
+		if recording and hum and root and root.Parent and not root.Anchored then
+			local vy1 = root.AssemblyLinearVelocity.Y
+			local gEff = workspace.Gravity
+			local falling = cy.vy0 ~= nil and math.abs(vy1) > 1e-3
+				and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
+			if hum.FloorMaterial ~= Air and not falling then
+				if cy.off ~= nil then
+					local blocked = cy.disabled
+					cy.off, cy.jumped, cy.restored = nil, false, false
+					cy.pinN, cy.vt, cy.finish = nil, nil, nil
+					setJumping(hum, true)
+					setFreefall(hum, true)
+					if blocked and hum.Jump and hum:GetState() ~= JUMPING then pcall(function() hum:ChangeState(JUMPING) end) end
+				end
+			else
+				local s = SH.scale
+				if cy.off == nil then
+					cy.off = dt * s
+				else
+					cy.off = cy.off + dt * s
+				end
+				if hum:GetState() == JUMPING then cy.jumped = true end
+				local stJ = hum:GetState()
+				if cy.enforce and not cy.jumped and cy.off <= COYOTE and hum.Jump
+					and (stJ == Enum.HumanoidStateType.Running or stJ == Enum.HumanoidStateType.RunningNoPhysics) then
+					cy.jumped = true
+					setJumping(hum, true)
+					pcall(function() hum:ChangeState(JUMPING) end)
+				end
+				stJ = hum:GetState()
+				if cy.enforce and cy.off > GRACE and (stJ == Enum.HumanoidStateType.Running or stJ == Enum.HumanoidStateType.RunningNoPhysics) then
+					setFreefall(hum, true)
+					pcall(function() hum:ChangeState(FREEFALL) end)
+				end
+			end
+		end
+		local p = pre
+		pre = nil
+		if not dt or dt < 1e-5 then return end
+		if not p or p.root ~= root or p.hum ~= hum or not root.Parent or root.Anchored then return end
+		if not MOVING[p.state] then return end
+		local s = p.s
+		local n = dt / STEP
+		local whole = math.abs(n - math.floor(n + 0.5)) < 1e-3
+		if whole then
+			n = math.floor(n + 0.5)
+			dt = n * STEP
+		end
+		local T = s * dt
+		local stNow = hum:GetState()
+		local jumping = stNow == JUMPING or p.state == JUMPING
+		local gWs = workspace.Gravity
+		local vy0 = p.v.Y
+		local vy1 = root.AssemblyLinearVelocity.Y
+		local eFall = stepping(vy0, dt, 0, whole, faller(gWs, { n = 0 }))
+		local pushed = jumping and vy1 > 1e-2 and vy1 > eFall + 1e-2
+		local zeroPush = stepping(0, dt, 0, whole, faller(gWs, { n = 1, vt = 0 }))
+		local jumpE = vy1 - zeroPush
+		local first = pushed and cy.vt == nil
+		local again = pushed and cy.vt ~= nil and math.abs(jumpE - cy.vt * s) < 1e-2
+		local fell = math.abs(vy1 - eFall) < 1e-3 + 1e-5 * math.abs(vy0)
+		if first then cy.pinN, cy.vt = 1, jumpE / s end
+		local phase0 = whole and (cy.grid or 0) or 0
+		local _, _, phase1 = stepping(0, T, phase0, whole, function(v) return v end)
+		cy.grid = phase1
+		local v0 = Vector3.new(p.v.X, 0, p.v.Z)
+		local v1 = root.AssemblyLinearVelocity
+		local v1h = Vector3.new(v1.X, 0, v1.Z)
+		local md = hum.MoveDirection
+		local target = Vector3.new(md.X, 0, md.Z) * hum.WalkSpeed
+		local floorCap = (p.floor ~= Air and caps[p.floor]) or WALK_CAP
+		local gEnd, gDisp = stepping(v0, dt, 0, whole, walker(target, floorCap))
+		local aEnd, aDisp = stepping(v0, dt, 0, whole, walker(target, AIR_CAP))
+		local airborne = p.floor == Air or p.state == JUMPING or p.state == Enum.HumanoidStateType.Freefall
+		local cap, eEnd, eDisp = floorCap, gEnd, gDisp
+		local otherEnd, otherDisp, otherCap = aEnd, aDisp, AIR_CAP
+		if airborne then
+			cap, eEnd, eDisp = AIR_CAP, aEnd, aDisp
+			otherEnd, otherDisp, otherCap = gEnd, gDisp, floorCap
+		end
+		if (v1h - otherEnd).Magnitude < (v1h - eEnd).Magnitude - 1e-3 then cap, eEnd, eDisp = otherCap, otherEnd, otherDisp end
+		if cap ~= AIR_CAP and p.floor ~= Air then
+			local err0 = target - v0
+			local m = err0.Magnitude
+			if m > cap * STEP * n / GAIN + 1 then
+				local along = (v1h - v0):Dot(err0 / m)
+				if along > 0 and math.abs(along - cap * STEP * n) > 0.05 * cap * STEP * n then
+					caps[p.floor] = along / (STEP * n)
+					cap = caps[p.floor]
+					eEnd, eDisp = stepping(v0, dt, 0, whole, walker(target, cap))
+				end
+			end
+		end
+		local uEnd, uDisp = stepping(v0 / s, T, phase0, whole, walker(target / s, cap))
+		local dv = uEnd * s - eEnd
+		local dp = uDisp - eDisp
+		if dv.Magnitude > 1e-6 or dp.Magnitude > 1e-6 then
+			root.AssemblyLinearVelocity = Vector3.new(v1.X + dv.X, v1.Y, v1.Z + dv.Z)
+			root.CFrame = root.CFrame + Vector3.new(dp.X, 0, dp.Z)
+			local st = hum:GetState()
+			if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.RunningNoPhysics then
+				local e = AnimEngine.current
+				if e and e.Running then pcall(e.Running, Vector3.new(v1.X + dv.X, 0, v1.Z + dv.Z).Magnitude) end
+			end
+		end
+		if first or again or fell then
+			local gN = (gWs + extra) / (s * s)
+			local eEndY, eDy = stepping(vy0, dt, 0, whole, faller(gWs, { n = (first or again) and 1 or 0, vt = jumpE }))
+			local pin = { n = cy.pinN or 0, vt = cy.vt }
+			local uEndY, iDy = stepping(vy0 / s, T, phase0, whole, faller(gN, pin))
+			cy.pinN = pin.n
+			local dvy, dy = uEndY * s - eEndY, iDy - eDy
+			if math.abs(dvy) > 1e-6 or math.abs(dy) > 1e-6 then
+				local v = root.AssemblyLinearVelocity
+				root.AssemblyLinearVelocity = Vector3.new(v.X, v.Y + dvy, v.Z)
+				root.CFrame = root.CFrame + Vector3.new(0, dy, 0)
+			end
+			if stNow == JUMPING and cy.vt and cy.pinN <= 0 and uEndY < cy.vt - 1e-4 then cy.finish = true end
+		elseif not jumping then
+			cy.pinN, cy.vt, cy.finish = nil, nil, nil
+		end
+		if hum.AutoRotate and TURNING[p.state] then
+			local air = p.state == JUMPING or p.state == FREEFALL
+			local w0, w1 = p.w, root.AssemblyAngularVelocity.Y
+			local function held(e)
+				return function(w, f) return w + f * ((TURN_A - 1) * w + TURN_B * e) end
+			end
+			local wFree = stepping(w0, dt, 0, whole, held(0))
+			local wUnit = stepping(0, dt, 0, whole, held(1))
+			local eEng = wUnit > 1e-9 and (w1 - wFree) / wUnit or nil
+			if eEng and math.abs(eEng) <= math.pi + 0.01 then
+				local e0 = eEng
+				if air and math.abs(eEng) >= TURN_AIR - 1e-3 then
+					local md = hum.MoveDirection
+					if md.Magnitude > 1e-3 then
+						local t = wrap(math.atan2(-md.X, -md.Z) - p.yaw)
+						if math.abs(t) > math.abs(eEng) and (t > 0) == (eEng > 0) then e0 = t end
+					end
+				end
+				local _, eDisp = stepping(w0, dt, 0, whole, held(eEng))
+				local cap = air and TURN_AIR or math.huge
+				local uEnd, uDisp
+				if whole then
+					uEnd, uDisp = stepping(w0 / s, T, phase0, true, function(w, f, d)
+						local e = math.max(-cap, math.min(cap, e0 - d))
+						return w + f * ((TURN_A - 1) * w + TURN_B * e)
+					end)
+				else
+					uEnd, uDisp = stepping(w0 / s, T, 0, false, held(math.max(-cap, math.min(cap, e0))))
+				end
+				local dYaw, dW = uDisp - eDisp, uEnd * s - w1
+				if math.abs(dYaw) > 1e-7 or math.abs(dW) > 1e-6 then
+					local cf = root.CFrame
+					root.CFrame = CFrame.new(cf.Position) * CFrame.Angles(0, dYaw, 0) * cf.Rotation
+					local w = root.AssemblyAngularVelocity
+					root.AssemblyAngularVelocity = Vector3.new(w.X, w.Y + dW, w.Z)
+				end
+			end
+		end
 	end
 end
 do
@@ -12819,6 +13026,7 @@ do
 		return fr and fr.TotalTime or 0
 	end
 	function inputs.Idle()
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid)
 		Bridge.ResetGhost()
 		camType(Enum.CameraType.Custom)
 		C.mode, C.frame = 1, 1
@@ -12906,6 +13114,7 @@ do
 		ToolSync.Clear()
 		Buttons.Resume(data, #data)
 		Lighting.Resume(data, #data)
+		SpeedHack.Humanoid.CoyoteRestore(data[#data] and data[#data].CY)
 	end
 	local function unpauseFrom(data)
 		C.RemoveCutFrames()
@@ -12946,6 +13155,7 @@ do
 		if C.DoubleInput() then return end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid)
 		local cam = workspace.CurrentCamera
 		C.pausedCamCF = cam and cam.CFrame or C.pausedCamCF
 		C.pausedZoom = Bridge.GetZoom()
@@ -12978,6 +13188,7 @@ do
 		for _ = 1, FrameCount do rs.RenderStepped:Wait() end
 		Bridge.LockAnimations(true)
 		C.paused = true
+		SpeedHack.Humanoid.CoyoteReset(C.Humanoid)
 		C.frame = #data
 		Bridge.LockShiftlock(#data > 0)
 		C.LoadFrame(C.data[#C.data], false, true)
@@ -13339,6 +13550,7 @@ do
 		fd.BT = Buttons.RecordFrame(fd.TotalTime, #data == 1)
 		Profiler.End("Buttons")
 		fd.LT = Lighting.RecordFrame(#data, fd.TotalTime, #data == 1)
+		fd.CY = SpeedHack.Humanoid.CoyoteState()
 		if state == Enum.HumanoidStateType.Dead or hum.Health <= 0 then fd.Died = true end
 	end
 	local function preSimulation(dt)
@@ -13357,7 +13569,15 @@ do
 			C.Humanoid:Move(C.HRP.AssemblyLinearVelocity)
 		end
 		SpeedHack.StepBegin(dt)
+		if C.mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded() then
+			SpeedHack.Humanoid.Pre(dt, C.Humanoid, C.HRP, SpeedHack.scale ~= 1)
+		end
 		Profiler.End("HappaTAS")
+	end
+	local function postSimulation(dt)
+		SpeedHack.StepEnd()
+		local recording = C.mode == 2 and (not C.paused or C.FirstFrameRecord) and C.CharLoaded()
+		SpeedHack.Humanoid.Post(dt, C.Humanoid, C.HRP, recording)
 	end
 	local function holdPose(fr)
 		if fr.Cframe and fr.Velocity then C.SyncFrame(fr) end
@@ -13525,8 +13745,8 @@ do
 			local ok, err = pcall(preSimulation, dt)
 			if not ok then reportError("PreSimulation", err) end
 		end)
-		on(rs.PostSimulation, function()
-			local ok, err = pcall(SpeedHack.StepEnd)
+		on(rs.PostSimulation, function(dt)
+			local ok, err = pcall(postSimulation, dt)
 			if not ok then reportError("PostSimulation", err) end
 		end)
 		on(rs.Heartbeat, function(dt)
@@ -14155,7 +14375,6 @@ Bridge.Init()
 InputSys.Start(Gui)
 Core.Start(Gui)
 Menu.Start(Gui, Unload)
--- Sounds.Init(Gui)
 ClientObjects.OnStatus = function(text) Menu.SetStatus(text, true) end
 ClientObjects.Start()
 Buttons.Start()

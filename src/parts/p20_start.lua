@@ -71,7 +71,6 @@ Bridge.Init()
 InputSys.Start(Gui)
 Core.Start(Gui)
 Menu.Start(Gui, Unload)
-Sounds.Init(Gui)
 ClientObjects.OnStatus = function(text) Menu.SetStatus(text, true) end
 ClientObjects.Start()
 Buttons.Start()
