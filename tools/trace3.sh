@@ -36,7 +36,7 @@ build_side() { # SIDE OUT
     if [ "$side" = v2 ]; then
       sed -e 's/^\(\s*\)Debug           = false,/\1Debug           = true,/' "$REF/src/HappaTAS_Executor.lua"
       echo ''
-      echo '__T = { Settings = Settings, Core = Core, Controls = Controls, InputSys = InputSys, Bridge = Bridge, AnimEngine = AnimEngine, Codec = Codec }'
+      echo '__T = { Settings = Settings, Core = Core, Controls = Controls, InputSys = InputSys, Bridge = Bridge, AnimEngine = AnimEngine, Codec = Codec, Store = Store }'
     else
       bash tools/build3.sh >/dev/null
       sed -e '0,/Debug = false,/s//Debug = true,/' src2/HappaTAS3.lua
@@ -44,6 +44,8 @@ build_side() { # SIDE OUT
       echo '__T3 = import'
     fi
     echo 'end'
+    # (the HappaTAS 3 side gets the file a V2 side saved: V2FILE_DATA, written after side a ran)
+    if [ "$side" = v3 ] && [ -f "$T/v2file.lua" ]; then cat "$T/v2file.lua"; fi
     cat tests/test_util.lua "$T/adapter_$side.lua" "$T/${SCENARIO:-scenario}.lua"
   } > "$out"
 }
@@ -63,7 +65,21 @@ run_side() { # SIDE NAME
     { print }' "$T/raw_$2.txt" > "$T/out_$2.txt"
 }
 
+rm -f "$T/v2file.lua"
 run_side "$SIDE_A" a
+# (the last file the V2 side saved, as a Lua string for the HappaTAS 3 side)
+if [ "$SIDE_A" = v2 ]; then
+  python3 - "$T/raw_a.txt" "$T/v2file.lua" <<'PYEOF'
+import sys, binascii
+data = None
+for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
+    if line.startswith('V2FILE '):
+        data = binascii.unhexlify(line.split(' ', 1)[1].strip())
+if data is not None:
+    esc = ''.join(chr(c) if 32 <= c < 127 and c not in (34, 92) else '\%03d' % c for c in data)
+    open(sys.argv[2], 'w').write('V2FILE_DATA = "' + esc + '"' + chr(10))
+PYEOF
+fi
 run_side "$SIDE_B" b
 if cmp -s "$T/out_a.txt" "$T/out_b.txt"; then
   echo "SAME ($(wc -l < "$T/out_b.txt") lines)"
