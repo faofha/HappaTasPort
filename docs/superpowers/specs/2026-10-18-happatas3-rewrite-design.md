@@ -295,3 +295,13 @@ Each phase has its own implementation plan, tests and PR.
   against 523 ms; loaded in 672 ms against 532 ms (the mock's LZ4 is Lua on both sides). Live (EToH kit test
   place, 2026-10-25): a 5-second run (301 frames) saved in 37 ms (3,268 bytes) and loaded in 28 ms; dzr's V2
   files (v1, v2, v3, up to 3,141 frames) loaded in 17-71 ms and played.
+- Phase 4 (world plugins, headless mock against V2.38.17): every system is a port of V2.38.17's code (client
+  objects, buttons, lighting, time control with the humanoid clock, the Kit Clock, kit objects); the traces
+  (main, V2's client object trace, a world trace with buttons, lighting, Smooth / fast / Frame Step motion, coyote
+  time, the Kit Clock and kit objects) are the same line for line. One V2 flaw was fixed on the way: V2's Kit
+  Clock asked for the environment of every Heartbeat / PostSimulation listener's function, HappaTAS's own
+  included, which switches Luau's fast paths off for that environment (frames about 2.5x slower after the first
+  pause); HappaTAS 3 only looks at listeners whose source is a kit module on the clock. Bench (us per frame, mock):
+  Idle 17.3 vs V2's 17.4, recording 84 vs 90, paused 88 vs 113, Test 107 vs 125, a world with 100 client objects,
+  beat blocks, a turret and the speed hack at 0.5x 3,402 vs 3,414. The client object listeners stay at 6 per part
+  (V2's): the recorder needs Anchored for every registered part (spec 7's "fewer listeners" is still open).
