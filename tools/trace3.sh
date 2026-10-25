@@ -76,7 +76,7 @@ for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
     if line.startswith('V2FILE '):
         data = binascii.unhexlify(line.split(' ', 1)[1].strip())
 if data is not None:
-    esc = ''.join(chr(c) if 32 <= c < 127 and c not in (34, 92) else '\%03d' % c for c in data)
+    esc = ''.join(chr(c) if 32 <= c < 127 and c not in (34, 92) else chr(92) + '%03d' % c for c in data)
     open(sys.argv[2], 'w').write('V2FILE_DATA = "' + esc + '"' + chr(10))
 PYEOF
 fi
