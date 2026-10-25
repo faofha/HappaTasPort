@@ -326,9 +326,16 @@ Each phase has its own implementation plan, tests and PR.
   Unload while recording at 0.5x: 94 kit environments back, gravity / WalkSpeed / JumpPower back, no part's
   Anchored changed, nothing left in the Camera / CoreGui / gethui; the release loads and unloads with no console
   line. Per-frame cost, both builds timed the same way (every RunService connection of the build and its render
-  bind), interleaved, fresh loads (us, V2.38.17 vs HappaTAS 3 after the review fixes): Idle 79 / 91 vs 78 / 79,
-  recording 389 / 439 vs 364 / 442, paused 389 / 358 vs 604 / 504, Test 557 / 444 vs 651 / 541, turret recording
-  445 / 361 vs 474 / 429, turret paused 382 / 326 vs 417 / 370, turret Test 496 / 461 vs 492 / 436. So live
-  HappaTAS 3 is level in Idle and recording but costs more while paused and in Test (the plugins' own methods cost
-  about the same as V2's modules; the Kit Clock's frame listener check while paused is ~70 us a frame) - not
-  the headless bench's result; open for a later phase.
+  bind): one build per fresh load varies by up to +-12 % from load to load (the first interleaved pairs seemed to
+  show HappaTAS 3 40-55 % dearer while paused; more rounds did not keep it). Four rounds each (us): recording 342
+  (V2) vs 380, paused 378 vs 388, Test 463 vs 494; recording alone, eight rounds, 391 vs 450, but switching a
+  feature on and off inside one recording removes the load-to-load spread: with client objects on 341 vs 337 and
+  ~364 vs 399, off 216 vs 223, the client objects' own cost 125 / 95 vs 114 / 172. With the whole world off (client
+  objects, kit objects, Kit Clock, lighting, buttons) 187 / 203 vs 176 / 168, HappaTAS 3 doing more of the work in
+  PreRender / PreSimulation and less in Heartbeat. Lua memory allocated per frame (KB, the game alone 3.5):
+  recording 14.0 vs V2's 15.5, paused 33.9 vs 32.1, Test 23.4 vs 20.8. Ruled out as costs: the plugin guards (39
+  guarded calls and 21 plugin pcalls a frame at ~70 ns each), timeline method calls (47 a frame at ~60 ns), global
+  lookups (as fast as locals here). So no reproducible gap against V2. Both builds pay the Kit Clock's frame
+  listener scan while paused (getconnections of Heartbeat and PostSimulation every frame: ~40 us, with the rest of
+  the scan ~70-85 us and 7 KB a frame): checking less often while paused would make HappaTAS 3 cheaper than V2
+  there, at the price of a new kit listener running a few frames in real time; not done.
