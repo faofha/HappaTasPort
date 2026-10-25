@@ -22,6 +22,7 @@ persist/v2reader
 persist/library
 persist/run
 persist/persist
+persist/settingsfile
 engine/plugins
 world/character
 world/camera
