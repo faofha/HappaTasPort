@@ -292,4 +292,6 @@ Each phase has its own implementation plan, tests and PR.
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
   `tools/savebench3.sh`, headless mock): 81,778 bytes against V2.38.16's 101,880 (80 %), saved in 470 ms
-  against 523 ms; loaded in 672 ms against 532 ms (the mock's LZ4 is Lua on both sides).
+  against 523 ms; loaded in 672 ms against 532 ms (the mock's LZ4 is Lua on both sides). Live (EToH kit test
+  place, 2026-10-25): a 5-second run (301 frames) saved in 37 ms (3,268 bytes) and loaded in 28 ms; dzr's V2
+  files (v1, v2, v3, up to 3,141 frames) loaded in 17-71 ms and played.
