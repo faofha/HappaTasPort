@@ -18,6 +18,7 @@ persist/bytes
 persist/value
 persist/lz4
 persist/codec6
+persist/v2reader
 engine/plugins
 world/character
 world/camera
