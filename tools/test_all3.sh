@@ -43,6 +43,12 @@ echo "$tr" | grep -q "^SAME" || { fail=1; echo "$tr"; }
 bo=$(bash tools/bench3.sh 2>&1)
 echo "bench: $(echo "$bo" | tail -1)"
 echo "$bo" | grep -q "^BENCH OK" || { fail=1; echo "$bo"; }
+# (the 10-minute save / load bench against V2 takes a while: BENCH=1 bash tools/test_all3.sh)
+if [ "$BENCH" = 1 ]; then
+  so=$(bash tools/savebench3.sh 2>&1)
+  echo "save bench: $(echo "$so" | tail -1)"
+  echo "$so" | grep -q "^SAVEBENCH OK" || { fail=1; echo "$so"; }
+fi
 bash tools/build3.sh --release wow3 >/dev/null || { echo "release build failed"; fail=1; }
 run main wow3
 run engine wow3

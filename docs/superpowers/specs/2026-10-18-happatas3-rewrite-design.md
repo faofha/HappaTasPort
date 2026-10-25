@@ -137,6 +137,12 @@ V2.38.16's codec and are converted in memory; a file is only rewritten as v6 whe
 One schema (name, type, default, range, section, description). `Settings.json` from V2.38.16 is converted
 on first load: every old name maps to a new key (table in the code, tested); the old file is kept as
 `Settings.v2.json`. "Show Stats (Idle / Create / Test)" and "Stats Text Size" become Inspector settings.
+The sound settings that V2.38.16 had (removed in V2.38.17) are dropped by the conversion without an error.
+
+There is one settings store for the whole script. Every interface (the new one and the classic one, 8.5)
+reads its values from that store and listens to its change events; no interface keeps a copy of its own.
+A change saved from one interface shows in the other at once, also when the other one isn't open yet (it
+reads the store when it opens).
 
 ## 7. World plugins
 
@@ -204,14 +210,14 @@ and the frame / time readout. Collapses to a slim strip in Idle.
     transparency, old / new halves, HEX / RGB / HSV boxes with labels, recent colours). Dropdowns open a plain
     list; for fonts each name is drawn in its font and hovering previews it live on the whole interface (click
     keeps it, moving away reverts).
-  - Sections: Appearance, Playback, Create, Speed hack, Inputs, World sync, Interface, Sounds, UI sounds.
+  - Sections: Appearance, Playback, Create, Speed hack, Inputs, World sync, Interface, UI sounds.
 - **Controls:** every action with its key, click to rebind, conflicts flagged. Default keys as V2.38.16.
 - **Help**, **Merge**. The **MicroProfiler** stays its own Roblox-style overlay.
 
 ### 8.4 Settings list
 
-All 39 settings of V2.38.16 (Playback 5, Create 4, Speed hack 3, Inputs 7, World sync 7, Interface 8,
-Sounds 5), plus:
+All 34 settings of V2.38.17 (Playback 5, Create 4, Speed hack 3, Inputs 7, World sync 7, Interface 8;
+V2.38.16's 5 sound settings were removed in V2.38.17), plus:
 
 - **Appearance:** Theme (saved looks, Save as…), Glass (Clear / Tint / Frost), Glass colour, Glass
   transparency, Blur strength, Edge light, Accent colour, Text colour, Secondary text colour, Recording
@@ -221,6 +227,25 @@ Sounds 5), plus:
 - **UI sounds:** Interface sounds on / off, Click sound, Hover sound, Open / close sound, Volume.
 
 Custom bezier easing runs in HappaTAS's own tween code (TweenService has no bezier).
+
+### 8.5 Classic interface
+
+A setting **Interface: New / Classic** (in Interface; default New). Classic is V2.38.17's interface (main
+menu, stats panels, settings list, controls, help, merge) drawn by HappaTAS 3, for people who prefer it.
+
+- Switching takes effect at once, without running the script again; each interface keeps its own window
+  positions.
+- Both interfaces use the one settings store (6.3). A setting changed in one shows in the other right away:
+  the classic interface listens to the same change events, so nothing waits for a switch back.
+- Appearance settings apply to the classic interface wherever it has the same thing: accent colour, text
+  colour, secondary text colour, recording colour, font, number font, text size and interface scale. The
+  rest (glass, blur, edge light, corners, button shape, shadows, animations, easing) are kept untouched in
+  the store and shown only in the new interface; the classic one never resets or overwrites them.
+- The classic interface's settings list shows every setting, the new Appearance ones too (so they can be
+  changed there), in V2.38.17's row style.
+- Tests (mock): with both interfaces built, change each setting in one and check the other's control and its
+  look in the same frame; change the accent colour in the new interface, switch to classic: the classic one
+  uses it at once; change it in classic, switch back: the new one shows it; restart: both load it.
 
 ## 9. MicroProfiler
 
@@ -253,13 +278,18 @@ Each phase has its own implementation plan, tests and PR.
 3. **Saves:** codec v6, v1-v5 readers, library, settings conversion. First phase you can record and save with.
 4. **World plugins:** client objects, buttons, lighting, EToH kit, time control.
 5. **UI:** component kit, windows, timeline bar, Settings, Inspector, Library, Controls, Help, Merge, mobile;
-   Frost blur trial in the client.
+   the classic interface (8.5); Frost blur trial in the client.
 6. **MicroProfiler.**
 7. **Switch-over:** HappaTAS 3 becomes `wow` / `wow1`; README; V2.38.16 stays in history.
 
 ## 13. Open questions (answered during the phases)
 
 - Does the Frost blur work well enough in Roblox (graphics levels, performance, look)? Phase 5.
+- V2.38.17 removed every sound: should the new UI sounds (8.4) stay, or go too? Ask before phase 5.
 - Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
   Merriweather, Roboto Mono and others available as Font families). Phase 5.
-- Exact v6 column encodings and how much smaller files get. Phase 3.
+- ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
+  stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
+  anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
+  `tools/savebench3.sh`, headless mock): 81,778 bytes against V2.38.16's 101,880 (80 %), saved in 470 ms
+  against 523 ms; loaded in 672 ms against 532 ms (the mock's LZ4 is Lua on both sides).

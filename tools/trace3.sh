@@ -7,6 +7,7 @@
 #   SIDES="v2 v2"               which builds run as side a and side b (default: "v2 v3")
 #   UPTO="tag"                  compare only the lines before the first one with this step tag
 #   SCENARIO=bench              another session in tests3/trace/ (tools/bench3.sh uses this)
+#   SCENARIO_PRE="lua"          Lua run before the session (tools/savebench3.sh: BENCH_FRAMES = n)
 # Prints "SAME (N lines)" or "DIFFERENT:" and the first differing lines (exit 2).
 # Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit b1569bd (V2.38.16),
 # never the working tree's src/parts.
@@ -46,7 +47,9 @@ build_side() { # SIDE OUT
     echo 'end'
     # (the HappaTAS 3 side gets the file a V2 side saved: V2FILE_DATA, written after side a ran)
     if [ "$side" = v3 ] && [ -f "$T/v2file.lua" ]; then cat "$T/v2file.lua"; fi
-    cat tests/test_util.lua "$T/adapter_$side.lua" "$T/${SCENARIO:-scenario}.lua"
+    cat tests/test_util.lua "$T/adapter_$side.lua"
+    [ -n "$SCENARIO_PRE" ] && echo "$SCENARIO_PRE"   # (Lua run before the scenario, e.g. BENCH_FRAMES = n)
+    cat "$T/${SCENARIO:-scenario}.lua"
   } > "$out"
 }
 

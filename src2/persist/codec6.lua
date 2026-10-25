@@ -8,9 +8,10 @@
 --  body = varint columnCount, per column: str name, u8 kind (1 f64, 2 u8, 3 list), u8 width,
 --      varint byteLen, payload; then Value meta (the timeline's meta)
 --    f64: per component, varint length + its values, lossless: a recorded value is rounded to 1/1000
---        (times to 1/1000000), so each is stored as the change of k = round(v x 1000) from the frame
---        before when k / 1000 gives v back bit for bit (code = zigzag(change) x 4 + 0), the same at
---        1000000 (+ 1), else the 8 bytes (code 2, then the f64: NaN, -0, unrounded values)
+--        (times to 1/1000000), so each is stored as the change of k = round(v x 1000) from the integer
+--        before it (the previous value's own k when it was stored that way, else round(prev x 1000))
+--        when k / 1000 gives v back bit for bit and |k| <= 2^47 (code = zigzag(change) x 4 + 0), the same
+--        at 1000000 (+ 1), else the 8 bytes (code 2, then the f64: NaN, -0, unrounded values)
 --    u8: the frames' bytes        list: varint entries, per entry varint frame step + Value
 --  Columns are matched by name: one the timeline lacks is added (no V2 field) so it round-trips, one the
 --  file lacks stays 0 / nil, another kind or width errors. "_filled" isn't saved (loaded frames are).
@@ -29,8 +30,7 @@ local MAX_COLUMNS = 512
 local MAX_WIDTH = 64
 local KIND = { f64 = 1, u8 = 2, list = 3 }
 local KIND_NAME = { "f64", "u8", "list" }
-local SCALES = { 1000, 1000000 }
-local LIMIT = 2 ^ 52
+local LIMIT = 2 ^ 47
 local DELTA_LIMIT = 2 ^ 49
 
 local function damaged(what) error("file is damaged: " .. what, 0) end
@@ -47,35 +47,108 @@ local function base(prev, scale)
 	return math.floor(k + 0.5)
 end
 
-local function putValue(w, v, prev)
-	for mode = 0, 1 do
-		local scale = SCALES[mode + 1]
-		local k = math.floor(v * scale + 0.5)
-		if k == k and k <= LIMIT and k >= -LIMIT and k / scale == v and (v ~= 0 or 1 / v > 0) then
-			local d = k - base(prev, scale)
-			if d < DELTA_LIMIT and d > -DELTA_LIMIT then
-				local z = (d >= 0) and d * 2 or -d * 2 - 1
-				w:varint(z * 4 + mode)
-				return
+-- one f64 component's frames lo..hi into its byte stream (st: ob, on, cap, prev, pmode, pk). The hot
+-- loop of saving: bytes go straight into a buffer; an unchanged value is one byte.
+local function encodeRange(st, buf, stride, off, lo, hi)
+	local ob, on, cap = st.ob, st.on, st.cap
+	local prev, pmode, pk = st.prev, st.pmode, st.pk
+	for i = lo, hi do
+		if on + 16 > cap then
+			cap = cap * 2
+			local nb = buffer.create(cap)
+			buffer.copy(nb, 0, ob, 0, on)
+			ob = nb
+		end
+		local v = buffer.readf64(buf, (i - 1) * stride + off)
+		if v == prev and pmode == 0 and (v ~= 0 or 1 / v > 0) then
+			buffer.writeu8(ob, on, 0)
+			on = on + 1
+		else
+			local code = nil
+			local k = math.floor(v * 1000 + 0.5)
+			if k == k and k <= LIMIT and k >= -LIMIT and k / 1000 == v and (v ~= 0 or 1 / v > 0) then
+				local d = k - ((pmode == 0) and pk or base(prev, 1000))
+				if d < DELTA_LIMIT and d > -DELTA_LIMIT then
+					code = ((d >= 0) and d * 2 or -d * 2 - 1) * 4
+					pmode, pk = 0, k
+				end
+			end
+			if not code then
+				k = math.floor(v * 1000000 + 0.5)
+				if k == k and k <= LIMIT and k >= -LIMIT and k / 1000000 == v and (v ~= 0 or 1 / v > 0) then
+					local d = k - ((pmode == 1) and pk or base(prev, 1000000))
+					if d < DELTA_LIMIT and d > -DELTA_LIMIT then
+						code = ((d >= 0) and d * 2 or -d * 2 - 1) * 4 + 1
+						pmode, pk = 1, k
+					end
+				end
+			end
+			if code then
+				while code >= 128 do
+					buffer.writeu8(ob, on, code % 128 + 128)
+					on = on + 1
+					code = code // 128
+				end
+				buffer.writeu8(ob, on, code)
+				on = on + 1
+			else
+				buffer.writeu8(ob, on, 2)
+				buffer.writef64(ob, on + 1, v)
+				on = on + 9
+				pmode = 2
 			end
 		end
+		prev = v
 	end
-	w:varint(2)
-	w:f64(v)
+	st.ob, st.on, st.cap, st.prev, st.pmode, st.pk = ob, on, cap, prev, pmode, pk
 end
 
-local function getValue(r, prev)
-	local code = r:varint()
-	local mode = code % 4
-	if mode == 2 then
-		if code ~= 2 then damaged("number code") end
-		return r:f64()
+-- frames lo..hi of one f64 component from its byte stream (c: p, last 0-based in rb, prev, pmode, pk)
+local function decodeRange(c, rb, buf, stride, off, lo, hi)
+	local p, last = c.p, c.last
+	local prev, pmode, pk = c.prev, c.pmode, c.pk
+	for i = lo, hi do
+		if p > last then damaged("column ends early") end
+		local b = buffer.readu8(rb, p)
+		p = p + 1
+		local code = b
+		if b >= 128 then
+			code = b - 128
+			local mul = 128
+			while true do
+				if p > last then damaged("column ends inside a number") end
+				b = buffer.readu8(rb, p)
+				p = p + 1
+				if b < 128 then
+					code = code + b * mul
+					break
+				end
+				code = code + (b - 128) * mul
+				mul = mul * 128
+				if mul > 2 ^ 56 then damaged("number too long") end
+			end
+		end
+		local mode = code % 4
+		local v
+		if mode == 0 or mode == 1 then
+			local z = (code - mode) / 4
+			local d = (z % 2 == 0) and z / 2 or -(z + 1) / 2
+			local scale = (mode == 0) and 1000 or 1000000
+			local k = ((pmode == mode) and pk or base(prev, scale)) + d
+			v = k / scale
+			pmode, pk = mode, k
+		elseif code == 2 then
+			if p + 7 > last then damaged("column ends inside a number") end
+			v = buffer.readf64(rb, p)
+			p = p + 8
+			pmode = 2
+		else
+			damaged("number code")
+		end
+		buffer.writef64(buf, (i - 1) * stride + off, v)
+		prev = v
 	end
-	if mode == 3 then damaged("number code") end
-	local z = (code - mode) / 4
-	local d = (z % 2 == 0) and z / 2 or -(z + 1) / 2
-	local scale = SCALES[mode + 1]
-	return (base(prev, scale) + d) / scale
+	c.p, c.prev, c.pmode, c.pk = p, prev, pmode, pk
 end
 
 -- ------------------------------------------------------------------------------------------------ encode
@@ -89,12 +162,11 @@ function Codec6.encode(tl, header, progress)
 	local state = {}
 	for ci, col in ipairs(cols) do
 		if col.kind == "f64" then
-			local st = { writers = {}, prev = {} }
+			local comps = {}
 			for k = 1, col.width do
-				st.writers[k] = Bytes.writer(n + 16)
-				st.prev[k] = 0
+				comps[k] = { ob = buffer.create(n + 64), on = 0, cap = n + 64, prev = 0, pmode = -1, pk = 0 }
 			end
-			state[ci] = st
+			state[ci] = comps
 		elseif col.kind == "list" then
 			state[ci] = { writer = Bytes.writer(), count = 0, last = 0 }
 		end
@@ -105,17 +177,7 @@ function Codec6.encode(tl, header, progress)
 		for ci, col in ipairs(cols) do
 			local st = state[ci]
 			if col.kind == "f64" then
-				local buf, stride = col.buf, col.stride
-				for k = 1, col.width do
-					local w, prev = st.writers[k], st.prev[k]
-					local off = (k - 1) * 8
-					for i = lo, hi do
-						local v = buffer.readf64(buf, (i - 1) * stride + off)
-						putValue(w, v, prev)
-						prev = v
-					end
-					st.prev[k] = prev
-				end
+				for k = 1, col.width do encodeRange(st[k], col.buf, col.stride, (k - 1) * 8, lo, hi) end
 			elseif col.kind == "list" then
 				local list, w = col.list, st.writer
 				for i = lo, hi do
@@ -142,8 +204,8 @@ function Codec6.encode(tl, header, progress)
 		if col.kind == "f64" then
 			local p = Bytes.writer()
 			for k = 1, col.width do
-				p:varint(st.writers[k]:len())
-				p:raw(st.writers[k]:tostring())
+				p:varint(st[k].on)
+				p:rawBuffer(st[k].ob, 0, st[k].on)
 			end
 			body:varint(p:len())
 			body:raw(p:tostring())
@@ -246,6 +308,7 @@ function Codec6.decode(data, tl, progress)
 	tl:resize(n)
 	-- f64 components and lists: readers, decoded in steps of CHUNK frames
 	local work = {}
+	local rb = buffer.fromstring(raw)
 	for _, d in ipairs(descs) do
 		local col = tl.cols[d.name]
 		local pr = Bytes.reader(raw, d.start, d.last)
@@ -254,7 +317,8 @@ function Codec6.decode(data, tl, progress)
 			for k = 1, d.width do
 				local len = pr:varint()
 				if len > pr:left() then damaged("column " .. d.name) end
-				comps[k] = { r = Bytes.reader(raw, pr:pos(), pr:pos() + len - 1), prev = 0 }
+				-- (0-based positions in rb)
+				comps[k] = { p = pr:pos() - 1, last = pr:pos() + len - 2, prev = 0, pmode = -1, pk = 0 }
 				pr:raw(len)
 			end
 			if pr:left() ~= 0 then damaged("column " .. d.name) end
@@ -276,24 +340,14 @@ function Codec6.decode(data, tl, progress)
 	while lo <= n do
 		local hi = math.min(n, lo + CHUNK - 1)
 		for _, wk in ipairs(work) do
-			local buf, stride = wk.col.buf, wk.col.stride
-			for k, c in ipairs(wk.comps) do
-				local cr, prev = c.r, c.prev
-				local off = (k - 1) * 8
-				for i = lo, hi do
-					local v = getValue(cr, prev)
-					buffer.writef64(buf, (i - 1) * stride + off, v)
-					prev = v
-				end
-				c.prev = prev
-			end
+			for k, c in ipairs(wk.comps) do decodeRange(c, rb, wk.col.buf, wk.col.stride, (k - 1) * 8, lo, hi) end
 		end
 		pace(progress, hi, n)
 		lo = hi + 1
 	end
 	for _, wk in ipairs(work) do
 		for _, c in ipairs(wk.comps) do
-			if c.r:left() ~= 0 then damaged("column " .. wk.col.name) end
+			if c.p ~= c.last + 1 then damaged("column " .. wk.col.name) end
 		end
 	end
 	tl.meta = type(meta) == "table" and meta or {}

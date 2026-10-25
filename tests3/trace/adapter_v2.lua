@@ -39,3 +39,16 @@ function A.load(name)
 	__T.Core.SetTAS(frames)
 end
 function A.loadV2File() A.load("traced") end
+-- the save bench (tests3/bench/save.lua): V2's Store.SaveSlot / LoadSlot
+local benchFrames
+function A.setFrames(frames) benchFrames = frames end
+function A.saveWork(name)
+	local ok, _, bytes = __T.Store.SaveSlot(name, benchFrames)
+	assert(ok, bytes)
+	return bytes
+end
+function A.loadWork(name)
+	local ok, frames = __T.Store.LoadSlot(name)
+	assert(ok, frames)
+	return #frames
+end

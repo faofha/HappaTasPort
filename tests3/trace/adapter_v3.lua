@@ -39,3 +39,17 @@ function A.loadV2File()
 		A.load("traced")
 	end
 end
+-- the save bench (tests3/bench/save.lua): the run into the timeline first (not timed), then build + safe save,
+-- read + load into a fresh timeline
+function A.setFrames(frames) E.modes:setRun(frames) end
+function A.saveWork(name)
+	local data = __T3("persist/run").build(E.tl, name)
+	assert(E.library:save(name, "", data))
+	return #data
+end
+function A.loadWork(name)
+	local data = assert(E.library:read(name .. ".tas"))
+	local fresh = __T3("engine/timeline").newLike(E.tl)
+	__T3("persist/run").load(fresh, data)
+	return fresh:count()
+end

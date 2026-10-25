@@ -32,6 +32,7 @@ local function makeTimeline(n, seed)
 	tl:addColumn("Lin", "f64", 3, { key = "Velocity", sub = "Linear" })
 	tl:addColumn("State", "u8", 1, { key = "State" })
 	tl:addColumn("Odd", "f64", 1, nil)
+	tl:addColumn("Signs", "f64", 1, nil) -- (0 then -0: an unchanged-looking value that isn't)
 	tl:addColumn("Input", "list", 1, { key = "Input" })
 	tl:addColumn("Died", "list", 1, { key = "Died" })
 	local rnd = Random.new(seed or 7)
@@ -47,6 +48,7 @@ local function makeTimeline(n, seed)
 		tl:set("State", i, 1, (i % 97 == 0) and 3 or 8)
 		local odd = ({ 0 / 0, -0.0, 1e300, math.huge, 1 / 3 })[i % 5 + 1]
 		tl:set("Odd", i, 1, odd)
+		tl:set("Signs", i, 1, (i % 2 == 0) and 0 or -0.0)
 		if i % 7 == 0 then tl:setList("Input", i, { { "W", 1 }, { "Space", i % 2 } }) end
 		if i == n - 3 then tl:setList("Died", i, true) end
 		tl:setFilled(i)
@@ -128,7 +130,7 @@ if VARIANT ~= "nocompress" then
 	check(#data < 0.25 * N * rawBytesPerFrame(tl), "smaller than a quarter of the raw columns (" .. #data .. " bytes, raw " .. N * rawBytesPerFrame(tl) .. ")")
 end
 
-section("rounded values that change every frame take a few bytes [" .. VARIANT .. "]")
+section("rounded values that change every frame take about 2 bytes [" .. VARIANT .. "]")
 do
 	local walk = Timeline.new()
 	walk:addColumn("P", "f64", 3, nil)
@@ -140,7 +142,7 @@ do
 		walk:setN("P", i, r1000(x), r1000(y), r1000(z))
 	end
 	local d = encode(walk, {})
-	check(#d < 3 * 3 * N, "under 3 bytes a value (" .. string.format("%.2f", #d / (3 * N)) .. ")")
+	check(#d < 2.1 * 3 * N, "about 2 bytes a value at most (" .. string.format("%.2f", #d / (3 * N)) .. ")")
 	local wb = Timeline.newLike(walk)
 	decode(d, wb)
 	check((sameBits(walk, wb)), "and exact")
