@@ -35,8 +35,8 @@ tools, death and respawn), Create / Test / Idle modes with every key control, TA
 (Sync / Smooth / Frustum culling), timed buttons, lighting, the EToH kit (Kit Clock, frame listeners, beat
 blocks, turrets, pushboxes, bounce pad / launcher effects, morphers), the speed hack (0.1x to 4x, Smooth and
 Frame Step), the MicroProfiler copy, mobile support (touch buttons, thumbstick replay), the NohBoard cursor,
-keyboard / click sounds, real-mouse replay, the Real-specific input fixes (VirtualInputManager keys, mouse
-calibration).
+real-mouse replay, the Real-specific input fixes (mouse calibration). (Keyboard / click sounds and
+VirtualInputManager keys went with V2.38.17; HappaTAS 3 has no sounds.)
 
 **Not included:** autosave, cloud sync, tags on runs, anything for games other than the ones HappaTAS
 already supports. Working around a game's anti-cheat is out of scope.
@@ -210,7 +210,7 @@ and the frame / time readout. Collapses to a slim strip in Idle.
     transparency, old / new halves, HEX / RGB / HSV boxes with labels, recent colours). Dropdowns open a plain
     list; for fonts each name is drawn in its font and hovering previews it live on the whole interface (click
     keeps it, moving away reverts).
-  - Sections: Appearance, Playback, Create, Speed hack, Inputs, World sync, Interface, UI sounds.
+  - Sections: Appearance, Playback, Create, Speed hack, Inputs, World sync, Interface (no UI sounds: dzr, 2026-10-25).
 - **Controls:** every action with its key, click to rebind, conflicts flagged. Default keys as V2.38.16.
 - **Help**, **Merge**. The **MicroProfiler** stays its own Roblox-style overlay.
 
@@ -224,7 +224,6 @@ V2.38.16's 5 sound settings were removed in V2.38.17), plus:
   colour, Font, Number font, Text size, Interface scale, Window corners, Button shape (Pill / Rounded /
   Square), Shadows, Animations (Off / Smooth / Snappy / Bouncy), Animation length, Easing (Roblox easing
   style + direction, or Custom cubic-bezier with a draggable curve, x1 y1 x2 y2, presets and Preview).
-- **UI sounds:** Interface sounds on / off, Click sound, Hover sound, Open / close sound, Volume.
 
 Custom bezier easing runs in HappaTAS's own tween code (TweenService has no bezier).
 
@@ -277,15 +276,18 @@ Each phase has its own implementation plan, tests and PR.
    death); trace parity with V2.38.16.
 3. **Saves:** codec v6, v1-v5 readers, library, settings conversion. First phase you can record and save with.
 4. **World plugins:** client objects, buttons, lighting, EToH kit, time control.
-5. **UI:** component kit, windows, timeline bar, Settings, Inspector, Library, Controls, Help, Merge, mobile;
-   the classic interface (8.5); Frost blur trial in the client.
+5. **UI**, in three parts, each with its own plan and PR:
+   - 5a: component kit, windows, appearance, Settings, Controls; Frost blur trial in the client.
+   - 5b: timeline bar, Inspector, Library, Merge, Help.
+   - 5c: the classic interface (8.5), mobile touch buttons.
 6. **MicroProfiler.**
 7. **Switch-over:** HappaTAS 3 becomes `wow` / `wow1`; README; V2.38.16 stays in history.
 
 ## 13. Open questions (answered during the phases)
 
 - Does the Frost blur work well enough in Roblox (graphics levels, performance, look)? Phase 5.
-- V2.38.17 removed every sound: should the new UI sounds (8.4) stay, or go too? Ask before phase 5.
+- ~~V2.38.17 removed every sound: should the new UI sounds (8.4) stay, or go too?~~ Answered (dzr, 2026-10-25): no
+  UI sounds; the section is dropped.
 - Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
   Merriweather, Roboto Mono and others available as Font families). Phase 5.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are

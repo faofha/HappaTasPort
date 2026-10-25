@@ -1,7 +1,9 @@
 -- ================================================================================================
 --  SETTINGSFILE  (HappaTAS 3 persist): HappaTasPort/Settings3.json, HappaTAS 3's settings and keys
 --    { format = "HappaTAS3 settings", version = 1, settings = { [key] = value }, controls = { [control] = key },
---      profiler = table? (the MicroProfiler's own data, kept for phase 6) }
+--      profiler = table? (the MicroProfiler's own data, kept for phase 6),
+--      ui = { themes = { [name] = { [key] = value } }, layout = { ["WxH"] = { [window] = rect } },
+--             recentColors = { "#RRGGBB", ... } } (the interface's own data, phase 5a) }
 --  The first start converts V2's HappaTasPort/Settings.json (V2 names -> keys; names HappaTAS 3 doesn't
 --  have, the old sound settings too, are left out; values sanitised like V2) and writes Settings3.json.
 --  Settings.json itself is never written: V2 (wow) still uses it until the switch-over.
@@ -25,7 +27,7 @@ local DELAY = 0.4
 
 function SettingsFile.new(files, settings, controls, life)
 	local self = setmetatable({ files = files, settings = settings, controls = controls, http = Env.svc("HttpService"),
-		queued = false, loading = false, closed = false, profiler = nil }, SettingsFile)
+		queued = false, loading = false, closed = false, profiler = nil, ui = nil }, SettingsFile)
 	local offs = {
 		settings:onAny(function() self:queue() end),
 		controls:changed(function() self:queue() end),
@@ -47,6 +49,31 @@ local function decode(self, raw)
 	return nil
 end
 
+-- the interface's data as read from a file: only tables where tables belong, only real colours, at most 8
+local MAX_RECENT = 8
+local function cleanUi(t)
+	local ui = { themes = {}, layout = {}, recentColors = {} }
+	if type(t) ~= "table" then return ui end
+	if type(t.themes) == "table" then
+		for name, look in pairs(t.themes) do
+			if type(name) == "string" and type(look) == "table" then ui.themes[name] = look end
+		end
+	end
+	if type(t.layout) == "table" then
+		for size, rects in pairs(t.layout) do
+			if type(size) == "string" and type(rects) == "table" then ui.layout[size] = rects end
+		end
+	end
+	if type(t.recentColors) == "table" then
+		local colorDef = Settings.byKey.accentColor
+		for _, c in ipairs(t.recentColors) do
+			local hex = Settings.sanitize(colorDef, c)
+			if hex and #ui.recentColors < MAX_RECENT then ui.recentColors[#ui.recentColors + 1] = hex end
+		end
+	end
+	return ui
+end
+
 local function setKey(controls, control, keyName)
 	if type(keyName) == "string" and (keyName == "None" or Keys.isValid(keyName)) then controls:set(control, keyName) end
 end
@@ -62,6 +89,7 @@ function SettingsFile:load()
 		for key, v in pairs(type(t3.settings) == "table" and t3.settings or {}) do settings:set(key, v) end
 		for control, keyName in pairs(type(t3.controls) == "table" and t3.controls or {}) do setKey(controls, control, keyName) end
 		self.profiler = type(t3.profiler) == "table" and t3.profiler or nil
+		self.ui = cleanUi(t3.ui)
 		source = "v3"
 	else
 		if raw3 then
@@ -90,7 +118,7 @@ end
 function SettingsFile:write()
 	if not self.files.available or not self.http then return false end
 	local out = { format = FORMAT, version = 1, settings = table.clone(self.settings.values),
-		controls = table.clone(self.controls.values), profiler = self.profiler }
+		controls = table.clone(self.controls.values), profiler = self.profiler, ui = self:getUi() }
 	local ok, json = pcall(self.http.JSONEncode, self.http, out)
 	if not ok then return false end
 	self.files:makeFolder(ROOT)
@@ -115,6 +143,18 @@ function SettingsFile:flush()
 		self.queued = false
 		self:write()
 	end
+end
+
+-- the interface's data (never nil: empty tables until something is saved)
+function SettingsFile:getUi()
+	if not self.ui then self.ui = cleanUi(nil) end
+	return self.ui
+end
+
+-- saved with the settings, DELAY seconds later
+function SettingsFile:setUi(t)
+	self.ui = cleanUi(t)
+	self:queue()
 end
 
 function SettingsFile:setProfiler(t)
