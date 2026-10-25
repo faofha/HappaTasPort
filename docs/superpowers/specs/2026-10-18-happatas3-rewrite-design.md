@@ -305,3 +305,30 @@ Each phase has its own implementation plan, tests and PR.
   Idle 17.3 vs V2's 17.4, recording 84 vs 90, paused 88 vs 113, Test 107 vs 125, a world with 100 client objects,
   beat blocks, a turret and the speed hack at 0.5x 3,402 vs 3,414. The client object listeners stay at 6 per part
   (V2's): the recorder needs Anchored for every registered part (spec 7's "fewer listeners" is still open).
+  Live (EToH kit test place, 2026-10-25, ~230 FPS, window not focused, driven through E.modes and
+  Humanoid:Move; samples read as the last PreRender handler, i.e. what is drawn): client objects played back
+  against the recording, by TAS time: spinning kill brick worst 0.0007 studs (one frame 0.0066 where the part
+  jumped two physics steps after a frame with none), the Pushing Platform worst 0.014 (V2's Smooth design: a
+  position every 2nd frame plus velocity, the error is about a dt^2 / 2 at ~150 stud/s^2; the same in V2's code,
+  diffco trace SAME), held still while paused 3 s. A timed button (Timer 3) pressed at TAS 0.472, released at
+  3.479 with a 3 s pause in between (its TimerStart moved 2.997 s while paused), Test released it at 3.474.
+  Lighting: the changer's 1 s tween recorded per frame, played back frame by frame (721 frames, worst 0.0005,
+  the write tolerance), the run's start lighting shown before the touch, kept as it is on Idle and after Test.
+  Beat blocks 10 s with a 3 s pause: switches at whole TAS seconds, recording 2,400 / paused 800 seeked / Test
+  2,402 frames 0 wrong against the kit's beat formula at the time shown. Turret 10 s with a pause: one 5 damage
+  hit per bullet at the same TAS times in recording and Test (1.025 / 1.029 ...), bullets still and no damage
+  while paused, 481 seeked frames the same, Test bullets within 0.009 studs by time (bullets the kit fired in Idle
+  before a Test can still hit, as in V2). Speed hack: jump 7.269 studs at 1x, 0.5x Smooth and 0.5x Frame Step
+  (apex TAS 0.572 / 0.576 / 0.572), the 0.5x recordings took 2.6 s real for 1.3 s TAS, every Test 1.307 s for
+  1.301; walking 13.4-13.8 studs by TAS 0.95 in all of them. Save / load v6 (live1 21,220 bytes, 1,439 frames with
+  client objects, speed factors, 5 kit events; long1 2,394 frames loaded in 31 ms while paused in Create): every
+  saved column the same after the load (only CY and LT, never saved, differ), the Test after it the same.
+  Unload while recording at 0.5x: 94 kit environments back, gravity / WalkSpeed / JumpPower back, no part's
+  Anchored changed, nothing left in the Camera / CoreGui / gethui; the release loads and unloads with no console
+  line. Per-frame cost, both builds timed the same way (every RunService connection of the build and its render
+  bind), interleaved, fresh loads (us, V2.38.17 vs HappaTAS 3 after the review fixes): Idle 79 / 91 vs 78 / 79,
+  recording 389 / 439 vs 364 / 442, paused 389 / 358 vs 604 / 504, Test 557 / 444 vs 651 / 541, turret recording
+  445 / 361 vs 474 / 429, turret paused 382 / 326 vs 417 / 370, turret Test 496 / 461 vs 492 / 436. So live
+  HappaTAS 3 is level in Idle and recording but costs more while paused and in Test (the plugins' own methods cost
+  about the same as V2's modules; the Kit Clock's frame listener check while paused is ~70 us a frame) - not
+  the headless bench's result; open for a later phase.
