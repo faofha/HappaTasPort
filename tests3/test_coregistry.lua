@@ -107,6 +107,7 @@ do
 	local cof = folder("ClientObjects")
 	local a = part("A", cof)
 	local R = newReg()
+	local addConns0 = #workspace.DescendantAdded._conns
 	R:enable()
 	check(waitReady(R), "ready")
 	eq(R.ids[floorP], nil, "an anchored plain part isn't registered")
@@ -133,7 +134,7 @@ do
 	eq(R.ids[c], nil, "no more than MaxRegistered")
 	R:disable()
 	eq(listeners(b), 0, "disable removes every listener")
-	eq(#workspace.DescendantAdded._conns, 0, "and the workspace connections")
+	eq(#workspace.DescendantAdded._conns, addConns0, "and the workspace connections")
 	eq(R.nWatched, 0, "and the watches")
 	plain:Destroy()
 	cof:Destroy()

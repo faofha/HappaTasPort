@@ -35,6 +35,7 @@ world/co/registry
 world/co/recorder
 world/co/player
 world/clientobjects
+world/buttons
 engine/merge
 engine/modes
 engine/frame
