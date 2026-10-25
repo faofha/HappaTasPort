@@ -54,12 +54,7 @@ Settings.SCHEMA = {
 	row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4 }),
 	row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true }),
 	row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0),
-
-	row("keyboardSounds", "Enable Keyboard Sounds", "Sounds", 0),
-	row("clickSounds", "Enable Click Sounds", "Sounds", 0),
-	row("soundTriggerMode", "Sound Trigger Mode", "Sounds", 0, { kind = NUM, min = 0, max = 2, integer = true }),
-	row("soundVolume", "Sound Volume", "Sounds", 50, { kind = NUM, min = 0, max = 100 }),
-	row("dynamicPitch", "Dynamic Pitch Variation", "Sounds", 1),
+	-- (V2.38.16's 5 sound settings went with V2.38.17: a V2 Settings.json that has them converts without them)
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do
@@ -83,7 +78,7 @@ end
 function Settings.new(errs)
 	local values = {}
 	for _, r in ipairs(Settings.SCHEMA) do values[r.key] = r.default end
-	return setmetatable({ values = values, listeners = {}, errs = errs }, Settings)
+	return setmetatable({ values = values, listeners = {}, anyListeners = {}, errs = errs }, Settings)
 end
 
 function Settings:get(key) return self.values[key] or 0 end
@@ -108,7 +103,21 @@ function Settings:set(key, v)
 			if not ok and self.errs then self.errs:report("setting " .. key, err) end
 		end
 	end
+	for _, f in ipairs(table.clone(self.anyListeners)) do
+		local ok, err = pcall(f, key, v)
+		if not ok and self.errs then self.errs:report("settings", err) end
+	end
 	return true
+end
+
+-- f(key, value) after any change (the settings file saves on it); returns a function that removes it
+function Settings:onAny(f)
+	local list = self.anyListeners
+	list[#list + 1] = f
+	return function()
+		local i = table.find(list, f)
+		if i then table.remove(list, i) end
+	end
 end
 
 -- f(value) after each change; returns a function that removes it

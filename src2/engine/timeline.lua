@@ -24,7 +24,8 @@ local START_CAP = 1024
 local BYTES = { f64 = 8, u8 = 1 }
 
 function Timeline.new()
-	local tl = setmetatable({ n = 0, cap = START_CAP, cols = {}, order = {}, version = 0 }, Timeline)
+	-- (meta: the run's own data, kept through saving and loading: when it was made, V2 tables, ...)
+	local tl = setmetatable({ n = 0, cap = START_CAP, cols = {}, order = {}, version = 0, meta = {} }, Timeline)
 	tl:addColumn("_filled", "u8", 1, nil)
 	return tl
 end
@@ -142,6 +143,75 @@ end
 
 function Timeline:removeLast()
 	if self.n > 0 then self:cut(self.n - 1) end
+end
+
+-- ------------------------------------------------------------------------------------------------ loading
+-- a timeline with the same columns (and V2 descriptions), no frames, an empty meta
+function Timeline.newLike(tl)
+	local out = Timeline.new()
+	for _, col in ipairs(tl.order) do
+		if col.name ~= "_filled" then out:addColumn(col.name, col.kind, col.width, col.v2) end
+	end
+	return out
+end
+
+-- capacity for at least n frames (buffers keep their first `keep` frames)
+local function reserve(self, n, keep)
+	if n <= self.cap then return end
+	local cap = self.cap
+	while cap < n do cap = cap * 2 end
+	for _, col in ipairs(self.order) do
+		if col.buf then
+			local nb = buffer.create(cap * col.stride)
+			buffer.copy(nb, 0, col.buf, 0, keep * col.stride)
+			col.buf = nb
+		end
+	end
+	self.cap = cap
+end
+
+-- n frames, all filled: numbers 0, lists empty (a file's frames are written in after this)
+function Timeline:resize(n)
+	reserve(self, n, 0)
+	for _, col in ipairs(self.order) do
+		if col.buf then
+			buffer.fill(col.buf, 0, 0, n * col.stride)
+		else
+			col.list = {}
+		end
+	end
+	self.n = n
+	buffer.fill(self.cols._filled.buf, 0, 1, n)
+	self.version = self.version + 1
+end
+
+-- takes the frames, columns and meta of `other` (a timeline a file was loaded into): the columns keep
+-- their tables here, only their data changes; a column only `other` has is added
+function Timeline:adopt(other)
+	reserve(self, other.cap, 0)
+	for _, oc in ipairs(other.order) do
+		local col = self.cols[oc.name]
+		if not col then
+			col = self:addColumn(oc.name, oc.kind, oc.width, oc.v2)
+		elseif col.kind ~= oc.kind or col.width ~= oc.width then
+			error("HappaTAS3: column " .. oc.name .. " has a different shape", 2)
+		end
+		if oc.buf then
+			local nb = buffer.create(self.cap * col.stride)
+			buffer.copy(nb, 0, oc.buf, 0, other.n * col.stride)
+			col.buf = nb
+		else
+			col.list = oc.list
+		end
+	end
+	for _, col in ipairs(self.order) do
+		if not other.cols[col.name] then
+			if col.buf then buffer.fill(col.buf, 0, 0, other.n * col.stride) else col.list = {} end
+		end
+	end
+	self.n = other.n
+	self.meta = other.meta or {}
+	self.version = self.version + 1
 end
 
 -- ------------------------------------------------------------------------------------------------ V2 frames

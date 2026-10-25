@@ -26,3 +26,30 @@ function A.optimizeTwice()
 end
 function A.merge(frames, where) E.mergeRun:startMerge(frames, where) end
 function A.mergeClick() E.mergeRun:finishMerge() end
+-- saving and loading (HappaTAS 3's persist; the work runs on its thread over the next frames, which the
+-- scenario steps on both sides); part C loads the file the V2 side saved (V2FILE_DATA, tools/trace3.sh)
+function A.save(name) assert(E.persist:save(name)) end
+function A.clearRun() E.modes:setRun({}) end
+function A.load(name) assert(E.persist:load(name .. ".tas")) end
+function A.loadV2File()
+	if V2FILE_DATA then
+		writefile(E.library.root .. "/tracedV2.tas", V2FILE_DATA)
+		A.load("tracedV2")
+	else
+		A.load("traced")
+	end
+end
+-- the save bench (tests3/bench/save.lua): the run into the timeline first (not timed), then build + safe save,
+-- read + load into a fresh timeline
+function A.setFrames(frames) E.modes:setRun(frames) end
+function A.saveWork(name)
+	local data = __T3("persist/run").build(E.tl, name)
+	assert(E.library:save(name, "", data))
+	return #data
+end
+function A.loadWork(name)
+	local data = assert(E.library:read(name .. ".tas"))
+	local fresh = __T3("engine/timeline").newLike(E.tl)
+	__T3("persist/run").load(fresh, data)
+	return fresh:count()
+end

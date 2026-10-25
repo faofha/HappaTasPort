@@ -81,11 +81,14 @@ local function world(tag)
 	logPos = #M.inputLog
 	if #lines > 0 then out("W.input", tag, table.concat(lines, " ")) end
 end
-local function frames(tag)
+-- skip: fields left out of this dump
+local function frames(tag, skip)
 	for i = 1, A.count() do
 		local fr = A.frameV2(i)
 		local keys = {}
-		for k in pairs(fr) do keys[#keys + 1] = k end
+		for k in pairs(fr) do
+			if not (skip and skip[k]) then keys[#keys + 1] = k end
+		end
 		table.sort(keys)
 		for _, k in ipairs(keys) do out("F", tag, i, k, fmt(fr[k])) end
 	end
@@ -279,4 +282,36 @@ step("mergePaused", 5)
 A.mergeClick()
 step("merged", 3)
 frames("merged")
+
+-- ------------------------------------------------------------------ save, clear, load, Test (each build its own format)
+key(Enum.KeyCode.One)
+step("idleSave", 3)
+A.save("traced")
+step("saved", 3)
+A.clearRun()
+step("cleared", 2)
+A.load("traced")
+step("loaded", 3)
+-- (V2's codec puts the viewport size on every frame after the one that recorded it; HappaTAS 3's v6 gives
+-- the recording back as it was: the viewport stays on the frames that had it. Playback is the same.)
+frames("loaded", { VX = true, VY = true })
+key(Enum.KeyCode.Three)
+n = 0
+step("testLoaded", 1)
+while A.mode() == 3 and n < 900 do n = n + 1; step("playLoaded" .. n) end
+key(Enum.KeyCode.One)
+step("idleLoaded", 3)
+
+-- ------------------------------------------------------------------ the file V2 saved (HappaTAS 3 reads V2's bytes)
+A.clearRun()
+step("clearedV2", 2)
+A.loadV2File()
+step("loadedV2", 3)
+frames("loadedV2")
+key(Enum.KeyCode.Three)
+n = 0
+step("testV2File", 1)
+while A.mode() == 3 and n < 900 do n = n + 1; step("playV2File" .. n) end
+key(Enum.KeyCode.One)
+step("idleV2File", 3)
 finish()

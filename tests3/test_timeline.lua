@@ -247,4 +247,42 @@ do
 		eq(S(tl:toV2(i)), S(want), "kept frame " .. i .. " equals V2's")
 	end
 end
+section("phase 3: meta, newLike, adopt, resize")
+do
+	local a = Timeline.new()
+	check(type(a.meta) == "table" and next(a.meta) == nil, "a new timeline has an empty meta")
+	a:addColumn("P", "f64", 3, { key = "P" })
+	a:addColumn("S", "u8", 1, { key = "S" })
+	a:addColumn("L", "list", 1, { key = "L" })
+	for i = 1, 3 do
+		a:append()
+		a:setN("P", i, i, i * 2, i * 3)
+		a:set("S", i, 1, i)
+		a:setList("L", i, { i })
+	end
+	a.meta.x = 1
+	local b = Timeline.newLike(a)
+	eq(b:count(), 0, "newLike: no frames")
+	check(b.cols.P and b.cols.P.width == 3 and b.cols.P.v2.key == "P", "newLike: same columns")
+	check(b.cols.L and b.cols.L.kind == "list", "newLike: list column")
+	check(next(b.meta) == nil, "newLike: empty meta")
+	b:resize(2000)
+	eq(b:count(), 2000, "resize: count")
+	check(b:isFilled(2000), "resize: frames filled")
+	eq(b:get("P", 2000, 3), 0, "resize: numbers zero")
+	eq(b:getList("L", 1), nil, "resize: lists empty")
+	b:setN("P", 2000, 7, 8, 9)
+	b:addColumn("Extra", "f64", 1, nil)
+	b:set("Extra", 5, 1, 42)
+	b.meta.y = 2
+	local v0 = a.version
+	a:adopt(b)
+	eq(a:count(), 2000, "adopt: count")
+	eq(a:get("P", 2000, 2), 8, "adopt: the other's numbers")
+	eq(a:get("Extra", 5, 1), 42, "adopt: a column only the other had")
+	eq(a.meta.y, 2, "adopt: meta")
+	check(a.version > v0, "adopt: version changed")
+	a:append()
+	eq(a:count(), 2001, "append after adopt grows fine")
+end
 finish()

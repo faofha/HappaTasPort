@@ -1,0 +1,2 @@
+VARIANT="plain"
+VARIANT="nofiles"; writefile = nil

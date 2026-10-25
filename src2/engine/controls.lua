@@ -35,7 +35,7 @@ end
 function Controls.new()
 	local values = {}
 	for _, c in ipairs(Controls.LIST) do values[c.key] = c.default end
-	return setmetatable({ values = values }, Controls)
+	return setmetatable({ values = values, listeners = {} }, Controls)
 end
 
 function Controls:get(control) return self.values[control] end
@@ -44,8 +44,20 @@ function Controls:get(control) return self.values[control] end
 function Controls:set(control, keyName)
 	if self.values[control] == nil then return false end
 	if keyName ~= "None" and not Keys.isValid(keyName) then return false end
+	if self.values[control] == keyName then return true end
 	self.values[control] = keyName
+	for _, f in ipairs(table.clone(self.listeners)) do pcall(f, control, keyName) end
 	return true
+end
+
+-- f(control, keyName) after a key changed (the settings file saves on it); returns a remover
+function Controls:changed(f)
+	local list = self.listeners
+	list[#list + 1] = f
+	return function()
+		local i = table.find(list, f)
+		if i then table.remove(list, i) end
+	end
 end
 
 -- true when the input is the key bound to the control (V2 CheckInput)

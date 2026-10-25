@@ -21,9 +21,11 @@ local V2_NAMES = {
 	"Kit Scripts On TAS Clock", "Sync Kit Objects",
 	"Show Stats (Idle)", "Show Stats (Create)", "Show Stats (Test)", "Stats Text Size", "Show MicroProfiler",
 	"MicroProfiler Scale", "MicroProfiler Text Offset", "Allow PlayerGui Interface",
-	"Enable Keyboard Sounds", "Enable Click Sounds", "Sound Trigger Mode", "Sound Volume", "Dynamic Pitch Variation",
 }
-eq(#Settings.SCHEMA, 39, "39 rows")
+eq(#Settings.SCHEMA, 34, "34 rows (V2.38.16's 39 without the 5 sound settings V2.38.17 removed)")
+for _, gone in ipairs({ "Enable Keyboard Sounds", "Enable Click Sounds", "Sound Trigger Mode", "Sound Volume", "Dynamic Pitch Variation" }) do
+	eq(Settings.byV2[gone], nil, "no sound setting: " .. gone)
+end
 local seenV2, seenKey = {}, {}
 for _, row in ipairs(Settings.SCHEMA) do
 	check(not seenKey[row.key], "unique key " .. tostring(row.key))
@@ -42,7 +44,6 @@ eq(s:get("playbackSpeed"), 1, "playbackSpeed")
 eq(s:get("ignoreGameProcessed"), 0, "ignoreGameProcessed")
 eq(s:get("speedHackSpeed"), 0.5, "speedHackSpeed")
 eq(s:get("statsTextSize"), 11, "statsTextSize")
-eq(s:get("soundVolume"), 50, "soundVolume")
 eq(s:get("syncClientObjects"), 0, "syncClientObjects")
 eq(s:on("lockCameraTest"), true, "lockCameraTest on")
 eq(s:on("speedHack"), false, "speedHack off")
@@ -141,4 +142,30 @@ t.boundInput = inp
 eq(t:active(inp), true, "the input that set a new key")
 eq(t:active(key(Enum.KeyCode.W)), false, "another input")
 life:cleanup()
+section("phase 3: onAny and Controls:changed (the settings file saves on them)")
+do
+	local s2 = Settings.new(errs)
+	local seen = {}
+	local off = s2:onAny(function(key, v) seen[#seen + 1] = key .. "=" .. tostring(v) end)
+	s2:set("playbackSpeed", 2)
+	s2:set("playbackSpeed", 2)
+	s2:set("syncLighting", 0)
+	s2:set("nope", 1)
+	eq(table.concat(seen, ","), "playbackSpeed=2,syncLighting=0", "onAny: each change once, nothing for no change / unknown")
+	off()
+	s2:set("playbackSpeed", 3)
+	eq(#seen, 2, "removed")
+	local c = Controls.new()
+	local got = {}
+	local offC = c:changed(function(control, keyName) got[#got + 1] = control .. "=" .. keyName end)
+	c:set("pause", "E")
+	c:set("pause", "E")
+	c:set("pause", "Banana")
+	c:set("nope", "E")
+	eq(table.concat(got, ","), "pause=E", "Controls:changed: a real change only")
+	offC()
+	c:set("pause", "Q")
+	eq(#got, 1, "removed")
+end
+
 finish()

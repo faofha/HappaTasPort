@@ -26,6 +26,7 @@ Env.genv = (getgenvF and getgenvF()) or _G
 Env.writefile, Env.readfile, Env.isfile = fn(writefile), fn(readfile), fn(isfile)
 Env.isfolder, Env.makefolder, Env.listfiles = fn(isfolder), fn(makefolder), fn(listfiles)
 Env.delfile, Env.appendfile = fn(delfile), fn(appendfile)
+Env.delfolder = fn(delfolder)
 Env.lz4compress, Env.lz4decompress = fn(lz4compress), fn(lz4decompress)
 Env.gethui = fn(gethui)
 Env.cloneref = fn(cloneref, clonereference)

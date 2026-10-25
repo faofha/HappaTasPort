@@ -19,3 +19,10 @@ tests3/trace/ref/
 tests3/trace/out_*.txt
 tests3/trace/raw_*.txt
 tests3/trace/run_*.lua
+
+# HappaTAS 3 phase 3: fixture generator scratch, local-only fixtures, trace / bench outputs
+tests3/fixtures/run_v2gen.lua
+tests3/fixtures/v2gen_out.txt
+tests3/fixtures/local/
+tests3/trace/v2file.lua
+tests3/bench/run_*.lua

@@ -26,3 +26,29 @@ end
 function A.merge(frames, where) __T.Core.SetTAS(frames, where) end
 -- the merge stats button: completes when the root is close enough to the other run's start, else cancels
 function A.mergeClick() C.MergeStats.MouseButton1Click:Fire() end
+-- saving and loading (V2's Store and codec); the saved file is printed for the HappaTAS 3 side (part C)
+local function hex(s) return (s:gsub(".", function(c) return string.format("%02x", string.byte(c)) end)) end
+function A.save(name)
+	assert(__T.Store.SaveSlot(name, __T.Core.GetTAS()))
+	M.realPrint("V2FILE " .. hex(M.fs[__T.Store.SlotPath(name)]))
+end
+function A.clearRun() __T.Core.SetTAS({}) end
+function A.load(name)
+	local ok, frames = __T.Store.LoadSlot(name)
+	assert(ok, frames)
+	__T.Core.SetTAS(frames)
+end
+function A.loadV2File() A.load("traced") end
+-- the save bench (tests3/bench/save.lua): V2's Store.SaveSlot / LoadSlot
+local benchFrames
+function A.setFrames(frames) benchFrames = frames end
+function A.saveWork(name)
+	local ok, _, bytes = __T.Store.SaveSlot(name, benchFrames)
+	assert(ok, bytes)
+	return bytes
+end
+function A.loadWork(name)
+	local ok, frames = __T.Store.LoadSlot(name)
+	assert(ok, frames)
+	return #frames
+end

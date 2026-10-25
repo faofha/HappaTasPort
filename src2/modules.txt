@@ -1,5 +1,6 @@
 config
 platform/env
+platform/files
 platform/gamecall
 platform/typing
 platform/camerascript
@@ -13,6 +14,15 @@ engine/keys
 engine/settings
 engine/controls
 engine/timeline
+persist/bytes
+persist/value
+persist/lz4
+persist/codec6
+persist/v2reader
+persist/library
+persist/run
+persist/persist
+persist/settingsfile
 engine/plugins
 world/character
 world/camera

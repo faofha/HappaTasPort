@@ -124,7 +124,7 @@ V2.38.16's codec and are converted in memory; a file is only rewritten as v6 whe
 ### 6.2 Library
 
 - Files stay in `HappaTasPort/<PlaceId>/`; folders are real subfolders.
-- `library.json` per place caches every file's header info; rebuilt from the headers when missing or stale.
+- `library.cache` per place caches every file's header info; rebuilt from the headers when missing or stale (not `.json`: V2 lists every `.json` in the place folder as a legacy slot).
 - Each run shows name, length, frames, saved date, size, script version, kit / speed hack use.
 - **Attempts:** "Save as new attempt" saves `Name (2)`, `(3)`...; attempts are grouped under the run, newest
   first.
@@ -288,4 +288,10 @@ Each phase has its own implementation plan, tests and PR.
 - V2.38.17 removed every sound: should the new UI sounds (8.4) stay, or go too? Ask before phase 5.
 - Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
   Merriweather, Roboto Mono and others available as Font families). Phase 5.
-- Exact v6 column encodings and how much smaller files get. Phase 3.
+- ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
+  stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
+  anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
+  `tools/savebench3.sh`, headless mock): 81,778 bytes against V2.38.16's 101,880 (80 %), saved in 470 ms
+  against 523 ms; loaded in 672 ms against 532 ms (the mock's LZ4 is Lua on both sides). Live (EToH kit test
+  place, 2026-10-25): a 5-second run (301 frames) saved in 37 ms (3,268 bytes) and loaded in 28 ms; dzr's V2
+  files (v1, v2, v3, up to 3,141 frames) loaded in 17-71 ms and played.

@@ -1,0 +1,3 @@
+VARIANT="plain"
+VARIANT="nocompress"; lz4compress = nil
+VARIANT="nodecompress"; lz4decompress = nil
