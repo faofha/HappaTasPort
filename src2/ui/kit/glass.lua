@@ -61,7 +61,9 @@ function Glass:restyle()
 	local th = self.theme
 	local r = th.corner(self.kind)
 	W.set(self.panel, "BackgroundColor3", th.c.glass)
-	W.set(self.panel, "BackgroundTransparency", th.t.glass)
+	-- (Clear: barely any fill, only the rim; Tint and Frost: the glass colour at its transparency)
+	local clear = th.E.settings:get("glass") == "Clear"
+	W.set(self.panel, "BackgroundTransparency", clear and math.max(th.t.glass, 0.94) or th.t.glass)
 	W.set(self.corner, "CornerRadius", UDim.new(0, r))
 	W.set(self.rim, "Transparency", th.t.rim)
 	W.set(self.shadow, "Visible", th.E.settings:on("shadows"))

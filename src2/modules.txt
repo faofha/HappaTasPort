@@ -65,6 +65,7 @@ ui/kit/bezier
 ui/windows
 ui/dock
 ui/toast
+ui/frost
 ui/win/settings
 ui/win/controls
 ui/app

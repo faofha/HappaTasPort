@@ -300,6 +300,15 @@ function SettingsWin.build(ui, body, win)
 		relayout()
 	end
 	search.onInput = function(t) query = t; filter() end
+	-- (the Glass row says when Frost can't be used here)
+	local function frostNote()
+		local r = sw.rows.glass
+		if not (r and r.row.desc) then return end
+		local why = s:get("glass") == "Frost" and ui.frost ~= nil and not ui.frost:available()
+		W.set(r.row.desc, "Text", why and "Frost needs high graphics: Tint is used" or r.def.desc)
+	end
+	sw.offs[#sw.offs + 1] = s:changed("glass", frostNote)
+	frostNote()
 	sw.offs[#sw.offs + 1] = s:changed("easing", function() filter() end)
 	for _, secName in ipairs(SECTIONS) do
 		sw.chips[secName].onClick = function()
