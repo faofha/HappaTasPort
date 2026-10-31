@@ -83,6 +83,27 @@ function K.label(self, parent, text, kind, size, secondary)
 	return l
 end
 
+-- the interface scale (UIScale): Absolute* sizes are screen pixels, Offsets are layer units = pixels / scale
+function K.scale(self)
+	local ui = self.ctx.ui
+	return ui and ui.root and ui.root.scale.Scale or 1
+end
+
+-- a connection to a signal that outlives the control (UserInputService): owned by the interface's scope, so
+-- Unload ends it even when the control is never destroyed, and the control's destroy ends it early
+function K.connect(self, signal, fn)
+	local ui = self.ctx.ui
+	local c
+	if ui and ui.life then
+		c = ui.life:connect(signal, fn)
+		self.offs[#self.offs + 1] = function() ui.life:drop(c) end
+	else
+		c = signal:Connect(fn)
+		self.offs[#self.offs + 1] = function() c:Disconnect() end
+	end
+	return c
+end
+
 function K.destroy(self)
 	for _, r in ipairs(self.rects) do self.ctx.pointer.remove(r) end
 	self.rects = {}

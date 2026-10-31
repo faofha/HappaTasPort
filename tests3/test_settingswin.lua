@@ -166,6 +166,20 @@ s:set("easing", "Custom")
 eq(sw.bezier.gui.Visible, true, "shown for Custom")
 s:set("easing", "Preset")
 
+section("the reset button at another interface scale (review: it sat over the row's name)")
+s:set("interfaceScale", 150)
+M.steps(2)
+s:set("textSize", 14)
+M.steps(2)
+local tr = sw.rows.textSize
+local rg, cg = tr.row.reset.gui, tr.ctl.gui
+eq(rg.Visible, true, "the reset shows")
+check(rg.AbsolutePosition.X + rg.AbsoluteSize.X <= cg.AbsolutePosition.X + 0.5, "left of the control (reset right " .. rg.AbsolutePosition.X + rg.AbsoluteSize.X .. ", control left " .. cg.AbsolutePosition.X .. ")")
+check(cg.AbsolutePosition.X - (rg.AbsolutePosition.X + rg.AbsoluteSize.X) <= 20 * 1.5, "right next to it")
+s:set("textSize", 13)
+s:set("interfaceScale", 100)
+M.steps(2)
+
 section("Unload")
 getgenv().__HappaTAS3.Unload()
 M.steps(2)

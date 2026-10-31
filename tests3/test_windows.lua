@@ -158,6 +158,18 @@ eq(pos(Cw), p0, "a sheet doesn't move")
 uis.TouchEnabled, uis.KeyboardEnabled = false, true
 wm:close("c")
 
+section("a bigger interface scale keeps windows on screen (review: one ended off screen)")
+setScreen(1920, 1080)
+wm:open("a")
+wm:place("a", 1600, 200)
+E.settings:set("interfaceScale", 150)
+M.steps(2)
+local ha = wm.windows.a.holder
+check(ha.AbsolutePosition.X + ha.AbsoluteSize.X <= 1920 + 0.5, "fully on screen at 150 % (right edge " .. ha.AbsolutePosition.X + ha.AbsoluteSize.X .. ")")
+check(ha.AbsolutePosition.X >= -0.5, "left edge too")
+E.settings:set("interfaceScale", 100)
+M.steps(2)
+
 section("Unload")
 getgenv().__HappaTAS3.Unload()
 M.steps(2)

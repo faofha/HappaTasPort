@@ -104,6 +104,14 @@ M.pressKey(Enum.KeyCode.Escape)
 M.releaseKey(Enum.KeyCode.Escape)
 eq(sl.value, 42, "Esc: unchanged")
 eq(sl.box.Visible, false, "Esc: back to the number")
+-- (review: Roblox may drop the focus before InputBegan sees Esc; FocusLost's second argument says it was Esc)
+local ESC = { KeyCode = Enum.KeyCode.Escape, UserInputType = Enum.UserInputType.Keyboard }
+UIH.click(sl.label)
+sl.box:CaptureFocus()
+sl.box.Text = "88"
+M.focusedBox = nil
+sl.box.FocusLost:Fire(false, ESC)
+eq(sl.value, 42, "Esc that ended the focus: the slider keeps its value")
 eq(E.mode, 1, "typing never ran a control")
 local custom = Slider.new(ctx, holder(200), { min = 0, max = 10, sanitize = function(v) local n = tonumber(v); if n and n % 2 == 0 then return n end return nil end })
 custom:set(4)
@@ -138,6 +146,13 @@ eq(commits[2], "Day", "focus lost commits")
 fd:set("Kept")
 UIH.typeInto(fd.box, "bad", true)
 eq(fd.box.Text, "Kept", "a refused commit shows the old text again")
+local nc = #commits
+fd.box:CaptureFocus()
+fd.box.Text = "Typo"
+M.focusedBox = nil
+fd.box.FocusLost:Fire(false, ESC)
+eq(#commits, nc, "Esc that ended the focus: no commit")
+eq(fd.box.Text, "Kept", "and the old text back")
 local search = Field.new(ctx, holder(320), { placeholder = "Search settings", search = true, w = 300 })
 eq(search.gui.Size.Y.Offset, 32, "the search box is 32 px high")
 eq(search.box.TextYAlignment, Enum.TextYAlignment.Center, "its text vertically centred")

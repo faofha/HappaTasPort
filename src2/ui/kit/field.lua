@@ -67,16 +67,19 @@ function Field.new(ctx, parent, opts)
 	local uis = Env.svc("UserInputService")
 	local conns = {
 		box.Focused:Connect(function() W.set(ring, "Transparency", 0) end),
-		box.FocusLost:Connect(function() self:commit() end),
-		box:GetPropertyChangedSignal("Text"):Connect(function() if self.onInput then self.onInput(box.Text) end end),
-		uis.InputBegan:Connect(function(inp)
-			if inp.KeyCode == Enum.KeyCode.Escape and box:IsFocused() then
-				self.cancel = true
-				box:ReleaseFocus()
-			end
+		box.FocusLost:Connect(function(_, cause)
+			if cause and cause.KeyCode == Enum.KeyCode.Escape then self.cancel = true end
+			self:commit()
 		end),
+		box:GetPropertyChangedSignal("Text"):Connect(function() if self.onInput then self.onInput(box.Text) end end),
 	}
 	for _, c in ipairs(conns) do self.offs[#self.offs + 1] = function() c:Disconnect() end end
+	K.connect(self, uis.InputBegan, function(inp)
+		if inp.KeyCode == Enum.KeyCode.Escape and box:IsFocused() then
+			self.cancel = true
+			box:ReleaseFocus()
+		end
+	end)
 	return self
 end
 

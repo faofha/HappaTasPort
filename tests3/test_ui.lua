@@ -4,6 +4,8 @@
 -- while recording (no click reaches the engine), an accent change restyles everything in one frame,
 -- pause / Test / Idle, then Unload leaves nothing (headless mock)
 -- ================================================================================================
+local UIS0 = game:GetService("UserInputService")
+local before = { began = UIS0.InputBegan:Count(), changed = UIS0.InputChanged:Count(), ended = UIS0.InputEnded:Count() }
 check(boot(30), "boots")
 local T = getgenv().__HappaTAS3_T
 local E = T.engine
@@ -46,6 +48,11 @@ section("clicks on the interface are the interface's (Active panels: Roblox mark
 -- (live: a click on a window reached the game as not processed, so an equipped tool would fire)
 eq(wm.windows.settings.glass.panel.Active, true, "a window's panel")
 eq(ui.dock.glass.panel.Active, true, "the Dock's panel")
+UIH.click(sw.rows.font.ctl.gui)
+local catcher = ui.root.gui:FindFirstChild("PopoverCatcher", true)
+check(catcher ~= nil, "a dropdown is open")
+eq(catcher and catcher.Active, true, "a popover's full-screen catcher (a click outside it closes it, the game gets nothing)")
+UIH.key(Enum.KeyCode.Escape)
 ui.toast:add("hello")
 eq(ui.toast.items[#ui.toast.items].glass.panel.Active, false, "a toast lets clicks through")
 
@@ -99,6 +106,10 @@ eq(game:GetService("Lighting"):FindFirstChild("HappaTASFrost"), nil, "no Frost e
 eq(E.inputs.mouseOverOwn, nil, "the engine's pointer hook cleared")
 eq(E.modalOpen, nil, "E.modalOpen cleared")
 eq(E.modal, nil, "E.modal cleared")
+-- (review: sliders, fields and popovers kept their InputBegan connections, and with them the old engine)
+eq(UIS0.InputBegan:Count(), before.began, "no InputBegan connection left")
+eq(UIS0.InputChanged:Count(), before.changed, "no InputChanged connection left")
+eq(UIS0.InputEnded:Count(), before.ended, "no InputEnded connection left")
 local before = E.settings:get("glass")
 UIH.key(Enum.KeyCode.M)
 eq(ui.root.gui.Parent, nil, "the Menu key does nothing any more")

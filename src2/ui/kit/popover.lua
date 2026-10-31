@@ -29,6 +29,7 @@ function Popover.open(ctx, anchor, w, h)
 	local catcher = K.frame("PopoverCatcher", layer)
 	catcher.Size = UDim2.new(1, 0, 1, 0)
 	catcher.ZIndex = ZINDEX - 1
+	catcher.Active = true -- (a click outside closes the popover; the game sees it game processed)
 	self.catcher = catcher
 	local holder = K.frame("Popover", layer)
 	holder.Position = UDim2.new(0, x, 0, y)
@@ -41,7 +42,8 @@ function Popover.open(ctx, anchor, w, h)
 		pointer = { add = function(r, z) return self:add(r, z) end, remove = function(r) self:remove(r) end } }
 	self.catcherRect = self:add({ gui = catcher, onPress = function() self:close() end }, -1)
 	local uis = Env.svc("UserInputService")
-	self.conns[#self.conns + 1] = uis.InputBegan:Connect(function(inp)
+	-- (owned by the interface's scope too: Unload ends it with the popover still open)
+	self.conns[#self.conns + 1] = ui.life:connect(uis.InputBegan, function(inp)
 		if inp.KeyCode == Enum.KeyCode.Escape and not ctx.typing:active(nil) then self:close() end
 	end)
 	return self
@@ -66,7 +68,7 @@ function Popover:close()
 	self.open = false
 	for _, r in ipairs(self.rects) do self.ui.pointer:remove(r) end
 	self.rects = {}
-	for _, c in ipairs(self.conns) do c:Disconnect() end
+	for _, c in ipairs(self.conns) do self.ui.life:drop(c) end
 	self.glass:destroy()
 	pcall(function() self.holder:Destroy() end)
 	pcall(function() self.catcher:Destroy() end)

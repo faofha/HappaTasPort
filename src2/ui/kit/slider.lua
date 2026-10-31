@@ -73,17 +73,20 @@ function Slider.new(ctx, parent, opts)
 	end
 	K.rect(self, { gui = hit, onPress = fromX, onDrag = function(pos) fromX(pos) end }, opts.z)
 	K.rect(self, { gui = label, onRelease = function(_, clicked) if clicked then self:edit() end end }, opts.z)
-	-- (Esc while typing: keep the old value; FocusLost alone can't tell Esc from a click elsewhere)
+	-- (Esc while typing: keep the old value; seen either by InputBegan or as the input that ended the focus,
+	-- whichever Roblox reports first)
 	self.cancel = false
 	local uis = Env.svc("UserInputService")
-	local escConn = uis.InputBegan:Connect(function(inp)
+	K.connect(self, uis.InputBegan, function(inp)
 		if inp.KeyCode == Enum.KeyCode.Escape and box.Visible and box:IsFocused() then
 			self.cancel = true
 			box:ReleaseFocus()
 		end
 	end)
-	self.offs[#self.offs + 1] = function() escConn:Disconnect() end
-	local lostConn = box.FocusLost:Connect(function() self:commit() end)
+	local lostConn = box.FocusLost:Connect(function(_, cause)
+		if cause and cause.KeyCode == Enum.KeyCode.Escape then self.cancel = true end
+		self:commit()
+	end)
 	self.offs[#self.offs + 1] = function() lostConn:Disconnect() end
 	self:show()
 	return self

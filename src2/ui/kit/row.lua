@@ -51,7 +51,7 @@ end
 
 -- the reset button's place follows the control's width
 function Row:place()
-	local cw = self.control and self.control.gui.AbsoluteSize.X or 0
+	local cw = self.control and self.control.gui.AbsoluteSize.X / K.scale(self) or 0
 	if cw == 0 and self.control then cw = self.control.gui.Size.X.Offset end
 	W.set(self.reset.gui, "Position", UDim2.new(1, -PAD - cw - GAP, 0.5, 0))
 end

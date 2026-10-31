@@ -50,9 +50,9 @@ function Bezier.new(ctx, parent)
 		K.stroke(hnd, Color3.new(1, 1, 1), 0, 1)
 		self.handles[i] = hnd
 		K.rect(self, { gui = hnd, onDrag = function(p)
-			local a = box.AbsolutePosition
-			local x = math.clamp((p.X - a.X) / BOX, 0, 1)
-			local y = math.clamp(1 - (p.Y - a.Y) / BOX, -1, 2)
+			local a, size = box.AbsolutePosition, box.AbsoluteSize -- (screen pixels: the interface scale is in them)
+			local x = math.clamp((p.X - a.X) / size.X, 0, 1)
+			local y = math.clamp(1 - (p.Y - a.Y) / size.Y, -1, 2)
 			s:set(KEYS[i * 2 - 1], math.floor(x * 100 + 0.5) / 100)
 			s:set(KEYS[i * 2], math.floor(y * 100 + 0.5) / 100)
 		end }, 3)
@@ -117,7 +117,7 @@ end
 function Bezier:preview()
 	local s = self.s
 	W.set(self.dot, "Position", UDim2.new(0, 0, 0, 0))
-	local far = self.track.AbsoluteSize.X - self.dot.AbsoluteSize.X
+	local far = (self.track.AbsoluteSize.X - self.dot.AbsoluteSize.X) / K.scale(self)
 	self.ctx.tween:play(self.dot, { Position = UDim2.new(0, far, 0, 0) }, { curve = Tween.curve(s), length = Tween.length(s) })
 end
 

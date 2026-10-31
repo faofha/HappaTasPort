@@ -26,6 +26,12 @@ function Windows.new(E, ui)
 		self:watchCamera()
 		self:onScreen()
 	end)
+	-- (a new interface scale changes the screen in layer units: windows are kept on it; the root's scale is
+	-- applied first, whichever listener runs first)
+	self.offScale = E.settings:changed("interfaceScale", function()
+		ui.root:applyScale()
+		self:onScreen()
+	end)
 	ui.life:own(function() self:destroy() end)
 	return self
 end
@@ -296,6 +302,7 @@ function Windows:destroy()
 	if self.dead then return end
 	self.dead = true
 	for _, c in ipairs(self.conns) do c:Disconnect() end
+	if self.offScale then self.offScale() end
 	if self.camConn then self.camConn:Disconnect() end
 	for _, win in pairs(self.windows) do
 		for _, r in ipairs(win.rects) do self.ui.pointer:remove(r) end
