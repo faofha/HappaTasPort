@@ -65,6 +65,8 @@ local function startEngine(k)
 	E.tl = Timeline.new()
 	E.tl:addColumn("FrameTime", "f64", 1, { key = "FrameTime" })
 	E.tl:addColumn("TotalTime", "f64", 1, { key = "TotalTime" })
+	-- (markers: frame bookmarks from the timeline bar, a label or true; saved in v6 files, V2 files have none)
+	E.tl:addColumn("Marker", "list", 1, { key = "Marker", keep = true })
 	E.plugins = Plugins.new(k.errs)
 	local guard = function(obj, name) return Plugins.guard(k.errs, obj, name) end
 	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modal == true end, getMode = function() return E.mode end }), "cameraScript")
