@@ -42,6 +42,31 @@ M.steps(120, 1 / 60)
 eq(E.paused, false, "clicks on the windows never paused")
 check(E.tl:count() > n0 + 100, "frames recorded meanwhile (" .. E.tl:count() - n0 .. ")")
 
+section("clicks on the interface are the interface's (Active panels: Roblox marks them game processed)")
+-- (live: a click on a window reached the game as not processed, so an equipped tool would fire)
+eq(wm.windows.settings.glass.panel.Active, true, "a window's panel")
+eq(ui.dock.glass.panel.Active, true, "the Dock's panel")
+ui.toast:add("hello")
+eq(ui.toast.items[#ui.toast.items].glass.panel.Active, false, "a toast lets clicks through")
+
+section("only characters every listed font has")
+-- (live: ↺ ⌕ ✕ ▾ drew as empty boxes in all 12 fonts; × ▼ ← … • are in every one, both weights)
+local FONT_OK = { ["×"] = true, ["▼"] = true, ["←"] = true, ["…"] = true, ["•"] = true }
+UIH.click(sw.rows.font.ctl.gui) -- (a dropdown's list too)
+local bad = {}
+for _, d in ipairs(ui.root.gui:GetDescendants()) do
+	if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+		for _, s in ipairs({ d.Text, d:IsA("TextBox") and d.PlaceholderText or "" }) do
+			for _, c in utf8.codes(s) do
+				local ch = utf8.char(c)
+				if c > 127 and not FONT_OK[ch] then bad[#bad + 1] = d.Name .. " " .. ch end
+			end
+		end
+	end
+end
+eq(#bad, 0, "no character a font lacks (" .. table.concat(bad, ", ") .. ")")
+UIH.key(Enum.KeyCode.Escape)
+
 section("an accent change restyles everything in one frame")
 E.settings:set("accentColor", "#00C080")
 local acc = Color3.fromHex("00C080")

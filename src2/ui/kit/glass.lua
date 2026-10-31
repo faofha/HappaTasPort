@@ -16,7 +16,9 @@ local function corner(parent)
 	return c
 end
 
--- a panel filling holder (a transparent Frame the caller sizes); opts.cornerKind ("window" by default)
+-- a panel filling holder (a transparent Frame the caller sizes); opts.cornerKind ("window" by default).
+-- The panel is Active, so Roblox marks a click on it game processed and the game (an equipped tool, the
+-- camera's right drag) leaves it alone; opts.passThrough (a toast) lets clicks through to the game.
 function Glass.panel(theme, holder, opts)
 	opts = opts or {}
 	local self = setmetatable({ theme = theme, kind = opts.cornerKind or "window", shadowCorners = {} }, Glass)
@@ -44,6 +46,7 @@ function Glass.panel(theme, holder, opts)
 	panel.BorderSizePixel = 0
 	panel.Size = UDim2.new(1, 0, 1, 0)
 	panel.ZIndex = 1
+	panel.Active = not opts.passThrough
 	panel.Parent = holder
 	self.corner = corner(panel)
 	local rim = Instance.new("UIStroke")

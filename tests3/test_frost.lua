@@ -71,6 +71,34 @@ M.steps(2)
 sp = cam:WorldToViewportPoint(part.Position)
 near(sp.X, center.X, 1, "still there after the camera moved")
 
+section("a moving camera only moves the parts (no rays: live, the rays cost ~20 us a frame)")
+local Cam = M.Classes.Camera.Methods
+local rayOrig = Cam.ViewportPointToRay
+local rays = 0
+Cam.ViewportPointToRay = function(...) rays = rays + 1 return rayOrig(...) end
+for i = 1, 10 do
+	cam.CFrame = CFrame.new(i, 20, 5) * CFrame.Angles(0, 1 + i / 10, 0.1)
+	M.step(1 / 60)
+end
+eq(rays, 0, "no rays while only the camera moves")
+sp = cam:WorldToViewportPoint(part.Position)
+near(sp.X, center.X, 1, "still on the window's centre")
+near(sp.Y, center.Y, 1, "still on the window's centre (y)")
+wm:place("f1", 260, 180)
+M.steps(2)
+check(rays > 0, "a moved window measures again")
+center = win.holder.AbsolutePosition + win.holder.AbsoluteSize / 2 + Vector2.new(0, M.inset)
+sp = cam:WorldToViewportPoint(part.Position)
+near(sp.X, center.X, 1, "on the moved window (x)")
+near(sp.Y, center.Y, 1, "on the moved window (y)")
+cam.FieldOfView = 50
+M.steps(2)
+sp = cam:WorldToViewportPoint(part.Position)
+right = cam:WorldToViewportPoint((part.CFrame * CFrame.new(part.Size.X / 2, 0, 0)).Position)
+near(right.X - sp.X, win.holder.AbsoluteSize.X / 2, 1, "as wide as the window at another field of view")
+cam.FieldOfView = 70
+Cam.ViewportPointToRay = rayOrig
+
 section("closing the last window removes everything")
 wm:close("f1")
 M.steps(2)
@@ -93,6 +121,13 @@ eq(ui.frost:available(), false, "not available")
 wm:open("settings")
 local row = ui.settingsWin.rows.glass.row
 check(row.desc.Text:find("high graphics", 1, true) ~= nil, "the Glass row says why (" .. row.desc.Text .. ")")
+-- (live: the note stayed after the graphics went up)
+ugs.SavedQualityLevel = { Name = "QualityLevel10", Value = 10 }
+M.steps(2)
+eq(row.desc.Text:find("Tint is used", 1, true), nil, "the note goes when the graphics go up (" .. row.desc.Text .. ")")
+ugs.SavedQualityLevel = { Name = "QualityLevel3", Value = 3 }
+M.steps(2)
+check(row.desc.Text:find("Tint is used", 1, true) ~= nil, "and comes back when they go down")
 wm:close("settings")
 ugs.SavedQualityLevel = { Name = "Automatic", Value = 0 }
 M.renderQuality = { Name = "Level19", Value = 19 }

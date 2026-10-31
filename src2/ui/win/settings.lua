@@ -308,6 +308,7 @@ function SettingsWin.build(ui, body, win)
 		W.set(r.row.desc, "Text", why and "Frost needs high graphics: Tint is used" or r.def.desc)
 	end
 	sw.offs[#sw.offs + 1] = s:changed("glass", frostNote)
+	if ui.frost then sw.offs[#sw.offs + 1] = ui.frost:qualityChanged(frostNote) end
 	frostNote()
 	sw.offs[#sw.offs + 1] = s:changed("easing", function() filter() end)
 	for _, secName in ipairs(SECTIONS) do

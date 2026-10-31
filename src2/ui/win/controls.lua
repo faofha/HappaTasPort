@@ -91,7 +91,7 @@ function ControlsWin.build(ui, body, win)
 		gui.Size = UDim2.new(0, 142, 0, 24)
 		kc.gui = gui
 		local key = Button.new(lctx, gui, { text = c:get(ctl.key), kind = "plain", w = 110 })
-		local clear = Button.new(lctx, gui, { text = "✕", kind = "plain", w = 26 })
+		local clear = Button.new(lctx, gui, { text = "×", kind = "plain", w = 26 })
 		clear.gui.Position = UDim2.new(0, 116, 0, 0)
 		kc.key, kc.clear = key, clear
 		local row = Row.new(lctx, list, { name = ctl.v2, desc = " ", control = kc })

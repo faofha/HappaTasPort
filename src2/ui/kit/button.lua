@@ -1,6 +1,6 @@
 -- ================================================================================================
 --  BUTTON  (HappaTAS 3 ui kit): a pill button. kind "primary" (accent, the mockup's .bt.pri), "plain" (calm
---  glass) or "reset" (the 24 px amber ↺ shown next to a setting that isn't its default). onClick().
+--  glass) or "reset" (the 24 px amber ← shown next to a setting that isn't its default). onClick().
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
@@ -19,7 +19,7 @@ function Button.new(ctx, parent, opts)
 	if self.kind == "reset" then
 		gui.Size = UDim2.new(0, 24, 0, 24)
 		K.gradient(gui, Color3.fromHex("FFC86E"), Color3.fromHex("F0A032"))
-		local l = K.label(self, gui, "↺", "bold", 12)
+		local l = K.label(self, gui, "←", "bold", 12)
 		l.Size = UDim2.new(1, 0, 1, 0)
 		l.TextColor3 = Color3.fromHex("2A1C00")
 		self.label = l

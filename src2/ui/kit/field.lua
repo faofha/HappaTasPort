@@ -32,10 +32,25 @@ function Field.new(ctx, parent, opts)
 	box.Size = UDim2.new(1, opts.search and -44 or -16, 1, 0)
 	self.box = box
 	if opts.search then
-		local icon = K.label(self, gui, "⌕", "bold", 15, true)
+		-- (a magnifier drawn from two frames: no listed font has a magnifier glyph, live)
+		local icon = K.frame("Icon", gui)
 		icon.AnchorPoint = Vector2.new(1, 0.5)
 		icon.Position = UDim2.new(1, -14, 0.5, 0)
-		icon.Size = UDim2.new(0, 18, 0, 18)
+		icon.Size = UDim2.new(0, 14, 0, 14)
+		local lens = K.frame("Lens", icon)
+		lens.Size = UDim2.new(0, 10, 0, 10)
+		K.corner(lens, 999)
+		local rim = K.stroke(lens, Color3.new(1, 1, 1), 0, 1.5)
+		local handle = K.frame("Handle", icon, Color3.new(1, 1, 1))
+		handle.BackgroundTransparency = 0
+		handle.AnchorPoint = Vector2.new(0.5, 0.5)
+		handle.Position = UDim2.new(0, 11.5, 0, 11.5)
+		handle.Size = UDim2.new(0, 5, 0, 1.5)
+		handle.Rotation = 45
+		K.style(self, function(th)
+			W.set(rim, "Color", th.c.text2)
+			W.set(handle, "BackgroundColor3", th.c.text2)
+		end)
 		self.icon = icon
 	end
 	local size = opts.search and 13.5 or 12

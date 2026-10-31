@@ -30,7 +30,7 @@ function Toast:add(text, isError)
 	local gui = K.frame("Toast", self.ui.root.layer)
 	gui.AnchorPoint = Vector2.new(0.5, 0)
 	gui.ZIndex = ZINDEX
-	local glass = Glass.panel(th, gui, { cornerKind = "control" })
+	local glass = Glass.panel(th, gui, { cornerKind = "control", passThrough = true })
 	local label = K.text("TextLabel", "Text", glass.panel)
 	label.Text = text
 	label.FontFace = th.font("text")

@@ -28,7 +28,7 @@ function Dropdown.new(ctx, parent, opts)
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextTruncate = Enum.TextTruncate.AtEnd
 	self.label = label
-	local arrow = K.label(self, gui, "▾", "bold", 12)
+	local arrow = K.label(self, gui, "▼", "bold", 10)
 	arrow.AnchorPoint = Vector2.new(1, 0.5)
 	arrow.Position = UDim2.new(1, -10, 0.5, 0)
 	arrow.Size = UDim2.new(0, 12, 0, 12)
