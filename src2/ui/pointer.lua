@@ -120,8 +120,8 @@ end
 
 -- the rect under pos (GUI space), or nil
 function Pointer:over(pos)
+	if self.root.shown == false then return nil end -- (the root's own flag: no engine read on every move)
 	local top = self.root.gui
-	if not top.Enabled then return nil end
 	local list = self:index(top).cells[math.floor(pos.X / CELL) * 65536 + math.floor(pos.Y / CELL)]
 	if not list then return nil end
 	local best = nil

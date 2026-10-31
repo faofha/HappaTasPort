@@ -82,7 +82,10 @@ function Root:applyScale()
 	W.bump() -- (every rect's bounds changed)
 end
 
-function Root:setShown(on) self.gui.Enabled = on == true end
+function Root:setShown(on)
+	self.shown = on == true
+	self.gui.Enabled = self.shown
+end
 
 function Root:destroy()
 	for _, off in ipairs(self.offs) do off() end
