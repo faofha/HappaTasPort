@@ -15,6 +15,8 @@ local Windows = import("ui/windows")
 local Layout = import("ui/layout")
 local Dock = import("ui/dock")
 local Toast = import("ui/toast")
+local SettingsWin = import("ui/win/settings")
+local ControlsWin = import("ui/win/controls")
 
 local UI = {}
 UI.__index = UI
@@ -36,13 +38,16 @@ function UI.start(E)
 	self.wm = Windows.new(E, self)
 	self.dock = Dock.new(self)
 	self.toast = Toast.new(self)
+	SettingsWin.define(self)
+	ControlsWin.define(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
 	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
-	E.modalOpen = function() return self.modal end
+	E.modalOpen = function() return self.modal end -- (E.modal: the same answer as a field, for per-frame readers)
 	life:own(self.wm:changed(function() self:updateModal() end))
 	life:own(function()
 		E.inputs.mouseOverOwn = nil
 		E.modalOpen = nil
+		E.modal = nil
 	end)
 	E.typing:watch(self.root.gui)
 	local uis = Env.svc("UserInputService")
@@ -53,7 +58,10 @@ function UI.start(E)
 	return self
 end
 
-function UI:updateModal() self.modal = self:anyWindowOpen() end
+function UI:updateModal()
+	self.modal = self:anyWindowOpen()
+	self.E.modal = self.modal
+end
 
 function UI:setShown(on)
 	self.shown = on == true

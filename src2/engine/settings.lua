@@ -95,9 +95,19 @@ Settings.SCHEMA = {
 	row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { desc = "Lets the interface sit where game scripts can see it" }),
 	-- (V2.38.16's 5 sound settings went with V2.38.17: a V2 Settings.json that has them converts without them)
 }
+-- the names the Settings window shows (a V2 row shows its V2 name)
+local NAMES = {
+	theme = "Theme", glass = "Glass", glassColor = "Glass colour", glassTransparency = "Glass transparency",
+	blurStrength = "Blur strength", edgeLight = "Edge light", accentColor = "Accent colour", textColor = "Text colour",
+	secondaryTextColor = "Secondary text colour", recordingColor = "Recording colour", font = "Font", numberFont = "Number font",
+	textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
+	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
+	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
+}
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do
 	r.order = i
+	r.name = NAMES[r.key] or r.v2
 	Settings.byKey[r.key] = r
 	if r.v2 then Settings.byV2[r.v2] = r end
 end

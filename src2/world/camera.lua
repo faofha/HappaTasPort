@@ -86,7 +86,7 @@ end
 function Camera:updateMouseMode()
 	local E = self.E
 	local cs, tl = E.cs, E.tl
-	local modal = E.modalOpen ~= nil and E.modalOpen()
+	local modal = E.modal == true -- (kept by the interface: read every frame, no call)
 	local camFreeze = (E.mode == 2 and E.paused and not E.firstFrame and tl:count() > 0 and E.modes:setCam() and not E.lookAround)
 	local lockedView = false
 	if E.mode == 2 and not modal then

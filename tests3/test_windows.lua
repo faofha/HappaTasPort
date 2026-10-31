@@ -124,7 +124,8 @@ section("Reset layout")
 wm:resetLayout()
 local ly = E.settingsFile:getUi().layout["1920x1080"]
 check(ly == nil or next(ly) == nil, "the screen size's saved places gone")
-eq(pos(A), Vector2.new(math.floor((1920 - 300) / 2), math.floor((1080 - 200) / 2)), "a back in the centre at its default size")
+local step = (table.find(wm.order, "a") - 1) * 24 -- (windows defined earlier, like Settings, cascade the later ones)
+eq(pos(A), Vector2.new(math.floor((1920 - 300) / 2) + step, math.floor((1080 - 200) / 2) + step), "a back at its default place and size")
 eq(size(A), Vector2.new(300, 200), "default size")
 
 section("restyled by the theme")

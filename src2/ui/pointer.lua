@@ -4,10 +4,11 @@
 --  mixing the two put clicks one top-bar height off (V2.36). Here every position is in the GUI's space
 --  (InputObject.Position, or GetMouseLocation() minus the inset), and the hit test walks the interface's
 --  own rects, the highest z first (then the last added).
---  rect = { gui, z, group, onHover(on), onPress(pos), onRelease(pos, clicked), onDrag(pos, delta), onWheel(dz) }
+--  rect = { gui, z, group, clip, onHover(on), onPress(pos), onRelease(pos, clicked), onDrag(pos, delta), onWheel(dz) }
 --  group (a window, the Dock, a popover) is checked once per search: the pointer runs this on every mouse
 --  move, so a rect is only looked at when the pointer is inside its group, and nothing at all while the
---  interface is hidden.
+--  interface is hidden. clip (a ScrollingFrame) limits a rect to the part of it that shows: a row scrolled
+--  out of a list never takes a click meant for what is above or below the list.
 --  A press keeps its rect: moves and the release go to it wherever the pointer is. A click is a release
 --  within 3 px of its press, over the same rect (microprofile's rule).
 -- ================================================================================================
@@ -91,6 +92,7 @@ function Pointer:over(pos)
 				end
 			end
 			local g = r.gui
+			if ok and r.clip then ok = inside(info(r.clip, top), pos) end
 			if ok and g then
 				local c = info(g, top)
 				if c.shown and inside(c, pos) then best = r end

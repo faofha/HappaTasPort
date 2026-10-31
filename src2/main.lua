@@ -67,7 +67,7 @@ local function startEngine(k)
 	E.tl:addColumn("TotalTime", "f64", 1, { key = "TotalTime" })
 	E.plugins = Plugins.new(k.errs)
 	local guard = function(obj, name) return Plugins.guard(k.errs, obj, name) end
-	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modalOpen ~= nil and E.modalOpen() end, getMode = function() return E.mode end }), "cameraScript")
+	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modal == true end, getMode = function() return E.mode end }), "cameraScript")
 	E.char = guard(E.plugins:add(Character.new(E)), "character")
 	E.cam = guard(E.plugins:add(Camera.new(E)), "camera")
 	E.inputs = guard(E.plugins:add(Inputs.new(E)), "inputs")

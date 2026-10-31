@@ -750,6 +750,9 @@ local function layout(inst)
 	local pPos, pSize, pScale
 	if p and (rawInst(p).isGui or isA(rawInst(p).class, "LayerCollector")) then
 		pPos, pSize, pScale = layout(p)
+		-- (a ScrollingFrame's children move up / left by its CanvasPosition, like Roblox)
+		local pd = rawInst(p)
+		if pd.class.Name == "ScrollingFrame" and pd.props.CanvasPosition then pPos = pPos - pd.props.CanvasPosition end
 	else
 		pPos, pSize, pScale = Vector2.new(0, 0), M.viewport, 1
 	end
