@@ -285,11 +285,46 @@ Each phase has its own implementation plan, tests and PR.
 
 ## 13. Open questions (answered during the phases)
 
-- Does the Frost blur work well enough in Roblox (graphics levels, performance, look)? Phase 5.
+- ~~Does the Frost blur work well enough in Roblox (graphics levels, performance, look)? Phase 5.~~ Answered in
+  phase 5a (live, EToH kit test place, 2026-11-01, 1920x1009, ~240 FPS): yes, Frost ships. At render quality 21
+  the game behind each window is blurred and the rest stays sharp; at dzr's level 1 the DepthOfField draws
+  nothing, so Frost falls back to Tint there (the check). The kit's own DepthOfField (Lighting.LCDepthOfFieldEffect,
+  all zeros, enabled) doesn't stop it. Cost, 300 frames each: GPU 1.31-1.37 ms against Tint's 1.09-1.17 (one or two
+  windows alike), render CPU unchanged. Its per-frame Lua first cast 4 rays a window every frame (~20-27 us); it now
+  measures a window's offset from the camera only when the window, the viewport or the field of view changes and
+  carries the parts with the camera (2 us a call in a loop). Setting UserGameSettings.SavedQualityLevel from a
+  script doesn't switch the renderer (settings().Rendering.QualityLevel does); Frost's check reads the saved
+  level, which the Roblox menu sets with the renderer. Not checked: Automatic graphics (Frost then reads
+  Rendering.QualityLevel, which may report Automatic rather than the level in use, giving Tint).
 - ~~V2.38.17 removed every sound: should the new UI sounds (8.4) stay, or go too?~~ Answered (dzr, 2026-10-25): no
   UI sounds; the section is dropped.
-- Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
-  Merriweather, Roboto Mono and others available as Font families). Phase 5.
+- ~~Which Roblox fonts to list (Builder Sans, Gotham, Source Sans Pro, Roboto, Fredoka One, Oswald,
+  Merriweather, Roboto Mono and others available as Font families). Phase 5.~~ Answered in phase 5a (live): all
+  12 in Settings.FONTS load (ContentProvider Success, GetTextBoundsAsync measures them, FontFace kept; a made-up
+  family fails and falls back to Source Sans' widths, so the check tells them apart). Fredoka One has no bold
+  (the same width in both weights). None has the icon characters the kit first used (↺ ⌕ ✕ ▾: empty boxes in
+  every font, both weights); × ▼ ← … • are in all 12, so the interface uses only those (a test walks every text),
+  and the search magnifier is drawn from two frames.
+- Phase 5a live check (EToH kit test place, 2026-11-01, Real, window not focused; mouse through
+  VirtualInputManager, whose clicks take screen coordinates and reach UserInputService without focus): the
+  interface sits under gethui (CoreGui.RobloxGui.TASUserInterface), nothing in PlayerGui. With real mouse events:
+  the Dock opens Settings, the title bar drags it (-300, +40 exactly), the grip resizes it (-80, -120 exactly),
+  the minimise dot shrinks it to its 36 px title and back, the close dot closes it and gives the mouse back; the
+  place and size survive a close and a re-run of the script (one interface after the re-run). Recording with
+  Pause on Left Click: clicks on Settings, Controls' title and the Dock never paused (87 frames recorded), a
+  click on the game did. Found there: the game saw those clicks as not game processed (an equipped tool would
+  have fired); window, Dock and popover panels are Active now and every such click arrives game processed (a
+  toast lets clicks through). Typing dzr's Test key (3) in the search box typed "3" and kept Create; Esc left
+  the box. An accent and glass colour change restyled the Dock, both windows and an on toggle in 2.4 ms. The
+  Glass row's "needs high graphics" note now follows the graphics quality (it stayed after the quality went up).
+  Per-frame Lua cost, every pipeline stage (us, low / median / high of 3 interleaved rounds of 300 frames, mouse
+  still): Idle Dock only 85.6 / 85.8 / 86.6, Settings open 82.1 / 83.1 / 91.6, Settings and Controls with Frost
+  96.8 / 97.1 / 107.5; recording 461 / 452 / 453 (medians, same order), paused 515 / 518 / 533, Test 573 / 571 /
+  578: an open window costs nothing measurable, Frost ~10-18 us. (These time the pipeline stages, not every
+  RunService connection as phase 4 did, so they don't compare with phase 4's numbers.) The release loads and
+  unloads with no console line; Unload with Frost showing leaves no part, no DepthOfField, no interface, no
+  getgenv entry, and the mouse free. Not covered live: mouse-move cost with a window open (the bench's
+  "recording, menu open" line, 10-20 % over V2 in the mock, is shown and not gated), touch devices.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
