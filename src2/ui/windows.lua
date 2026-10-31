@@ -18,7 +18,7 @@ local CASCADE = 24
 local SHEET_H = 0.6
 
 function Windows.new(E, ui)
-	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {},
+	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, openCount = 0,
 		uis = Env.svc("UserInputService"), guiService = Env.svc("GuiService") }, Windows)
 	self.key = self:screenKey()
 	self:watchCamera()
@@ -111,6 +111,7 @@ function Windows:save(id)
 end
 
 function Windows:onScreen()
+	W.bump() -- (anything placed by scale moved)
 	self.key = self:screenKey()
 	local l = self:layout()
 	for id, win in pairs(self.windows) do
@@ -135,6 +136,7 @@ end
 function Windows:addRect(win, rect, lz)
 	rect.lz = lz
 	rect.z = win.z * 100 + lz
+	rect.group = rect.group or win.holder
 	win.rects[#win.rects + 1] = rect
 	self.ui.pointer:add(rect)
 	return rect
@@ -235,6 +237,7 @@ end
 function Windows:open(id)
 	if not self.defs[id] then return end
 	local win = self.windows[id] or self:build(id)
+	if not win.open then self.openCount = self.openCount + 1 end
 	win.open = true
 	W.set(win.holder, "Visible", true)
 	self:apply(win, win.x, win.y, win.w, win.h)
@@ -246,6 +249,7 @@ function Windows:close(id)
 	local win = self.windows[id]
 	if not win or not win.open then return end
 	win.open = false
+	self.openCount = self.openCount - 1
 	W.set(win.holder, "Visible", false)
 	self:save(id)
 	self:fire(id, false)
@@ -260,10 +264,8 @@ function Windows:isOpen(id)
 	return win ~= nil and win.open == true
 end
 
-function Windows:anyOpen()
-	for _, win in pairs(self.windows) do if win.open then return true end end
-	return false
-end
+-- (asked every frame through E.modalOpen: a count, no loop)
+function Windows:anyOpen() return self.openCount > 0 end
 
 -- every window back at its default place and size (this screen size's saved places forgotten)
 function Windows:resetLayout()
@@ -300,6 +302,7 @@ function Windows:destroy()
 		win:destroy()
 	end
 	self.windows = {}
+	self.openCount = 0
 end
 
 return Windows

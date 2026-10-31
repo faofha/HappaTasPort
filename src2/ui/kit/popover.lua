@@ -49,6 +49,7 @@ end
 
 function Popover:add(rect, z)
 	rect.z = Z + (z or 0) + 1
+	if rect.gui ~= self.catcher then rect.group = rect.group or self.holder end
 	self.rects[#self.rects + 1] = rect
 	self.ui.pointer:add(rect)
 	return rect

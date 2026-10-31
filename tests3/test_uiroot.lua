@@ -85,12 +85,12 @@ check(log[1] == "A:press" and joined:find("A:release", 1, true) ~= nil and joine
 log = {}
 UIH.wheel(Vector2.new(120, 110), 1)
 check(table.concat(log, ","):find("A:wheel1", 1, true) ~= nil, "wheel over A")
-a.Visible = false
+W.set(a, "Visible", false) -- (the interface writes its layout through W.set: the pointer's cache follows it)
 log = {}
 UIH.click(Vector2.new(120, 110))
 local hit = table.concat(log, ","):find("press", 1, true)
 eq(hit, nil, "a hidden rect isn't hit (" .. table.concat(log, ",") .. ")")
-a.Visible = true
+W.set(a, "Visible", true)
 
 section("a click on the interface never reaches the engine (Review Focus 2)")
 E.modes:request("create")

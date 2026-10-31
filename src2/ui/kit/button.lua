@@ -28,7 +28,7 @@ function Button.new(ctx, parent, opts)
 		l.Size = UDim2.new(1, 0, 1, 0)
 		self.label = l
 	end
-	K.style(self, function(th)
+	self.restyle = function(th)
 		if self.kind == "reset" then
 			W.set(self.cornerObj, "CornerRadius", UDim.new(0, 12))
 			W.set(self.label, "TextColor3", Color3.fromHex("2A1C00"))
@@ -44,7 +44,8 @@ function Button.new(ctx, parent, opts)
 		end
 		local w = opts.w or (Layout.textWidth(self.label.Text, th.font("bold"), th.size(11.5), gui) + 26)
 		W.set(gui, "Size", UDim2.new(0, w, 0, opts.h or 24))
-	end)
+	end
+	K.style(self, self.restyle)
 	K.rect(self, { onRelease = function(_, clicked) if clicked and self.onClick then self.onClick() end end,
 		onHover = function(on) if self.kind ~= "reset" then W.set(self.label, "TextTransparency", on and 0 or 0.08) end end }, opts.z)
 	return self
@@ -52,6 +53,14 @@ end
 
 function Button:setText(t)
 	self.label.Text = t
+	self.restyle(self.ctx.theme)
+end
+
+-- "primary" / "plain" (the Dock lights the buttons of open windows)
+function Button:setKind(kind)
+	if kind == self.kind or self.kind == "reset" then return end
+	self.kind = kind
+	self.restyle(self.ctx.theme)
 end
 
 Button.destroy = K.destroy

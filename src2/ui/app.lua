@@ -13,13 +13,15 @@ local Theme = import("ui/theme")
 local Tween = import("ui/tween")
 local Windows = import("ui/windows")
 local Layout = import("ui/layout")
+local Dock = import("ui/dock")
+local Toast = import("ui/toast")
 
 local UI = {}
 UI.__index = UI
 
 function UI.start(E)
 	local life = E.life:scope("ui")
-	local self = setmetatable({ E = E, life = life, shown = true, wm = nil }, UI)
+	local self = setmetatable({ E = E, life = life, shown = true, wm = nil, modal = false }, UI)
 	E.ui = self
 	self.root = Root.new(E)
 	life:own(function() self.root:destroy() end)
@@ -32,8 +34,12 @@ function UI.start(E)
 	self.theme = Theme.new(E, life)
 	self.tween = Tween.new(E, life)
 	self.wm = Windows.new(E, self)
+	self.dock = Dock.new(self)
+	self.toast = Toast.new(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
-	E.modalOpen = function() return self:anyWindowOpen() end
+	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
+	E.modalOpen = function() return self.modal end
+	life:own(self.wm:changed(function() self:updateModal() end))
 	life:own(function()
 		E.inputs.mouseOverOwn = nil
 		E.modalOpen = nil
@@ -47,13 +53,19 @@ function UI.start(E)
 	return self
 end
 
+function UI:updateModal() self.modal = self:anyWindowOpen() end
+
 function UI:setShown(on)
 	self.shown = on == true
 	self.root:setShown(self.shown)
+	self:updateModal()
 	self.E.bus:emit("uiShown", self.shown)
 end
 
 function UI:toggle() self:setShown(not self.shown) end
+
+-- a Dock button for window id (defined with ui.wm:define first)
+function UI:addDockButton(id) return self.dock and self.dock:add(id) end
 
 -- the pointer is on the interface (or a press that started on it isn't released yet)
 function UI:pointerOver()

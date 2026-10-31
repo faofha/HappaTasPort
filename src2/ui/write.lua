@@ -3,9 +3,14 @@
 --  value that changed. Roblox redraws a ScreenGui when anything in it changes and a Text write costs
 --  far more than a read (V2.37.2 / V2.38 live measurements), so an unchanged value is never written.
 --  The last value written is remembered per instance (weakly): only the interface writes its objects.
+--  W.version goes up whenever something that moves, sizes, shows or hides a GuiObject is written (or
+--  W.bump() says so): the pointer keeps the rects' bounds until then.
 -- ================================================================================================
-local W = {}
+local W = { version = 0 }
 local last = setmetatable({}, { __mode = "k" })
+local LAYOUT = { Position = true, Size = true, AnchorPoint = true, Visible = true, Parent = true }
+
+function W.bump() W.version = W.version + 1 end
 
 -- true when the value was written
 function W.set(inst, prop, value)
@@ -18,6 +23,7 @@ function W.set(inst, prop, value)
 	end
 	c[prop] = value
 	inst[prop] = value
+	if LAYOUT[prop] then W.version = W.version + 1 end
 	return true
 end
 

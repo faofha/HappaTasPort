@@ -4,11 +4,15 @@
 --  mixing the two put clicks one top-bar height off (V2.36). Here every position is in the GUI's space
 --  (InputObject.Position, or GetMouseLocation() minus the inset), and the hit test walks the interface's
 --  own rects, the highest z first (then the last added).
---  rect = { gui, z, onHover(on), onPress(pos), onRelease(pos, clicked), onDrag(pos, delta), onWheel(dz) }
+--  rect = { gui, z, group, onHover(on), onPress(pos), onRelease(pos, clicked), onDrag(pos, delta), onWheel(dz) }
+--  group (a window, the Dock, a popover) is checked once per search: the pointer runs this on every mouse
+--  move, so a rect is only looked at when the pointer is inside its group, and nothing at all while the
+--  interface is hidden.
 --  A press keeps its rect: moves and the release go to it wherever the pointer is. A click is a release
 --  within 3 px of its press, over the same rect (microprofile's rule).
 -- ================================================================================================
 local Env = import("platform/env")
+local W = import("ui/write")
 
 local Pointer = {}
 Pointer.__index = Pointer
@@ -32,6 +36,7 @@ function Pointer:add(rect)
 	rect.seq = self.seq
 	rect.z = rect.z or 0
 	self.rects[#self.rects + 1] = rect
+	W.bump()
 	return rect
 end
 
@@ -40,10 +45,14 @@ function Pointer:remove(rect)
 	if i then table.remove(self.rects, i) end
 	if self.hover == rect then self.hover = nil end
 	if self.pressed == rect then self.pressed = nil end
+	W.bump()
 end
 
+-- (bounds and visibility are kept per gui until W.version changes: no engine reads on a plain mouse move)
+local cache = setmetatable({}, { __mode = "k" })
+
 -- visible = the gui and every GuiObject above it Visible, inside the shown root
-local function shown(gui, top)
+local function shownNow(gui, top)
 	local g = gui
 	while g and g ~= top do
 		if g:IsA("GuiObject") and not g.Visible then return false end
@@ -52,19 +61,40 @@ local function shown(gui, top)
 	return g == top and top.Enabled
 end
 
-local function inside(gui, pos)
+local function info(gui, top)
+	local c = cache[gui]
+	if c and c.v == W.version then return c end
 	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
-	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
+	c = { v = W.version, x0 = p.X, y0 = p.Y, x1 = p.X + s.X, y1 = p.Y + s.Y, shown = gui.Parent ~= nil and shownNow(gui, top) }
+	cache[gui] = c
+	return c
+end
+
+local function inside(c, pos)
+	return pos.X >= c.x0 and pos.X <= c.x1 and pos.Y >= c.y0 and pos.Y <= c.y1
 end
 
 -- the rect under pos (GUI space), or nil
 function Pointer:over(pos)
-	local best = nil
 	local top = self.root.gui
+	if not top.Enabled then return nil end
+	local best, groups = nil, {}
 	for _, r in ipairs(self.rects) do
-		local g = r.gui
-		if g and g.Parent and (not best or r.z > best.z or (r.z == best.z and r.seq > best.seq)) and inside(g, pos) and shown(g, top) then
-			best = r
+		if not best or r.z > best.z or (r.z == best.z and r.seq > best.seq) then
+			local grp, ok = r.group, true
+			if grp then
+				ok = groups[grp]
+				if ok == nil then
+					local gi = info(grp, top)
+					ok = gi.shown and inside(gi, pos)
+					groups[grp] = ok
+				end
+			end
+			local g = r.gui
+			if ok and g then
+				local c = info(g, top)
+				if c.shown and inside(c, pos) then best = r end
+			end
 		end
 	end
 	return best

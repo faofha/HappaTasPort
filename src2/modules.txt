@@ -63,5 +63,7 @@ ui/kit/dropdown
 ui/kit/colorpicker
 ui/kit/bezier
 ui/windows
+ui/dock
+ui/toast
 ui/app
 main

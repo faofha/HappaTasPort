@@ -123,8 +123,8 @@ end
 function Slider:edit()
 	self.cancel = false
 	self.box.Text = tostring(self.value)
-	self.label.Visible = false
-	self.box.Visible = true
+	W.set(self.label, "Visible", false)
+	W.set(self.box, "Visible", true)
 	self.box:CaptureFocus()
 end
 
@@ -136,9 +136,9 @@ function Slider:sanitize(text)
 end
 
 function Slider:commit()
-	if not self.box.Visible then return end
-	self.box.Visible = false
-	self.label.Visible = true
+	if not self.box.Visible then return end -- (FocusLost after Esc already handled)
+	W.set(self.box, "Visible", false)
+	W.set(self.label, "Visible", true)
 	if self.cancel then
 		self.cancel = false
 		self:show()

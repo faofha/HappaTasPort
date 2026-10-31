@@ -72,6 +72,7 @@ function Layout.textWidth(text, font, size, parent)
 	end
 	probe.FontFace, probe.TextSize, probe.Text = font, size, text
 	w = math.ceil(probe.TextBounds.X)
+	probe.Text = "" -- (it holds no text the player could read or a search could find)
 	cache[key] = w
 	return w
 end

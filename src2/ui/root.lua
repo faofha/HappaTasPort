@@ -6,6 +6,7 @@
 --  write costs ~0.06 ms with it, ~0.002 ms without (V2.38 live).
 -- ================================================================================================
 local Env = import("platform/env")
+local W = import("ui/write")
 
 local Root = {}
 Root.__index = Root
@@ -78,6 +79,7 @@ end
 
 function Root:applyScale()
 	self.scale.Scale = self.E.settings:get("interfaceScale") / 100
+	W.bump() -- (every rect's bounds changed)
 end
 
 function Root:setShown(on) self.gui.Enabled = on == true end
