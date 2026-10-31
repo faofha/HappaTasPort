@@ -184,6 +184,97 @@ M.steps(30, 1 / 60)
 W.set, W.paint = origSet, origPaint
 eq(writes, 0, "paused 30 frames: nothing written")
 
+-- ------------------------------------------------------------------------------------------------ lanes
+-- (a run made frame by frame in Idle: the bar shows it in full)
+local function craft(n, each)
+	E.modes:request("idle")
+	M.steps(2)
+	local t = E.tl
+	t:cut(0)
+	for i = 1, n do
+		local j = t:append()
+		t:set("State", j, 1, 8)
+		t:setN("FrameTime", j, 1 / 60)
+		t:setN("TotalTime", j, j / 60)
+		if each then each(t, j) end
+		t:setFilled(j)
+	end
+	E.modes:runLoaded()
+	M.steps(1)
+end
+local function laneMarks(name)
+	local out = {}
+	for _, m in ipairs(bar.lanes.rows[name].marks) do
+		if m.Visible then out[#out + 1] = m end
+	end
+	return out
+end
+local function laneMarkAt(name, f)
+	for _, m in ipairs(laneMarks(name)) do
+		if math.abs(m.Position.X.Offset - bar:xOf(f)) <= 1 then return m end
+	end
+	return nil
+end
+
+section("lanes show the events")
+local STATES = { 8, 8, 3, 3, 8, 8, 8, 8, 8, 8 }
+craft(10, function(t, j)
+	t:set("State", j, 1, STATES[j])
+	if j == 4 then t:setList("Died", j, true) end
+	if j == 2 or j == 7 then t:setList("Input", j, { 32 }) end
+end)
+eq(bar.lanes.open, false, "closed at first")
+UIH.click(bar.buttons.lanes.gui)
+M.steps(1)
+eq(bar.lanes.open, true, "the lanes button opens them")
+eq(bar.lanes.gui.Visible, true, "shown")
+check(laneMarkAt("Character", 3) ~= nil, "a Character mark at the state change on 3")
+local dm = laneMarkAt("Character", 4)
+check(dm ~= nil and dm.BackgroundColor3 == ui.theme.c.rec, "the death on 4 in the recording colour")
+check(laneMarkAt("Inputs", 2) and laneMarkAt("Inputs", 7), "Inputs at 2 and 7")
+eq(#laneMarks("Buttons"), 0, "no button events")
+
+section("bucketed")
+craft(10000, function(t, j) t:setList("Input", j, { 32 }) end)
+local nm = #laneMarks("Inputs")
+check(nm > 0 and nm <= 300, "10,000 inputs: at most 300 marks (" .. nm .. ")")
+
+section("lanes follow the zoom")
+craft(1000, function(t, j) if j % 5 == 0 then t:setList("Input", j, { 32 }) end end)
+bar.whole = false
+bar.view.first, bar.view.last = 1, 50
+bar:refresh(true)
+local inView = laneMarks("Inputs")
+eq(#inView, 10, "only the 10 inputs in frames 1-50")
+local maxX = 0
+for _, m in ipairs(inView) do maxX = math.max(maxX, m.Position.X.Offset) end
+check(maxX <= bar.trackW + 1, "all inside the track")
+bar.whole = true
+bar:refresh(true)
+
+section("closed lanes cost nothing")
+UIH.click(bar.buttons.lanes.gui)
+M.steps(1)
+eq(bar.lanes.open, false, "closed")
+E.modes:request("create")
+M.steps(2)
+E.modes:request("unpause")
+local lw = 0
+local oSet, oPaint = W.set, W.paint
+local function countLane(f)
+	return function(inst, prop, value)
+		local done = f(inst, prop, value)
+		if done and inst:IsDescendantOf(bar.lanes.gui) then lw = lw + 1 end
+		return done
+	end
+end
+W.set, W.paint = countLane(oSet), countLane(oPaint)
+M.steps(60, 1 / 60)
+W.set, W.paint = oSet, oPaint
+eq(lw, 0, "recording 60 frames: nothing written under the closed lanes")
+E.modes:request("pause")
+M.steps(2)
+
 section("a long run (10 minutes at 240 FPS)")
 E.modes:request("idle")
 M.steps(2)
@@ -202,4 +293,15 @@ E.modes:runLoaded()
 M.steps(2)
 eq(#bar.gui:GetDescendants(), small, "no more GUI objects than the pools (" .. small .. ")")
 check(bar.readout.Text:find("144000", 1, true) ~= nil, "the readout")
+
+section("the lanes are remembered")
+UIH.click(bar.buttons.lanes.gui)
+M.steps(60, 1 / 60) -- (the settings file is written a moment later)
+eq(bar.lanes.open, true, "open")
+check(boot(30), "the script runs again")
+T = getgenv().__HappaTAS3_T
+E = T.engine
+ui = E.ui
+bar = ui.bar
+eq(bar.lanes.open, true, "still open after a re-run")
 finish()

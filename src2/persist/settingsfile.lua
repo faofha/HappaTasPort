@@ -52,8 +52,9 @@ end
 -- the interface's data as read from a file: only tables where tables belong, only real colours, at most 8
 local MAX_RECENT = 8
 local function cleanUi(t)
-	local ui = { themes = {}, layout = {}, recentColors = {} }
+	local ui = { themes = {}, layout = {}, recentColors = {}, bar = { lanes = false } }
 	if type(t) ~= "table" then return ui end
+	if type(t.bar) == "table" then ui.bar.lanes = t.bar.lanes == true end
 	if type(t.themes) == "table" then
 		for name, look in pairs(t.themes) do
 			if type(name) == "string" and type(look) == "table" then ui.themes[name] = look end

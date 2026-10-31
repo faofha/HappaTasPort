@@ -16,6 +16,7 @@ local Glass = import("ui/kit/glass")
 local Icon = import("ui/kit/icon")
 local Util = import("engine/util")
 local BarModel = import("ui/bar/model")
+local Lanes = import("ui/bar/lanes")
 
 local Bar = {}
 Bar.__index = Bar
@@ -75,6 +76,7 @@ function Bar.new(ui)
 	E.plugins:add({ name = "ui.bar", order = 990, onDataChanged = changed, onLoaded = changed })
 	self.offs[#self.offs + 1] = function() E.plugins:remove("ui.bar") end
 	ui.life:own(function() self:destroy() end)
+	self.lanes = Lanes.new(self)
 	self:place()
 	self:restyle()
 	self:follow()

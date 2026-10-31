@@ -68,6 +68,7 @@ ui/dock
 ui/toast
 ui/frost
 ui/bar/model
+ui/bar/lanes
 ui/bar/bar
 ui/win/settings
 ui/win/controls
