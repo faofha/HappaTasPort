@@ -3,11 +3,11 @@
 #   bash tools/bench3.sh
 # HappaTAS 3 must not read or write more Instance properties per frame than V2.38.17 in any mode, and its
 # Lua time per frame must stay within 10 % of V2's (timing in the mock is noisy: each mode's fastest of 5 runs
-# inside a scenario run, and the best of 3 scenario runs per side).
+# inside a scenario run, and the best of 5 scenario runs per side).
 set -e
 cd "$(dirname "$0")/.."
 T=tests3/trace
-for run in 1 2 3; do
+for run in 1 2 3 4 5; do
   SCENARIO=bench bash tools/trace3.sh >/dev/null
   cp "$T/raw_a.txt" "$T/bench_a$run.txt"; cp "$T/raw_b.txt" "$T/bench_b$run.txt"
 done
@@ -23,8 +23,8 @@ def rows(paths):
                 if name not in out or v[0] < out[name][0]: out[name] = v
     return out
 T = sys.argv[1]
-a = rows(["%s/bench_a%d.txt" % (T, r) for r in (1, 2, 3)])
-b = rows(["%s/bench_b%d.txt" % (T, r) for r in (1, 2, 3)])
+a = rows(["%s/bench_a%d.txt" % (T, r) for r in (1, 2, 3, 4, 5)])
+b = rows(["%s/bench_b%d.txt" % (T, r) for r in (1, 2, 3, 4, 5)])
 ok = True
 print("%-18s %22s %22s" % ("mode", "V2.38.17 us/rd/wr", "HappaTAS 3 us/rd/wr"))
 for name in a:
