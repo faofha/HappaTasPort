@@ -75,29 +75,58 @@ local function inside(c, pos)
 	return pos.X >= c.x0 and pos.X <= c.x1 and pos.Y >= c.y0 and pos.Y <= c.y1
 end
 
+-- A grid of 64 px cells, each listing the rects that cover it (only shown ones, cut to their group and
+-- clip), rebuilt when W.version changes: a mouse move looks at the few rects in its cell, not at every
+-- rect of every open window (an open Settings window has ~200).
+local CELL = 64
+
+local function cut(c, by)
+	return { x0 = math.max(c.x0, by.x0), y0 = math.max(c.y0, by.y0), x1 = math.min(c.x1, by.x1), y1 = math.min(c.y1, by.y1) }
+end
+
+function Pointer:index(top)
+	local ix = self.ix
+	if ix and ix.v == W.version then return ix end
+	ix = { v = W.version, cells = {} }
+	local cells = ix.cells
+	for _, r in ipairs(self.rects) do
+		local g = r.gui
+		if g then
+			local c = info(g, top)
+			local ok = c.shown
+			local b = c
+			if ok and r.group then
+				local gi = info(r.group, top)
+				ok = gi.shown
+				b = cut(b, gi)
+			end
+			if ok and r.clip then b = cut(b, info(r.clip, top)) end
+			if ok and b.x1 >= b.x0 and b.y1 >= b.y0 then
+				r.bx = b
+				for cx = math.floor(b.x0 / CELL), math.floor(b.x1 / CELL) do
+					for cy = math.floor(b.y0 / CELL), math.floor(b.y1 / CELL) do
+						local k = cx * 65536 + cy
+						local list = cells[k]
+						if not list then list = {}; cells[k] = list end
+						list[#list + 1] = r
+					end
+				end
+			end
+		end
+	end
+	self.ix = ix
+	return ix
+end
+
 -- the rect under pos (GUI space), or nil
 function Pointer:over(pos)
 	local top = self.root.gui
 	if not top.Enabled then return nil end
-	local best, groups = nil, {}
-	for _, r in ipairs(self.rects) do
-		if not best or r.z > best.z or (r.z == best.z and r.seq > best.seq) then
-			local grp, ok = r.group, true
-			if grp then
-				ok = groups[grp]
-				if ok == nil then
-					local gi = info(grp, top)
-					ok = gi.shown and inside(gi, pos)
-					groups[grp] = ok
-				end
-			end
-			local g = r.gui
-			if ok and r.clip then ok = inside(info(r.clip, top), pos) end
-			if ok and g then
-				local c = info(g, top)
-				if c.shown and inside(c, pos) then best = r end
-			end
-		end
+	local list = self:index(top).cells[math.floor(pos.X / CELL) * 65536 + math.floor(pos.Y / CELL)]
+	if not list then return nil end
+	local best = nil
+	for _, r in ipairs(list) do
+		if (not best or r.z > best.z or (r.z == best.z and r.seq > best.seq)) and inside(r.bx, pos) then best = r end
 	end
 	return best
 end

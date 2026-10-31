@@ -58,6 +58,30 @@ measure("test playback", 250)
 local g = 0
 while A.mode() == 3 and g < 2000 do M.step(1 / 60); g = g + 1 end
 
+-- (phase 5a) with a menu open: V2's main menu, HappaTAS 3's Settings window (it builds the first time)
+A.request("idle")
+M.steps(5)
+A.openMenu()
+M.steps(10)
+measure("idle, menu open", 600)
+A.request("create")
+M.steps(5)
+A.request("unpause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
+local my = 900
+measure("recording, menu open", 300, function()
+	my = my + 1
+	M.moveMouse(my, 300)
+end)
+A.request("pause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.zero
+measure("paused, menu open", 300)
+A.closeMenu()
+A.request("idle")
+M.steps(5)
+
 -- the world (phase 4): 100 client objects (20 moved by a script), a beat block group and a turret with the
 -- kit's own loops (kit-style modules), the speed hack at 0.5x, recording
 local RSt = M.services.ReplicatedStorage
