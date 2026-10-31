@@ -18,7 +18,7 @@ local CASCADE = 24
 local SHEET_H = 0.6
 
 function Windows.new(E, ui)
-	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, openCount = 0,
+	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0,
 		uis = Env.svc("UserInputService"), guiService = Env.svc("GuiService") }, Windows)
 	self.key = self:screenKey()
 	self:watchCamera()
@@ -129,6 +129,17 @@ function Windows:onScreen()
 		else
 			self:apply(win, win.x, win.y, win.w, win.h)
 		end
+	end
+	for _, f in ipairs(table.clone(self.screenFns)) do pcall(f) end
+end
+
+-- f() after the screen changed size or the interface scale changed (the timeline bar re-places itself)
+function Windows:screenChanged(f)
+	local list = self.screenFns
+	list[#list + 1] = f
+	return function()
+		local i = table.find(list, f)
+		if i then table.remove(list, i) end
 	end
 end
 

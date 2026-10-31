@@ -1,11 +1,12 @@
 -- ================================================================================================
 -- Bench: per-frame cost in each mode, the same session on V2.38.16 and on HappaTAS 3 (through the trace
--- adapters; tools/bench3.sh runs and compares them). V2's stats panels, client objects and MicroProfiler
--- are off: phase 2 of HappaTAS 3 has none of them yet.
+-- adapters; tools/bench3.sh runs and compares them). V2's client objects and MicroProfiler are off (HappaTAS 3's
+-- world plugins are measured in "world recording"; its MicroProfiler is phase 6). V2's stats panels stay on, as
+-- V2 ships them: HappaTAS 3's timeline bar and Inspector (phase 5b) are their counterpart.
 --   us = Lua time per frame of the whole mock frame (HappaTAS + mock), rd / wr = Instance reads / writes
 -- ================================================================================================
 check(A.boot(), "boots")
-for _, name in ipairs({ "Show Stats (Idle)", "Show Stats (Create)", "Show Stats (Test)", "Sync Client Objects", "Show MicroProfiler" }) do
+for _, name in ipairs({ "Sync Client Objects", "Show MicroProfiler" }) do
 	A.setSetting(name, 0)
 end
 M.steps(30)

@@ -27,6 +27,21 @@ function W.set(inst, prop, value)
 	return true
 end
 
+-- like W.set, but never moves W.version: for objects no pointer rect depends on (the timeline bar's playhead,
+-- ticks and marks move every frame while recording; a bump would make the pointer measure every rect again)
+function W.paint(inst, prop, value)
+	local c = last[inst]
+	if not c then
+		c = {}
+		last[inst] = c
+	elseif c[prop] == value and value ~= nil then
+		return false
+	end
+	c[prop] = value
+	inst[prop] = value
+	return true
+end
+
 -- forgets what was written to inst (when something else may have changed it)
 function W.forget(inst) last[inst] = nil end
 

@@ -23,14 +23,28 @@ local function available(E)
 	return E.library ~= nil and E.library.files ~= nil and E.library.files.available == true
 end
 
+-- the run as it is now: what a save or a load leaves (dirty() compares with it)
+local function markOf(tl) return { count = tl:count(), version = tl.version, edits = tl.edits or 0 } end
+
 local function done(E, op, ok, message, path)
 	E.busy = nil
+	if ok and E.persist then E.persist.mark = markOf(E.tl) end
 	E.bus:emit("persist", { op = op, ok = ok, message = message, path = path })
 	E.bus:emit("status", message, not ok)
 end
 
 local function baseName(path)
 	return (tostring(path):match("([^/]+)$") or tostring(path)):gsub("%.[^%.]+$", "")
+end
+
+-- whether the run has frames that aren't in a saved or loaded file (the timeline bar's unsaved dot):
+-- frames added or gone, existing frames changed (tl.version), or edits that don't change the version
+-- (markers: tl.edits)
+function Persist:dirty()
+	local tl = self.E.tl
+	if tl:count() == 0 then return false end
+	local m = self.mark
+	return m == nil or m.count ~= tl:count() or m.version ~= tl.version or m.edits ~= (tl.edits or 0)
 end
 
 -- saves the run as <folder>/<name>.tas (asAttempt: the next "name (n)"); true, "started" or false, why

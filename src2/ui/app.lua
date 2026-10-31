@@ -18,6 +18,7 @@ local Toast = import("ui/toast")
 local SettingsWin = import("ui/win/settings")
 local ControlsWin = import("ui/win/controls")
 local Frost = import("ui/frost")
+local Bar = import("ui/bar/bar")
 
 local UI = {}
 UI.__index = UI
@@ -40,6 +41,7 @@ function UI.start(E)
 	self.dock = Dock.new(self)
 	self.toast = Toast.new(self)
 	self.frost = Frost.new(self)
+	self.bar = Bar.new(self)
 	SettingsWin.define(self)
 	ControlsWin.define(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end

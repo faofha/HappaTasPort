@@ -130,11 +130,13 @@ function BarModel:toggleMarker(f, label)
 	local i0, i1 = self:range("marker", f, f)
 	if tl:getList("Marker", f) ~= nil then
 		tl:setList("Marker", f, nil)
+		tl.edits = (tl.edits or 0) + 1 -- (a change no tl.version follows: the unsaved dot sees it)
 		if i0 <= i1 then table.remove(list, i0) end
 		self.version = self.version + 1
 		return false
 	end
 	tl:setList("Marker", f, label or true)
+	tl.edits = (tl.edits or 0) + 1
 	if f <= self.indexed then table.insert(list, i0, f) end
 	self.version = self.version + 1
 	return true
