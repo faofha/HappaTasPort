@@ -140,4 +140,66 @@ eq(writes("Settings3%.json$"), 0, "nothing written until a change")
 s6:set("playbackSpeed", 2)
 wait(0.5)
 eq(writes("Settings3%.json$"), 1, "written after a change")
+
+section("a V2 Settings.json converts with the Appearance defaults (phase 5a)")
+files:delete(V3_PATH)
+files:write(V2_PATH, V2_JSON)
+do
+	local sf7, s7 = fresh()
+	eq(sf7:load(), "v2", "converted")
+	eq(s7:get("glass"), "Tint", "glass default")
+	eq(s7:get("accentColor"), "#3F7CF0", "accent default")
+	eq(s7:get("font"), "BuilderSans", "font default")
+	local v3j = HttpService:JSONDecode(files:read(V3_PATH))
+	eq(v3j.settings.accentColor, "#3F7CF0", "strings saved")
+	eq(v3j.settings.textSize, 13, "numbers saved")
+	local ui = sf7:getUi()
+	check(type(ui) == "table" and type(ui.themes) == "table" and type(ui.layout) == "table" and type(ui.recentColors) == "table",
+		"getUi: an empty table set, never nil")
+end
+
+section("the ui table round trip (phase 5a)")
+do
+	local sf8, s8 = fresh()
+	sf8:load()
+	local ui = sf8:getUi()
+	ui.themes["Night"] = { accentColor = "#FF00AA", glass = "Clear" }
+	ui.layout["1920x1080"] = { settings = { x = 40, y = 60, w = 420, h = 640, min = false } }
+	local colors = {}
+	for i = 1, 9 do colors[i] = string.format("#%02X0000", i) end
+	ui.recentColors = colors
+	sf8:setUi(ui)
+	s8:set("glass", "Frost")
+	wait(0.5)
+	local j = HttpService:JSONDecode(files:read(V3_PATH))
+	eq(j.settings.glass, "Frost", "a choice saved")
+	eq(j.ui.themes.Night.accentColor, "#FF00AA", "a theme saved")
+	eq(j.ui.layout["1920x1080"].settings.w, 420, "a layout saved")
+	eq(#j.ui.recentColors, 8, "at most 8 recent colours")
+	eq(j.ui.recentColors[1], "#010000", "the newest first, the oldest dropped")
+	local sf9, s9 = fresh()
+	eq(sf9:load(), "v3", "read back")
+	eq(s9:get("glass"), "Frost", "the choice read back")
+	local ui9 = sf9:getUi()
+	eq(ui9.themes.Night.glass, "Clear", "theme read back")
+	eq(ui9.layout["1920x1080"].settings.x, 40, "layout read back")
+	eq(#ui9.recentColors, 8, "recent colours read back")
+end
+
+section("an older Settings3.json without ui loads (phase 5a)")
+do
+	files:write(V3_PATH, '{"format":"HappaTAS3 settings","version":1,"settings":{"playbackSpeed":2},"controls":{}}')
+	local sf10, s10 = fresh()
+	eq(sf10:load(), "v3", "loaded")
+	eq(s10:get("playbackSpeed"), 2, "its value")
+	local ui = sf10:getUi()
+	check(next(ui.themes) == nil and next(ui.layout) == nil and #ui.recentColors == 0, "an empty ui table")
+	files:write(V3_PATH, '{"format":"HappaTAS3 settings","version":1,"settings":{},"controls":{},"ui":{"themes":"bad","layout":5,"recentColors":["#123456","nope",7]}}')
+	local sf11 = fresh()
+	sf11:load()
+	local ui11 = sf11:getUi()
+	check(next(ui11.themes) == nil and next(ui11.layout) == nil, "bad parts dropped")
+	eq(table.concat(ui11.recentColors, ","), "#123456", "only real colours kept")
+	eq(#printed, 0, "no errors")
+end
 finish()

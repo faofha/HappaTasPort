@@ -22,7 +22,9 @@ local V2_NAMES = {
 	"Show Stats (Idle)", "Show Stats (Create)", "Show Stats (Test)", "Stats Text Size", "Show MicroProfiler",
 	"MicroProfiler Scale", "MicroProfiler Text Offset", "Allow PlayerGui Interface",
 }
-eq(#Settings.SCHEMA, 34, "34 rows (V2.38.16's 39 without the 5 sound settings V2.38.17 removed)")
+local v2Rows = 0
+for _, row in ipairs(Settings.SCHEMA) do if row.v2 then v2Rows = v2Rows + 1 end end
+eq(v2Rows, 34, "34 V2 rows (V2.38.16's 39 without the 5 sound settings V2.38.17 removed)")
 for _, gone in ipairs({ "Enable Keyboard Sounds", "Enable Click Sounds", "Sound Trigger Mode", "Sound Volume", "Dynamic Pitch Variation" }) do
 	eq(Settings.byV2[gone], nil, "no sound setting: " .. gone)
 end
@@ -30,7 +32,7 @@ local seenV2, seenKey = {}, {}
 for _, row in ipairs(Settings.SCHEMA) do
 	check(not seenKey[row.key], "unique key " .. tostring(row.key))
 	seenKey[row.key] = true
-	seenV2[row.v2] = (seenV2[row.v2] or 0) + 1
+	if row.v2 then seenV2[row.v2] = (seenV2[row.v2] or 0) + 1 end -- (Appearance rows have no V2 name)
 end
 for _, n in ipairs(V2_NAMES) do eq(seenV2[n], 1, "V2 name in the schema once: " .. n) end
 eq(Settings.byV2["Lock Camera (Test)"].key, "lockCameraTest", "byV2")
@@ -166,6 +168,88 @@ do
 	offC()
 	c:set("pause", "Q")
 	eq(#got, 1, "removed")
+end
+
+section("choice / color / text kinds sanitise (phase 5a)")
+do
+	local sa = Settings.sanitize
+	local glass, accent, theme = Settings.byKey.glass, Settings.byKey.accentColor, Settings.byKey.theme
+	check(glass and accent and theme, "the rows exist")
+	eq(glass.kind, "choice", "glass is a choice")
+	eq(sa(glass, "tint"), "Tint", "a choice matches case-insensitively, canonical name back")
+	eq(sa(glass, "Frost"), "Frost", "Frost")
+	eq(sa(glass, "Glassy"), nil, "an unknown option refused")
+	eq(sa(glass, 2), nil, "a number for a choice refused")
+	eq(accent.kind, "color", "accentColor is a color")
+	eq(sa(accent, "3f7cf0"), "#3F7CF0", "RRGGBB without # -> #RRGGBB upper case")
+	eq(sa(accent, "#3f7cf0"), "#3F7CF0", "#rrggbb")
+	eq(sa(accent, "#3F7"), "#33FF77", "#RGB widened")
+	eq(sa(accent, "#12"), nil, "#12 refused")
+	eq(sa(accent, "#GG0000"), nil, "not hex refused")
+	eq(theme.kind, "text", "theme is text")
+	eq(sa(theme, "My look"), "My look", "text kept")
+	eq(sa(theme, string.rep("a", 41)), nil, "41 characters refused")
+	eq(sa(theme, string.rep("a", 40)), string.rep("a", 40), "40 characters kept")
+	local s3 = Settings.new()
+	check(s3:set("glass", "frost"), "set a choice")
+	eq(s3:get("glass"), "Frost", "get returns the string")
+	eq(s3:set("accentColor", "nope"), false, "a bad colour refused by set")
+	eq(s3:get("accentColor"), "#3F7CF0", "unchanged")
+	local fired = 0
+	s3:changed("glassColor", function() fired = fired + 1 end)
+	s3:set("glassColor", "#242a38")
+	eq(fired, 0, "the same colour in another case is no change")
+end
+
+section("appearance defaults (phase 5a)")
+do
+	local want = {
+		theme = "Default", glass = "Tint", glassColor = "#242A38", glassTransparency = 54, blurStrength = 70, edgeLight = 16,
+		accentColor = "#3F7CF0", textColor = "#FFFFFF", secondaryTextColor = "#B4BBC8", recordingColor = "#FF5A5A",
+		font = "BuilderSans", numberFont = "RobotoMono", textSize = 13, interfaceScale = 100, windowCorners = 16,
+		buttonShape = "Pill", shadows = 1, animations = "Smooth", animationLength = 0.2, easing = "Preset",
+		easingDirection = "Out", bezierX1 = 0.25, bezierY1 = 0.1, bezierX2 = 0.25, bezierY2 = 1,
+	}
+	local s4 = Settings.new()
+	local n = 0
+	for key, v in pairs(want) do
+		n = n + 1
+		local def = Settings.byKey[key]
+		check(def ~= nil, "row " .. key)
+		if def then
+			eq(def.section, "Appearance", key .. " in Appearance")
+			eq(def.default, v, key .. " default")
+			eq(s4:get(key), v, key .. " value")
+			eq(def.v2, nil, key .. " has no V2 name")
+		end
+	end
+	eq(n, 25, "25 appearance rows")
+	local ranges = { glassTransparency = { 0, 100 }, blurStrength = { 0, 100 }, edgeLight = { 0, 100 }, textSize = { 8, 24 },
+		interfaceScale = { 50, 200 }, windowCorners = { 0, 24 }, animationLength = { 0.05, 1 }, bezierX1 = { 0, 1 },
+		bezierY1 = { -1, 2 }, bezierX2 = { 0, 1 }, bezierY2 = { -1, 2 } }
+	for key, r in pairs(ranges) do
+		local def = Settings.byKey[key]
+		eq(def.min, r[1], key .. " min")
+		eq(def.max, r[2], key .. " max")
+	end
+	for _, key in ipairs({ "glassTransparency", "blurStrength", "edgeLight", "textSize", "interfaceScale", "windowCorners" }) do
+		eq(Settings.byKey[key].integer, true, key .. " is an integer")
+	end
+	local opts = function(key) return table.concat(Settings.byKey[key].options, ",") end
+	eq(opts("glass"), "Clear,Tint,Frost", "glass options")
+	eq(opts("buttonShape"), "Pill,Rounded,Square", "button shapes")
+	eq(opts("animations"), "Off,Smooth,Snappy,Bouncy", "animations")
+	eq(opts("easing"), "Preset,Linear,Sine,Quad,Cubic,Quart,Quint,Exponential,Circular,Back,Elastic,Bounce,Custom", "easing")
+	eq(opts("easingDirection"), "In,Out,InOut", "easing direction")
+	eq(table.concat(Settings.FONTS, ","), "BuilderSans,GothamSSm,SourceSansPro,Roboto,Montserrat,Nunito,Ubuntu,FredokaOne,Oswald,Merriweather,RobotoMono,Inconsolata", "fonts")
+	eq(opts("font"), table.concat(Settings.FONTS, ","), "font options are the fonts")
+	eq(opts("numberFont"), table.concat(Settings.FONTS, ","), "number font options are the fonts")
+	eq(Settings.byKey.glass.order < Settings.byKey.lockCameraTest.order, true, "Appearance comes first (spec 8.3's section order)")
+end
+
+section("every row has a desc (phase 5a)")
+for _, row in ipairs(Settings.SCHEMA) do
+	check(type(row.desc) == "string" and #row.desc >= 8 and #row.desc <= 90, "desc for " .. row.key .. " (" .. tostring(row.desc) .. ")")
 end
 
 finish()

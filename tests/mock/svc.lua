@@ -51,6 +51,7 @@ cls("Lighting", "Instance", { ClockTime = 14, Brightness = 2, GlobalShadows = tr
 -- (two of the lighting effects Sync Lighting records: HappaTAS 3's lighting tests)
 cls("ColorCorrectionEffect", "Instance", { Brightness = 0, Contrast = 0, Saturation = 0, TintColor = Color3.new(1, 1, 1), Enabled = true })
 cls("BloomEffect", "Instance", { Intensity = 1, Size = 24, Threshold = 2, Enabled = true })
+cls("DepthOfFieldEffect", "Instance", { FarIntensity = 0.75, FocusDistance = 0.05, InFocusRadius = 10, NearIntensity = 0.75, Enabled = true })
 cls("ReplicatedStorage", "Instance")
 cls("ReplicatedFirst", "Instance")
 cls("SoundService", "Instance", { RespectFilteringEnabled = true })
@@ -164,6 +165,9 @@ C.DataModel.Methods.FindService = function(self, name) return services[name] end
 C.DataModel.Methods.IsLoaded = function() return true end
 C.DataModel.Methods.BindToClose = function() end
 C.DataModel.Events = { "Loaded" }
+-- settings().Rendering.QualityLevel (Enum.QualityLevel: Automatic 0, Level01..Level21 = 1..21): M.renderQuality
+M.renderQuality = { Name = "Automatic", Value = 0 }
+settings = function() return { Rendering = { QualityLevel = M.renderQuality } } end
 UserSettings = function()
 	local us = { GetService = function(_, n) return getService(n) end, IsUserFeatureEnabled = function() return false end }
 	return us

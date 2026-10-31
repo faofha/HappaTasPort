@@ -25,6 +25,8 @@ OUT="tests3/run_${NAME}.lua"
   echo '__T3 = import'
   echo 'end'
   cat tests/test_util.lua
+  # (a suite whose first line says "-- needs: ui" gets the UI helpers: tests3/ui_helpers.lua)
+  if head -1 "tests3/test_${NAME}.lua" | grep -qE "needs:.*(^| )ui( |$)"; then cat tests3/ui_helpers.lua; fi
   cat "tests3/test_${NAME}.lua"
 } > "$OUT"
 echo "$OUT"

@@ -36,6 +36,7 @@ local Library = import("persist/library")
 local Run = import("persist/run")
 local Persist = import("persist/persist")
 local SettingsFile = import("persist/settingsfile")
+local UIApp = import("ui/app")
 
 local Main = {}
 local kernel = nil
@@ -66,7 +67,7 @@ local function startEngine(k)
 	E.tl:addColumn("TotalTime", "f64", 1, { key = "TotalTime" })
 	E.plugins = Plugins.new(k.errs)
 	local guard = function(obj, name) return Plugins.guard(k.errs, obj, name) end
-	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modalOpen ~= nil and E.modalOpen() end, getMode = function() return E.mode end }), "cameraScript")
+	E.cs = guard(CameraScript.new(life, k.errs, { modalOpen = function() return E.modal == true end, getMode = function() return E.mode end }), "cameraScript")
 	E.char = guard(E.plugins:add(Character.new(E)), "character")
 	E.cam = guard(E.plugins:add(Camera.new(E)), "camera")
 	E.inputs = guard(E.plugins:add(Inputs.new(E)), "inputs")
@@ -90,6 +91,7 @@ local function startEngine(k)
 	Frame.start(E)
 	E.cs:start()
 	E.char:start()
+	UIApp.start(E) -- (the interface: E.ui; its own scope, undone after the character is let go)
 	life:own(function()
 		pcall(E.modes.cancelDeferred, E.modes)
 		if E.mode ~= 1 and E.char:loaded() then pcall(E.modes.idle, E.modes) end

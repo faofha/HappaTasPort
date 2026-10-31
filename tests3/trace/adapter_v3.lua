@@ -11,6 +11,10 @@ function A.boot()
 	return ok and E.char.hrp ~= nil
 end
 function A.mode() return E.mode end
+-- (phase 5a bench) the Settings window, and transitions without a click (the window is under the mouse)
+function A.openMenu() E.ui.wm:open("settings") end
+function A.closeMenu() E.ui.wm:close("settings") end
+function A.request(action) E.modes:request(action) end
 function A.frame() return E.frame end
 function A.paused() return E.paused end
 function A.count() return E.tl:count() end

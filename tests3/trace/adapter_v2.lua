@@ -9,6 +9,13 @@ function A.boot()
 	return ok and C.HRP ~= nil
 end
 function A.mode() return C.mode end
+-- (phase 5a bench) V2's main menu (the Menu key), and transitions without a click (the menu is under the mouse)
+function A.openMenu() M.pressKey(Enum.KeyCode.M); M.releaseKey(Enum.KeyCode.M) end
+A.closeMenu = A.openMenu
+function A.request(action)
+	local map = { create = "Create", unpause = "Unpause", pause = "Pause", idle = "Idle", test = "Test" }
+	task.spawn(C.inputs[map[action]]) -- (Unpause waits a frame in V2)
+end
 function A.frame() return C.frame end
 function A.paused() return C.paused end
 function A.count() return #__T.Core.GetTAS() end

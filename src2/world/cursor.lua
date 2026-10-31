@@ -208,7 +208,7 @@ function Cursor:update(tl, f)
 	local isFP = (f and tl:get("Zoom", f, 1) <= 0.55) or cs:isFirstPerson()
 	local mb = self.uis.MouseBehavior
 	local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
-	local locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modalOpen and E.modalOpen())
+	local locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modal == true)
 	if locked then
 		if not self:ensure() then return end
 		if centered then
