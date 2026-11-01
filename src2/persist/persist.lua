@@ -60,6 +60,7 @@ function Persist:save(name, folder, asAttempt)
 	if asAttempt then clean = E.library:nextAttemptName(clean, folder) end
 	E.plugins:call("onSave", E.tl) -- (the plugins' id tables into tl.meta before the file is built)
 	E.busy = "saving"
+	E.bus:emit("persist", { op = "started", what = "save" }) -- (the bar dims its buttons until the save ends)
 	task.spawn(function()
 		task.wait() -- (the work starts on the next frame: the caller's frame isn't held up)
 		local ok, res = pcall(function()
@@ -84,6 +85,7 @@ function Persist:load(path)
 	if E.busy then return false, "Wait: " .. E.busy end
 	if not (E.mode == 1 or (E.mode == 2 and E.paused)) then return false, "Go Idle or pause before loading" end
 	E.busy = "loading"
+	E.bus:emit("persist", { op = "started", what = "load" })
 	task.spawn(function()
 		task.wait()
 		local fresh
@@ -124,6 +126,7 @@ function Persist:readFrames(path)
 	if E.busy then return false, "Wait: " .. E.busy end
 	if not Persist.canMerge(E) then return false, Persist.NOT_NOW_MERGE end
 	E.busy = "reading"
+	E.bus:emit("persist", { op = "started", what = "frames" })
 	task.spawn(function()
 		task.wait()
 		local ok, res = pcall(function()

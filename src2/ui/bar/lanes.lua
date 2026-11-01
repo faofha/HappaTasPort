@@ -81,7 +81,7 @@ function Lanes:setOpen(on, quiet)
 	on = on == true
 	if on then self:build() end
 	self.open = on
-	W.set(self.gui, "Visible", on)
+	W.set(self.gui, "Visible", on and not self.bar.strip)
 	local chev = self.bar.buttons.lanes
 	if chev then W.paint(chev.icon.gui, "Rotation", on and 180 or 0) end
 	if not quiet then
@@ -97,6 +97,11 @@ function Lanes:setOpen(on, quiet)
 end
 
 function Lanes:toggle() self:setOpen(not self.open) end
+
+-- hidden while the bar is a strip (Idle without a run), back when a run comes; open stays the user's choice
+function Lanes:fit()
+	W.set(self.gui, "Visible", self.open and not self.bar.strip)
+end
 
 -- every lane's marks for the bar's view (only while open)
 function Lanes:redraw()

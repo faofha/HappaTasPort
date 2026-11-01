@@ -324,6 +324,68 @@ M.steps(2)
 eq(#bar.gui:GetDescendants(), small, "no more GUI objects than the pools (" .. small .. ")")
 check(bar.readout.Text:find("144000", 1, true) ~= nil, "the readout")
 
+local function smallRun(count)
+	tl:cut(0)
+	for i = 1, count do
+		local j = tl:append()
+		tl:set("State", j, 1, 8)
+		tl:setN("FrameTime", j, 1 / 60)
+		tl:setN("TotalTime", j, j / 60)
+		tl:setFilled(j)
+	end
+	E.modes:runLoaded()
+	M.steps(2)
+end
+
+section("the marker is refused while busy")
+smallRun(600)
+E.modes:request("create")
+M.steps(3)
+E.busy = "saving"
+local edits0 = tl.edits or 0
+bar:press("marker")
+eq(tl.edits or 0, edits0, "no marker while saving")
+E.busy = nil
+M.steps(2)
+
+section("in Idle a save dims the transport until it ends")
+E.modes:request("idle")
+M.steps(2)
+eq(bar.buttons.test.enabled, true, "Test can be used")
+local okSave = E.persist:save("BarBusy")
+check(okSave == true, "the save started")
+eq(bar.buttons.test.enabled, false, "dimmed while saving")
+check(waitIdle(), "saved")
+M.steps(2)
+eq(bar.buttons.test.enabled, true, "back after the save")
+
+section("the lanes hide while the bar is a strip")
+bar.lanes:setOpen(true, true)
+eq(bar.lanes.gui.Visible, true, "shown with a run")
+E.modes:setRun({})
+M.steps(2)
+eq(height(), 10, "a strip")
+eq(bar.lanes.gui.Visible, false, "hidden with the strip")
+eq(bar.lanes.open, true, "still open (the choice is kept)")
+smallRun(600)
+eq(bar.lanes.gui.Visible, true, "shown again with a run")
+bar.lanes:setOpen(false, true)
+
+section("the ruler redraws once a second while recording")
+E.modes:request("create")
+M.steps(3)
+E.modes:request("seek", { frame = tl:count() })
+M.steps(2)
+local last0 = bar.drawn.last
+bar.tick = 1 -- (just after a 120-frame boundary: the old gate would wait 2 s at 60 FPS)
+E.modes:request("unpause")
+M.steps(90, 1 / 60)
+check(bar.drawn.last > last0, "redrawn within 1.5 s (" .. tostring(bar.drawn.last) .. " > " .. tostring(last0) .. ")")
+E.modes:request("pause")
+M.steps(2)
+E.modes:request("idle")
+M.steps(2)
+
 section("the lanes are remembered")
 UIH.click(bar.buttons.lanes.gui)
 M.steps(60, 1 / 60) -- (the settings file is written a moment later)
