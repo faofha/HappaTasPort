@@ -109,6 +109,32 @@ A.closeLanes()
 A.request("idle")
 M.steps(5)
 
+-- (phase 5c) HappaTAS 3 with the Classic interface live: V2's own interface on both sides (gated)
+A.setInterface("Classic")
+M.steps(5)
+measure("idle, classic", 600)
+A.request("create")
+M.steps(5)
+A.request("unpause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
+local mc = 900
+measure("recording, classic", 300, function()
+	mc = mc + 1
+	M.moveMouse(mc, 400)
+end)
+A.request("pause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.zero
+A.request("test")
+M.steps(2)
+measure("Test, classic", 250)
+g = 0
+while A.mode() == 3 and g < 2000 do M.step(1 / 60); g = g + 1 end
+A.request("idle")
+A.setInterface("New")
+M.steps(5)
+
 -- the world (phase 4): 100 client objects (20 moved by a script), a beat block group and a turret with the
 -- kit's own loops (kit-style modules), the speed hack at 0.5x, recording
 local RSt = M.services.ReplicatedStorage

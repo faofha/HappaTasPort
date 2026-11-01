@@ -25,9 +25,10 @@ Bar.__index = Bar
 local Z, ZINDEX = 40000000, 450000
 local H, STRIP, BOTTOM, MAXW = 40, 10, 76, 900
 local TICKS, LABELS, MARKS = 41, 11, 120
--- (while recording or testing the bar is written every 2nd frame, as V2 wrote its stats panels, and the ruler
--- redrawn every 120th: within V2's time and writes per frame in the bench)
-local BTN, EVERY, REDRAW_EVERY, MIN_FRAMES = 24, 2, 120, 10
+-- (while recording or testing the bar is written every 2nd frame, as V2 wrote its stats panels; while recording
+-- the ruler is redrawn once a second of real time, whatever the frame rate: within V2's time and writes per frame
+-- in the bench)
+local BTN, EVERY, REDRAW_SECONDS, MIN_FRAMES = 24, 2, 1, 10
 local READOUT_EVERY = 6 -- (while running, the readout's text and the buttons' states 10 times a second: the playhead
 -- moves every 2nd frame)
 local STEPS = { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000 }
@@ -69,6 +70,10 @@ function Bar.new(ui)
 	self.offs[#self.offs + 1] = ui.theme:changed(function() self:place(); self:restyle(); self:refresh(true) end)
 	self.offs[#self.offs + 1] = ui.wm:screenChanged(function() self:place(); self:refresh(true) end)
 	self.offs[#self.offs + 1] = E.state:watch("mode", function() self:follow(); self:refresh(true) end)
+	self.offs[#self.offs + 1] = E.bus:on("uiShown", function(active)
+		self:follow()
+		if active then self:refresh(true) end -- (what changed while it was hidden)
+	end)
 	self.offs[#self.offs + 1] = E.state:watch("frame", function() if E.mode == 1 then self:refresh(true) end end)
 	self.offs[#self.offs + 1] = E.bus:on("persist", function() self:refresh(true) end)
 	for _, key in ipairs({ "speedHack", "speedHackSpeed", "playbackSpeed" }) do
@@ -184,6 +189,7 @@ function Bar:place()
 	local w = math.min(MAXW, math.floor(sw * 0.7))
 	local strip = self.E.mode == 1 and self.E.tl:count() == 0
 	self.strip = strip
+	if self.lanes then self.lanes:fit() end
 	W.set(self.gui, "Position", UDim2.new(0, sw / 2, 0, sh - BOTTOM))
 	W.set(self.gui, "Size", UDim2.new(0, w, 0, strip and STRIP or H))
 	W.set(self.body, "Visible", not strip)
@@ -300,7 +306,9 @@ function Bar:press(name)
 		if E.mode ~= 2 then m:request("create") elseif E.paused then m:request("unpause") else m:request("pause") end
 	elseif name == "test" then
 		if E.mode == 3 then m:request("create") else m:request("test") end
-	elseif name == "marker" then self.model:toggleMarker(math.clamp(E.frame, 1, math.max(1, E.tl:count())))
+	elseif name == "marker" then
+		if E.busy then return end -- (not while a save, load or read works on the run)
+		self.model:toggleMarker(math.clamp(E.frame, 1, math.max(1, E.tl:count())))
 	elseif name == "lanes" then
 		if self.lanes then self.lanes:toggle() end
 	end
@@ -318,7 +326,7 @@ local function allowedNow(self, name)
 		return m:allowed(E.paused and "unpause" or "pause")
 	end
 	if name == "test" then return m:allowed(E.mode == 3 and "create" or "test") end
-	if name == "marker" then return n > 0 and E.mode ~= 1 end
+	if name == "marker" then return n > 0 and E.mode ~= 1 and not E.busy end
 	return true
 end
 
@@ -326,7 +334,8 @@ end
 -- the per-frame handler only outside Idle
 function Bar:follow()
 	local E = self.E
-	if E.mode ~= 1 then
+	-- (outside Idle, and only while the new interface is live and shown)
+	if E.mode ~= 1 and self.ui:newActive() then
 		if not self.off then self.off = E.pipe:add("PreRender", 220, "ui.bar", function() self:step() end, "ui") end
 	elseif self.off then
 		self.off()
@@ -349,10 +358,11 @@ function Bar:refresh(force)
 		self.tick = self.tick + 1
 		if self.tick % EVERY ~= 0 then return end
 	end
-	-- (the frames added since the last sync; while recording the marks are drawn every REDRAW_EVERY frames only,
+	-- (the frames added since the last sync; while recording the marks are drawn once every REDRAW_SECONDS only,
 	-- so the model catches up then)
 	local recording = E.mode == 2 and not E.paused
-	if force or not recording or self.tick % REDRAW_EVERY == 0 then self.model:sync() end
+	local due = recording and os.clock() - (self.redrawAt or 0) >= REDRAW_SECONDS
+	if force or not recording or due then self.model:sync() end
 	if (E.mode == 1 and n == 0) ~= self.strip then
 		self:place()
 		force = true
@@ -396,8 +406,9 @@ function Bar:refresh(force)
 	end
 	local d = self.drawn
 	if force or d.v ~= self.model.version or d.first ~= v.first or d.last ~= v.last or d.w ~= self.trackW then
-		if not force and E.mode == 2 and not E.paused and self.tick % REDRAW_EVERY ~= 0 then return end
+		if not force and recording and not due then return end
 		d.v, d.first, d.last, d.w = self.model.version, v.first, v.last, self.trackW
+		self.redrawAt = os.clock()
 		self:redraw()
 	end
 end

@@ -350,6 +350,48 @@ Each phase has its own implementation plan, tests and PR.
   the clock isn't 1x (0.17), not the new windows. The release loads and unloads with no console line and leaves
   nothing in CoreGui, gethui, the Camera or Lighting. Settings.json, Settings3.json and the place's 8 files put
   back byte for byte, fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
+- Phase 5c live check (EToH kit test place, 2026-11-01, Real at 240 FPS, window not focused; keys and mouse through
+  VirtualInputManager): switching to Classic and back while recording walked on without a pause (frames 169 -> 288
+  across the switch to Classic, 1844 -> 1966 across the switch back); Classic showed V2's join message and Create
+  panel with the red recording edge, the new Dock / bar / Inspector hidden, and they came back on the switch. V2's
+  menu ("HappaTAS 3.0.0-dev", Controls / Settings / Saves / Help / More) opened on the Menu key, every tab opened on a
+  real click and no click reached the game. A setting typed in one interface showed in the other (Playback Speed
+  0.75 typed in Classic's box read 0.75 in the Settings window; 1.25 typed there read 1.25 in Classic), and an accent
+  change lit Classic's selected tab at once. Saves through real clicks: Add Slot made "Slot 2", renamed zz5c, Save wrote
+  zz5c.tas (3,395 frames, the unsaved mark off), Load after clearing the run gave the 3,395 frames back ("Loaded zz5c").
+  Merge through Expand -> Merge (as in V2, Merge and Delete show once the row is expanded): V2's dialog offered After
+  only (the file ends mid-fall: V2's Running rule), Merge Stats read "Current Distance: 228.555 / Distance Required:
+  0.064 / Click here to cancel merge", a click cancelled and the run stayed 3,395 frames; on the hitbox it turned green
+  ("complete merge") at distance 0 and gave 6,801 frames (3,395 + 12 recorded + 3,395 - 1). The Create panel and the
+  Inspector on the same paused frame (1500) agreed on every row (frame time 0.003989, total time 0:06.287, position
+  133.385, 2.5, 128, rotation, velocities, state, camera rotation -21.346, -90, 0, zoom 16.125, keys, mouse). Per-frame
+  cost, the pipeline's timer (ms, Classic / New): Idle 0.080 / 0.098, paused 0.463 / 0.466, recording 0.413 / 0.338,
+  Test 0.526 / 0.449; per handler, Classic's own work is 9 us recording, 3 paused, 6 in Test (the bar and the Inspector
+  10 + 6). Against V2.38.17, measured again the same day after a client restart (60 FPS): each script's frame
+  handlers timed the same way from outside (a temporary hook wrapping the RunService connections and the render-step
+  bind each script makes while it loads), both with the same world settings (Sync Client Objects on, Record Tool
+  Actions off), the Idle / Create / Test stats panels on and V2's MicroProfiler off, the character put back on the
+  same spot and walked the same way each time, three alternating rounds, us per frame, V2 vs HappaTAS 3 (Classic):
+  recording 322-328 vs 411-442, paused 523-553 vs 588-628, Test 476-543 vs 562-581. (A first comparison that day had
+  Sync Client Objects off in V2's file only and showed a larger gap; it is superseded.) Recording, by stage: PreRender
+  50-53 vs 93-95, PreSimulation 146-150 vs 174-191, PostSimulation 21-23 vs 31-32, the late render bind 37-38 vs 48-53,
+  Heartbeat the same. Where it isn't: the client-object recorder (101-130 us in both, the largest single piece), the
+  camera hold (setZoom / update 30 vs 27 us), the mouse rules (~22 us in both), garbage (12-13 KB a frame recording,
+  ~50 KB paused, in both), the guards (39 guarded calls a frame, ~5 us) and the pipeline's runner threads (the same
+  totals with a plain pcall loop swapped in). What remains is many 3-10 us pieces of the engine's and the world
+  plugins' per-frame work (Timeline:append clears every column on each new frame, setN uses select in a loop, the
+  plugin hooks' dispatch, the kit objects' four hooks, the stats panel); the headless bench (HappaTAS 3 within V2)
+  doesn't see it because the mock's own Instance reads and Lua datatypes dominate its frame time. Followed up the
+  same day (plan 2026-11-01-happatas3-live-frame-cost.md, tools/live/meter3.lua): Timeline:append clears only rows
+  that held values before and setN / getN have no select loop (~7 us a frame less while recording), plugin hooks
+  are dispatched from prebuilt lists (~1-2 us). With every world feature and the stats panels off in both scripts
+  the gap stays (recording 150 vs 232 us, paused 283 vs 351, Test 368 vs 442): it is the layered core (plugins,
+  guards, pipeline stages, timeline lookups), each piece a little dearer than V2's inline code, nothing above
+  ~8 us. Accepted by dzr: about 0.08 ms a frame (0.5 % of a 60 FPS frame, 2 % at 240 FPS). The release
+  loads with no console line, opens in the saved interface (Classic) and unloads leaving nothing in gethui, CoreGui, the
+  Camera, Lighting or PlayerGui. Touch (the pad, V2's mobile buttons, the thumbstick) isn't available on the PC
+  client: checked headless only. Settings.json, Settings3.json and the place's 8 files put back byte for byte (zz5c.tas
+  deleted), fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,

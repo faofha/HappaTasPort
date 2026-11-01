@@ -20,7 +20,7 @@ local GREEN, RED = Color3.fromRGB(0, 140, 40), Color3.fromRGB(170, 30, 30)
 local NO_RUN = "You must have a TAS to merge"
 
 function MergeWin.define(ui)
-	ui.wm:define("merge", { title = "Merge", w = 340, h = 190, minW = 300, minH = 170, modal = false, corner = "topLeft",
+	ui.wm:define("merge", { title = "Merge", w = 340, h = 190, minW = 300, minH = 170, modal = false, corner = "topLeft", remember = false,
 		build = function(body, win) ui.mergeWin = MergeWin.build(ui, body, win) end })
 	-- (the Library's Merge: open the window and read the run at path)
 	ui.startMerge = function(path)

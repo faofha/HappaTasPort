@@ -57,6 +57,16 @@ function Root.new(E)
 	local scale = Instance.new("UIScale")
 	scale.Parent = layer
 	self.layer, self.scale = layer, scale
+	-- (the touch pad's own layer: it stays when the rest of the interface is hidden)
+	local padLayer = Instance.new("Frame")
+	padLayer.Name = "PadLayer"
+	padLayer.BackgroundTransparency = 1
+	padLayer.BorderSizePixel = 0
+	padLayer.Size = UDim2.new(1, 0, 1, 0)
+	padLayer.Parent = gui
+	local padScale = Instance.new("UIScale")
+	padScale.Parent = padLayer
+	self.padLayer, self.padScale = padLayer, padScale
 	self:applyScale()
 	self.offs[#self.offs + 1] = E.settings:changed("interfaceScale", function() self:applyScale() end)
 	if tryParent(gui, hui()) then
@@ -79,6 +89,7 @@ end
 
 function Root:applyScale()
 	self.scale.Scale = self.E.settings:get("interfaceScale") / 100
+	self.padScale.Scale = self.scale.Scale
 	W.bump() -- (every rect's bounds changed)
 end
 

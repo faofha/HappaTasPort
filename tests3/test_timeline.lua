@@ -285,4 +285,63 @@ do
 	a:append()
 	eq(a:count(), 2001, "append after adopt grows fine")
 end
+
+section("live frame cost: a cut run records from zeros")
+do
+	local tl = Timeline.new()
+	tl:addColumn("A", "f64", 1, nil)
+	tl:addColumn("C", "f64", 12, nil)
+	tl:addColumn("U", "u8", 1, nil)
+	tl:addColumn("L", "list", 1, nil)
+	for _ = 1, 5 do
+		local i = tl:append()
+		tl:set("A", i, 1, 7)
+		tl:setN("C", i, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+		tl:set("U", i, 1, 9)
+		tl:setList("L", i, "x")
+		tl:setFilled(i)
+	end
+	tl:cut(2)
+	for _ = 1, 3 do tl:append() end
+	local dirty = 0
+	for i = 3, 5 do
+		if tl:get("A", i, 1) ~= 0 or tl:get("U", i, 1) ~= 0 or tl:getList("L", i) ~= nil or tl:isFilled(i) then dirty = dirty + 1 end
+		for k = 1, 12 do if tl:get("C", i, k) ~= 0 then dirty = dirty + 1 end end
+	end
+	eq(dirty, 0, "rows 3-5 are zeros, nil and not filled")
+	eq(tl:get("A", 2, 1), 7, "row 2 kept")
+end
+
+section("live frame cost: setN / getN round trip at widths 1, 3, 4, 12")
+do
+	local tl = Timeline.new()
+	for _, w in ipairs({ 1, 3, 4, 12 }) do tl:addColumn("W" .. w, "f64", w, nil) end
+	local i = tl:append()
+	local bad = 0
+	for _, w in ipairs({ 1, 3, 4, 12 }) do
+		local vals = {}
+		for k = 1, w do vals[k] = k * 1.5 + w end
+		tl:setN("W" .. w, i, table.unpack(vals))
+		local back = { tl:getN("W" .. w, i) }
+		if #back ~= w then bad = bad + 1 end
+		for k = 1, w do if back[k] ~= vals[k] then bad = bad + 1 end end
+	end
+	eq(bad, 0, "every value back exactly")
+end
+
+section("live frame cost: append clears only rows used before")
+do
+	local fills = 0
+	local real = Timeline._fill
+	Timeline._fill = function(...) fills = fills + 1 return buffer.fill(...) end
+	local tl = Timeline.new()
+	tl:addColumn("A", "f64", 1, nil)
+	tl:addColumn("C", "f64", 12, nil)
+	for _ = 1, 100 do tl:append() end
+	eq(fills, 0, "100 new rows of a fresh run: nothing to clear")
+	tl:cut(50)
+	tl:append()
+	check(fills >= 3, "a row used before is cleared in every buffer column (" .. fills .. ")")
+	Timeline._fill = real
+end
 finish()

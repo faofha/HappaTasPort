@@ -296,9 +296,10 @@ function Windows:anyOpen() return self.openCount > 0 end
 -- a window that frees the mouse is open (def.modal, true unless false: the Inspector isn't)
 function Windows:anyModalOpen() return self.modalCount > 0 end
 
--- open / closed kept in the settings file (ui.open), so a re-run opens the same windows
+-- open / closed kept in the settings file (ui.open), so a re-run opens the same windows (not a def.remember
+-- false one: the Merge window would come back empty)
 function Windows:rememberOpen(id, on)
-	if self.restoring then return end
+	if self.restoring or (self.defs[id] and self.defs[id].remember == false) then return end
 	local sf = self.E.settingsFile
 	if not sf then return end
 	local t = sf:getUi()
@@ -315,7 +316,8 @@ function Windows:restoreOpen()
 	self.restoring = true
 	for _, id in ipairs(self.order) do
 		local want = saved[id]
-		if want == nil then want = self.defs[id].openByDefault == true end
+		if self.defs[id].remember == false then want = false -- (def.remember false: never opened by a re-run)
+		elseif want == nil then want = self.defs[id].openByDefault == true end
 		if want then self:open(id) end
 	end
 	self.restoring = false

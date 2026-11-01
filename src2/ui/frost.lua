@@ -61,7 +61,7 @@ function Frost:qualityChanged(f)
 end
 
 function Frost:wanted()
-	return self.E.settings:get("glass") == "Frost" and self.ui.shown and self.ui.wm:anyOpen() and self:available()
+	return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and self.ui.wm:anyOpen() and self:available()
 end
 
 function Frost:update()

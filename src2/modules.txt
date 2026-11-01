@@ -30,6 +30,7 @@ world/inputs
 world/cursor
 world/animation
 world/tools
+world/thumbstick
 world/co/format
 world/co/registry
 world/co/recorder
@@ -78,5 +79,15 @@ ui/win/library
 ui/win/merge
 ui/win/helptext
 ui/win/help
+ui/touch
+ui/classic/tree
+ui/classic/build
+ui/classic/settingsrows
+ui/classic/controlsrows
+ui/classic/saves
+ui/classic/stats
+ui/classic/look
+ui/classic/mobile
+ui/classic/classic
 ui/app
 main

@@ -19,7 +19,8 @@ local Plugins = {}
 Plugins.__index = Plugins
 
 function Plugins.new(errs)
-	-- (byHook: for each hook, the plugins that have it, in order; made on the first call, dropped by add / remove)
+	-- (byHook: for each hook, the functions and plugins that have it, in order; made on the first call, dropped by
+	-- add / remove)
 	return setmetatable({ list = {}, byName = {}, byHook = {}, errs = errs }, Plugins)
 end
 
@@ -73,19 +74,26 @@ function Plugins.guard(errs, obj, name)
 	})
 end
 
+-- (each hook's functions, plugins and report names are listed once, on the first call after an add / remove:
+-- a call is one pcall per plugin, no method lookup or name building every frame)
 function Plugins:call(hook, ...)
-	local list = self.byHook[hook]
-	if not list then
-		list = {}
+	local h = self.byHook[hook]
+	if not h then
+		h = { fns = {}, ps = {}, names = {}, n = 0 }
 		for _, p in ipairs(self.list) do
-			if p[hook] then list[#list + 1] = p end
+			local f = p[hook]
+			if f then
+				local n = h.n + 1
+				h.n = n
+				h.fns[n], h.ps[n], h.names[n] = f, p, p.name .. "." .. hook
+			end
 		end
-		self.byHook[hook] = list
+		self.byHook[hook] = h
 	end
-	for i = 1, #list do
-		local p = list[i]
-		local ok, err = pcall(p[hook], p, ...)
-		if not ok then self.errs:report(p.name .. "." .. hook, err) end
+	local fns, ps = h.fns, h.ps
+	for i = 1, h.n do
+		local ok, err = pcall(fns[i], ps[i], ...)
+		if not ok then self.errs:report(h.names[i], err) end
 	end
 end
 

@@ -5,8 +5,11 @@
 --  its text boxes count as typing (E.typing:watch). Everything is undone on Unload (its own scope).
 --  The Menu key shows / hides the whole interface; it works even when the game took the key, never while
 --  the player types (V2.37.1).
+--  Interface: New / Classic (spec 8.5): only one interface is live; the other is hidden and does no
+--  per-frame work (bus "uiShown" with newActive()), and the engine's hooks answer for the live one.
 -- ================================================================================================
 local Env = import("platform/env")
+local W = import("ui/write")
 local Root = import("ui/root")
 local Pointer = import("ui/pointer")
 local Theme = import("ui/theme")
@@ -23,13 +26,15 @@ local InspectorWin = import("ui/win/inspector")
 local LibraryWin = import("ui/win/library")
 local MergeWin = import("ui/win/merge")
 local HelpWin = import("ui/win/help")
+local Classic = import("ui/classic/classic")
+local Touch = import("ui/touch")
 
 local UI = {}
 UI.__index = UI
 
 function UI.start(E)
 	local life = E.life:scope("ui")
-	local self = setmetatable({ E = E, life = life, shown = true, wm = nil, modal = false }, UI)
+	local self = setmetatable({ E = E, life = life, shown = true, wm = nil, modal = false, live = "New", classic = nil }, UI)
 	E.ui = self
 	self.root = Root.new(E)
 	life:own(function() self.root:destroy() end)
@@ -46,13 +51,17 @@ function UI.start(E)
 	self.toast = Toast.new(self)
 	self.frost = Frost.new(self)
 	self.bar = Bar.new(self)
+	if Touch.wanted(Env.svc("UserInputService")) then self.touch = Touch.new(self) end
 	SettingsWin.define(self)
 	ControlsWin.define(self)
 	InspectorWin.define(self)
 	LibraryWin.define(self)
 	MergeWin.define(self)
 	HelpWin.define(self)
-	E.inputs.mouseOverOwn = function() return self:pointerOver() end
+	E.inputs.mouseOverOwn = function(m)
+		if self.live == "Classic" then return self.classic ~= nil and self.classic:pointerOver(m) end
+		return self:pointerOver()
+	end
 	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
 	E.modalOpen = function() return self.modal end -- (E.modal: the same answer as a field, for per-frame readers)
 	life:own(self.wm:changed(function() self:updateModal() end))
@@ -67,21 +76,84 @@ function UI.start(E)
 	local uis = Env.svc("UserInputService")
 	life:connect(uis.InputBegan, function(inp)
 		if E.typing:active(inp) then return end
-		if E.controls:matches(inp, "menu") then self:toggle() end
+		if E.controls:matches(inp, "menu") then
+			if self.live == "Classic" and self.classic then self.classic:toggle() else self:toggle() end
+		end
 	end)
+	-- (the interface chosen, now and whenever the setting changes)
+	life:own(E.settings:changed("interface", function(v) self:setInterface(v) end))
+	self:setInterface(E.settings:get("interface"))
 	return self
 end
 
+-- the new interface is live and shown (its per-frame work runs only then)
+function UI:newActive() return self.live == "New" and self.shown end
+
+-- the live interface is shown
+function UI:liveShown()
+	if self.live == "Classic" then return self.classic ~= nil and self.classic.shown end
+	return self.shown
+end
+
+-- typing in a box of ours and waiting for a key to bind end (they belong to the interface going away)
+function UI:endTyping()
+	local E = self.E
+	local own = E.typing.own
+	if own then pcall(function() own:ReleaseFocus() end) end
+	E.typing.own = nil
+	if self.controlsWin and self.controlsWin.stopWaiting then self.controlsWin.stopWaiting() end
+	if self.classic and self.classic.stopWaiting then self.classic.stopWaiting() end
+	E.typing.rebinding = false
+end
+
+-- "New" or "Classic" (anything else is New): the other one hidden, in the same frame
+function UI:setInterface(name)
+	if name ~= "Classic" then name = "New" end
+	if name == self.live and (name == "New" or self.classic) then return end
+	self:endTyping()
+	if name == "Classic" and not self.classic then
+		self.classic = Classic.new(self)
+		local c = self.classic
+		self.life:own(function() c:destroy() end)
+		self.E.typing:watch(c.gui)
+	end
+	self.live = name
+	self:applyShown()
+	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
+	-- (a merge goes on across the switch: the live interface shows its own way to finish it)
+	if self.E.merge then
+		if name == "Classic" then self.classic.saves.showMerge() elseif self.startMerge then self.startMerge(nil) end
+	end
+	self:updateModal()
+	self.E.bus:emit("uiShown", self:newActive())
+end
+
+-- the root while the new interface is live: shown with it, and on a touch screen also while it is hidden, with
+-- only the touch pad left (its Menu button brings the rest back)
+function UI:applyShown()
+	local active = self:newActive()
+	local pad = self.touch ~= nil and self.live == "New"
+	self.root.shown = active or pad -- (the pointer ignores a hidden interface: Pointer:over)
+	self.root.gui.Enabled = active or pad
+	W.set(self.root.layer, "Visible", active)
+	W.bump()
+end
+
 function UI:updateModal()
-	self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()
+	if self.live == "Classic" then
+		self.modal = self.classic ~= nil and self.classic:modal()
+	else
+		self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()
+	end
 	self.E.modal = self.modal
 end
 
+-- the new interface shown / hidden (the Menu key while it is live)
 function UI:setShown(on)
 	self.shown = on == true
-	self.root:setShown(self.shown)
+	self:applyShown()
 	self:updateModal()
-	self.E.bus:emit("uiShown", self.shown)
+	self.E.bus:emit("uiShown", self:newActive())
 end
 
 function UI:toggle() self:setShown(not self.shown) end
@@ -91,12 +163,12 @@ function UI:addDockButton(id) return self.dock and self.dock:add(id) end
 
 -- the pointer is on the interface (or a press that started on it isn't released yet)
 function UI:pointerOver()
-	return self.shown and self.pointer ~= nil and self.pointer:busy()
+	return (self:newActive() or (self.touch ~= nil and self.live == "New")) and self.pointer ~= nil and self.pointer:busy()
 end
 
 -- a window is open (the window manager comes in with the windows)
 function UI:anyWindowOpen()
-	return self.shown and self.wm ~= nil and self.wm:anyOpen()
+	return self:newActive() and self.wm ~= nil and self.wm:anyOpen()
 end
 
 return UI

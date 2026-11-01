@@ -239,4 +239,42 @@ do
 	M.steps(2)
 	E.time = real
 end
+
+section("live frame cost: hooks dispatched from lists made once")
+do
+	local Plugins = __T3("engine/plugins")
+	local reported = {}
+	local errs = { report = function(_, name, err) reported[#reported + 1] = name end }
+	local pl = Plugins.new(errs)
+	local log = {}
+	local a = { name = "a", order = 1 }
+	function a.onX(self, v) log[#log + 1] = "a1:" .. tostring(v) end
+	local b = { name = "b", order = 2 }
+	function b.onX() error("boom") end
+	local c = { name = "c", order = 3 }
+	function c.onX(self, v) log[#log + 1] = "c:" .. tostring(v) end
+	pl:add(c)
+	pl:add(a)
+	pl:add(b)
+	pl:call("onX", 1)
+	eq(table.concat(log, ","), "a1:1,c:1", "in order, the erroring one in between doesn't stop the next")
+	eq(table.concat(reported, ","), "b.onX", "the error reported as name.hook")
+	-- (a hook replaced on the instance is seen after the next add / remove, not on every call)
+	a.onX = function(self, v) log[#log + 1] = "a2:" .. tostring(v) end
+	log = {}
+	pl:call("onX", 2)
+	eq(table.concat(log, ","), "a1:2,c:2", "the list made once is used: no lookup per call")
+	local d = { name = "d", order = 0, onX = function(self, v) log[#log + 1] = "d:" .. tostring(v) end }
+	pl:add(d)
+	log = {}
+	pl:call("onX", 3)
+	eq(table.concat(log, ","), "d:3,a2:3,c:3", "an add makes the lists again: the new plugin and the replaced hook")
+	pl:remove("c")
+	log = {}
+	pl:call("onX", 4)
+	eq(table.concat(log, ","), "d:4,a2:4", "a removed plugin isn't called")
+	log = {}
+	pl:call("onNothing", 5)
+	eq(#log, 0, "a hook no plugin has")
+end
 finish()
