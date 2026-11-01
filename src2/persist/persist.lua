@@ -4,7 +4,8 @@
 --  every transition is refused (Modes:allowed), so the run can't change under it. The result goes on the
 --  bus ("persist", { op, ok, message, path }) and as a status message.
 --  Save: not while recording. Load: only in Idle or paused in Create; the file is read into a fresh
---  timeline and taken over only when it loaded, so a damaged file leaves the run as it was.
+--  timeline and taken over only when it loaded, so a damaged file leaves the run as it was. readFrames
+--  (for a merge): the same reading, but the frames only go out on the bus; the run in use is untouched.
 -- ================================================================================================
 local Files = import("platform/files")
 local Timeline = import("engine/timeline")
@@ -102,6 +103,35 @@ function Persist:load(path)
 			done(E, "load", true, "Loaded " .. baseName(path), path)
 		else
 			done(E, "load", false, "Could not load: " .. tostring(res), path)
+		end
+	end)
+	return true, "started"
+end
+
+-- reads the run at path for a merge: bus "persist" { op = "frames", ok, frames (V2 frame tables), message,
+-- path }; the run in use (and whether it is saved) stays as it is. true, "started" or false, why
+function Persist:readFrames(path)
+	local E = self.E
+	if not available(E) then return false, UNAVAILABLE end
+	if E.busy then return false, "Wait: " .. E.busy end
+	E.busy = "reading"
+	task.spawn(function()
+		task.wait()
+		local ok, res = pcall(function()
+			local data, err = E.library:read(path)
+			if not data then error(err or "the file could not be read", 0) end
+			local fresh = Timeline.newLike(E.tl)
+			Run.load(fresh, data)
+			E.plugins:call("onLoading", fresh)
+			return fresh:toV2All()
+		end)
+		E.busy = nil
+		if ok then
+			E.bus:emit("persist", { op = "frames", ok = true, frames = res, message = "Read " .. baseName(path), path = path })
+		else
+			local message = "Could not read: " .. tostring(res)
+			E.bus:emit("persist", { op = "frames", ok = false, message = message, path = path })
+			E.bus:emit("status", message, true)
 		end
 	end)
 	return true, "started"

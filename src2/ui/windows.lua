@@ -94,8 +94,9 @@ end
 function Windows:defaultRect(id)
 	local def = self.defs[id]
 	local sw, sh, top = self:screen()
-	-- (def.corner "topRight": out of the play area, for a window open while playing)
+	-- (def.corner "topRight" / "topLeft": out of the play area, for a window open while playing)
 	if def.corner == "topRight" then return sw - def.w - EDGE, top + EDGE, def.w, def.h end
+	if def.corner == "topLeft" then return EDGE, top + EDGE, def.w, def.h end
 	local i = (table.find(self.order, id) or 1) - 1
 	return math.floor((sw - def.w) / 2) + i * CASCADE, math.floor((sh - def.h) / 2) + i * CASCADE, def.w, def.h
 end

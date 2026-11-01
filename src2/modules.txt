@@ -75,5 +75,6 @@ ui/win/controls
 ui/win/inspectorvalues
 ui/win/inspector
 ui/win/library
+ui/win/merge
 ui/app
 main

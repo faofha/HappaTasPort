@@ -3,7 +3,8 @@
 --  folder, New folder from the name field, Delete folder for empty ones), a search field and a sort menu,
 --  the list (name, length, frames, saved; a run's attempts folded under it behind a chevron), an info line
 --  for the selection, a name field and the buttons Save / New attempt / Rename and Load / Merge / Move to /
---  Delete. Save into a name that exists and Delete ask a second click within 3 s; Load / Save / New attempt
+--  Delete (Merge opens the Merge window with the selection). Save into a name that exists and Delete ask a second
+--  click within 3 s; Load / Save / New attempt
 --  / Merge are dimmed while a save or load runs (E.busy). Results and refusals show as status toasts; the
 --  list is read again when the window opens and after every save or load (bus "persist").
 -- ================================================================================================
@@ -158,6 +159,9 @@ function LibraryWin.build(ui, body, win)
 	button("delete", "Delete", main, PAD + 134, -44)
 	lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 150 })
 	lw.moveDrop.gui.Position = UDim2.new(0, PAD + 214, 1, -44)
+
+	-- (the Merge window, when there is one: ui.startMerge opens it and reads the selected run)
+	if ui.startMerge then lw.onMerge = function(path) ui.startMerge(path) end end
 
 	-- ---------------------------------------------------------------------------------------- helpers
 	local function status(text, isError) E.bus:emit("status", text, isError == true) end
