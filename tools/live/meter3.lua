@@ -5,7 +5,7 @@
 --  Meter.compare(opts): V2 and HappaTAS 3 in alternating rounds. Every frame handler a script connects while
 --      it loads (RunService signals' Connect / Once, BindToRenderStep) is wrapped and timed; the result is
 --      us per frame by stage, median over the rounds, for recording, paused and Test.
---  Meter.sections(path, specsOf, seconds): exclusive time (a wrapper takes its children's time off its own)
+--  Meter.sections(path, specsOf, seconds, extra): exclusive time (a wrapper takes its children's time off its own)
 --      of the functions specsOf(env) names, in the same three modes, for one script.
 --  Both match V2's Settings.json to HappaTAS 3's choices for the run (the same world features, stats panels
 --  on, no MicroProfiler; HappaTAS 3 in its Classic interface) and put both files back at the end, errors
@@ -26,8 +26,9 @@ local function key(kc)
 	task.wait(0.3)
 end
 
--- V2's file follows HappaTAS 3's settings for the run; returns a function that puts both files back
-local function matchSettings()
+-- V2's file follows HappaTAS 3's settings for the run (extra = { v2 = { [V2 name] = v }, h3 = { [key] = v } }
+-- on top: features switched off in both, say); returns a function that puts both files back
+local function matchSettings(extra)
 	local orig2, orig3 = readfile(SETTINGS2), readfile(SETTINGS3)
 	local t3 = http:JSONDecode(orig3)
 	local s3 = t3.settings or {}
@@ -40,6 +41,10 @@ local function matchSettings()
 	s3.showStatsIdle, s3.showStatsCreate, s3.showStatsTest = 1, 1, 1
 	s3.showMicroProfiler = 0
 	s3.interface = "Classic"
+	if extra then
+		for k, v in pairs(extra.v2 or {}) do s2[k] = v end
+		for k, v in pairs(extra.h3 or {}) do s3[k] = v end
+	end
 	t2.settings, t3.settings = s2, s3
 	writefile(SETTINGS2, http:JSONEncode(t2))
 	writefile(SETTINGS3, http:JSONEncode(t3))
@@ -157,7 +162,7 @@ function Meter.compare(opts)
 		r.total = total
 		return r
 	end
-	local restore = matchSettings()
+	local restore = matchSettings(opts.extra)
 	local home, hum = homeOf()
 	local runs = { v2 = {}, h3 = {} }
 	local ok, err = pcall(function()
@@ -204,7 +209,7 @@ end
 -- ------------------------------------------------------------------------------------------------ sections
 -- specsOf(env) -> { { table, key, label }, ... }; env = { engine = HappaTAS 3's engine (debug build), v2 = V2's
 -- exposed modules (tools/live/v2expose.sh) }
-function Meter.sections(path, specsOf, seconds)
+function Meter.sections(path, specsOf, seconds, extra)
 	local excl, stack, depth, frames = {}, {}, 0, 0
 	local function wrapFn(fn, label)
 		return function(...)
@@ -232,7 +237,7 @@ function Meter.sections(path, specsOf, seconds)
 		end
 		return r
 	end
-	local restore = matchSettings()
+	local restore = matchSettings(extra)
 	local home, hum = homeOf()
 	local ok, res = pcall(function()
 		unloadAll()
