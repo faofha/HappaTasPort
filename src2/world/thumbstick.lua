@@ -17,6 +17,7 @@ local r = Util.round
 
 function Thumbstick.new(E)
 	local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), players = Env.svc("Players"), tcf = nil, found = -math.huge }, Thumbstick)
+	self.mobile = self:touch()
 	E.tl:addColumn("Mobile", "list", 1, { key = "Mobile", keep = true })
 	return self
 end
@@ -119,18 +120,18 @@ function Thumbstick:replay(mob)
 	end)
 end
 
--- recording (touch devices only)
+-- recording (touch devices only: decided once when the script starts, as V2's C.IsMobile)
 function Thumbstick:fill(tl, i)
-	if not self:touch() then return end
+	if not self.mobile then return end
 	local m = self:read()
 	if m then tl:setList("Mobile", i, m) end
 end
 
--- Test (touch devices only)
+-- Test (touch devices only; TouchEnabled is read only for a frame with thumbstick data, as V2 did)
 function Thumbstick:onPlayTo(tl, f)
-	if not self:touch() or f < 1 or f > tl:count() then return end
+	if f < 1 or f > tl:count() then return end
 	local mob = tl:getList("Mobile", f)
-	if type(mob) == "table" then self:replay(mob) end
+	if type(mob) == "table" and self:touch() then self:replay(mob) end
 end
 
 return Thumbstick

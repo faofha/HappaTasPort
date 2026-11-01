@@ -65,6 +65,18 @@ E.modes:setRun({})
 M.steps(2)
 uis.TouchEnabled = true
 record(30)
+local none = true
+for i = 1, tl:count() do if tl:getList("Mobile", i) ~= nil then none = false end end
+check(none, "a touch screen found after the start isn't recorded (V2 decided once)")
+E.modes:request("idle")
+M.steps(2)
+check(boot(30), "runs again on a touch screen")
+T = getgenv().__HappaTAS3_T
+E = T.engine
+tl = E.tl
+guard = 0
+while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
+record(30)
 local n = tl:count()
 local bad = 0
 for i = 2, n do
