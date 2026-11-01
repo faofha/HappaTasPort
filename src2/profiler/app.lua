@@ -132,6 +132,7 @@ function ProfilerApp.start(E)
 	end
 	local entries = {} -- (the scope each running handler began: a mode change inside it ends the same one)
 	local pipeHook = {
+		modules = { engine = true, ui = true }, -- (the handlers it times: Record / Playback and Stats UI)
 		stageBegin = function(stage, dt)
 			if stage == "PreRender" then P.FrameBegin(dt) end
 			P.Begin("HappaTAS")
@@ -157,6 +158,7 @@ function ProfilerApp.start(E)
 		end,
 	}
 	local plugHook = {
+		names = SCOPE, -- (the plugins / guards it times)
 		begin = function(name)
 			local scope = SCOPE[name]
 			if scope then scopeBegin(scope) end

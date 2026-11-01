@@ -286,17 +286,19 @@ do
 	local pl = Plugins.new(errs)
 	local seen = {}
 	pl:add({ name = "cursor", order = 1, onY = function() seen[#seen + 1] = "hook" end })
+	pl:add({ name = "other", order = 2, onY = function() seen[#seen + 1] = "other hook" end })
 	local obj = { name = "x", update = function(self, v) seen[#seen + 1] = "update " .. tostring(v) return v end }
 	local g = Plugins.guard(errs, obj, "cursor")
-	Plugins.prof = { begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
+	-- (names: only the plugins / guards the profiler times; "other" isn't reported)
+	Plugins.prof = { names = { cursor = true }, begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
 	pl:call("onY")
 	local r = g:update(7)
-	eq(table.concat(seen, ","), "begin cursor,hook,finish cursor,begin cursor,update 7,finish cursor", "both by name")
+	eq(table.concat(seen, ","), "begin cursor,hook,finish cursor,other hook,begin cursor,update 7,finish cursor", "both by name; an unlisted plugin isn't reported")
 	eq(r, 7, "the guarded call's result")
 	Plugins.prof = nil
 	seen = {}
 	pl:call("onY")
 	g:update(8)
-	eq(table.concat(seen, ","), "hook,update 8", "unset: nothing else")
+	eq(table.concat(seen, ","), "hook,other hook,update 8", "unset: nothing else")
 end
 finish()
