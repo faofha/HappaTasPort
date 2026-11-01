@@ -113,12 +113,16 @@ function Pipeline:runStage(stage, dt)
 	local runner = self.runners[stage]
 	self.runners[stage] = nil -- (taken while running: a nested run of the same stage makes its own)
 	local pr = self.profiler
-	local timed = pr and pr.entries
 	for _, e in ipairs(snap) do
 		if self.stopped then return end
 		if e.on then
 			if not runner then runner = coroutine.create(runnerLoop) end
-			local t = timed and timed[e.name]
+			-- (whether the profiler times this handler: worked out again only when pipe.profiler changes)
+			if e.pr ~= pr then
+				e.pr = pr
+				e.timed = pr ~= nil and pr.entries[e.name] ~= nil
+			end
+			local t = pr and e.timed
 			if t then pr.entryBegin(e) end
 			local ok, res = coroutine.resume(runner, e.fn, dt)
 			if t then pr.entryEnd(e) end

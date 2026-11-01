@@ -66,10 +66,16 @@ function Plugins.guard(errs, obj, name)
 			pr.finish(name)
 			return finish(ok, ...)
 		end
+		-- (whether this call is timed, worked out once per Plugins.prof: a call compares one reference)
+		local seenPr, isTimed = nil, false
 		return function(_, ...)
 			local pr = Plugins.prof
-			local t = pr and pr.names[name]
-			if t and (t == true or t[k]) then
+			if pr ~= seenPr then
+				seenPr = pr
+				local t = pr and pr.names[name]
+				isTimed = t ~= nil and t ~= false and (t == true or t[k] == true)
+			end
+			if isTimed then
 				pr.begin(name)
 				return timed(pr, pcall(obj[k], obj, ...))
 			end
@@ -89,11 +95,12 @@ function Plugins.guard(errs, obj, name)
 end
 
 -- (each hook's functions, plugins and report names are listed once, on the first call after an add / remove:
--- a call is one pcall per plugin, no method lookup or name building every frame)
+-- a call is one pcall per plugin, no method lookup or name building every frame; which of them the profiler
+-- times is worked out again only when Plugins.prof changes)
 function Plugins:call(hook, ...)
 	local h = self.byHook[hook]
 	if not h then
-		h = { fns = {}, ps = {}, names = {}, n = 0 }
+		h = { fns = {}, ps = {}, names = {}, n = 0, timed = {}, pr = false }
 		for _, p in ipairs(self.list) do
 			local f = p[hook]
 			if f then
@@ -106,10 +113,16 @@ function Plugins:call(hook, ...)
 	end
 	local fns, ps = h.fns, h.ps
 	local pr = Plugins.prof
-	local timed = pr and pr.names
+	if h.pr ~= pr then
+		h.pr = pr
+		for i = 1, h.n do
+			local t = pr and pr.names[ps[i].name]
+			h.timed[i] = t ~= nil and t ~= false and (t == true or t[hook] == true)
+		end
+	end
+	local timed = h.timed
 	for i = 1, h.n do
-		local t = timed and timed[ps[i].name]
-		if t and t ~= true and not t[hook] then t = nil end
+		local t = pr and timed[i]
 		if t then pr.begin(ps[i].name) end
 		local ok, err = pcall(fns[i], ps[i], ...)
 		if t then pr.finish(ps[i].name) end
