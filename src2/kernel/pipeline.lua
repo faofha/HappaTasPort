@@ -81,9 +81,9 @@ end
 -- With pipe.timing on (the Inspector's Performance section shows), every 4th frame's stages are timed with
 -- os.clock: their time is added to pipe.timeSum and the frames to pipe.timeFrames (an average needs no more);
 -- off, nothing extra runs.
--- With pipe.profiler set (the MicroProfiler is open), each stage and the handlers of the modules it times are
--- reported to it: stageBegin(stage, dt) / stageEnd(stage) around the stage, entryBegin(e) / entryEnd(e) around a
--- handler whose module is in pipe.profiler.modules.
+-- With pipe.profiler set (the MicroProfiler is open), each stage and the handlers it times are reported to it:
+-- stageBegin(stage, dt) / stageEnd(stage) around the stage, entryBegin(e) / entryEnd(e) around a handler whose
+-- name is in pipe.profiler.entries.
 local SAMPLE_EVERY = 4
 function Pipeline:run(stage, dt)
 	if stage == "PreRender" then self.sampling = self.timing and self.frame % SAMPLE_EVERY == 0 end
@@ -113,12 +113,12 @@ function Pipeline:runStage(stage, dt)
 	local runner = self.runners[stage]
 	self.runners[stage] = nil -- (taken while running: a nested run of the same stage makes its own)
 	local pr = self.profiler
-	local timed = pr and pr.modules
+	local timed = pr and pr.entries
 	for _, e in ipairs(snap) do
 		if self.stopped then return end
 		if e.on then
 			if not runner then runner = coroutine.create(runnerLoop) end
-			local t = timed and timed[e.module]
+			local t = timed and timed[e.name]
 			if t then pr.entryBegin(e) end
 			local ok, res = coroutine.resume(runner, e.fn, dt)
 			if t then pr.entryEnd(e) end

@@ -169,7 +169,7 @@ do
 	p2:add("Heartbeat", 10, "b", function() seen[#seen + 1] = "run b" end, "modB")
 	p2:add("Heartbeat", 20, "c", function() seen[#seen + 1] = "run c" end, "modC")
 	p2.profiler = {
-		modules = { modA = true, modB = true }, -- (only the modules the profiler times: modC isn't reported)
+		entries = { a = true, b = true }, -- (only the handlers the profiler times, by name: c isn't reported)
 		stageBegin = function(stage, dt) seen[#seen + 1] = "begin " .. stage .. (type(dt) == "number" and " dt" or "") end,
 		stageEnd = function(stage) seen[#seen + 1] = "end " .. stage end,
 		entryBegin = function(e) seen[#seen + 1] = "in " .. e.module end,
@@ -178,7 +178,7 @@ do
 	M.step(1 / 60)
 	local s = table.concat(seen, ",")
 	check(s:find("begin PreRender dt,in modA,run a,out modA,end PreRender", 1, true) ~= nil, "PreRender: begin, entry, end (" .. s .. ")")
-	check(s:find("begin Heartbeat dt,in modB,run b,out modB,run c,end Heartbeat", 1, true) ~= nil, "Heartbeat the same; an unlisted module's handler isn't reported")
+	check(s:find("begin Heartbeat dt,in modB,run b,out modB,run c,end Heartbeat", 1, true) ~= nil, "Heartbeat the same; an unlisted handler isn't reported")
 	p2.profiler = nil
 	seen = {}
 	M.step(1 / 60)

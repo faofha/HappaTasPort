@@ -24,6 +24,10 @@ local NAME, DISPLAY_ORDER = "HappaProfiler", 2147482000
 local TEXT_EXT = { txt = true, csv = true, html = true } -- (V2's Store.WriteText types)
 -- V2's scope names for HappaTAS 3's plugins (by plugin name) and guarded objects (by guard name)
 local SCOPE = { cursor = "Cursor", clientobjects = "Client Objects", clientObjects = "Client Objects", buttons = "Buttons" }
+-- the pipeline handlers V2's scopes stood around (V2 p18_core: Record in preRender / preSimulation, Playback in
+-- preRender / heartbeat, Stats UI around the panels)
+local ENTRY_SCOPE = { ["engine.preRender"] = "both", ["engine.preSimulation"] = "rec", ["engine.heartbeat"] = "play",
+	["ui.bar"] = "ui", ["ui.inspector"] = "ui", ["ui.classic.stats"] = "ui" }
 
 local function keyOf(name)
 	local r = Settings.byV2[name]
@@ -132,7 +136,9 @@ function ProfilerApp.start(E)
 	end
 	local entries = {} -- (the scope each running handler began: a mode change inside it ends the same one)
 	local pipeHook = {
-		modules = { engine = true, ui = true }, -- (the handlers it times: Record / Playback and Stats UI)
+		-- (the handlers it times, V2's scopes: Record = the frame's recording in PreRender and PreSimulation,
+		-- Playback = Test's PreRender and Heartbeat work, Stats UI = the panels / the bar and the Inspector)
+		entries = ENTRY_SCOPE,
 		stageBegin = function(stage, dt)
 			if stage == "PreRender" then P.FrameBegin(dt) end
 			P.Begin("HappaTAS")
@@ -142,11 +148,14 @@ function ProfilerApp.start(E)
 			if stage == "PreRender" then P.FrameEnd() end
 		end,
 		entryBegin = function(e)
+			local kind = ENTRY_SCOPE[e.name]
 			local name = false
-			if e.module == "engine" then
-				if E.mode == 3 then name = "Playback" elseif E.mode == 2 and not E.paused then name = "Record" end
-			elseif e.module == "ui" then
+			if kind == "ui" then
 				name = "Stats UI"
+			elseif E.mode == 3 then
+				if kind == "play" or kind == "both" then name = "Playback" end
+			elseif E.mode == 2 and not E.paused then
+				if kind == "rec" or kind == "both" then name = "Record" end
 			end
 			entries[#entries + 1] = name
 			if name then scopeBegin(name) end
