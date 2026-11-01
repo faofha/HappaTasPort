@@ -325,6 +325,31 @@ Each phase has its own implementation plan, tests and PR.
   unloads with no console line; Unload with Frost showing leaves no part, no DepthOfField, no interface, no
   getgenv entry, and the mouse free. Not covered live: mouse-move cost with a window open (the bench's
   "recording, menu open" line, 10-20 % over V2 in the mock, is shown and not gated), touch devices.
+- Phase 5b live check (EToH kit test place, 2026-11-01, Real at 240 FPS, window not focused; mouse through
+  VirtualInputManager): the Dock reads Inspector, Library, Settings, Controls, Help; the Inspector opens on the
+  first start without taking the mouse (dzr's settings file already held a place for it, which wins over the
+  top-right default). Inspector against V2.38.17's Idle panel on the same still frame (V2 loaded alone, Show
+  Stats (Idle) switched on for the read and the file put back): position 33, 3.5, 128, rotation 0, -90, 0, both
+  velocities 0, camera rotation -14.017, -91.685, 0, state Running, zoom 12.5 the same on both (frame time is
+  each frame's own). Recording 2 s walking with a jump: 477 frames, the bar "477 / 477   0:01.999", Paused, the
+  unsaved dot. With real mouse events: a drag on the track from 20 % to 50 % stopped on frame 239 of 477, three
+  wheel notches zoomed 476 to 243 frames, the lanes opened (4 marks), the marker button marked frame 239, a
+  scrub in Test jumped playback. Library in a zz5b folder: New folder, Save (the unsaved dot went off), New
+  attempt ("run1 (2)"), Rename, Move to Top level and back through the menu, Delete (asks "Delete?", gone on
+  the second click), Load (477 frames, the marker on 239 back). Found there: dzr's settings file held a 539 x 340
+  Library layout, the window opened at its 560 minimum and the Rename button sat outside it (clicks never
+  reached it); minW is 640 now, and a test shrinks the window to its minimum and checks every control is inside.
+  Merge through the Library and the Merge window: Before / After both offered, the Library closed for playing,
+  "Complete merge" at distance 0 (required 0.048), 991 frames as computed (before - 1 + recorded + after);
+  a far one read "Cancel merge" and gave the 991-frame run back unchanged. Help: 24 topics, "Missing executor
+  functions" says none on Real, the Pause topic shows dzr's key ([E]). Per-frame cost, the pipeline's own timer
+  (ms): Idle 0.078 with nothing open, 0.087 / 0.083 with the Inspector (still / walking); recording 0.35 with the
+  bar, 0.30 with the bar and the Inspector, 0.27 / 0.28 with Settings open and the mouse moving / still (the 5a
+  follow-up: moving the mouse over an open window costs nothing measurable); paused 0.43 and Test with the
+  lanes 0.47, nearly all of it the engine's late-render step (0.18) and the Kit Clock's listener takeover while
+  the clock isn't 1x (0.17), not the new windows. The release loads and unloads with no console line and leaves
+  nothing in CoreGui, gethui, the Camera or Lighting. Settings.json, Settings3.json and the place's 8 files put
+  back byte for byte, fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
