@@ -21,7 +21,7 @@ local LibraryWin = {}
 
 local PAD, SIDE, ROW_H, CONFIRM = 14, 160, 22, 3
 local SORTS = {
-	{ "Name A–Z", "name", false }, { "Name Z–A", "name", true }, { "Newest", "date", true },
+	{ "Name A-Z", "name", false }, { "Name Z-A", "name", true }, { "Newest", "date", true },
 	{ "Oldest", "date", false }, { "Longest", "length", true }, { "Shortest", "length", false },
 }
 local MOVE_LABEL, TOP_LEVEL = "Move to…", "Top level"

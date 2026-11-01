@@ -7,13 +7,15 @@
 local CONFIG = import("config")
 local Env = {}
 
--- a Debug note, printed once per text (a feature that switched itself off for a missing executor function)
+-- a note: a feature that switched itself off for a missing executor function. Each text is kept once in
+-- Env.notes (Help > Missing executor functions lists them) and printed only with Debug.
 local noted = {}
+Env.notes = {}
 function Env.debugNote(text)
-	if CONFIG.Debug and not noted[text] then
-		noted[text] = true
-		print("[HappaTAS3] " .. text)
-	end
+	if noted[text] then return end
+	noted[text] = true
+	Env.notes[#Env.notes + 1] = text
+	if CONFIG.Debug then print("[HappaTAS3] " .. text) end
 end
 
 local function fn(...)
@@ -99,6 +101,14 @@ function Env.has(feature)
 	end
 	return true
 end
+
+-- (the functions whose features would only notice they're missing later, at a moment that may never come:
+-- noted now, in the words those features use)
+if not Env.getconnections then Env.debugNote("getconnections unavailable; the kit's frame listeners keep real time") end
+if not Env.getloadedmodules then
+	Env.debugNote("getloadedmodules unavailable; the Kit Clock is off (the kit's scripts keep real time)")
+end
+if not Env.has("files") then Env.debugNote("Saving is unavailable on this executor (no file functions)") end
 
 Env.executor = "unknown"
 if Env.identifyexecutor then

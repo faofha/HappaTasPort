@@ -22,6 +22,7 @@ local Bar = import("ui/bar/bar")
 local InspectorWin = import("ui/win/inspector")
 local LibraryWin = import("ui/win/library")
 local MergeWin = import("ui/win/merge")
+local HelpWin = import("ui/win/help")
 
 local UI = {}
 UI.__index = UI
@@ -50,6 +51,7 @@ function UI.start(E)
 	InspectorWin.define(self)
 	LibraryWin.define(self)
 	MergeWin.define(self)
+	HelpWin.define(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
 	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
 	E.modalOpen = function() return self.modal end -- (E.modal: the same answer as a field, for per-frame readers)

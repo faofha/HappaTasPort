@@ -76,5 +76,7 @@ ui/win/inspectorvalues
 ui/win/inspector
 ui/win/library
 ui/win/merge
+ui/win/helptext
+ui/win/help
 ui/app
 main
