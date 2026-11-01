@@ -104,6 +104,28 @@ end
 local function typeName(text) UIH.typeInto(lw.nameField.box, text) M.steps(1) end
 local function press(name) UIH.click(lw.buttons[name].gui) M.steps(1) end
 
+section("at its smallest every control is inside the window (live: a saved 539 x 340 layout hid Rename)")
+do
+	local win = wm.windows.library
+	local ox, oy, ow, oh = win.x, win.y, win.w, win.h
+	wm:apply(win, win.x, win.y, 1, 1)
+	M.steps(2)
+	local hp, hs = win.holder.AbsolutePosition, win.holder.AbsoluteSize
+	local out = {}
+	local function inside(name, g)
+		local p, s = g.AbsolutePosition, g.AbsoluteSize
+		if p.X < hp.X or p.Y < hp.Y or p.X + s.X > hp.X + hs.X or p.Y + s.Y > hp.Y + hs.Y then out[#out + 1] = name end
+	end
+	for k, b in pairs(lw.buttons) do inside(k, b.gui) end
+	inside("move", lw.moveDrop.gui)
+	inside("sort", lw.sort.gui)
+	inside("name", lw.nameField.gui)
+	inside("search", lw.search.gui)
+	eq(#out, 0, "all inside at " .. win.w .. " x " .. win.h .. " (" .. table.concat(out, ", ") .. ")")
+	wm:apply(win, ox, oy, ow, oh)
+	M.steps(2)
+end
+
 section("folders")
 local fnames = {}
 for _, fr in ipairs(lw.folderRows) do fnames[#fnames + 1] = fr.label.Text end

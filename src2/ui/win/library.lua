@@ -28,7 +28,8 @@ local MOVE_LABEL, TOP_LEVEL = "Move to…", "Top level"
 local BUSY_DIMS = { load = true, save = true, attempt = true, merge = true }
 
 function LibraryWin.define(ui)
-	ui.wm:define("library", { title = "Library", w = 660, h = 470, minW = 560, minH = 340,
+	-- (minW: the name field and the first button row need 640: a smaller saved layout is widened to it)
+	ui.wm:define("library", { title = "Library", w = 660, h = 470, minW = 640, minH = 340,
 		build = function(body, win) ui.libraryWin = LibraryWin.build(ui, body, win) end })
 	ui:addDockButton("library")
 end
