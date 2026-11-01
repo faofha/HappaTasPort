@@ -83,6 +83,7 @@ function ControlsWin.build(ui, body, win)
 		end
 	end
 	cw.refresh = refresh
+	cw.stopWaiting = function() stopWaiting() end
 
 	local y = 0
 	for _, ctl in ipairs(Controls.LIST) do

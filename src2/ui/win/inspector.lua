@@ -93,6 +93,10 @@ function Insp.build(ui, body, win)
 	end
 	self.offs[#self.offs + 1] = ui.theme:changed(function() self:restyle() end)
 	self.offs[#self.offs + 1] = ui.wm:changed(function(id) if id == "inspector" then self:follow() end end)
+	self.offs[#self.offs + 1] = E.bus:on("uiShown", function(active)
+		self:follow()
+		if active and self.win.open then self:update(true) end -- (what changed while it was hidden)
+	end)
 	ui.life:own(function() self:destroy() end)
 	self:restyle()
 	self:layout()
@@ -270,7 +274,7 @@ end
 function Insp:timing()
 	local data = saved(self.ui)
 	local all = self:statsShown()
-	local perf = all and self.win.open and not self.win.min and not data.collapsed.Performance
+	local perf = all and self.win.open and self.ui:newActive() and not self.win.min and not data.collapsed.Performance
 		and not (data.hidden.fps and data.hidden.happaMs)
 	self.E.pipe.timing = perf == true
 	if not perf then self.E.pipe.timeSum, self.E.pipe.timeFrames = 0, 0 end
@@ -344,7 +348,7 @@ end
 
 -- ------------------------------------------------------------------------------------------------ per frame
 function Insp:follow()
-	local open = self.win.open
+	local open = self.win.open and self.ui:newActive()
 	if open and not self.off then
 		self.pausedKey = nil -- (opened again on the same frame: shown afresh)
 		self.off = self.E.pipe:add("PreRender", 230, "ui.inspector", function(dt) self:step(dt) end, "ui")

@@ -78,5 +78,6 @@ ui/win/library
 ui/win/merge
 ui/win/helptext
 ui/win/help
+ui/classic/classic
 ui/app
 main

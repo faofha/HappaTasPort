@@ -69,6 +69,10 @@ function Bar.new(ui)
 	self.offs[#self.offs + 1] = ui.theme:changed(function() self:place(); self:restyle(); self:refresh(true) end)
 	self.offs[#self.offs + 1] = ui.wm:screenChanged(function() self:place(); self:refresh(true) end)
 	self.offs[#self.offs + 1] = E.state:watch("mode", function() self:follow(); self:refresh(true) end)
+	self.offs[#self.offs + 1] = E.bus:on("uiShown", function(active)
+		self:follow()
+		if active then self:refresh(true) end -- (what changed while it was hidden)
+	end)
 	self.offs[#self.offs + 1] = E.state:watch("frame", function() if E.mode == 1 then self:refresh(true) end end)
 	self.offs[#self.offs + 1] = E.bus:on("persist", function() self:refresh(true) end)
 	for _, key in ipairs({ "speedHack", "speedHackSpeed", "playbackSpeed" }) do
@@ -326,7 +330,8 @@ end
 -- the per-frame handler only outside Idle
 function Bar:follow()
 	local E = self.E
-	if E.mode ~= 1 then
+	-- (outside Idle, and only while the new interface is live and shown)
+	if E.mode ~= 1 and self.ui:newActive() then
 		if not self.off then self.off = E.pipe:add("PreRender", 220, "ui.bar", function() self:step() end, "ui") end
 	elseif self.off then
 		self.off()
