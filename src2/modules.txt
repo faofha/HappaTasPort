@@ -74,5 +74,6 @@ ui/win/settings
 ui/win/controls
 ui/win/inspectorvalues
 ui/win/inspector
+ui/win/library
 ui/app
 main

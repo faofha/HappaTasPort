@@ -20,6 +20,7 @@ local ControlsWin = import("ui/win/controls")
 local Frost = import("ui/frost")
 local Bar = import("ui/bar/bar")
 local InspectorWin = import("ui/win/inspector")
+local LibraryWin = import("ui/win/library")
 
 local UI = {}
 UI.__index = UI
@@ -46,6 +47,7 @@ function UI.start(E)
 	SettingsWin.define(self)
 	ControlsWin.define(self)
 	InspectorWin.define(self)
+	LibraryWin.define(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
 	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
 	E.modalOpen = function() return self.modal end -- (E.modal: the same answer as a field, for per-frame readers)
