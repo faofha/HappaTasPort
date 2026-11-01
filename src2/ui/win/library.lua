@@ -223,7 +223,7 @@ function LibraryWin.build(ui, body, win)
 		if (e.kit or 0) > 0 then parts[#parts + 1] = "kit objects" end
 		if (e.speedHack or 0) > 0 then parts[#parts + 1] = "speed hack" end
 		if e.created then parts[#parts + 1] = "created " .. dateText(e.created) end
-		W.set(lw.info, "Text", table.concat(parts, "  ·  "))
+		W.set(lw.info, "Text", table.concat(parts, "  •  "))
 	end
 
 	-- ---------------------------------------------------------------------------------------- folders

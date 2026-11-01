@@ -1,6 +1,7 @@
 -- ================================================================================================
 --  DOCK  (HappaTAS 3 ui): the small glass pill at the top centre, below the top bar: "HappaTAS" and a
---  button per window (ui:addDockButton(id), in the order they're added); a click opens / closes that
+--  button per window (ui:addDockButton(id), in ORDER: Inspector, Library, Settings, Controls, Help; any other
+--  after them); a click opens / closes that
 --  window, and the buttons of open windows are lit. The spec names no launcher (phase 5a plan ruling).
 -- ================================================================================================
 local W = import("ui/write")
@@ -13,6 +14,7 @@ local Dock = {}
 Dock.__index = Dock
 
 local Z, ZINDEX, H, PAD, GAP, TOP = 50000000, 500000, 36, 14, 8, 8
+local ORDER = { "inspector", "library", "settings", "controls", "help" }
 
 function Dock.new(ui)
 	local self = setmetatable({ ui = ui, buttons = {}, order = {}, rects = {}, offs = {} }, Dock)
@@ -56,6 +58,13 @@ function Dock:add(id)
 	b.onClick = function() self.ui.wm:toggle(id) end
 	self.buttons[id] = b
 	self.order[#self.order + 1] = id
+	-- (in ORDER's order, whatever order the windows were defined in; others after them)
+	local function rank(x) return table.find(ORDER, x) or (#ORDER + 1) end
+	table.sort(self.order, function(a, c)
+		local ra, rc = rank(a), rank(c)
+		if ra ~= rc then return ra < rc end
+		return a < c
+	end)
 	self:layout()
 	return b
 end

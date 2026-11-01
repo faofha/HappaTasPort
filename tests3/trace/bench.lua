@@ -75,11 +75,37 @@ measure("recording, menu open", 300, function()
 	my = my + 1
 	M.moveMouse(my, 300)
 end)
+measure("recording, menu open, still", 300)
 A.request("pause")
 M.steps(3)
 hrp.AssemblyLinearVelocity = Vector3.zero
 measure("paused, menu open", 300)
 A.closeMenu()
+A.request("idle")
+M.steps(5)
+
+-- (phase 5b) recording with the mouse moving (HappaTAS 3's Inspector is open in every mode here), then Test
+-- with the timeline bar's lanes open (V2 has neither: its stats panels)
+A.request("create")
+M.steps(5)
+A.request("unpause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
+local mz = 900
+measure("recording, Inspector open", 300, function()
+	mz = mz + 1
+	M.moveMouse(mz, 600)
+end)
+A.request("pause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.zero
+A.openLanes()
+A.request("test")
+M.steps(2)
+measure("Test, lanes open", 250)
+g = 0
+while A.mode() == 3 and g < 2000 do M.step(1 / 60); g = g + 1 end
+A.closeLanes()
 A.request("idle")
 M.steps(5)
 
