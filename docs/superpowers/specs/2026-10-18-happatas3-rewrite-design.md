@@ -350,6 +350,32 @@ Each phase has its own implementation plan, tests and PR.
   the clock isn't 1x (0.17), not the new windows. The release loads and unloads with no console line and leaves
   nothing in CoreGui, gethui, the Camera or Lighting. Settings.json, Settings3.json and the place's 8 files put
   back byte for byte, fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
+- Phase 5c live check (EToH kit test place, 2026-11-01, Real at 240 FPS, window not focused; keys and mouse through
+  VirtualInputManager): switching to Classic and back while recording walked on without a pause (frames 169 -> 288
+  across the switch to Classic, 1844 -> 1966 across the switch back); Classic showed V2's join message and Create
+  panel with the red recording edge, the new Dock / bar / Inspector hidden, and they came back on the switch. V2's
+  menu ("HappaTAS 3.0.0-dev", Controls / Settings / Saves / Help / More) opened on the Menu key, every tab opened on a
+  real click and no click reached the game. A setting typed in one interface showed in the other (Playback Speed
+  0.75 typed in Classic's box read 0.75 in the Settings window; 1.25 typed there read 1.25 in Classic), and an accent
+  change lit Classic's selected tab at once. Saves through real clicks: Add Slot made "Slot 2", renamed zz5c, Save wrote
+  zz5c.tas (3,395 frames, the unsaved mark off), Load after clearing the run gave the 3,395 frames back ("Loaded zz5c").
+  Merge through Expand -> Merge (as in V2, Merge and Delete show once the row is expanded): V2's dialog offered After
+  only (the file ends mid-fall: V2's Running rule), Merge Stats read "Current Distance: 228.555 / Distance Required:
+  0.064 / Click here to cancel merge", a click cancelled and the run stayed 3,395 frames; on the hitbox it turned green
+  ("complete merge") at distance 0 and gave 6,801 frames (3,395 + 12 recorded + 3,395 - 1). The Create panel and the
+  Inspector on the same paused frame (1500) agreed on every row (frame time 0.003989, total time 0:06.287, position
+  133.385, 2.5, 128, rotation, velocities, state, camera rotation -21.346, -90, 0, zoom 16.125, keys, mouse). Per-frame
+  cost, the pipeline's timer (ms, Classic / New): Idle 0.080 / 0.098, paused 0.463 / 0.466, recording 0.413 / 0.338,
+  Test 0.526 / 0.449; per handler, Classic's own work is 9 us recording, 3 paused, 6 in Test (the bar and the Inspector
+  10 + 6). Against V2.38.17 (each script's frame handlers timed the same way from outside, both with the Idle /
+  Create / Test stats panels on and V2's MicroProfiler off, two runs each, ms): Idle 0.09 both, recording 0.18-0.20 vs
+  0.34-0.35, paused 0.44 vs 0.54-0.59, Test 0.36-0.37 vs 0.47-0.51. The gap is the engine and world handlers from
+  phases 2-4, not the interface (engine.preSimulation ~95 us while recording, lateRender 168 us and the Kit Clock's
+  step 135 us while paused): the headless bench, where HappaTAS 3 is within V2, doesn't see it; a follow-up. The release
+  loads with no console line, opens in the saved interface (Classic) and unloads leaving nothing in gethui, CoreGui, the
+  Camera, Lighting or PlayerGui. Touch (the pad, V2's mobile buttons, the thumbstick) isn't available on the PC
+  client: checked headless only. Settings.json, Settings3.json and the place's 8 files put back byte for byte (zz5c.tas
+  deleted), fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
