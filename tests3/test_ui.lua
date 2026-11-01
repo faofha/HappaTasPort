@@ -199,6 +199,35 @@ check(prof.Snapshot().recorded > n0, "still counting after the switch")
 E.settings:set("interface", "New")
 M.steps(3)
 check(prof.active and pg.DisplayOrder > ui.root.gui.DisplayOrder, "above the new interface")
+eq(ui.live, "New", "New is live")
+do -- (review: the pointer hit-tests its own rects, so a press on the profiler also reached the window under it)
+	prof.SetMode("Detailed") -- (covers the screen below its menu bar)
+	M.steps(3)
+	if not wm:isOpen("inspector") then wm:open("inspector"); M.steps(3) end
+	local insp = wm.windows.inspector
+	local tb = insp.titleBar or insp.body
+	local frame = insp.frame or tb
+	local c = UIH.center(tb)
+	check(prof.IsMouseOver(Vector2.new(c.X, c.Y + M.inset)), "the Inspector's title bar is under the Detailed view")
+	local p0 = frame.AbsolutePosition
+	UIH.drag(c, c + Vector2.new(-200, 150), 6)
+	M.steps(3)
+	eq(tostring(frame.AbsolutePosition), tostring(p0), "a drag on the profiler doesn't move the Inspector under it")
+	if wm:isOpen("settings") then wm:close("settings"); M.steps(3) end
+	local b = ui.dock.buttons.settings.gui
+	local bc = UIH.center(b)
+	check(prof.IsMouseOver(Vector2.new(bc.X, bc.Y + M.inset)), "the Dock's Settings button is under the Detailed view")
+	UIH.click(b)
+	M.steps(3)
+	eq(wm:isOpen("settings"), false, "a click on the profiler doesn't press the Dock button under it")
+	prof.SetMode("Frame")
+	M.steps(3)
+	UIH.click(b)
+	M.steps(3)
+	eq(wm:isOpen("settings"), true, "with the profiler's bar out of the way the button works")
+	wm:close("settings")
+	M.steps(3)
+end
 E.settings:set("interface", "Classic") -- (Classic again for the re-run below)
 M.steps(60, 1 / 60) -- (the settings file is written a moment later)
 

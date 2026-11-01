@@ -118,9 +118,20 @@ function Pointer:index(top)
 	return ix
 end
 
+-- the open MicroProfiler is drawn over the interface: the pointer on it is on none of the interface's rects
+-- (its IsMouseOver takes GetMouseLocation space and is false while Ctrl is held: clicks go through)
+local function underProfiler(self, pos)
+	local prof = self.E.profiler
+	if not (prof and prof.active) then return false end
+	local inset = Vector2.zero
+	if self.guiService then pcall(function() inset = self.guiService:GetGuiInset() end) end
+	return prof.IsMouseOver(pos + inset)
+end
+
 -- the rect under pos (GUI space), or nil
 function Pointer:over(pos)
 	if self.root.shown == false then return nil end -- (the root's own flag: no engine read on every move)
+	if underProfiler(self, pos) then return nil end
 	local top = self.root.gui
 	local list = self:index(top).cells[math.floor(pos.X / CELL) * 65536 + math.floor(pos.Y / CELL)]
 	if not list then return nil end
