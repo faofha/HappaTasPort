@@ -7,7 +7,7 @@
 --  of the values (Test at another playback speed still shows Frame, V2's rule); Stats Text Size = the values'
 --  size. Updated 5 times a second while the character can move (Idle, recording, Test; the slow rows once a
 --  second: V2 wrote 4-12 rows every 2nd frame, the Inspector has 23 and the timeline bar; together they stay
---  within V2's cost), on a change while paused,
+--  within V2's cost), on a change while paused and once a second then too,
 --  never while closed or minimised; only the rows that show are worked out;
 --  the pipeline is timed (HappaTAS ms) only while Performance shows.
 -- ================================================================================================
@@ -346,6 +346,7 @@ end
 function Insp:follow()
 	local open = self.win.open
 	if open and not self.off then
+		self.pausedKey = nil -- (opened again on the same frame: shown afresh)
 		self.off = self.E.pipe:add("PreRender", 230, "ui.inspector", function(dt) self:step(dt) end, "ui")
 	elseif not open and self.off then
 		self.off()
@@ -371,9 +372,11 @@ function Insp:step(dt)
 	end
 	local paused = E.mode == 2 and E.paused
 	if paused then
+		-- (on a change of the frame shown; and once a second, for the rows from settings and the live character)
+		self.tick = self.tick + 1
 		local tl = E.tl
 		local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0) .. ":" .. self.perf.ms
-		if key == self.pausedKey then return end
+		if key == self.pausedKey and self.tick % SLOW_EVERY ~= 0 then return end
 		self.pausedKey = key
 	else
 		self.pausedKey = nil

@@ -3,7 +3,7 @@
 --  (it yields every 2000 frames, so the game keeps its frame rate) and E.busy says so; while it runs,
 --  every transition is refused (Modes:allowed), so the run can't change under it. The result goes on the
 --  bus ("persist", { op, ok, message, path }) and as a status message.
---  Save: not while recording. Load: only in Idle or paused in Create; the file is read into a fresh
+--  Save: not while recording, never an empty run (V2's "There is nothing to save"). Load: only in Idle or paused in Create; the file is read into a fresh
 --  timeline and taken over only when it loaded, so a damaged file leaves the run as it was. readFrames
 --  (for a merge): the same reading, but the frames only go out on the bus; the run in use is untouched.
 -- ================================================================================================
@@ -52,6 +52,7 @@ end
 function Persist:save(name, folder, asAttempt)
 	local E = self.E
 	if not available(E) then return false, UNAVAILABLE end
+	if E.tl:count() == 0 then return false, "There is nothing to save" end
 	if E.busy then return false, "Wait: " .. E.busy end
 	if E.mode == 2 and not E.paused then return false, "Pause before saving" end
 	local clean = Files.cleanName(name)
@@ -108,12 +109,20 @@ function Persist:load(path)
 	return true, "started"
 end
 
+-- whether a merge may start now (load's rule: Idle, or paused in Create)
+function Persist.canMerge(E)
+	return E.mode == 1 or (E.mode == 2 and E.paused)
+end
+Persist.NOT_NOW_MERGE = "Go Idle or pause before merging"
+
 -- reads the run at path for a merge: bus "persist" { op = "frames", ok, frames (V2 frame tables), message,
--- path }; the run in use (and whether it is saved) stays as it is. true, "started" or false, why
+-- path }; the run in use (and whether it is saved) stays as it is. true, "started" or false, why (load's
+-- rules: not while busy, only in Idle or paused in Create)
 function Persist:readFrames(path)
 	local E = self.E
 	if not available(E) then return false, UNAVAILABLE end
 	if E.busy then return false, "Wait: " .. E.busy end
+	if not Persist.canMerge(E) then return false, Persist.NOT_NOW_MERGE end
 	E.busy = "reading"
 	task.spawn(function()
 		task.wait()

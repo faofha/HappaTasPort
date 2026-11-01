@@ -228,6 +228,12 @@ for _ = 1, 60 do
 	M.step(1 / 60)
 	if wrote then writeFrames = writeFrames + 1 end
 end
+-- (review: recording shows the newest recorded frame, as V2's Create panel did)
+do
+	local text = insp.rows.frame.value.Text
+	check(text:match("^%d+ / %d+$") ~= nil, "recording: the frame row shows a frame (" .. text .. ")")
+	check(insp.rows.totalTime.value.Text ~= "-", "and its total time (" .. insp.rows.totalTime.value.Text .. ")")
+end
 E.modes:request("pause")
 M.steps(3)
 check(writeFrames >= 4 and writeFrames <= 5, "recording: written 5 times a second (" .. writeFrames .. " of 60 frames)")
@@ -242,6 +248,15 @@ for _ = 1, 30 do
 end
 W.set, W.paint = oSet, oPaint
 eq(writeFrames, 0, "paused, nothing changing: nothing written")
+
+section("paused: rows from settings follow within a second (review: Performance collapsed kept them stale)")
+E.settings:set("speedHackSpeed", 0.5)
+E.settings:set("speedHack", 1)
+M.steps(61, 1 / 60)
+eq(insp.rows.speed.value.Text, "0.5", "Speed follows the speed hack while paused")
+E.settings:set("speedHack", 0)
+M.steps(61, 1 / 60)
+eq(insp.rows.speed.value.Text, "1", "and back")
 
 section("timing only while Performance shows")
 eq(T.pipe.timing, false, "collapsed: not timed")

@@ -196,8 +196,9 @@ function LibraryWin.build(ui, body, win)
 	local function updateButtons(force)
 		local busy = E.busy ~= nil
 		local sel = lw.selected ~= nil and entryOf(lw.selected) ~= nil
+		local hasRun = E.tl:count() > 0
 		local want = {
-			load = sel and not busy, save = not busy, attempt = not busy,
+			load = sel and not busy, save = hasRun and not busy, attempt = hasRun and not busy,
 			merge = sel and not busy and lw.onMerge ~= nil,
 			rename = sel, delete = sel,
 		}
@@ -370,9 +371,13 @@ function LibraryWin.build(ui, body, win)
 			return
 		end
 		local folder = shownFolder()
+		-- (the selected run's name, with All runs shown: saved over it in its own folder)
+		local sel = lw.selected and entryOf(lw.selected)
+		if lw.folder == nil and sel and lower(sel.name) == lower(clean) then folder = sel.folder end
+		-- (any listed run of that name, a legacy V2 .json slot too: Library:save replaces it)
 		local existing
 		for _, e in ipairs(E.library:list()) do
-			if e.folder == folder and lower(e.name) == lower(clean) and lower(e.ext) == ".tas" then existing = e end
+			if e.folder == folder and lower(e.name) == lower(clean) then existing = e end
 		end
 		if existing and not asked("save", lower(existing.path)) then
 			setConfirm("save", lower(existing.path))
@@ -490,7 +495,7 @@ function LibraryWin.build(ui, body, win)
 	end
 
 	-- ---------------------------------------------------------------------------------------- lifetime
-	-- (while open: the 3-second questions run out, the buttons follow E.busy)
+	-- (while open: the 3-second questions run out, the buttons follow E.busy and whether there is a run)
 	local function follow()
 		if win.open and not lw.off then
 			lw.off = E.pipe:add("PreRender", 240, "ui.library", function(dt)
@@ -499,8 +504,9 @@ function LibraryWin.build(ui, body, win)
 					c.left = c.left - (dt or 0)
 					if c.left <= 0 then setConfirm(nil) end
 				end
-				if (E.busy ~= nil) ~= lw.wasBusy then
-					lw.wasBusy = E.busy ~= nil
+				local hasRun = E.tl:count() > 0
+				if (E.busy ~= nil) ~= lw.wasBusy or hasRun ~= lw.hadRun then
+					lw.wasBusy, lw.hadRun = E.busy ~= nil, hasRun
 					updateButtons()
 				end
 			end, "ui")

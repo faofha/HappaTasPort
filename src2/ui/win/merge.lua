@@ -11,6 +11,7 @@
 local W = import("ui/write")
 local K = import("ui/kit/base")
 local Button = import("ui/kit/button")
+local Persist = import("persist/persist")
 
 local MergeWin = {}
 
@@ -124,6 +125,11 @@ function MergeWin.build(ui, body, win)
 
 	local function begin(where)
 		if not mw.frames then return end
+		-- (the mode may have changed while Before / After were offered: a merge takes the run over)
+		if not Persist.canMerge(E) then
+			status(Persist.NOT_NOW_MERGE, true)
+			return
+		end
 		if E.mergeRun:startMerge(mw.frames, where) then
 			mw.frames = nil
 			-- (you play now: the Library frees the mouse, so it closes)

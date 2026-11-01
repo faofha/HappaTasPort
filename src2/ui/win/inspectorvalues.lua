@@ -99,6 +99,9 @@ function IV.values(E, perf, want, memo, out)
 	local f = nil
 	if E.mode == 2 and n > 0 then
 		f = E.paused and math.clamp(E.frame, 1, n) or n
+		-- (recording: frame n is appended at PreRender and filled at PreSimulation; the Inspector runs in
+		-- between, so the newest recorded frame is n - 1 then)
+		if not E.paused and f > 1 and not tl:isFilled(f) then f = f - 1 end
 		if not tl:isFilled(f) then f = nil end
 	end
 	local playFrame = (E.mode == 3 and n > 0) and math.clamp(E.frame, 1, n) or nil
