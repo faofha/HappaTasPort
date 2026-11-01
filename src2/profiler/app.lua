@@ -46,7 +46,9 @@ end
 local function tryParent(gui, parent)
 	if not parent then return false end
 	local ok = pcall(function() gui.Parent = parent end)
-	return ok and gui.Parent == parent
+	-- (no "== parent": a cloneref'd service is never == the instance Parent gives back; setting Parent either
+	-- works or errors)
+	return ok and gui.Parent ~= nil
 end
 
 function ProfilerApp.start(E)

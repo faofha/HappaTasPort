@@ -439,6 +439,7 @@ instMt.__index = function(self, k)
 end
 
 local function setParent(self, p)
+	if p ~= nil then p = rawInst(p).self or p end -- (a cloneref'd parent is stored as the instance itself)
 	local d = rawInst(self)
 	if d.destroyed then error("The Parent property of " .. tostring(d.props.Name) .. " is locked", 3) end
 	if p == self then error("Attempt to set parent to self", 3) end
@@ -545,6 +546,7 @@ function Instance_new(className, parent)
 	local d = { class = cls, props = { Name = className }, children = {}, childByName = {}, parent = nil, attrs = {},
 		isGui = isA(cls, "GuiObject"), isPart = isA(cls, "BasePart") }
 	local self = setmetatable({ _d = d }, instMt)
+	d.self = self -- (the instance's own reference: Parent always gives this one back, as in Roblox)
 	if cls.Name == "Humanoid" then d.state = Enum.HumanoidStateType.Running end
 	if parent then self.Parent = parent end
 	return self
