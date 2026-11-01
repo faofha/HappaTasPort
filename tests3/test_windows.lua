@@ -139,6 +139,8 @@ E.settings:set("shadows", 1)
 eq(A.shadow.Visible, true, "Shadows on")
 
 section("no per-frame work while nothing moves")
+wm:close("inspector") -- (it shows live values and its timing; not one of the windows this checks)
+M.steps(2)
 local w0 = M.propWrites
 M.steps(60, 1 / 60)
 eq(M.propWrites - w0, 0, "no GUI writes over 60 idle frames with two windows open")

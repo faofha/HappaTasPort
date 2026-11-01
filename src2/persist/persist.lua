@@ -3,8 +3,9 @@
 --  (it yields every 2000 frames, so the game keeps its frame rate) and E.busy says so; while it runs,
 --  every transition is refused (Modes:allowed), so the run can't change under it. The result goes on the
 --  bus ("persist", { op, ok, message, path }) and as a status message.
---  Save: not while recording. Load: only in Idle or paused in Create; the file is read into a fresh
---  timeline and taken over only when it loaded, so a damaged file leaves the run as it was.
+--  Save: not while recording, never an empty run (V2's "There is nothing to save"). Load: only in Idle or paused in Create; the file is read into a fresh
+--  timeline and taken over only when it loaded, so a damaged file leaves the run as it was. readFrames
+--  (for a merge): the same reading, but the frames only go out on the bus; the run in use is untouched.
 -- ================================================================================================
 local Files = import("platform/files")
 local Timeline = import("engine/timeline")
@@ -23,8 +24,12 @@ local function available(E)
 	return E.library ~= nil and E.library.files ~= nil and E.library.files.available == true
 end
 
+-- the run as it is now: what a save or a load leaves (dirty() compares with it)
+local function markOf(tl) return { count = tl:count(), version = tl.version, edits = tl.edits or 0 } end
+
 local function done(E, op, ok, message, path)
 	E.busy = nil
+	if ok and E.persist then E.persist.mark = markOf(E.tl) end
 	E.bus:emit("persist", { op = op, ok = ok, message = message, path = path })
 	E.bus:emit("status", message, not ok)
 end
@@ -33,10 +38,21 @@ local function baseName(path)
 	return (tostring(path):match("([^/]+)$") or tostring(path)):gsub("%.[^%.]+$", "")
 end
 
+-- whether the run has frames that aren't in a saved or loaded file (the timeline bar's unsaved dot):
+-- frames added or gone, existing frames changed (tl.version), or edits that don't change the version
+-- (markers: tl.edits)
+function Persist:dirty()
+	local tl = self.E.tl
+	if tl:count() == 0 then return false end
+	local m = self.mark
+	return m == nil or m.count ~= tl:count() or m.version ~= tl.version or m.edits ~= (tl.edits or 0)
+end
+
 -- saves the run as <folder>/<name>.tas (asAttempt: the next "name (n)"); true, "started" or false, why
 function Persist:save(name, folder, asAttempt)
 	local E = self.E
 	if not available(E) then return false, UNAVAILABLE end
+	if E.tl:count() == 0 then return false, "There is nothing to save" end
 	if E.busy then return false, "Wait: " .. E.busy end
 	if E.mode == 2 and not E.paused then return false, "Pause before saving" end
 	local clean = Files.cleanName(name)
@@ -88,6 +104,43 @@ function Persist:load(path)
 			done(E, "load", true, "Loaded " .. baseName(path), path)
 		else
 			done(E, "load", false, "Could not load: " .. tostring(res), path)
+		end
+	end)
+	return true, "started"
+end
+
+-- whether a merge may start now (load's rule: Idle, or paused in Create)
+function Persist.canMerge(E)
+	return E.mode == 1 or (E.mode == 2 and E.paused)
+end
+Persist.NOT_NOW_MERGE = "Go Idle or pause before merging"
+
+-- reads the run at path for a merge: bus "persist" { op = "frames", ok, frames (V2 frame tables), message,
+-- path }; the run in use (and whether it is saved) stays as it is. true, "started" or false, why (load's
+-- rules: not while busy, only in Idle or paused in Create)
+function Persist:readFrames(path)
+	local E = self.E
+	if not available(E) then return false, UNAVAILABLE end
+	if E.busy then return false, "Wait: " .. E.busy end
+	if not Persist.canMerge(E) then return false, Persist.NOT_NOW_MERGE end
+	E.busy = "reading"
+	task.spawn(function()
+		task.wait()
+		local ok, res = pcall(function()
+			local data, err = E.library:read(path)
+			if not data then error(err or "the file could not be read", 0) end
+			local fresh = Timeline.newLike(E.tl)
+			Run.load(fresh, data)
+			E.plugins:call("onLoading", fresh)
+			return fresh:toV2All()
+		end)
+		E.busy = nil
+		if ok then
+			E.bus:emit("persist", { op = "frames", ok = true, frames = res, message = "Read " .. baseName(path), path = path })
+		else
+			local message = "Could not read: " .. tostring(res)
+			E.bus:emit("persist", { op = "frames", ok = false, message = message, path = path })
+			E.bus:emit("status", message, true)
 		end
 	end)
 	return true, "started"

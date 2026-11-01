@@ -1,8 +1,8 @@
 -- needs: ui
 -- ================================================================================================
--- HappaTAS 3, phase 5a: the interface together: start with only the Dock, Settings and Controls open
--- while recording (no click reaches the engine), an accent change restyles everything in one frame,
--- pause / Test / Idle, then Unload leaves nothing (headless mock)
+-- HappaTAS 3, phases 5a / 5b: the interface together: start with the Dock and the Inspector, every window
+-- open while recording (no click reaches the engine), save / load / merge through the windows, an accent
+-- change restyles everything in one frame, pause / Test / Idle, then Unload leaves nothing (headless mock)
 -- ================================================================================================
 local UIS0 = game:GetService("UserInputService")
 local before = { began = UIS0.InputBegan:Count(), changed = UIS0.InputChanged:Count(), ended = UIS0.InputEnded:Count() }
@@ -19,16 +19,23 @@ local function guis(name)
 	for _, d in ipairs(CoreGui:GetDescendants()) do if d.Name == name then n = n + 1 end end
 	return n
 end
+local function waitIdle()
+	local g = 0
+	while E.busy and g < 2000 do M.step(1 / 60); g = g + 1 end
+	M.steps(2)
+	return not E.busy
+end
 
-section("start: only the Dock")
-eq(wm:anyOpen(), false, "no window")
-check(ui.dock.buttons.settings and ui.dock.buttons.controls, "Settings and Controls in the Dock")
+section("start: the Dock and the Inspector")
+eq(wm:isOpen("inspector"), true, "the Inspector opens by default (phase 5b)")
+eq(wm:isOpen("settings") or wm:isOpen("controls"), false, "no other window")
+eq(table.concat(ui.dock.order, ","), "inspector,library,settings,controls,help", "the Dock's five buttons, in order")
 eq(E.modalOpen(), false, "the mouse isn't freed")
+eq(ui.bar.strip, true, "the timeline bar is a strip (Idle, no run)")
 
-section("both windows open while recording")
-UIH.click(ui.dock.buttons.settings.gui)
-UIH.click(ui.dock.buttons.controls.gui)
-check(wm:isOpen("settings") and wm:isOpen("controls"), "both open")
+section("every window open while recording")
+for _, id in ipairs({ "settings", "controls", "library", "help" }) do UIH.click(ui.dock.buttons[id].gui) end
+check(wm:isOpen("settings") and wm:isOpen("controls") and wm:isOpen("library") and wm:isOpen("help"), "all open")
 eq(E.modalOpen(), true, "the mouse is freed")
 E.modes:request("create")
 M.steps(3)
@@ -40,9 +47,38 @@ local sw = ui.settingsWin
 UIH.click(sw.search.gui)
 UIH.click(UIH.center(wm.windows.controls.titleBar))
 UIH.click(UIH.center(wm.windows.settings.body))
+UIH.click(UIH.center(wm.windows.library.body))
+UIH.click(UIH.center(wm.windows.help.body))
+UIH.click(UIH.center(wm.windows.inspector.body))
 M.steps(120, 1 / 60)
 eq(E.paused, false, "clicks on the windows never paused")
 check(E.tl:count() > n0 + 100, "frames recorded meanwhile (" .. E.tl:count() - n0 .. ")")
+
+section("save, load and merge through the windows")
+E.modes:request("pause")
+M.steps(3)
+local saved = E.tl:count()
+local lw = ui.libraryWin
+wm:focus("library")
+UIH.typeInto(lw.nameField.box, "Together")
+UIH.click(lw.buttons.save.gui)
+check(waitIdle(), "saved")
+eq(E.persist:dirty(), false, "nothing unsaved")
+lw.select("Together.tas")
+UIH.click(lw.buttons.load.gui)
+check(waitIdle(), "loaded")
+eq(E.tl:count(), saved, "the run as saved")
+lw.select("Together.tas")
+UIH.click(lw.buttons.merge.gui)
+check(waitIdle(), "read for a merge")
+eq(wm:isOpen("merge"), true, "the Merge window")
+eq(ui.mergeWin.state, "choose", "Before / After offered")
+UIH.click(ui.mergeWin.buttons.cancel.gui)
+M.steps(2)
+eq(wm:isOpen("merge"), false, "cancelled")
+eq(E.merge, false, "no merge")
+wm:open("merge") -- (open for the font check below: an empty Merge window)
+wm:focus("settings")
 
 section("clicks on the interface are the interface's (Active panels: Roblox marks them game processed)")
 -- (live: a click on a window reached the game as not processed, so an equipped tool would fire)
@@ -110,6 +146,12 @@ eq(E.modal, nil, "E.modal cleared")
 eq(UIS0.InputBegan:Count(), before.began, "no InputBegan connection left")
 eq(UIS0.InputChanged:Count(), before.changed, "no InputChanged connection left")
 eq(UIS0.InputEnded:Count(), before.ended, "no InputEnded connection left")
+eq(T.pipe.timing, false, "the pipeline isn't timed")
+local boxes = 0
+for _, ch in ipairs(workspace.CurrentCamera:GetChildren()) do
+	if ch.Name == "startHitbox" or ch.Name == "endHitbox" then boxes = boxes + 1 end
+end
+eq(boxes, 0, "no merge boxes")
 local before = E.settings:get("glass")
 UIH.key(Enum.KeyCode.M)
 eq(ui.root.gui.Parent, nil, "the Menu key does nothing any more")

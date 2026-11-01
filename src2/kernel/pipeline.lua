@@ -20,13 +20,18 @@ local LATE_BIND = "HappaTAS3Late"
 function Pipeline.new(life, errs, bus)
 	local stages = {}
 	for _, s in ipairs(STAGES) do stages[s] = {} end
-	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, runners = {}, kept = {}, seq = 0, stopped = false, frame = 0 }, Pipeline)
+	return setmetatable({ life = life, errs = errs, bus = bus, stages = stages, runners = {}, kept = {}, seq = 0, stopped = false,
+		frame = 0, snaps = {} }, Pipeline)
 end
 
-local function removeEntry(list, e)
+-- (each stage runs a snapshot of its list, made again only after an add or a remove: a handler that adds or
+-- removes one mid-stage doesn't change the list being run, and no list is copied every frame)
+local function removeEntry(self, stage, e)
+	local list = self.stages[stage]
 	e.on = false
 	local i = table.find(list, e)
 	if i then table.remove(list, i) end
+	self.snaps[stage] = nil
 end
 
 -- module: the module the handler belongs to (defaults to its name); switched off together
@@ -40,7 +45,8 @@ function Pipeline:add(stage, order, name, fn, module)
 		if other.order > order then at = i break end
 	end
 	table.insert(list, at, e)
-	return function() removeEntry(list, e) end
+	self.snaps[stage] = nil
+	return function() removeEntry(self, stage, e) end
 end
 
 -- a module that is never switched off after errors (the engine: its errors are reported, the frame goes on)
@@ -50,7 +56,7 @@ function Pipeline:disableModule(module, err)
 	for _, s in ipairs(STAGES) do
 		local list = self.stages[s]
 		for i = #list, 1, -1 do
-			if list[i].module == module then removeEntry(list, list[i]) end
+			if list[i].module == module then removeEntry(self, s, list[i]) end
 		end
 	end
 	self.bus:emit("moduleDisabled", module, err)
@@ -72,14 +78,35 @@ local function runnerLoop(fn, dt)
 	end
 end
 
+-- With pipe.timing on (the Inspector's Performance section shows), every 4th frame's stages are timed with
+-- os.clock: their time is added to pipe.timeSum and the frames to pipe.timeFrames (an average needs no more);
+-- off, nothing extra runs.
+local SAMPLE_EVERY = 4
 function Pipeline:run(stage, dt)
+	if stage == "PreRender" then self.sampling = self.timing and self.frame % SAMPLE_EVERY == 0 end
+	if self.sampling and self.timing then
+		local t0 = os.clock()
+		self:runStage(stage, dt)
+		self.timeSum = (self.timeSum or 0) + (os.clock() - t0)
+		if stage == "PreRender" then self.timeFrames = (self.timeFrames or 0) + 1 end
+		return
+	end
+	self:runStage(stage, dt)
+end
+
+function Pipeline:runStage(stage, dt)
 	if self.stopped then return end
 	if stage == "PreRender" then self.frame = self.frame + 1 end
 	local list = self.stages[stage]
 	if #list == 0 then return end
+	local snap = self.snaps[stage]
+	if not snap then
+		snap = table.clone(list)
+		self.snaps[stage] = snap
+	end
 	local runner = self.runners[stage]
 	self.runners[stage] = nil -- (taken while running: a nested run of the same stage makes its own)
-	for _, e in ipairs(table.clone(list)) do
+	for _, e in ipairs(snap) do
 		if self.stopped then return end
 		if e.on then
 			if not runner then runner = coroutine.create(runnerLoop) end

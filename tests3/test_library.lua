@@ -217,4 +217,15 @@ do
 	check(not L:move("Other2/legacy b.tas", ""), "moving a .tas next to a legacy slot of that name is refused")
 	eq(files:read(ROOT .. "/Legacy B.json"), "{}", "the legacy slot is untouched")
 end
+section("folders: every one, empty ones too, sorted")
+do
+	local root2 = "HappaTasPort/lib2"
+	files:makeFolder(root2 .. "/A/B")
+	files:makeFolder(root2 .. "/C")
+	files:makeFolder(root2 .. "/A/B/D/E") -- (deeper than 3 levels: not listed)
+	files:write(root2 .. "/A/x.tas", v6file(5))
+	local L2 = Library.new(files, root2)
+	local f = L2:folders()
+	eq(table.concat(f, "|"), "|A|A/B|A/B/D|C", "root, A, A/B, A/B/D, C")
+end
 finish()

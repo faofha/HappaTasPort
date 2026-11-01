@@ -8,6 +8,10 @@ function A.boot()
 	while not (C.HRP and C.Humanoid) and guard < 200 do M.step(1 / 60); guard = guard + 1 end
 	return ok and C.HRP ~= nil
 end
+-- (V2 has no Inspector; its stats panels never took clicks)
+function A.closeInspector() end
+function A.openLanes() end
+function A.closeLanes() end
 function A.mode() return C.mode end
 -- (phase 5a bench) V2's main menu (the Menu key), and transitions without a click (the menu is under the mouse)
 function A.openMenu() M.pressKey(Enum.KeyCode.M); M.releaseKey(Enum.KeyCode.M) end

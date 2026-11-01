@@ -167,6 +167,24 @@ end
 -- every header read again
 function Library:refresh() return self:list(true) end
 
+-- every folder ("" = the root first), empty ones too, at most MAX_DEPTH levels, sorted by name
+function Library:folders()
+	local out = { "" }
+	if not self.files.available then return out end
+	local function visit(folder, depth)
+		if depth >= MAX_DEPTH then return end
+		local abs = (folder == "") and self.root or (self.root .. "/" .. folder)
+		for _, sub in ipairs(self.files:listFolders(abs)) do
+			local rel = join(folder, sub)
+			out[#out + 1] = rel
+			visit(rel, depth + 1)
+		end
+	end
+	visit("", 0)
+	table.sort(out, function(a, b) return lower(a) < lower(b) end)
+	return out
+end
+
 function Library:sorted(entries, by, descending)
 	local out = table.clone(entries)
 	local function primary(e)

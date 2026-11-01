@@ -52,8 +52,25 @@ end
 -- the interface's data as read from a file: only tables where tables belong, only real colours, at most 8
 local MAX_RECENT = 8
 local function cleanUi(t)
-	local ui = { themes = {}, layout = {}, recentColors = {} }
+	local ui = { themes = {}, layout = {}, recentColors = {}, bar = { lanes = false }, open = {},
+		inspector = { pinned = {}, hidden = {}, collapsed = {} } }
 	if type(t) ~= "table" then return ui end
+	if type(t.bar) == "table" then ui.bar.lanes = t.bar.lanes == true end
+	if type(t.open) == "table" then
+		for id, on in pairs(t.open) do
+			if type(id) == "string" and type(on) == "boolean" then ui.open[id] = on end
+		end
+	end
+	if type(t.inspector) == "table" then
+		for _, part in ipairs({ "pinned", "hidden", "collapsed" }) do
+			local src = t.inspector[part]
+			if type(src) == "table" then
+				for key, on in pairs(src) do
+					if type(key) == "string" and on == true then ui.inspector[part][key] = true end
+				end
+			end
+		end
+	end
 	if type(t.themes) == "table" then
 		for name, look in pairs(t.themes) do
 			if type(name) == "string" and type(look) == "table" then ui.themes[name] = look end
