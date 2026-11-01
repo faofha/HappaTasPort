@@ -19,7 +19,7 @@ section("start")
 check(boot(3), "boots")
 check(oldUnloaded, "the older V2 copy was unloaded")
 local h = genv.__HappaTAS3
-check(type(h) == "table" and h.Version == "3.0.0-dev", "handle published with the version")
+check(type(h) == "table" and h.Version == "3.0.0", "handle published with the version")
 local T = genv.__HappaTAS3_T
 check(type(T) == "table" and T.pipe ~= nil and T.state ~= nil, "debug tables published (test builds have Debug on)")
 eq(T.state:get("mode"), "Idle", "initial mode Idle")

@@ -4,9 +4,32 @@
 --  {key:<control>} becomes the control's key as bound now, in brackets. "missing" lists Env.notes. Text uses
 --  only characters every listed font has (ASCII and × ▼ ← … •).
 -- ================================================================================================
+local CONFIG = import("config")
 local Env = import("platform/env")
 
 local HelpText = {}
+
+-- what this version brings: the Help topic "What's new" and the classic interface's update log (More tab);
+-- one line an item, at most 60 characters (a classic update log row is 360 px of 12 px text)
+HelpText.WHATS_NEW = {
+	version = CONFIG.VERSION,
+	items = {
+		"A new interface: Dock, windows, timeline bar, Inspector",
+		"The classic interface is still there (Settings > Interface)",
+		"Library: folders, search, sort, numbered attempts",
+		"File format v6: smaller files, safe saving",
+		"Old .tas files (v1-v5) and Settings.json carry over",
+		"Faster frames, everything undone on Unload",
+		"Touch buttons and thumbstick replay on phones",
+		"The MicroProfiler on the new engine",
+	},
+}
+
+local function whatsNew()
+	local lines = { "HappaTAS " .. HelpText.WHATS_NEW.version }
+	for _, item in ipairs(HelpText.WHATS_NEW.items) do lines[#lines + 1] = "• " .. item end
+	return table.concat(lines, "\n")
+end
 
 local CREDITS = table.concat({
 	"Happy_Liam/happa - Main Scripter/UI Design",
@@ -22,6 +45,7 @@ local TOPICS = {
 		.. "Create {key:create} and Test {key:test}.\n\nIn Create you record, pause, go back and record over your "
 		.. "mistakes. Test plays the run. The Dock at the top opens the windows; {key:menu} hides or shows the whole "
 		.. "interface." },
+	{ "whatsnew", "What's new", whatsNew() },
 	{ "idle", "Idle",
 		"Idle {key:idle} is the default mode: everything TAS related stops and you play the game like normal. The "
 		.. "run you made stays, so you can save it, test it or go back to Create." },

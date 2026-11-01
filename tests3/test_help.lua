@@ -133,6 +133,29 @@ eq(hw.body.Text, table.concat({
 	"Executor port - client side script",
 }, "\n"), "the five lines")
 
+section("what's new (phase 7)")
+do
+	local list = HelpText.topics(E)
+	local function topicById(id)
+		for _, t in ipairs(list) do if t.id == id then return t end end
+		return nil
+	end
+	local function order(id)
+		for i, t in ipairs(list) do if t.id == id then return i end end
+		return -1
+	end
+	eq(__T3("config").VERSION, "3.0.0", "version 3.0.0")
+	local t = topicById("whatsnew")
+	check(t ~= nil and t.title == "What's new", "a What's new topic")
+	eq(order("whatsnew"), order("start") + 1, "right after Getting started")
+	check(t ~= nil and t.body:find("HappaTAS 3.0.0", 1, true) ~= nil, "names the version")
+	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
+		check(t ~= nil and t.body:find("• " .. item, 1, true) ~= nil, "lists: " .. item)
+		check(#item <= 60, "fits a classic row: " .. item)
+	end
+	eq(HelpText.WHATS_NEW and #HelpText.WHATS_NEW.items or 0, 8, "eight items")
+end
+
 section("only characters every font has")
 local okChars = { [utf8.char(215)] = true, [utf8.char(9660)] = true, [utf8.char(8592)] = true, [utf8.char(8230)] = true,
 	[utf8.char(8226)] = true }
