@@ -48,7 +48,7 @@ function Touch.new(ui)
 			end,
 			remove = function(r) ui.pointer:remove(r) end,
 		} }
-	local gui = K.frame("TouchPad", ui.root.layer)
+	local gui = K.frame("TouchPad", ui.root.padLayer)
 	gui.Position = UDim2.new(0, 8, 0.16, 0)
 	gui.Size = UDim2.new(0, BTN_W * 3 + GAP * 2, 0, (BTN_H + GAP) * 5)
 	gui.ZIndex = 300000

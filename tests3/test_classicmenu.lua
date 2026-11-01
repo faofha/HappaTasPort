@@ -163,4 +163,23 @@ ui = E.ui
 M.steps(2)
 eq(ui.live, "Classic", "Classic again after a re-run")
 eq(ui.classic.menu.AbsolutePosition, p0 + Vector2.new(100, 40), "the menu's place kept")
+
+section("the theme row: a saved look by name, never an unknown or empty one (review)")
+local tr = ui.classic.settingsRows.theme.input
+local data = E.settingsFile:getUi()
+data.themes["Mine"] = { accentColor = "#112233" }
+E.settingsFile:setUi(data)
+local theme0 = E.settings:get("theme")
+tr.Text = ""
+tr.FocusLost:Fire(false, nil)
+eq(E.settings:get("theme"), theme0, "an empty box changes nothing")
+eq(tr.Text, tostring(theme0), "the box shows the theme again")
+tr.Text = "Nope"
+tr.FocusLost:Fire(true, nil)
+eq(E.settings:get("theme"), theme0, "an unknown name is refused")
+eq(tr.Text, tostring(theme0), "the box shows the theme again")
+tr.Text = "Mine"
+tr.FocusLost:Fire(true, nil)
+eq(E.settings:get("theme"), "Mine", "a saved look by name")
+eq(E.settings:get("accentColor"), "#112233", "its values loaded")
 finish()

@@ -124,7 +124,7 @@ function ClassicLook:apply()
 	for _, sc in ipairs(self.scales) do if sc.Scale ~= scale then sc.Scale = scale end end
 	self.rec.Color = color(s:get("recordingColor"))
 	local c = self.classic
-	if c.tabName then c:tab(c.tabName) end -- (the selected tab in the accent colour)
+	if c.tabName then c:paintTabs() end -- (the selected tab in the accent colour)
 	if c.settingsRows then
 		for _, r in pairs(c.settingsRows) do
 			if r.knob and r.on then r.knob.BackgroundColor3 = acc end

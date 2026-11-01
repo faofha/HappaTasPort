@@ -9,6 +9,7 @@ local Env = import("platform/env")
 local Settings = import("engine/settings")
 local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
+local SettingsWin = import("ui/win/settings")
 
 local SettingsRows = {}
 
@@ -94,7 +95,15 @@ function SettingsRows.build(classic)
 			local inp = r.input
 			inp.Text = tostring(s:get(key))
 			life:connect(inp.FocusLost, function()
-				s:set(key, inp.Text)
+				local text = inp.Text:gsub("^%s+", ""):gsub("%s+$", "")
+				if key == "theme" then
+					-- (a look by name, as the Settings window's list: an empty box or an unknown name changes nothing)
+					if text ~= "" and text ~= s:get(key) and not SettingsWin.applyLook(E, text) then
+						E.bus:emit("status", "No saved look named \"" .. text .. "\"", true)
+					end
+				elseif text ~= "" then
+					s:set(key, inp.Text)
+				end
 				inp.Text = tostring(s:get(key)) -- (the store's own spelling, or the old value when refused)
 			end)
 			classic.offs[#classic.offs + 1] = s:changed(key, function(v) inp.Text = tostring(v) end)

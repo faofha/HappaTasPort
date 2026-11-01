@@ -108,8 +108,15 @@ function Saves.build(classic)
 			f.Name = "Slot_" .. clean
 		end)
 		life:connect(s.save.MouseButton1Click, function()
-			if s.path and not confirmed(s, s.save, "Save") then return end
-			local ok, why = E.persist:save(s.slotName, "")
+			-- (a slot not saved yet but named like a saved run, in any case: that run is saved over, after asking)
+			local name, existing = s.slotName, s.path
+			if not existing then
+				for _, e in ipairs(entries()) do
+					if lower(e.name) == lower(name) then name, existing = e.name, e.path end
+				end
+			end
+			if existing and not confirmed(s, s.save, "Save") then return end
+			local ok, why = E.persist:save(name, "")
 			if not ok then status(why) return end
 			sv.saving = s
 		end)
@@ -209,6 +216,13 @@ function Saves.build(classic)
 		local can = E.mergeCanComplete == true
 		b["MergeStats.3"].Text = can and " Click here to complete merge" or " Click here to cancel merge"
 		stats.BackgroundColor3 = can and GREEN or RED
+	end
+	-- a merge running now, started in the new interface too: Merge Stats show and follow it (the switch calls this)
+	function sv.showMerge()
+		if not E.merge then return end
+		stats.Visible = true
+		follow()
+		sv.step()
 	end
 	for _, when in ipairs({ "Before", "After" }) do
 		local btn = b["Merge.Options." .. when]

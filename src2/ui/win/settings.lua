@@ -72,6 +72,21 @@ local function appearanceKeys()
 	return keys
 end
 
+-- loads a look by name: "Default" (any case) or one saved with "Save as…"; false for an unknown name
+function SettingsWin.applyLook(E, name)
+	local s = E.settings
+	if tostring(name):lower() == "default" then
+		for _, def in ipairs(appearanceKeys()) do s:set(def.key, def.default) end
+		s:set("theme", "Default")
+		return true
+	end
+	local look = E.settingsFile and E.settingsFile:getUi().themes[name]
+	if not look then return false end
+	for k, v in pairs(look) do s:set(k, v) end
+	s:set("theme", name)
+	return true
+end
+
 local function themeControl(ctx, s, sw)
 	local self = K.new(ctx, {})
 	local gui = K.frame("Theme", nil)
@@ -91,16 +106,7 @@ local function themeControl(ctx, s, sw)
 	local nameField = Field.new(ctx, gui, { w = 150, placeholder = "Name" })
 	W.set(nameField.gui, "Visible", false)
 	self.dropdown, self.saveAs, self.nameField = dd, saveAs, nameField
-	local function apply(name)
-		if name == "Default" then
-			for _, def in ipairs(appearanceKeys()) do s:set(def.key, def.default) end
-		else
-			local look = sf:getUi().themes[name]
-			if not look then return end
-			for k, v in pairs(look) do s:set(k, v) end
-		end
-		s:set("theme", name)
-	end
+	local function apply(name) SettingsWin.applyLook(ctx.E, name) end
 	self.apply = apply
 	dd.onChange = apply
 	saveAs.onClick = function()

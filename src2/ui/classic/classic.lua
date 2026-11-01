@@ -100,18 +100,25 @@ end
 -- V2's tab(): the chosen tab's button lighter, its frame shown
 function Classic:tab(name)
 	local b = self.byPath
+	for _, t in ipairs(TABS) do b["MainMenu." .. t .. "Frame"].Visible = false end
+	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
+	self.tabName = name
+	self:paintTabs()
+	if name == "Saves" and self.saves then self.saves.refresh() end
+end
+
+-- the tab buttons: the chosen one lighter, in the accent colour (a restyle calls this, never tab(): choosing
+-- Saves again rebuilt its rows, and a new row's restyle chose it again)
+function Classic:paintTabs()
+	local b = self.byPath
 	local black = Color3.new(0, 0, 0)
 	for _, t in ipairs(TABS) do
 		local tb = b["MainMenu." .. t .. "Toggle"]
-		tb.BackgroundTransparency = 0.75
-		if tb.BackgroundColor3 ~= black then tb.BackgroundColor3 = black end
-		b["MainMenu." .. t .. "Frame"].Visible = false
+		local on = t == self.tabName
+		tb.BackgroundTransparency = on and 0.5 or 0.75
+		local want = (on and self.look) and self.look:accent() or black
+		if tb.BackgroundColor3 ~= want then tb.BackgroundColor3 = want end
 	end
-	b["MainMenu." .. name .. "Toggle"].BackgroundTransparency = 0.5
-	if self.look then b["MainMenu." .. name .. "Toggle"].BackgroundColor3 = self.look:accent() end
-	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
-	self.tabName = name
-	if name == "Saves" and self.saves then self.saves.refresh() end
 end
 
 function Classic:wire()

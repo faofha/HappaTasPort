@@ -9,6 +9,7 @@
 --  per-frame work (bus "uiShown" with newActive()), and the engine's hooks answer for the live one.
 -- ================================================================================================
 local Env = import("platform/env")
+local W = import("ui/write")
 local Root = import("ui/root")
 local Pointer = import("ui/pointer")
 local Theme = import("ui/theme")
@@ -117,11 +118,25 @@ function UI:setInterface(name)
 		self.E.typing:watch(c.gui)
 	end
 	self.live = name
-	self.root.shown = self:newActive()
-	self.root.gui.Enabled = self:newActive()
+	self:applyShown()
 	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
+	-- (a merge goes on across the switch: the live interface shows its own way to finish it)
+	if self.E.merge then
+		if name == "Classic" then self.classic.saves.showMerge() elseif self.startMerge then self.startMerge(nil) end
+	end
 	self:updateModal()
 	self.E.bus:emit("uiShown", self:newActive())
+end
+
+-- the root while the new interface is live: shown with it, and on a touch screen also while it is hidden, with
+-- only the touch pad left (its Menu button brings the rest back)
+function UI:applyShown()
+	local active = self:newActive()
+	local pad = self.touch ~= nil and self.live == "New"
+	self.root.shown = active or pad -- (the pointer ignores a hidden interface: Pointer:over)
+	self.root.gui.Enabled = active or pad
+	W.set(self.root.layer, "Visible", active)
+	W.bump()
 end
 
 function UI:updateModal()
@@ -136,8 +151,7 @@ end
 -- the new interface shown / hidden (the Menu key while it is live)
 function UI:setShown(on)
 	self.shown = on == true
-	self.root.shown = self:newActive() -- (the pointer ignores a hidden interface: Pointer:over)
-	self.root.gui.Enabled = self:newActive()
+	self:applyShown()
 	self:updateModal()
 	self.E.bus:emit("uiShown", self:newActive())
 end
@@ -149,7 +163,7 @@ function UI:addDockButton(id) return self.dock and self.dock:add(id) end
 
 -- the pointer is on the interface (or a press that started on it isn't released yet)
 function UI:pointerOver()
-	return self:newActive() and self.pointer ~= nil and self.pointer:busy()
+	return (self:newActive() or (self.touch ~= nil and self.live == "New")) and self.pointer ~= nil and self.pointer:busy()
 end
 
 -- a window is open (the window manager comes in with the windows)

@@ -24,6 +24,15 @@ local function tap(name)
 	M.steps(1)
 end
 
+section("the pad's Menu button hides the interface and brings it back (review: it hid itself)")
+tap("menu")
+eq(ui.shown, false, "hidden")
+eq(pad.gui.Visible and ui.root.gui.Enabled, true, "the pad stays")
+eq(ui.bar.gui.AbsoluteSize.X > 0 and ui.root.layer.Visible, false, "the rest is hidden")
+tap("menu")
+eq(ui.shown, true, "shown again")
+eq(ui.root.layer.Visible, true, "everything back")
+
 section("modes and recording from the pad")
 tap("create")
 eq(E.mode, 2, "Create")
