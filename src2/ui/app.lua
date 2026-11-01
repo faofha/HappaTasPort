@@ -59,6 +59,9 @@ function UI.start(E)
 	MergeWin.define(self)
 	HelpWin.define(self)
 	E.inputs.mouseOverOwn = function(m)
+		-- (the MicroProfiler, open over either interface: a click on it is its own, V2's ClickOnOwnUI)
+		local prof = E.profiler
+		if prof and prof.active and prof.IsMouseOver(m) then return true end
 		if self.live == "Classic" then return self.classic ~= nil and self.classic:pointerOver(m) end
 		return self:pointerOver()
 	end
