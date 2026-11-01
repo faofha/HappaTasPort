@@ -6,9 +6,10 @@
 --  the time, and the lanes button (ui/bar/lanes). A 10-high strip in Idle with no run.
 --  Every transition goes through E.modes:request. Per-frame work only outside Idle (a handler added when
 --  the mode leaves Idle); in Idle it follows the run through the plugin hooks and the state store. The
---  ruler and marks are redrawn when the model, the view or the width changed (every 60th frame at
---  most while recording; the rest every 2nd frame while recording or testing); everything else is written only when its value changes (W.set). The pools are fixed:
---  41 ticks, 11 labels, 120 marks.
+--  ruler and marks are redrawn when the model, the view or the width changed (every 120th frame at
+--  most while recording, the model synced then too); the playhead every 2nd frame while recording or testing,
+--  the readout, buttons, speed and unsaved dot 10 times a second; everything only when its value changes. The
+--  pools are fixed: 41 ticks, 11 labels, 120 marks; a redraw hides only the ones it showed last time.
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
@@ -25,9 +26,10 @@ local Z, ZINDEX = 40000000, 450000
 local H, STRIP, BOTTOM, MAXW = 40, 10, 76, 900
 local TICKS, LABELS, MARKS = 41, 11, 120
 -- (while recording or testing the bar is written every 2nd frame, as V2 wrote its stats panels, and the ruler
--- redrawn every 60th: within V2's writes per frame in the bench)
-local BTN, EVERY, REDRAW_EVERY, MIN_FRAMES = 24, 2, 60, 10
-local READOUT_EVERY = 6 -- (while running, the readout's text 10 times a second: the playhead moves every 2nd frame)
+-- redrawn every 120th: within V2's time and writes per frame in the bench)
+local BTN, EVERY, REDRAW_EVERY, MIN_FRAMES = 24, 2, 120, 10
+local READOUT_EVERY = 6 -- (while running, the readout's text and the buttons' states 10 times a second: the playhead
+-- moves every 2nd frame)
 local STEPS = { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000 }
 local TRANSPORT = { { "start", "start" }, { "back1", "back1" }, { "rec", "record" }, { "forward1", "forward1" },
 	{ "test", "play" }, { "marker", "marker" } }
@@ -333,7 +335,6 @@ function Bar:follow()
 end
 
 function Bar:step()
-	self.model:sync()
 	self:refresh(false)
 end
 
@@ -348,6 +349,10 @@ function Bar:refresh(force)
 		self.tick = self.tick + 1
 		if self.tick % EVERY ~= 0 then return end
 	end
+	-- (the frames added since the last sync; while recording the marks are drawn every REDRAW_EVERY frames only,
+	-- so the model catches up then)
+	local recording = E.mode == 2 and not E.paused
+	if force or not recording or self.tick % REDRAW_EVERY == 0 then self.model:sync() end
 	if (E.mode == 1 and n == 0) ~= self.strip then
 		self:place()
 		force = true
@@ -364,8 +369,12 @@ function Bar:refresh(force)
 		W.paint(self.readout, "Text", string.format("%d / %d   %s", f, n, Util.toTime(tl:get("TotalTime", f, 1))))
 		self.lastF, self.lastN = f, n
 	end
-	W.paint(self.playhead, "Visible", n > 0)
-	W.paint(self.playhead, "Position", UDim2.new(0, self:xOf(f), 0, 4))
+	local x = self:xOf(f)
+	if force or x ~= self.headX or (n > 0) ~= self.headShown then
+		self.headX, self.headShown = x, n > 0
+		W.paint(self.playhead, "Visible", n > 0)
+		W.paint(self.playhead, "Position", UDim2.new(0, x, 0, 4))
+	end
 	local mode = (E.mode == 1 and "Idle") or (E.mode == 3 and "Test") or (E.paused and "Paused" or "Recording")
 	if mode ~= self.modeName then
 		self.modeName = mode
@@ -373,15 +382,17 @@ function Bar:refresh(force)
 		W.paint(self.modeIcon.gui, "Visible", MODE_ICON[mode] ~= nil)
 		if MODE_ICON[mode] then self.modeIcon:setKind(MODE_ICON[mode]) end
 	end
-	local s = E.settings
-	local sp = ""
-	if E.mode == 2 and s:on("speedHack") then sp = string.format("%gx", s:get("speedHackSpeed"))
-	elseif E.mode == 3 and s:get("playbackSpeed") ~= 1 then sp = string.format("%gx", s:get("playbackSpeed")) end
-	W.paint(self.speedLabel, "Text", sp)
-	W.paint(self.unsaved, "Visible", E.persist ~= nil and E.persist:dirty())
-	for name, b in pairs(self.buttons) do
-		local on = allowedNow(self, name)
-		if on ~= b.enabled or force then self:setEnabled(b, on) end
+	if force or not running or self.tick % READOUT_EVERY == 0 then
+		local s = E.settings
+		local sp = ""
+		if E.mode == 2 and s:on("speedHack") then sp = string.format("%gx", s:get("speedHackSpeed"))
+		elseif E.mode == 3 and s:get("playbackSpeed") ~= 1 then sp = string.format("%gx", s:get("playbackSpeed")) end
+		W.paint(self.speedLabel, "Text", sp)
+		W.paint(self.unsaved, "Visible", E.persist ~= nil and E.persist:dirty())
+		for name, b in pairs(self.buttons) do
+			local on = allowedNow(self, name)
+			if on ~= b.enabled or force then self:setEnabled(b, on) end
+		end
 	end
 	local d = self.drawn
 	if force or d.v ~= self.model.version or d.first ~= v.first or d.last ~= v.last or d.w ~= self.trackW then
@@ -423,8 +434,10 @@ function Bar:redraw()
 			f = f + minor
 		end
 	end
-	for i = ti + 1, TICKS do W.paint(self.ticks[i], "Visible", false) end
-	for i = li + 1, LABELS do W.paint(self.labels[i], "Visible", false) end
+	-- (only the pool objects shown last time are hidden: the rest already are)
+	for i = ti + 1, self.shownTicks or TICKS do W.paint(self.ticks[i], "Visible", false) end
+	for i = li + 1, self.shownLabels or LABELS do W.paint(self.labels[i], "Visible", false) end
+	self.shownTicks, self.shownLabels = ti, li
 	local mi = 0
 	local i0, i1 = self.model:range("marker", v.first, v.last)
 	local list = self.model:events("marker")
@@ -441,7 +454,8 @@ function Bar:redraw()
 			W.paint(m, "Position", UDim2.new(0, x, 0, 26))
 		end
 	end
-	for k = mi + 1, MARKS do W.paint(self.marks[k], "Visible", false) end
+	for k = mi + 1, self.shownMarks or MARKS do W.paint(self.marks[k], "Visible", false) end
+	self.shownMarks = mi
 	if self.lanes then self.lanes:redraw() end
 end
 

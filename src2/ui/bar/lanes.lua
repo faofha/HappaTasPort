@@ -133,7 +133,9 @@ function Lanes:redraw()
 				i = math.max(i + 1, j)
 			end
 		end
-		for k = mi + 1, MARKS do W.paint(row.marks[k], "Visible", false) end
+		-- (only the marks shown last time are hidden: the rest already are)
+		for k = mi + 1, row.shown or MARKS do W.paint(row.marks[k], "Visible", false) end
+		row.shown = mi
 	end
 end
 
