@@ -51,6 +51,8 @@ function Plugins:get(name) return self.byName[name] end
 -- calls goes through a guard: an error is reported once per message as "name.method" and the call returns
 -- nothing, so one failing plugin never stops the engine's frame. Fields read and written through the guard
 -- are the object's own.
+-- Plugins.prof (set by the MicroProfiler while it's open): begin(name) / finish(name) around the guarded calls
+-- and plugin hooks it times: Plugins.prof.names[name] = true (every call) or a set of hook / method names.
 function Plugins.guard(errs, obj, name)
 	local proxy = {}
 	local function make(k)
@@ -60,7 +62,25 @@ function Plugins.guard(errs, obj, name)
 			errs:report(label, (...))
 			return nil
 		end
-		return function(_, ...) return finish(pcall(obj[k], obj, ...)) end
+		local function timed(pr, ok, ...)
+			pr.finish(name)
+			return finish(ok, ...)
+		end
+		-- (whether this call is timed, worked out once per Plugins.prof: a call compares one reference)
+		local seenPr, isTimed = nil, false
+		return function(_, ...)
+			local pr = Plugins.prof
+			if pr ~= seenPr then
+				seenPr = pr
+				local t = pr and pr.names[name]
+				isTimed = t ~= nil and t ~= false and (t == true or t[k] == true)
+			end
+			if isTimed then
+				pr.begin(name)
+				return timed(pr, pcall(obj[k], obj, ...))
+			end
+			return finish(pcall(obj[k], obj, ...))
+		end
 	end
 	return setmetatable(proxy, {
 		__index = function(_, k)
@@ -75,11 +95,12 @@ function Plugins.guard(errs, obj, name)
 end
 
 -- (each hook's functions, plugins and report names are listed once, on the first call after an add / remove:
--- a call is one pcall per plugin, no method lookup or name building every frame)
+-- a call is one pcall per plugin, no method lookup or name building every frame; which of them the profiler
+-- times is worked out again only when Plugins.prof changes)
 function Plugins:call(hook, ...)
 	local h = self.byHook[hook]
 	if not h then
-		h = { fns = {}, ps = {}, names = {}, n = 0 }
+		h = { fns = {}, ps = {}, names = {}, n = 0, timed = {}, pr = false }
 		for _, p in ipairs(self.list) do
 			local f = p[hook]
 			if f then
@@ -91,8 +112,20 @@ function Plugins:call(hook, ...)
 		self.byHook[hook] = h
 	end
 	local fns, ps = h.fns, h.ps
+	local pr = Plugins.prof
+	if h.pr ~= pr then
+		h.pr = pr
+		for i = 1, h.n do
+			local t = pr and pr.names[ps[i].name]
+			h.timed[i] = t ~= nil and t ~= false and (t == true or t[hook] == true)
+		end
+	end
+	local timed = h.timed
 	for i = 1, h.n do
+		local t = pr and timed[i]
+		if t then pr.begin(ps[i].name) end
 		local ok, err = pcall(fns[i], ps[i], ...)
+		if t then pr.finish(ps[i].name) end
 		if not ok then self.errs:report(h.names[i], err) end
 	end
 end

@@ -183,6 +183,54 @@ M.steps(3)
 eq(E.mode, 1, "Idle")
 M.steps(60, 1 / 60) -- (the settings file is written a moment later)
 
+section("the MicroProfiler over both interfaces (phase 6)")
+E.settings:set("showMicroProfiler", 1)
+M.steps(3)
+local prof = E.profiler
+local pg = CoreGui:FindFirstChild("HappaProfiler")
+check(prof.active and pg ~= nil and pg.Enabled, "open, in CoreGui")
+check(T.pipe.profiler ~= nil and __T3("engine/plugins").prof ~= nil, "the kernel feeds it")
+E.settings:set("interface", "Classic")
+M.steps(3)
+check(prof.active and pg.Parent ~= nil and pg.DisplayOrder > ui.classic.gui.DisplayOrder, "still open above Classic")
+local n0 = prof.Snapshot().recorded
+M.steps(5, 16 / 1000)
+check(prof.Snapshot().recorded > n0, "still counting after the switch")
+E.settings:set("interface", "New")
+M.steps(3)
+check(prof.active and pg.DisplayOrder > ui.root.gui.DisplayOrder, "above the new interface")
+eq(ui.live, "New", "New is live")
+do -- (review: the pointer hit-tests its own rects, so a press on the profiler also reached the window under it)
+	prof.SetMode("Detailed") -- (covers the screen below its menu bar)
+	M.steps(3)
+	if not wm:isOpen("inspector") then wm:open("inspector"); M.steps(3) end
+	local insp = wm.windows.inspector
+	local tb = insp.titleBar or insp.body
+	local frame = insp.frame or tb
+	local c = UIH.center(tb)
+	check(prof.IsMouseOver(Vector2.new(c.X, c.Y + M.inset)), "the Inspector's title bar is under the Detailed view")
+	local p0 = frame.AbsolutePosition
+	UIH.drag(c, c + Vector2.new(-200, 150), 6)
+	M.steps(3)
+	eq(tostring(frame.AbsolutePosition), tostring(p0), "a drag on the profiler doesn't move the Inspector under it")
+	if wm:isOpen("settings") then wm:close("settings"); M.steps(3) end
+	local b = ui.dock.buttons.settings.gui
+	local bc = UIH.center(b)
+	check(prof.IsMouseOver(Vector2.new(bc.X, bc.Y + M.inset)), "the Dock's Settings button is under the Detailed view")
+	UIH.click(b)
+	M.steps(3)
+	eq(wm:isOpen("settings"), false, "a click on the profiler doesn't press the Dock button under it")
+	prof.SetMode("Frame")
+	M.steps(3)
+	UIH.click(b)
+	M.steps(3)
+	eq(wm:isOpen("settings"), true, "with the profiler's bar out of the way the button works")
+	wm:close("settings")
+	M.steps(3)
+end
+E.settings:set("interface", "Classic") -- (Classic again for the re-run below)
+M.steps(60, 1 / 60) -- (the settings file is written a moment later)
+
 section("Unload leaves nothing")
 E.settings:set("glass", "Frost")
 local uis = M.services.UserInputService
@@ -200,6 +248,9 @@ eq(UIS0.InputBegan:Count(), before.began, "no InputBegan connection left")
 eq(UIS0.InputChanged:Count(), before.changed, "no InputChanged connection left")
 eq(UIS0.InputEnded:Count(), before.ended, "no InputEnded connection left")
 eq(T.pipe.timing, false, "the pipeline isn't timed")
+eq(guis("HappaProfiler"), 0, "no MicroProfiler")
+eq(T.pipe.profiler, nil, "the pipeline doesn't feed a profiler")
+eq(__T3("engine/plugins").prof, nil, "nor do the plugins and guards")
 local boxes = 0
 for _, ch in ipairs(workspace.CurrentCamera:GetChildren()) do
 	if ch.Name == "startHitbox" or ch.Name == "endHitbox" then boxes = boxes + 1 end

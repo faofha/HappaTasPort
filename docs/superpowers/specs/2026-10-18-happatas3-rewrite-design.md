@@ -392,6 +392,24 @@ Each phase has its own implementation plan, tests and PR.
   Camera, Lighting or PlayerGui. Touch (the pad, V2's mobile buttons, the thumbstick) isn't available on the PC
   client: checked headless only. Settings.json, Settings3.json and the place's 8 files put back byte for byte (zz5c.tas
   deleted), fps cap 240 and graphics level 1 untouched, HappaTasTest deleted.
+- Phase 6 live check (EToH kit test place, 2026-11-02, Real at 60 FPS, window not focused; keys and mouse through
+  VirtualInputManager): F6 opened the MicroProfiler (Avg 16.67 ms), in dzr's saved mode (Detailed). Found live: its
+  ScreenGui went into gethui() (CoreGui.RobloxGui, under Roblox's top bar) instead of straight into CoreGui: the
+  parent check compared with ==, and Env.svc's CoreGui is a cloneref (never == the instance Parent gives back); the
+  interface root had the same check (latent: without gethui its CoreGui fallback refused the interface). Fixed with
+  a test (the mock's cloneref can now give a distinct reference); after it: straight in CoreGui at DisplayOrder
+  2147482000, drawn over the top bar like V2's. Real clicks: hovering Mode opened its menu, lines 2 / 3 / 1 picked
+  Timers / Counters / Detailed; Custom > TAS Timeline on a recorded run (181 frames), a click on frame 60's bar seeked
+  there and the readout read Time[ 15.87] Avg[ 16.64] Max[ 19.02], the same as frames 1-60 of the run worked out by
+  hand; [Dump] wrote microprofile-<date>-<time>.html to the place folder (deleted); Ctrl+P paused and resumed the
+  profiler, not the run. Cost with the profiler open in Frame mode on both sides (tools/live/meter3.lua, three
+  alternating rounds, us per frame, V2 vs HappaTAS 3): recording 374 vs 476, paused 589 vs 659, Test 529 vs 633:
+  the accepted engine gap plus about 15-35 us more for HappaTAS 3's open profiler, most of it in PreRender where it
+  draws (the scopes were cut to V2's sites in the headless bench: recording with the profiler open 1.06-1.07 of V2's
+  there). Not checked live: the frame colour rule against Roblox's own profiler (V2.38.1's code, checked against
+  Roblox's dumps then; unchanged). The release loads with the profiler open and no console line, and unloads leaving
+  nothing. Settings.json, Settings3.json and the place's files put back byte for byte, fps cap 60 and graphics
+  quality 10 as found, HappaTasTest deleted.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,

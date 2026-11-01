@@ -277,4 +277,39 @@ do
 	pl:call("onNothing", 5)
 	eq(#log, 0, "a hook no plugin has")
 end
+
+section("phase 6: the profiler sees plugin hooks and guard calls by name")
+do
+	local Plugins = __T3("engine/plugins")
+	local reported = {}
+	local errs = { report = function(_, name) reported[#reported + 1] = name end }
+	local pl = Plugins.new(errs)
+	local seen = {}
+	pl:add({ name = "cursor", order = 1, onY = function() seen[#seen + 1] = "hook" end })
+	pl:add({ name = "other", order = 2, onY = function() seen[#seen + 1] = "other hook" end })
+	local obj = { name = "x", update = function(self, v) seen[#seen + 1] = "update " .. tostring(v) return v end }
+	local g = Plugins.guard(errs, obj, "cursor")
+	-- (names: only the plugins / guards the profiler times; "other" isn't reported)
+	Plugins.prof = { names = { cursor = true }, begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
+	pl:call("onY")
+	local r = g:update(7)
+	eq(table.concat(seen, ","), "begin cursor,hook,finish cursor,other hook,begin cursor,update 7,finish cursor", "both by name; an unlisted plugin isn't reported")
+	eq(r, 7, "the guarded call's result")
+	Plugins.prof = nil
+	seen = {}
+	pl:call("onY")
+	g:update(8)
+	eq(table.concat(seen, ","), "hook,other hook,update 8", "unset: nothing else")
+	-- (a set of hook names: only those hooks of that plugin are timed)
+	Plugins.prof = { names = { other = { onZ = true } }, begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
+	pl:add({ name = "zed", order = 3, onZ = function() seen[#seen + 1] = "zed z" end })
+	local o = pl:get("other")
+	o.onZ = function() seen[#seen + 1] = "other z" end
+	pl.byHook = {}
+	seen = {}
+	pl:call("onY")
+	pl:call("onZ")
+	eq(table.concat(seen, ","), "hook,other hook,begin other,other z,finish other,zed z", "only other's onZ is timed")
+	Plugins.prof = nil
+end
 finish()

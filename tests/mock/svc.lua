@@ -853,7 +853,12 @@ getcustomasset = function(p) return "rbxasset://custom/" .. norm(p) end
 local genvT = {}
 getgenv = function() return genvT end
 M.genv = genvT
-cloneref = function(x) return x end
+-- M.clonerefDistinct: like Real, cloneref gives a second reference to the same instance (never == to the
+-- instance itself; what Parent returns is the instance's own reference)
+cloneref = function(x)
+	if M.clonerefDistinct and type(x) == "table" and rawget(x, "_d") then return setmetatable({ _d = rawget(x, "_d") }, getmetatable(x)) end
+	return x
+end
 local hui = Instance.new("Folder")
 hui.Name = "HiddenUI"
 hui.Parent = services.CoreGui
