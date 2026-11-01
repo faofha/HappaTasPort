@@ -24,6 +24,7 @@ local function handlers()
 	return n
 end
 cam.CFrame = CFrame.new(0, 10, 0)
+wm:close("inspector") -- (it opens by default since phase 5b; this suite counts windows)
 wm:define("f1", { title = "One", w = 300, h = 200, build = function() end })
 wm:define("f2", { title = "Two", w = 300, h = 200, build = function() end })
 

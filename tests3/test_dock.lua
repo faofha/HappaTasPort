@@ -10,8 +10,9 @@ local wm = ui.wm
 local dock = ui.dock
 check(dock ~= nil, "the Dock")
 
-section("only the Dock shows at start")
-eq(wm:anyOpen(), false, "no window open")
+section("only the Dock (and the Inspector, phase 5b) at start")
+eq(wm:isOpen("settings") or wm:isOpen("controls"), false, "no other window open")
+wm:close("inspector") -- (this suite counts the Dock's lit buttons)
 check(dock.gui.Visible and dock.gui.Parent ~= nil, "the Dock is shown")
 local sw = workspace.CurrentCamera.ViewportSize.X
 near(dock.gui.AbsolutePosition.X + dock.gui.AbsoluteSize.X / 2, sw / 2, 1, "centred at the top")

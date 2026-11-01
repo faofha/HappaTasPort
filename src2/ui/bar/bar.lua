@@ -27,6 +27,7 @@ local TICKS, LABELS, MARKS = 41, 11, 120
 -- (while recording or testing the bar is written every 2nd frame, as V2 wrote its stats panels, and the ruler
 -- redrawn every 60th: within V2's writes per frame in the bench)
 local BTN, EVERY, REDRAW_EVERY, MIN_FRAMES = 24, 2, 60, 10
+local READOUT_EVERY = 6 -- (while running, the readout's text 10 times a second: the playhead moves every 2nd frame)
 local STEPS = { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000 }
 local TRANSPORT = { { "start", "start" }, { "back1", "back1" }, { "rec", "record" }, { "forward1", "forward1" },
 	{ "test", "play" }, { "marker", "marker" } }
@@ -358,10 +359,11 @@ function Bar:refresh(force)
 	local f = math.clamp(E.frame or 1, 1, math.max(1, n))
 	if n == 0 then
 		W.paint(self.readout, "Text", "0 / 0")
-	elseif f ~= self.lastF or n ~= self.lastN or force then
+		self.lastF, self.lastN = f, n
+	elseif (f ~= self.lastF or n ~= self.lastN or force) and (force or not running or self.tick % READOUT_EVERY == 0) then
 		W.paint(self.readout, "Text", string.format("%d / %d   %s", f, n, Util.toTime(tl:get("TotalTime", f, 1))))
+		self.lastF, self.lastN = f, n
 	end
-	self.lastF, self.lastN = f, n
 	W.paint(self.playhead, "Visible", n > 0)
 	W.paint(self.playhead, "Position", UDim2.new(0, self:xOf(f), 0, 4))
 	local mode = (E.mode == 1 and "Idle") or (E.mode == 3 and "Test") or (E.paused and "Paused" or "Recording")

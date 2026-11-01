@@ -117,6 +117,8 @@ local function tweenHandlers()
 	return n
 end
 eq(tweenHandlers(), 0, "no tween handler in the pipeline while idle (an idle handler costs a resume a frame)")
+E.ui.wm:close("inspector") -- (its live values and timing write by nature; this checks the theme)
+M.steps(2)
 local w0 = M.propWrites
 M.steps(60, 1 / 60)
 eq(M.propWrites - w0, 0, "no writes while idle")

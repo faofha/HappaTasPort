@@ -14,11 +14,11 @@ local Window = import("ui/kit/window")
 local Windows = {}
 Windows.__index = Windows
 
-local CASCADE = 24
+local CASCADE, EDGE = 24, 16
 local SHEET_H = 0.6
 
 function Windows.new(E, ui)
-	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0,
+	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0, modalCount = 0,
 		uis = Env.svc("UserInputService"), guiService = Env.svc("GuiService") }, Windows)
 	self.key = self:screenKey()
 	self:watchCamera()
@@ -93,7 +93,9 @@ end
 
 function Windows:defaultRect(id)
 	local def = self.defs[id]
-	local sw, sh = self:screen()
+	local sw, sh, top = self:screen()
+	-- (def.corner "topRight": out of the play area, for a window open while playing)
+	if def.corner == "topRight" then return sw - def.w - EDGE, top + EDGE, def.w, def.h end
 	local i = (table.find(self.order, id) or 1) - 1
 	return math.floor((sw - def.w) / 2) + i * CASCADE, math.floor((sh - def.h) / 2) + i * CASCADE, def.w, def.h
 end
@@ -254,8 +256,12 @@ end
 function Windows:open(id)
 	if not self.defs[id] then return end
 	local win = self.windows[id] or self:build(id)
-	if not win.open then self.openCount = self.openCount + 1 end
+	if not win.open then
+		self.openCount = self.openCount + 1
+		if self.defs[id].modal ~= false then self.modalCount = self.modalCount + 1 end
+	end
 	win.open = true
+	self:rememberOpen(id, true)
 	W.set(win.holder, "Visible", true)
 	self:apply(win, win.x, win.y, win.w, win.h)
 	self:focus(id)
@@ -267,6 +273,8 @@ function Windows:close(id)
 	if not win or not win.open then return end
 	win.open = false
 	self.openCount = self.openCount - 1
+	if self.defs[id].modal ~= false then self.modalCount = self.modalCount - 1 end
+	self:rememberOpen(id, false)
 	W.set(win.holder, "Visible", false)
 	self:save(id)
 	self:fire(id, false)
@@ -283,6 +291,34 @@ end
 
 -- (asked every frame through E.modalOpen: a count, no loop)
 function Windows:anyOpen() return self.openCount > 0 end
+
+-- a window that frees the mouse is open (def.modal, true unless false: the Inspector isn't)
+function Windows:anyModalOpen() return self.modalCount > 0 end
+
+-- open / closed kept in the settings file (ui.open), so a re-run opens the same windows
+function Windows:rememberOpen(id, on)
+	if self.restoring then return end
+	local sf = self.E.settingsFile
+	if not sf then return end
+	local t = sf:getUi()
+	if t.open[id] == on then return end
+	t.open[id] = on
+	sf:setUi(t)
+end
+
+-- opens the windows that were open (def.openByDefault when nothing was saved for one); called once, after
+-- every window is defined
+function Windows:restoreOpen()
+	local sf = self.E.settingsFile
+	local saved = sf and sf:getUi().open or {}
+	self.restoring = true
+	for _, id in ipairs(self.order) do
+		local want = saved[id]
+		if want == nil then want = self.defs[id].openByDefault == true end
+		if want then self:open(id) end
+	end
+	self.restoring = false
+end
 
 -- every window back at its default place and size (this screen size's saved places forgotten)
 function Windows:resetLayout()

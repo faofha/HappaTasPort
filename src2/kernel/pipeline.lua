@@ -72,7 +72,23 @@ local function runnerLoop(fn, dt)
 	end
 end
 
+-- With pipe.timing on (the Inspector's Performance section shows), every 4th frame's stages are timed with
+-- os.clock: their time is added to pipe.timeSum and the frames to pipe.timeFrames (an average needs no more);
+-- off, nothing extra runs.
+local SAMPLE_EVERY = 4
 function Pipeline:run(stage, dt)
+	if stage == "PreRender" then self.sampling = self.timing and self.frame % SAMPLE_EVERY == 0 end
+	if self.sampling and self.timing then
+		local t0 = os.clock()
+		self:runStage(stage, dt)
+		self.timeSum = (self.timeSum or 0) + (os.clock() - t0)
+		if stage == "PreRender" then self.timeFrames = (self.timeFrames or 0) + 1 end
+		return
+	end
+	self:runStage(stage, dt)
+end
+
+function Pipeline:runStage(stage, dt)
 	if self.stopped then return end
 	if stage == "PreRender" then self.frame = self.frame + 1 end
 	local list = self.stages[stage]

@@ -184,6 +184,36 @@ M.steps(30, 1 / 60)
 W.set, W.paint = origSet, origPaint
 eq(writes, 0, "paused 30 frames: nothing written")
 
+section("playing: the playhead every 2nd frame, the readout's text 10 times a second")
+do
+	local readouts, heads = 0, 0
+	local function counting(f)
+		return function(inst, prop, value)
+			local done = f(inst, prop, value)
+			if done and inst == bar.readout and prop == "Text" then readouts = readouts + 1 end
+			if done and inst == bar.playhead and prop == "Position" then heads = heads + 1 end
+			return done
+		end
+	end
+	-- (a run long enough to play for a second)
+	E.modes:request("seek", { frame = E.tl:count() })
+	M.steps(2)
+	E.modes:request("unpause")
+	M.steps(150, 1 / 60)
+	E.modes:request("pause")
+	M.steps(2)
+	E.modes:request("test")
+	M.steps(2)
+	W.set, W.paint = counting(origSet), counting(origPaint)
+	M.steps(60, 1 / 60)
+	W.set, W.paint = origSet, origPaint
+	check(heads >= 25, "playhead moved " .. heads .. " times in 60 frames")
+	check(readouts >= 8 and readouts <= 10, "readout written " .. readouts .. " times in 60 frames")
+	E.modes:request("create")
+	M.steps(3)
+	check(bar.readout.Text:find("^" .. E.frame .. " / ") ~= nil, "back in Create: the readout shows the frame at once")
+end
+
 -- ------------------------------------------------------------------------------------------------ lanes
 -- (a run made frame by frame in Idle: the bar shows it in full)
 local function craft(n, each)

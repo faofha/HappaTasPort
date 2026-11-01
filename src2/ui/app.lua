@@ -19,6 +19,7 @@ local SettingsWin = import("ui/win/settings")
 local ControlsWin = import("ui/win/controls")
 local Frost = import("ui/frost")
 local Bar = import("ui/bar/bar")
+local InspectorWin = import("ui/win/inspector")
 
 local UI = {}
 UI.__index = UI
@@ -44,10 +45,13 @@ function UI.start(E)
 	self.bar = Bar.new(self)
 	SettingsWin.define(self)
 	ControlsWin.define(self)
+	InspectorWin.define(self)
 	E.inputs.mouseOverOwn = function() return self:pointerOver() end
 	-- (asked several times a frame by the camera and the cursor: a stored answer, kept up to date below)
 	E.modalOpen = function() return self.modal end -- (E.modal: the same answer as a field, for per-frame readers)
 	life:own(self.wm:changed(function() self:updateModal() end))
+	self.wm:restoreOpen() -- (the windows open when the script last ran, or open by default)
+	self:updateModal()
 	life:own(function()
 		E.inputs.mouseOverOwn = nil
 		E.modalOpen = nil
@@ -63,7 +67,7 @@ function UI.start(E)
 end
 
 function UI:updateModal()
-	self.modal = self:anyWindowOpen()
+	self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()
 	self.E.modal = self.modal
 end
 

@@ -10,6 +10,7 @@
 math.randomseed(7) -- (the Animate engine picks idle animations with math.random)
 M.clockStep = 0 -- os.clock() = frame time: the trace doesn't depend on how often a build reads it
 check(A.boot(), "boots")
+A.closeInspector()
 local UIS = M.services.UserInputService
 local cam = workspace.CurrentCamera
 

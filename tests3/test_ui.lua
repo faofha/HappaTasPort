@@ -20,8 +20,9 @@ local function guis(name)
 	return n
 end
 
-section("start: only the Dock")
-eq(wm:anyOpen(), false, "no window")
+section("start: the Dock and the Inspector")
+eq(wm:isOpen("inspector"), true, "the Inspector opens by default (phase 5b)")
+eq(wm:isOpen("settings") or wm:isOpen("controls"), false, "no other window")
 check(ui.dock.buttons.settings and ui.dock.buttons.controls, "Settings and Controls in the Dock")
 eq(E.modalOpen(), false, "the mouse isn't freed")
 
