@@ -90,4 +90,6 @@ ui/classic/look
 ui/classic/mobile
 ui/classic/classic
 ui/app
+profiler/profiler
+profiler/app
 main

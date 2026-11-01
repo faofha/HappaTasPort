@@ -159,5 +159,30 @@ eq(RS.PostSimulation:Count(), before[3], "PostSimulation connections back to bef
 local bound = false
 for _, b in ipairs(M.binds) do if b.name == "HappaTAS3Late" then bound = true end end
 check(not bound, "the late render-step bind is gone")
+section("phase 6: the profiler hook sees each stage and entry once, and nothing when unset")
+do
+	local life2 = Lifecycle.new()
+	local p2 = Pipeline.new(life2, errs, bus)
+	p2:start()
+	local seen = {}
+	p2:add("PreRender", 10, "a", function() seen[#seen + 1] = "run a" end, "modA")
+	p2:add("Heartbeat", 10, "b", function() seen[#seen + 1] = "run b" end, "modB")
+	p2.profiler = {
+		stageBegin = function(stage, dt) seen[#seen + 1] = "begin " .. stage .. (type(dt) == "number" and " dt" or "") end,
+		stageEnd = function(stage) seen[#seen + 1] = "end " .. stage end,
+		entryBegin = function(e) seen[#seen + 1] = "in " .. e.module end,
+		entryEnd = function(e) seen[#seen + 1] = "out " .. e.module end,
+	}
+	M.step(1 / 60)
+	local s = table.concat(seen, ",")
+	check(s:find("begin PreRender dt,in modA,run a,out modA,end PreRender", 1, true) ~= nil, "PreRender: begin, entry, end (" .. s .. ")")
+	check(s:find("begin Heartbeat dt,in modB,run b,out modB,end Heartbeat", 1, true) ~= nil, "Heartbeat the same")
+	p2.profiler = nil
+	seen = {}
+	M.step(1 / 60)
+	eq(table.concat(seen, ","), "run a,run b", "unset: only the handlers")
+	life2:cleanup()
+end
+
 -- (the errors above were provoked on purpose: keep finish()'s log check about real runtime errors)
 finish()

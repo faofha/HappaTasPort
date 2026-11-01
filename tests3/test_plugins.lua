@@ -277,4 +277,26 @@ do
 	pl:call("onNothing", 5)
 	eq(#log, 0, "a hook no plugin has")
 end
+
+section("phase 6: the profiler sees plugin hooks and guard calls by name")
+do
+	local Plugins = __T3("engine/plugins")
+	local reported = {}
+	local errs = { report = function(_, name) reported[#reported + 1] = name end }
+	local pl = Plugins.new(errs)
+	local seen = {}
+	pl:add({ name = "cursor", order = 1, onY = function() seen[#seen + 1] = "hook" end })
+	local obj = { name = "x", update = function(self, v) seen[#seen + 1] = "update " .. tostring(v) return v end }
+	local g = Plugins.guard(errs, obj, "cursor")
+	Plugins.prof = { begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
+	pl:call("onY")
+	local r = g:update(7)
+	eq(table.concat(seen, ","), "begin cursor,hook,finish cursor,begin cursor,update 7,finish cursor", "both by name")
+	eq(r, 7, "the guarded call's result")
+	Plugins.prof = nil
+	seen = {}
+	pl:call("onY")
+	g:update(8)
+	eq(table.concat(seen, ","), "hook,update 8", "unset: nothing else")
+end
 finish()
