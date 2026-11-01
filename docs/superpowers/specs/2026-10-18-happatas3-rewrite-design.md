@@ -135,8 +135,9 @@ V2.38.16's codec and are converted in memory; a file is only rewritten as v6 whe
 ### 6.3 Settings
 
 One schema (name, type, default, range, section, description). `Settings.json` from V2.38.16 is converted
-on first load: every old name maps to a new key (table in the code, tested); the old file is kept as
-`Settings.v2.json`. "Show Stats (Idle / Create / Test)" and "Stats Text Size" become Inspector settings.
+on first load: every old name maps to a new key (table in the code, tested). As built: HappaTAS 3 keeps its own
+file, `Settings3.json`, and only ever reads `Settings.json`, so V2 (run from the history) keeps its own settings
+and no `Settings.v2.json` copy is needed; deleting `Settings3.json` converts `Settings.json` again. "Show Stats (Idle / Create / Test)" and "Stats Text Size" become Inspector settings.
 The sound settings that V2.38.16 had (removed in V2.38.17) are dropped by the conversion without an error.
 
 There is one settings store for the whole script. Every interface (the new one and the classic one, 8.5)
@@ -281,7 +282,8 @@ Each phase has its own implementation plan, tests and PR.
    - 5b: timeline bar, Inspector, Library, Merge, Help.
    - 5c: the classic interface (8.5), mobile touch buttons.
 6. **MicroProfiler.**
-7. **Switch-over:** HappaTAS 3 becomes `wow` / `wow1`; README; V2.38.16 stays in history.
+7. **Switch-over:** HappaTAS 3 becomes `wow` / `wow1`; README; V2.38.16 stays in history. (Done 2026-11-02:
+   `wow` / `wow1` = HappaTAS 3.0.0, built by `tools/release3.sh`; V2.38.17 is the trace reference, commit aaa21b6.)
 
 ## 13. Open questions (answered during the phases)
 
