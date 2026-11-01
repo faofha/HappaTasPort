@@ -1,10 +1,12 @@
 -- ================================================================================================
 --  CLASSIC  (HappaTAS 3 ui, spec 8.5): V2.38.17's interface drawn by HappaTAS 3, for people who prefer it.
---  Its own ScreenGui ("HappaTASClassic") next to the new interface's, built the first time Classic is
---  chosen (UI:setInterface). Only one interface is live; this one answers the engine's questions while it is
+--  Its own ScreenGui ("HappaTASClassic") next to the new interface's, built from V2's tree (ui/classic/tree)
+--  the first time Classic is chosen (UI:setInterface). Only one interface is live; this one answers the engine's questions while it is
 --  (pointerOver: the mouse on its visible menu; modal: its menu open frees the mouse).
 -- ================================================================================================
 local Env = import("platform/env")
+local ClassicTree = import("ui/classic/tree")
+local ClassicBuild = import("ui/classic/build")
 
 local Classic = {}
 Classic.__index = Classic
@@ -23,17 +25,15 @@ function Classic.new(ui)
 	end
 	local gui = Instance.new("ScreenGui")
 	gui.Name = NAME
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false -- (IgnoreGuiInset off and Global ZIndex, as V2's UI.Create)
 	pcall(function() gui.AutoLocalize = false end)
-	pcall(function() gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling end)
+	pcall(function() gui.ZIndexBehavior = Enum.ZIndexBehavior.Global end)
 	pcall(function() gui.DisplayOrder = DISPLAY_ORDER end)
 	self.gui = gui
-	local menu = Instance.new("Frame")
-	menu.Name = "MainMenu"
-	menu.Visible = false
-	menu.Parent = gui
-	self.menu = menu
+	-- V2.38.17's tree (byPath["MainMenu.SettingsFrame.List"] = that instance)
+	local _, byPath = ClassicBuild.build(ClassicTree.TREE, ClassicTree.STYLES, gui)
+	self.byPath = byPath
+	self.menu = byPath.MainMenu
 	pcall(function() gui.Parent = parent end)
 	self.uis = Env.svc("UserInputService")
 	self.guiService = Env.svc("GuiService")
