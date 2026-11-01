@@ -30,6 +30,11 @@ end
 -- on top: features switched off in both, say); returns a function that puts both files back
 local function matchSettings(extra)
 	local orig2, orig3 = readfile(SETTINGS2), readfile(SETTINGS3)
+	local function restore()
+		writefile(SETTINGS2, orig2)
+		writefile(SETTINGS3, orig3)
+	end
+	local ok, err = pcall(function()
 	local t3 = http:JSONDecode(orig3)
 	local s3 = t3.settings or {}
 	local t2 = http:JSONDecode(orig2)
@@ -48,10 +53,13 @@ local function matchSettings(extra)
 	t2.settings, t3.settings = s2, s3
 	writefile(SETTINGS2, http:JSONEncode(t2))
 	writefile(SETTINGS3, http:JSONEncode(t3))
-	return function()
-		writefile(SETTINGS2, orig2)
-		writefile(SETTINGS3, orig3)
+	end)
+	-- (a failure part way leaves neither file changed)
+	if not ok then
+		restore()
+		error(err, 0)
 	end
+	return restore
 end
 
 local function unloadAll()
@@ -131,24 +139,9 @@ function Meter.compare(opts)
 			return table.unpack(r, 1, r.n)
 		end
 	end
-	local idxOld, gameOld
-	idxOld = hookmetamethod(RS.Heartbeat, "__index", function(self, k)
-		local v = idxOld(self, k)
-		if on and (k == "Connect" or k == "Once") and type(v) == "function" and checkcaller() then
-			local name = tostring(self):gsub("^Signal ", "")
-			return function(sg, f, ...) return v(sg, wrap(f, name), ...) end
-		end
-		return v
-	end)
-	gameOld = hookmetamethod(game, "__namecall", function(self, ...)
-		if on and checkcaller() and getnamecallmethod() == "BindToRenderStep" then
-			local a = table.pack(...)
-			a[3] = wrap(a[3], "Late")
-			return gameOld(self, table.unpack(a, 1, a.n))
-		end
-		return gameOld(self, ...)
-	end)
-	local hb = RS.Heartbeat:Connect(function() frames = frames + 1 end)
+	-- (everything that changes something happens inside one pcall; the cleanup undoes only what was done, the
+	-- scripts first, so a script still loaded can't save its run settings over the restored files)
+	local st = {}
 	local function window(sec)
 		for k in pairs(acc) do acc[k] = nil end
 		frames = 0
@@ -162,29 +155,50 @@ function Meter.compare(opts)
 		r.total = total
 		return r
 	end
-	local restore = matchSettings(opts.extra)
-	local home, hum = homeOf()
 	local runs = { v2 = {}, h3 = {} }
 	local ok, err = pcall(function()
-		unloadAll()
-		for i = 1, rounds do
-			for _, who in ipairs({ "v2", "h3" }) do
-				home()
-				on = true
-				runs[who][i] = runModes(paths[who], window, seconds, hum)
-				on = false
-				unloadAll()
-				if opts.progress then opts.progress(who .. " " .. i) end
-			end
+	st.restore = matchSettings(opts.extra)
+	st.home, st.hum = homeOf()
+	local idxOld, gameOld
+	idxOld = hookmetamethod(RS.Heartbeat, "__index", function(self, k)
+		local v = idxOld(self, k)
+		if on and (k == "Connect" or k == "Once") and type(v) == "function" and checkcaller() then
+			local name = tostring(self):gsub("^Signal ", "")
+			return function(sg, f, ...) return v(sg, wrap(f, name), ...) end
 		end
+		return v
+	end)
+	st.idxOld = idxOld
+	gameOld = hookmetamethod(game, "__namecall", function(self, ...)
+		if on and checkcaller() and getnamecallmethod() == "BindToRenderStep" then
+			local a = table.pack(...)
+			a[3] = wrap(a[3], "Late")
+			return gameOld(self, table.unpack(a, 1, a.n))
+		end
+		return gameOld(self, ...)
+	end)
+	st.gameOld = gameOld
+	st.hb = RS.Heartbeat:Connect(function() frames = frames + 1 end)
+	unloadAll()
+	for i = 1, rounds do
+		for _, who in ipairs({ "v2", "h3" }) do
+			st.home()
+			on = true
+			runs[who][i] = runModes(paths[who], window, seconds, st.hum)
+			on = false
+			unloadAll()
+			if opts.progress then opts.progress(who .. " " .. i) end
+		end
+	end
 	end)
 	on = false
-	walk(hum, false)
-	hookmetamethod(RS.Heartbeat, "__index", idxOld)
-	hookmetamethod(game, "__namecall", gameOld)
-	hb:Disconnect()
-	restore()
-	home()
+	if st.hum then walk(st.hum, false) end
+	if st.idxOld then pcall(hookmetamethod, RS.Heartbeat, "__index", st.idxOld) end
+	if st.gameOld then pcall(hookmetamethod, game, "__namecall", st.gameOld) end
+	if st.hb then st.hb:Disconnect() end
+	unloadAll()
+	if st.restore then st.restore() end
+	if st.home then pcall(st.home) end
 	if not ok then error(err, 0) end
 	-- medians per script, mode and stage
 	local out = {}
@@ -225,7 +239,7 @@ function Meter.sections(path, specsOf, seconds, extra)
 			return table.unpack(r, 1, r.n)
 		end
 	end
-	local hb = RS.Heartbeat:Connect(function() frames = frames + 1 end)
+	local st = {}
 	local function window(sec)
 		for k in pairs(excl) do excl[k] = nil end
 		frames = 0
@@ -237,12 +251,13 @@ function Meter.sections(path, specsOf, seconds, extra)
 		end
 		return r
 	end
-	local restore = matchSettings(extra)
-	local home, hum = homeOf()
 	local ok, res = pcall(function()
+		st.restore = matchSettings(extra)
+		st.home, st.hum = homeOf()
+		st.hb = RS.Heartbeat:Connect(function() frames = frames + 1 end)
 		unloadAll()
-		home()
-		return runModes(path, window, seconds or 3, hum, function()
+		st.home()
+		return runModes(path, window, seconds or 3, st.hum, function()
 			local g = getgenv()
 			local env = { engine = g.__HappaTAS3_T and g.__HappaTAS3_T.engine, v2 = g.__V2T }
 			for _, s in ipairs(specsOf(env)) do
@@ -252,11 +267,11 @@ function Meter.sections(path, specsOf, seconds, extra)
 			if env.engine then env.engine.plugins.byHook = {} end
 		end)
 	end)
-	walk(hum, false)
-	hb:Disconnect()
+	if st.hum then walk(st.hum, false) end
+	if st.hb then st.hb:Disconnect() end
 	unloadAll()
-	restore()
-	home()
+	if st.restore then st.restore() end
+	if st.home then pcall(st.home) end
 	if not ok then error(res, 0) end
 	return res
 end
