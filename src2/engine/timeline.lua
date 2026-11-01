@@ -13,7 +13,7 @@
 --  Optimize flags: keep = true / f(value) (a frame with this value is kept), keepOnChange = true /
 --  { components } (kept when these differ from the frame before).
 --  Growth doubles the buffers; a cut only lowers the count (the values of frames reused later are
---  cleared by append). `version` changes whenever existing frames change or go (not on append / set).
+--  cleared by append: only rows that held values before, `used`, so recording into a fresh run clears nothing). `version` changes whenever existing frames change or go (not on append / set).
 -- ================================================================================================
 local Util = import("engine/util")
 
@@ -22,10 +22,12 @@ Timeline.__index = Timeline
 
 local START_CAP = 1024
 local BYTES = { f64 = 8, u8 = 1 }
+Timeline._fill = buffer.fill -- (append's row clearing: a test counts the calls)
 
 function Timeline.new()
 	-- (meta: the run's own data, kept through saving and loading: when it was made, V2 tables, ...)
-	local tl = setmetatable({ n = 0, cap = START_CAP, cols = {}, order = {}, version = 0, meta = {} }, Timeline)
+	-- (used: the highest frame that ever held values; the rows after it are zeros)
+	local tl = setmetatable({ n = 0, cap = START_CAP, cols = {}, order = {}, version = 0, meta = {}, used = 0 }, Timeline)
 	tl:addColumn("_filled", "u8", 1, nil)
 	return tl
 end
@@ -61,17 +63,23 @@ local function grow(self)
 	self.cap = cap
 end
 
--- a new frame at the end: numbers 0, lists nil, not filled
+-- a new frame at the end: numbers 0, lists nil, not filled (a cut already dropped the lists after it; a row
+-- past `used` never held values)
 function Timeline:append()
 	if self.n >= self.cap then grow(self) end
 	local i = self.n + 1
 	self.n = i
-	for _, col in ipairs(self.order) do
-		if col.buf then
-			buffer.fill(col.buf, (i - 1) * col.stride, 0, col.stride)
-		else
-			col.list[i] = nil
+	if i <= self.used then
+		local fill = Timeline._fill
+		for _, col in ipairs(self.order) do
+			if col.buf then
+				fill(col.buf, (i - 1) * col.stride, 0, col.stride)
+			else
+				col.list[i] = nil
+			end
 		end
+	else
+		self.used = i
 	end
 	return i
 end
@@ -91,18 +99,40 @@ function Timeline:get(name, i, k)
 	return buffer.readu8(col.buf, i - 1)
 end
 
-function Timeline:setN(name, i, ...)
+-- (widths 1, 2, 3, 4 and 12 are written without a select loop; wider ones through a table)
+function Timeline:setN(name, i, a, b, c, d, e, f, g, h, k, l, m, o, ...)
 	local col = self.cols[name]
-	local base = (i - 1) * col.stride
-	for k = 1, col.width do buffer.writef64(col.buf, base + (k - 1) * 8, (select(k, ...))) end
+	local buf, base, w = col.buf, (i - 1) * col.stride, col.width
+	local wr = buffer.writef64
+	wr(buf, base, a)
+	if w == 1 then return end
+	wr(buf, base + 8, b)
+	if w == 2 then return end
+	wr(buf, base + 16, c)
+	if w == 3 then return end
+	wr(buf, base + 24, d)
+	if w == 4 then return end
+	if w == 12 then
+		wr(buf, base + 32, e); wr(buf, base + 40, f); wr(buf, base + 48, g); wr(buf, base + 56, h)
+		wr(buf, base + 64, k); wr(buf, base + 72, l); wr(buf, base + 80, m); wr(buf, base + 88, o)
+		return
+	end
+	local rest = { e, f, g, h, k, l, m, o, ... }
+	for j = 5, w do wr(buf, base + (j - 1) * 8, rest[j - 4]) end
 end
 
 function Timeline:getN(name, i)
 	local col = self.cols[name]
 	local base, buf = (i - 1) * col.stride, col.buf
-	if col.width == 3 then
-		return buffer.readf64(buf, base), buffer.readf64(buf, base + 8), buffer.readf64(buf, base + 16)
+	local w = col.width
+	local rd = buffer.readf64
+	if w == 3 then return rd(buf, base), rd(buf, base + 8), rd(buf, base + 16) end
+	if w == 12 then
+		return rd(buf, base), rd(buf, base + 8), rd(buf, base + 16), rd(buf, base + 24), rd(buf, base + 32), rd(buf, base + 40),
+			rd(buf, base + 48), rd(buf, base + 56), rd(buf, base + 64), rd(buf, base + 72), rd(buf, base + 80), rd(buf, base + 88)
 	end
+	if w == 1 then return rd(buf, base) end
+	if w == 4 then return rd(buf, base), rd(buf, base + 8), rd(buf, base + 16), rd(buf, base + 24) end
 	local out = table.create(col.width)
 	for k = 1, col.width do out[k] = buffer.readf64(buf, base + (k - 1) * 8) end
 	return table.unpack(out, 1, col.width)
@@ -181,6 +211,7 @@ function Timeline:resize(n)
 		end
 	end
 	self.n = n
+	if n > self.used then self.used = n end
 	buffer.fill(self.cols._filled.buf, 0, 1, n)
 	self.version = self.version + 1
 end
@@ -210,6 +241,7 @@ function Timeline:adopt(other)
 		end
 	end
 	self.n = other.n
+	if self.n > self.used then self.used = self.n end -- (a column only this run has keeps its old rows)
 	self.meta = other.meta or {}
 	self.version = self.version + 1
 end
