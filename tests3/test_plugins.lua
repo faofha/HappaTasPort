@@ -300,5 +300,16 @@ do
 	pl:call("onY")
 	g:update(8)
 	eq(table.concat(seen, ","), "hook,other hook,update 8", "unset: nothing else")
+	-- (a set of hook names: only those hooks of that plugin are timed)
+	Plugins.prof = { names = { other = { onZ = true } }, begin = function(name) seen[#seen + 1] = "begin " .. name end, finish = function(name) seen[#seen + 1] = "finish " .. name end }
+	pl:add({ name = "zed", order = 3, onZ = function() seen[#seen + 1] = "zed z" end })
+	local o = pl:get("other")
+	o.onZ = function() seen[#seen + 1] = "other z" end
+	pl.byHook = {}
+	seen = {}
+	pl:call("onY")
+	pl:call("onZ")
+	eq(table.concat(seen, ","), "hook,other hook,begin other,other z,finish other,zed z", "only other's onZ is timed")
+	Plugins.prof = nil
 end
 finish()

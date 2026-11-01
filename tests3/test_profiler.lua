@@ -950,10 +950,9 @@ P.SetMode("Frame")
 section("timers fed by the core")
 MENUS[3].click(3) -- 30
 stepMs(16, 40)
--- the HappaTAS scope runs in every pipeline stage: PreRender, the late render step, PreSimulation,
--- PostSimulation and Heartbeat (V2 left its PostSimulation work out of the scope: 4 there)
+-- the HappaTAS scope runs in PreRender, the late render step, PreSimulation and Heartbeat
 local ht = P.TimerStats("HappaTAS")
-eq(ht.calls, 5, "HappaTAS scope ran 5 times in the last frame")
+eq(ht.calls, 4, "HappaTAS scope ran 4 times in the last frame")
 check(ht.time > 0, "HappaTAS time measured with os.clock")
 local ft = P.TimerStats("Frame")
 near(ft.time, 16, 1e-9, "Frame timer = frame time")

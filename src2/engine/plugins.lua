@@ -52,7 +52,7 @@ function Plugins:get(name) return self.byName[name] end
 -- nothing, so one failing plugin never stops the engine's frame. Fields read and written through the guard
 -- are the object's own.
 -- Plugins.prof (set by the MicroProfiler while it's open): begin(name) / finish(name) around the guarded calls
--- and plugin hooks whose guard / plugin name is in Plugins.prof.names (the ones it times).
+-- and plugin hooks it times: Plugins.prof.names[name] = true (every call) or a set of hook / method names.
 function Plugins.guard(errs, obj, name)
 	local proxy = {}
 	local function make(k)
@@ -68,7 +68,8 @@ function Plugins.guard(errs, obj, name)
 		end
 		return function(_, ...)
 			local pr = Plugins.prof
-			if pr and pr.names[name] then
+			local t = pr and pr.names[name]
+			if t and (t == true or t[k]) then
 				pr.begin(name)
 				return timed(pr, pcall(obj[k], obj, ...))
 			end
@@ -108,6 +109,7 @@ function Plugins:call(hook, ...)
 	local timed = pr and pr.names
 	for i = 1, h.n do
 		local t = timed and timed[ps[i].name]
+		if t and t ~= true and not t[hook] then t = nil end
 		if t then pr.begin(ps[i].name) end
 		local ok, err = pcall(fns[i], ps[i], ...)
 		if t then pr.finish(ps[i].name) end

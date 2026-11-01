@@ -24,6 +24,9 @@ local NAME, DISPLAY_ORDER = "HappaProfiler", 2147482000
 local TEXT_EXT = { txt = true, csv = true, html = true } -- (V2's Store.WriteText types)
 -- V2's scope names for HappaTAS 3's plugins (by plugin name) and guarded objects (by guard name)
 local SCOPE = { cursor = "Cursor", clientobjects = "Client Objects", clientObjects = "Client Objects", buttons = "Buttons" }
+-- what V2's Client Objects / Buttons / Cursor scopes stood around: recording a frame and Test's frame for the
+-- client objects and buttons (fill / onPlayTo), every cursor update (its guarded calls)
+local TIMED = { clientobjects = { fill = true, onPlayTo = true }, buttons = { fill = true, onPlayTo = true }, cursor = true }
 -- the pipeline handlers V2's scopes stood around (V2 p18_core: Record in preRender / preSimulation, Playback in
 -- preRender / heartbeat, Stats UI around the panels)
 local ENTRY_SCOPE = { ["engine.preRender"] = "both", ["engine.preSimulation"] = "rec", ["engine.heartbeat"] = "play",
@@ -139,12 +142,14 @@ function ProfilerApp.start(E)
 		-- (the handlers it times, V2's scopes: Record = the frame's recording in PreRender and PreSimulation,
 		-- Playback = Test's PreRender and Heartbeat work, Stats UI = the panels / the bar and the Inspector)
 		entries = ENTRY_SCOPE,
+		-- (V2's HappaTAS scope: PreRender, PreSimulation, Heartbeat and the late render step; its PostSimulation
+		-- work, the speed hack's held parts, stayed outside it)
 		stageBegin = function(stage, dt)
 			if stage == "PreRender" then P.FrameBegin(dt) end
-			P.Begin("HappaTAS")
+			if stage ~= "PostSimulation" then P.Begin("HappaTAS") end
 		end,
 		stageEnd = function(stage)
-			P.End("HappaTAS")
+			if stage ~= "PostSimulation" then P.End("HappaTAS") end
 			if stage == "PreRender" then P.FrameEnd() end
 		end,
 		entryBegin = function(e)
@@ -167,7 +172,7 @@ function ProfilerApp.start(E)
 		end,
 	}
 	local plugHook = {
-		names = SCOPE, -- (the plugins / guards it times)
+		names = TIMED, -- (the plugins / guards it times, V2's sites)
 		begin = function(name)
 			local scope = SCOPE[name]
 			if scope then scopeBegin(scope) end
