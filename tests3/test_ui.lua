@@ -96,17 +96,21 @@ section("only characters every listed font has")
 -- (live: ↺ ⌕ ✕ ▾ drew as empty boxes in all 12 fonts; × ▼ ← … • are in every one, both weights)
 local FONT_OK = { ["×"] = true, ["▼"] = true, ["←"] = true, ["…"] = true, ["•"] = true }
 UIH.click(sw.rows.font.ctl.gui) -- (a dropdown's list too)
-local bad = {}
-for _, d in ipairs(ui.root.gui:GetDescendants()) do
-	if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-		for _, s in ipairs({ d.Text, d:IsA("TextBox") and d.PlaceholderText or "" }) do
-			for _, c in utf8.codes(s) do
-				local ch = utf8.char(c)
-				if c > 127 and not FONT_OK[ch] then bad[#bad + 1] = d.Name .. " " .. ch end
+local function fontBad()
+	local bad = {}
+	for _, d in ipairs(ui.root.gui:GetDescendants()) do
+		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+			for _, s in ipairs({ d.Text, d:IsA("TextBox") and d.PlaceholderText or "" }) do
+				for _, c in utf8.codes(s) do
+					local ch = utf8.char(c)
+					if c > 127 and not FONT_OK[ch] then bad[#bad + 1] = d.Name .. " " .. ch end
+				end
 			end
 		end
 	end
+	return bad
 end
+local bad = fontBad()
 eq(#bad, 0, "no character a font lacks (" .. table.concat(bad, ", ") .. ")")
 UIH.key(Enum.KeyCode.Escape)
 
@@ -131,12 +135,61 @@ E.modes:request("idle")
 M.steps(3)
 eq(E.mode, 1, "Idle")
 
+section("Classic live: record, save, load and Test with its menu open (phase 5c)")
+E.settings:set("interface", "Classic")
+M.steps(2)
+local c = ui.classic
+check(c ~= nil and c.gui.Parent ~= nil, "Classic built")
+eq(guis("HappaTASClassic"), 1, "its ScreenGui")
+UIH.key(Enum.KeyCode.M) -- (the Menu key opens V2's menu while Classic is live)
+M.steps(1)
+eq(c.menu.Visible, true, "V2's menu open")
+local badC = fontBad()
+eq(#badC, 0, "the new interface's font check still passes with Classic built (" .. table.concat(badC, ", ") .. ")")
+E.modes:request("create")
+M.steps(3)
+E.modes:request("unpause")
+M.steps(3)
+local nc = E.tl:count()
+UIH.click(UIH.center(c.menu))
+UIH.click(UIH.center(c.menu))
+M.steps(120, 1 / 60)
+eq(E.paused, false, "clicks on V2's menu never paused")
+check(E.tl:count() > nc + 100, "frames recorded meanwhile (" .. E.tl:count() - nc .. ")")
+E.modes:request("pause")
+M.steps(3)
+local cn = E.tl:count()
+c:tab("Saves")
+M.steps(1)
+local sv = c.saves
+sv.addSlot.MouseButton1Click:Fire()
+M.steps(1)
+local slot = sv.slots[#sv.slots]
+slot.save.MouseButton1Click:Fire()
+if slot.save.Text == "Sure?" then slot.save.MouseButton1Click:Fire() end
+check(waitIdle(), "saved from a classic slot")
+E.modes:request("idle")
+M.steps(2)
+E.modes:setRun({})
+M.steps(2)
+slot.load.MouseButton1Click:Fire()
+check(waitIdle(), "loaded from it")
+eq(E.tl:count(), cn, "the run as saved")
+E.modes:request("test")
+M.steps(30)
+eq(E.mode, 3, "Test with Classic live")
+E.modes:request("idle")
+M.steps(3)
+eq(E.mode, 1, "Idle")
+M.steps(60, 1 / 60) -- (the settings file is written a moment later)
+
 section("Unload leaves nothing")
 E.settings:set("glass", "Frost")
 local uis = M.services.UserInputService
 getgenv().__HappaTAS3.Unload()
 M.steps(2)
 eq(guis("TASUserInterface"), 0, "no interface")
+eq(guis("HappaTASClassic"), 0, "no classic interface")
 eq(workspace.CurrentCamera:FindFirstChild("HappaTASFrost"), nil, "no Frost parts")
 eq(game:GetService("Lighting"):FindFirstChild("HappaTASFrost"), nil, "no Frost effect")
 eq(E.inputs.mouseOverOwn, nil, "the engine's pointer hook cleared")
@@ -155,4 +208,14 @@ eq(boxes, 0, "no merge boxes")
 local before = E.settings:get("glass")
 UIH.key(Enum.KeyCode.M)
 eq(ui.root.gui.Parent, nil, "the Menu key does nothing any more")
+
+section("a re-run opens Classic")
+check(boot(30), "the script runs again")
+local ui2 = getgenv().__HappaTAS3_T.engine.ui
+M.steps(2)
+eq(ui2.live, "Classic", "Classic is live")
+check(ui2.classic ~= nil and ui2.classic.gui.Parent ~= nil, "its interface built")
+eq(guis("HappaTASClassic"), 1, "one classic ScreenGui")
+getgenv().__HappaTAS3_T.engine.settings:set("interface", "New")
+M.steps(60, 1 / 60)
 finish()

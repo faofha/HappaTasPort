@@ -19,6 +19,7 @@ function A.closeInspector() E.ui.wm:close("inspector") end
 -- (phase 5b bench) the timeline bar's lanes (not kept in the settings file)
 function A.openLanes() E.ui.bar.lanes:setOpen(true, true) end
 function A.closeLanes() E.ui.bar.lanes:setOpen(false, true) end
+function A.setInterface(name) E.settings:set("interface", name) end
 function A.request(action) E.modes:request(action) end
 function A.frame() return E.frame end
 function A.paused() return E.paused end

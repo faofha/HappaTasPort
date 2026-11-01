@@ -11,6 +11,7 @@ end
 -- (V2 has no Inspector; its stats panels never took clicks)
 function A.closeInspector() end
 function A.openLanes() end
+function A.setInterface() end -- (V2 has only its own interface)
 function A.closeLanes() end
 function A.mode() return C.mode end
 -- (phase 5a bench) V2's main menu (the Menu key), and transitions without a click (the menu is under the mouse)
