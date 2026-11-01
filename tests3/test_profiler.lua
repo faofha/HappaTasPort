@@ -761,6 +761,76 @@ P.GetTAS, P.OnScrub = oldGet, oldScrub
 M.step(16 / 1000)
 check(P.Config().custom == false, "TAS Timeline off")
 
+section("HappaTAS 3: the TAS timeline reads the run in use, through a cut and a new run, and a click seeks in it")
+do
+	local E3 = getgenv().__HappaTAS3_T.engine
+	local tl3 = E3.tl
+	-- (a run of `count` frames of 16 ms, frame `spikeAt` `spikeMs` long)
+	local function makeRun(count, spikeAt, spikeMs)
+		E3.modes:request("idle")
+		M.step(16 / 1000)
+		tl3:cut(0)
+		local total = 0
+		for k = 1, count do
+			local j = tl3:append()
+			local ft = (k == spikeAt) and spikeMs / 1000 or 0.016
+			total = total + ft
+			tl3:set("State", j, 1, 8)
+			tl3:setN("FrameTime", j, ft)
+			tl3:setN("TotalTime", j, total)
+			tl3:setFilled(j)
+		end
+		E3.modes:runLoaded()
+		M.step(16 / 1000)
+		E3.modes:request("create")
+		stepMs(16, 3)
+	end
+	local function readoutAt(f, spikeAt, spikeMs)
+		local sum, mx = 0, 0
+		for k = 1, f do
+			local ms = (k == spikeAt) and spikeMs or 16
+			sum = sum + ms
+			if ms > mx then mx = ms end
+		end
+		local cur = (f == spikeAt) and spikeMs or 16
+		return string.format("Time[%6.2f] Avg[%6.2f] Max[%6.2f]", cur, sum / f, mx)
+	end
+	makeRun(300, 150, 40)
+	eq(E3.paused, true, "paused in Create")
+	E3.modes:request("seek", { frame = 200 })
+	stepMs(16, 2)
+	eq(E3.frame, 200, "on frame 200")
+	MENUS[7].click(2)
+	stepMs(16, 2)
+	check(P.Config().custom == true, "TAS Timeline on")
+	eq(U.readout.s, readoutAt(200, 150, 40), "the readout of frames 1-200 of the run in use")
+	-- a cut: frames after 120 gone, frame 100 now the spike
+	tl3:cut(120)
+	tl3:setN("FrameTime", 100, 0.03)
+	tl3.version = tl3.version + 1
+	E3.plugins:call("onDataChanged")
+	E3.modes:request("seek", { frame = 110 })
+	stepMs(16, 2)
+	eq(E3.frame, 110, "on frame 110 of the cut run")
+	eq(U.readout.s, readoutAt(110, 100, 30), "the readout follows the cut run (the old spike at 150 is gone)")
+	-- a click on a bar seeks inside the run (past its end: its last frame)
+	mouse(barX(3), 30)
+	M.step(16 / 1000)
+	M.click(1)
+	stepMs(16, 2)
+	eq(E3.frame, 120, "a click after the end seeks to the run's last frame")
+	-- a new run in its place (a load ends this way: the run adopted, the engine told)
+	makeRun(80, 40, 50)
+	E3.modes:request("seek", { frame = 60 })
+	stepMs(16, 2)
+	eq(U.readout.s, readoutAt(60, 40, 50), "a new run: its own frames")
+	away()
+	MENUS[7].click(0)
+	E3.modes:request("idle")
+	stepMs(16, 2)
+	check(P.Config().custom == false, "TAS Timeline off again")
+end
+
 section("Dump")
 local function countFiles(ext)
 	local n, last = 0, nil
