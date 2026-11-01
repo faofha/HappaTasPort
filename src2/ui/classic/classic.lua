@@ -16,6 +16,7 @@ local SettingsRows = import("ui/classic/settingsrows")
 local ControlsRows = import("ui/classic/controlsrows")
 local Saves = import("ui/classic/saves")
 local ClassicStats = import("ui/classic/stats")
+local ClassicLook = import("ui/classic/look")
 local HelpText = import("ui/win/helptext")
 
 local Classic = {}
@@ -55,6 +56,7 @@ function Classic.new(ui)
 	self.saves = Saves.build(self)
 	self.stats = ClassicStats.new(self)
 	self:buildHelp()
+	self.look = ClassicLook.new(self) -- (after every row exists: it themes what it finds)
 	self:wire()
 	self:placeMenu()
 	pcall(function() gui.Parent = parent end)
@@ -96,11 +98,15 @@ end
 -- V2's tab(): the chosen tab's button lighter, its frame shown
 function Classic:tab(name)
 	local b = self.byPath
+	local black = Color3.new(0, 0, 0)
 	for _, t in ipairs(TABS) do
-		b["MainMenu." .. t .. "Toggle"].BackgroundTransparency = 0.75
+		local tb = b["MainMenu." .. t .. "Toggle"]
+		tb.BackgroundTransparency = 0.75
+		if tb.BackgroundColor3 ~= black then tb.BackgroundColor3 = black end
 		b["MainMenu." .. t .. "Frame"].Visible = false
 	end
 	b["MainMenu." .. name .. "Toggle"].BackgroundTransparency = 0.5
+	if self.look then b["MainMenu." .. name .. "Toggle"].BackgroundColor3 = self.look:accent() end
 	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
 	self.tabName = name
 	if name == "Saves" and self.saves then self.saves.refresh() end

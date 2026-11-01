@@ -14,7 +14,7 @@ local SettingsRows = {}
 
 local u, v2 = UDim2.new, Vector2.new
 local ROW_H, HEADER_H = 30, 28
-local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) }
+local SWITCH_ON = { Position = u(1, 0, 0.5, 0) }
 local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)
@@ -75,10 +75,13 @@ function SettingsRows.build(classic)
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
+				-- (an on switch in the accent colour: ui/classic/look)
+				local bg = on and Color3.fromHex(tostring(s:get("accentColor")):sub(2)) or target.BackgroundColor3
 				if instant or not ts then
-					r.knob.Position, r.knob.BackgroundColor3 = target.Position, target.BackgroundColor3
+					r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 				else
-					ts:Create(r.knob, TweenInfo.new(0.25), target):Play()
+					r.knob.BackgroundColor3 = bg
+					ts:Create(r.knob, TweenInfo.new(0.25), { Position = target.Position }):Play()
 				end
 			end
 			show(s:get(key), true)
