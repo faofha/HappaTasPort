@@ -13,6 +13,7 @@ local Env = import("platform/env")
 local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
 local SettingsRows = import("ui/classic/settingsrows")
+local ControlsRows = import("ui/classic/controlsrows")
 local HelpText = import("ui/win/helptext")
 
 local Classic = {}
@@ -48,11 +49,23 @@ function Classic.new(ui)
 	self.guiService = Env.svc("GuiService")
 	self.ts = Env.svc("TweenService")
 	self.settingsRows = SettingsRows.build(self)
+	self.controlRows = ControlsRows.build(self)
 	self:buildHelp()
 	self:wire()
 	self:placeMenu()
 	pcall(function() gui.Parent = parent end)
-	self:tab("Controls")
+	self.touch = self.uis ~= nil and self.uis.TouchEnabled and not self.uis.KeyboardEnabled
+	if self.touch then
+		-- (touch screens: no Controls tab, the other four in a row: V2's p19_menu.lua)
+		byPath["MainMenu.ControlsToggle"].Visible = false
+		for x, t in pairs({ [0] = "Settings", [0.25] = "Saves", [0.5] = "Help", [0.75] = "More" }) do
+			byPath["MainMenu." .. t .. "Toggle"].Position = u(x, 0, 0.108, 0)
+			byPath["MainMenu." .. t .. "Toggle"].Size = u(0, 100, 0, 30)
+		end
+		self:tab("Settings")
+	else
+		self:tab("Controls")
+	end
 	self:joinMessage()
 	return self
 end
@@ -84,7 +97,7 @@ function Classic:tab(name)
 		b["MainMenu." .. t .. "Frame"].Visible = false
 	end
 	b["MainMenu." .. name .. "Toggle"].BackgroundTransparency = 0.5
-	b["MainMenu." .. name .. "Frame"].Visible = true
+	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
 	self.tabName = name
 	if self.onTab then self.onTab(name) end
 end

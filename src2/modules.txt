@@ -81,6 +81,7 @@ ui/win/help
 ui/classic/tree
 ui/classic/build
 ui/classic/settingsrows
+ui/classic/controlsrows
 ui/classic/classic
 ui/app
 main

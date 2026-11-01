@@ -66,7 +66,7 @@ local Settings = __T3("engine/settings")
 local sections, seen = 0, {}
 for _, def in ipairs(Settings.SCHEMA) do if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end end
 eq(rows("MainMenu.SettingsFrame.List"), #Settings.SCHEMA + sections, "a row per setting and a header per section")
-eq(rows("MainMenu.ControlsFrame.List"), 0, "no control rows yet")
+eq(rows("MainMenu.ControlsFrame.List"), #__T3("engine/controls").LIST, "a row per control (Task 4)")
 local HelpText = __T3("ui/win/helptext")
 eq(rows("MainMenu.HelpFrame.List"), 1 + #HelpText.topics(E), "Help: V2's spacer and a row per topic")
 eq(c.byPath["MainMenu.MoreFrame.List.3UpdateLog"], nil, "no update log")
