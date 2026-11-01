@@ -182,6 +182,9 @@ function SettingsFile:setUi(t)
 	self:queue()
 end
 
+-- the MicroProfiler's own table as loaded (nil when the file had none)
+function SettingsFile:getProfiler() return self.profiler end
+
 function SettingsFile:setProfiler(t)
 	self.profiler = t
 	self:queue()

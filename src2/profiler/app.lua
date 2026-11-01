@@ -196,7 +196,7 @@ function ProfilerApp.start(E)
 		feed(false)
 		if P.active then pcall(setVisible, false) end
 	end)
-	local saved = E.settingsFile and E.settingsFile.profiler
+	local saved = E.settingsFile and E.settingsFile:getProfiler()
 	if type(saved) == "table" then pcall(P.LoadConfig, saved) end
 	P.Start()
 	return P
