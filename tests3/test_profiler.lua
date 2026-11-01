@@ -1149,6 +1149,22 @@ do
 	E3.modes:request("unpause")
 	stepMs(16, 5)
 	check(E3.mode == 2 and not E3.paused, "recording")
+	do -- (review: V2's fillFrame ended Record before the Client Objects and Buttons scopes, side by side)
+		local open, nested, seen = {}, 0, {}
+		local b0, e0 = P.Begin, P.End
+		P.Begin = function(n)
+			if (n == "Client Objects" or n == "Buttons") and open.Record then nested = nested + 1 end
+			open[n] = true
+			seen[n] = (seen[n] or 0) + 1
+			return b0(n)
+		end
+		P.End = function(n) open[n] = nil; return e0(n) end
+		stepMs(16, 5)
+		P.Begin, P.End = b0, e0
+		check((seen.Record or 0) > 0 and (seen["Client Objects"] or 0) > 0 and (seen.Buttons or 0) > 0,
+			"Record, Client Objects and Buttons all timed while recording")
+		eq(nested, 0, "no Client Objects / Buttons scope inside Record (V2: side by side)")
+	end
 	local n0 = E3.tl:count()
 	mouse(200, 5) -- (the menu bar)
 	M.step(16 / 1000)

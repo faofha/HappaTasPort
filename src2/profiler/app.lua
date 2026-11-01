@@ -173,20 +173,33 @@ function ProfilerApp.start(E)
 			if name then scopeEnd(name) end
 		end,
 	}
+	-- (V2's fillFrame ended Record before the Client Objects and Buttons scopes: a plugin scope inside the
+	-- recording handler pauses Record around itself, so the two sit side by side as in V2)
+	local held, recOff = {}, false
 	local plugHook = {
 		names = TIMED, -- (the plugins / guards it times, V2's sites)
 		begin = function(name)
 			local scope = SCOPE[name]
-			if scope then scopeBegin(scope) end
+			if not scope then return end
+			local pause = not recOff and (depth.Record or 0) > 0
+			held[#held + 1] = pause
+			if pause then recOff = true; P.End("Record") end
+			scopeBegin(scope)
 		end,
 		finish = function(name)
 			local scope = SCOPE[name]
-			if scope then scopeEnd(scope) end
+			if not scope then return end
+			scopeEnd(scope)
+			local pause = held[#held]
+			held[#held] = nil
+			if pause then recOff = false; P.Begin("Record") end
 		end,
 	}
 	local function feed(on)
 		table.clear(depth)
 		table.clear(entries)
+		table.clear(held)
+		recOff = false
 		E.pipe.profiler = on and pipeHook or nil
 		Plugins.prof = on and plugHook or nil
 	end
