@@ -190,6 +190,23 @@ do
 	insp:update(false, false)
 	Util.round = oRound
 	check(rounds <= 1, "standing still: no number formatted again (" .. rounds .. ")")
+	-- (standing still in Idle: the values are only worked out on the once-a-second ticks)
+	local oValues, calls = IV.values, 0
+	IV.values = function(...) calls = calls + 1; return oValues(...) end
+	M.steps(120, 1 / 60)
+	check(calls <= 2, "still: worked out " .. calls .. " times in 2 s")
+	calls = 0
+	hrp.AssemblyLinearVelocity = Vector3.new(10, 0, 0)
+	M.steps(120, 1 / 60)
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	check(calls >= 9, "moving: " .. calls .. " times in 2 s")
+	calls = 0
+	M.steps(13, 1 / 60)
+	calls = 0
+	UIH.key(Enum.KeyCode.H)
+	M.steps(13, 1 / 60)
+	check(calls >= 1, "a key press shows (" .. calls .. ")")
+	IV.values = oValues
 	E.modes:request("create")
 	M.steps(3)
 end

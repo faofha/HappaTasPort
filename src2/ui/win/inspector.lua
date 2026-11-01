@@ -44,7 +44,7 @@ end
 function Insp.build(ui, body, win)
 	local E = ui.E
 	local self = setmetatable({ ui = ui, E = E, win = win, ctx = win.ctx, rows = {}, pinned = {}, sections = {},
-		offs = {}, tick = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
+		offs = {}, tick = 0, last = {}, memo = {}, values = {}, still = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
 	local ctx = win.ctx
 	self.options = Button.new(ctx, body, { text = "Options", kind = "plain", h = 22 })
 	self.options.gui.AnchorPoint = Vector2.new(1, 0)
@@ -85,6 +85,12 @@ function Insp.build(ui, body, win)
 		self.offs[#self.offs + 1] = s:changed(key, function() self:restyle(); self:layout(); self:update(true) end)
 	end
 	self.offs[#self.offs + 1] = E.state:watch("mode", function() self:layout(); self:update(true) end)
+	-- (a key pressed or let go: the Keys row may change though nothing moves)
+	local uis = E.inputs.uis
+	for _, sig in ipairs({ uis.InputBegan, uis.InputEnded }) do
+		local c = ui.life:connect(sig, function() self.keyed = true end)
+		self.offs[#self.offs + 1] = function() ui.life:drop(c) end
+	end
 	self.offs[#self.offs + 1] = ui.theme:changed(function() self:restyle() end)
 	self.offs[#self.offs + 1] = ui.wm:changed(function(id) if id == "inspector" then self:follow() end end)
 	ui.life:own(function() self:destroy() end)
@@ -373,7 +379,9 @@ function Insp:step(dt)
 		self.pausedKey = nil
 		self.tick = self.tick + 1
 		if self.tick % FAST_EVERY ~= 0 then return end
-		self:update(false, self.tick % SLOW_EVERY == 0)
+		local slow = self.tick % SLOW_EVERY == 0
+		if not slow and not self:moved() then return end
+		self:update(false, slow)
 		return
 	end
 	self:update(false, true)
@@ -401,6 +409,24 @@ function Insp:makePlan(all, frameToo)
 		end
 	end
 	return plan
+end
+
+-- whether anything a fast row shows can have changed since the last look: the character, the camera, the
+-- mouse, the frame, a key (a still character in Idle costs four reads twice a second this way)
+function Insp:moved()
+	local E = self.E
+	local s = self.still
+	local hrp = E.char and E.char.hrp
+	local pos = hrp and hrp.Position
+	local cam = workspace.CurrentCamera
+	local cf = cam and cam.CFrame
+	local m = E.inputs.uis:GetMouseLocation()
+	local n = E.tl:count()
+	local same = not self.keyed and s.pos == pos and s.cf == cf and s.m == m and s.mode == E.mode and s.frame == E.frame
+		and s.n == n
+	s.pos, s.cf, s.m, s.mode, s.frame, s.n = pos, cf, m, E.mode, E.frame, n
+	self.keyed = false
+	return not same
 end
 
 -- writes the values that changed into the rows that show (slowToo: the slow rows too; force: every row
