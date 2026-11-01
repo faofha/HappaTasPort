@@ -367,11 +367,21 @@ Each phase has its own implementation plan, tests and PR.
   133.385, 2.5, 128, rotation, velocities, state, camera rotation -21.346, -90, 0, zoom 16.125, keys, mouse). Per-frame
   cost, the pipeline's timer (ms, Classic / New): Idle 0.080 / 0.098, paused 0.463 / 0.466, recording 0.413 / 0.338,
   Test 0.526 / 0.449; per handler, Classic's own work is 9 us recording, 3 paused, 6 in Test (the bar and the Inspector
-  10 + 6). Against V2.38.17 (each script's frame handlers timed the same way from outside, both with the Idle /
-  Create / Test stats panels on and V2's MicroProfiler off, two runs each, ms): Idle 0.09 both, recording 0.18-0.20 vs
-  0.34-0.35, paused 0.44 vs 0.54-0.59, Test 0.36-0.37 vs 0.47-0.51. The gap is the engine and world handlers from
-  phases 2-4, not the interface (engine.preSimulation ~95 us while recording, lateRender 168 us and the Kit Clock's
-  step 135 us while paused): the headless bench, where HappaTAS 3 is within V2, doesn't see it; a follow-up. The release
+  10 + 6). Against V2.38.17, measured again the same day after a client restart (60 FPS): each script's frame
+  handlers timed the same way from outside (a temporary hook wrapping the RunService connections and the render-step
+  bind each script makes while it loads), both with the same world settings (Sync Client Objects on, Record Tool
+  Actions off), the Idle / Create / Test stats panels on and V2's MicroProfiler off, the character put back on the
+  same spot and walked the same way each time, three alternating rounds, us per frame, V2 vs HappaTAS 3 (Classic):
+  recording 322-328 vs 411-442, paused 523-553 vs 588-628, Test 476-543 vs 562-581. (A first comparison that day had
+  Sync Client Objects off in V2's file only and showed a larger gap; it is superseded.) Recording, by stage: PreRender
+  50-53 vs 93-95, PreSimulation 146-150 vs 174-191, PostSimulation 21-23 vs 31-32, the late render bind 37-38 vs 48-53,
+  Heartbeat the same. Where it isn't: the client-object recorder (101-130 us in both, the largest single piece), the
+  camera hold (setZoom / update 30 vs 27 us), the mouse rules (~22 us in both), garbage (12-13 KB a frame recording,
+  ~50 KB paused, in both), the guards (39 guarded calls a frame, ~5 us) and the pipeline's runner threads (the same
+  totals with a plain pcall loop swapped in). What remains is many 3-10 us pieces of the engine's and the world
+  plugins' per-frame work (Timeline:append clears every column on each new frame, setN uses select in a loop, the
+  plugin hooks' dispatch, the kit objects' four hooks, the stats panel); the headless bench (HappaTAS 3 within V2)
+  doesn't see it because the mock's own Instance reads and Lua datatypes dominate its frame time. A follow-up. The release
   loads with no console line, opens in the saved interface (Classic) and unloads leaving nothing in gethui, CoreGui, the
   Camera, Lighting or PlayerGui. Touch (the pad, V2's mobile buttons, the thumbstick) isn't available on the PC
   client: checked headless only. Settings.json, Settings3.json and the place's 8 files put back byte for byte (zz5c.tas
