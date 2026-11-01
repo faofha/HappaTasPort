@@ -381,7 +381,13 @@ Each phase has its own implementation plan, tests and PR.
   totals with a plain pcall loop swapped in). What remains is many 3-10 us pieces of the engine's and the world
   plugins' per-frame work (Timeline:append clears every column on each new frame, setN uses select in a loop, the
   plugin hooks' dispatch, the kit objects' four hooks, the stats panel); the headless bench (HappaTAS 3 within V2)
-  doesn't see it because the mock's own Instance reads and Lua datatypes dominate its frame time. A follow-up. The release
+  doesn't see it because the mock's own Instance reads and Lua datatypes dominate its frame time. Followed up the
+  same day (plan 2026-11-01-happatas3-live-frame-cost.md, tools/live/meter3.lua): Timeline:append clears only rows
+  that held values before and setN / getN have no select loop (~7 us a frame less while recording), plugin hooks
+  are dispatched from prebuilt lists (~1-2 us). With every world feature and the stats panels off in both scripts
+  the gap stays (recording 150 vs 232 us, paused 283 vs 351, Test 368 vs 442): it is the layered core (plugins,
+  guards, pipeline stages, timeline lookups), each piece a little dearer than V2's inline code, nothing above
+  ~8 us. Accepted by dzr: about 0.08 ms a frame (0.5 % of a 60 FPS frame, 2 % at 240 FPS). The release
   loads with no console line, opens in the saved interface (Classic) and unloads leaving nothing in gethui, CoreGui, the
   Camera, Lighting or PlayerGui. Touch (the pad, V2's mobile buttons, the thumbstick) isn't available on the PC
   client: checked headless only. Settings.json, Settings3.json and the place's 8 files put back byte for byte (zz5c.tas
