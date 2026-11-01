@@ -54,7 +54,7 @@ eq(menu.BackgroundColor3, Color3.fromRGB(0, 35, 73), "V2's dark blue")
 eq(menu.Visible, false, "closed until the Menu key")
 check(c.byPath["MainMenu.Title"].Text:find("3.0.0-dev", 1, true) ~= nil, "the title carries the version")
 
-section("the lists the menu fills")
+section("the lists the menu fills (Task 3 fills Settings and Help)")
 local function rows(path)
 	local n = 0
 	for _, ch in ipairs(c.byPath[path]:GetChildren()) do
@@ -62,13 +62,13 @@ local function rows(path)
 	end
 	return n
 end
-eq(rows("MainMenu.SettingsFrame.List"), 0, "no settings rows yet")
+local Settings = __T3("engine/settings")
+local sections, seen = 0, {}
+for _, def in ipairs(Settings.SCHEMA) do if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end end
+eq(rows("MainMenu.SettingsFrame.List"), #Settings.SCHEMA + sections, "a row per setting and a header per section")
 eq(rows("MainMenu.ControlsFrame.List"), 0, "no control rows yet")
-local help = {}
-for _, ch in ipairs(c.byPath["MainMenu.HelpFrame.List"]:GetChildren()) do
-	if not ch:IsA("UIListLayout") then help[#help + 1] = ch.Name end
-end
-eq(table.concat(help, ","), "Spacer", "Help: only V2's spacer (the topics come from helptext)")
+local HelpText = __T3("ui/win/helptext")
+eq(rows("MainMenu.HelpFrame.List"), 1 + #HelpText.topics(E), "Help: V2's spacer and a row per topic")
 eq(c.byPath["MainMenu.MoreFrame.List.3UpdateLog"], nil, "no update log")
 check(c.byPath["MainMenu.MoreFrame.List.5Credits"] ~= nil, "the credits stay")
 

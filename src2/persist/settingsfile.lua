@@ -53,9 +53,17 @@ end
 local MAX_RECENT = 8
 local function cleanUi(t)
 	local ui = { themes = {}, layout = {}, recentColors = {}, bar = { lanes = false }, open = {},
-		inspector = { pinned = {}, hidden = {}, collapsed = {} } }
+		inspector = { pinned = {}, hidden = {}, collapsed = {} }, classic = { menu = {} } }
 	if type(t) ~= "table" then return ui end
 	if type(t.bar) == "table" then ui.bar.lanes = t.bar.lanes == true end
+	-- (the classic menu's place per screen size: { x, y } numbers)
+	if type(t.classic) == "table" and type(t.classic.menu) == "table" then
+		for key, p in pairs(t.classic.menu) do
+			if type(key) == "string" and type(p) == "table" and type(p.x) == "number" and type(p.y) == "number" then
+				ui.classic.menu[key] = { x = p.x, y = p.y }
+			end
+		end
+	end
 	if type(t.open) == "table" then
 		for id, on in pairs(t.open) do
 			if type(id) == "string" and type(on) == "boolean" then ui.open[id] = on end
