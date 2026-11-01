@@ -14,6 +14,7 @@ local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
 local SettingsRows = import("ui/classic/settingsrows")
 local ControlsRows = import("ui/classic/controlsrows")
+local Saves = import("ui/classic/saves")
 local HelpText = import("ui/win/helptext")
 
 local Classic = {}
@@ -50,6 +51,7 @@ function Classic.new(ui)
 	self.ts = Env.svc("TweenService")
 	self.settingsRows = SettingsRows.build(self)
 	self.controlRows = ControlsRows.build(self)
+	self.saves = Saves.build(self)
 	self:buildHelp()
 	self:wire()
 	self:placeMenu()
@@ -84,9 +86,9 @@ function Classic:show(on)
 	self.ui:updateModal()
 end
 
--- the menu is open: the mouse is free (V2's Menu.IsModalOpen)
+-- the menu or the merge dialog is open: the mouse is free (V2's Menu.IsModalOpen)
 function Classic:modal()
-	return self.shown and self.menu.Visible == true
+	return self.shown and (self.menu.Visible == true or self.byPath.Merge.Visible == true)
 end
 
 -- V2's tab(): the chosen tab's button lighter, its frame shown
@@ -99,7 +101,7 @@ function Classic:tab(name)
 	b["MainMenu." .. name .. "Toggle"].BackgroundTransparency = 0.5
 	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
 	self.tabName = name
-	if self.onTab then self.onTab(name) end
+	if name == "Saves" and self.saves then self.saves.refresh() end
 end
 
 function Classic:wire()
@@ -251,9 +253,10 @@ function Classic:openHelpRow(row)
 end
 
 -- ------------------------------------------------------------------------------------------------ the engine's questions
--- the mouse (m: UserInputService:GetMouseLocation()) is on the open menu
+-- the mouse (m: UserInputService:GetMouseLocation()) is on the open menu, the merge dialog or Merge Stats (a
+-- click there is never a Pause / Unpause)
 function Classic:pointerOver(m)
-	if not self:modal() then return false end
+	if not self.shown then return false end
 	if not m then
 		local ok, v = pcall(self.uis.GetMouseLocation, self.uis)
 		if not ok then return false end
@@ -261,9 +264,14 @@ function Classic:pointerOver(m)
 	end
 	local inset = Vector2.zero
 	if self.guiService then pcall(function() inset = self.guiService:GetGuiInset() end) end
-	local p, s = self.menu.AbsolutePosition, self.menu.AbsoluteSize
 	local x, y = m.X - inset.X, m.Y - inset.Y
-	return x >= p.X and x <= p.X + s.X and y >= p.Y and y <= p.Y + s.Y
+	for _, g in ipairs({ self.menu, self.byPath.Merge, self.byPath.MergeStats }) do
+		if g.Visible then
+			local p, s = g.AbsolutePosition, g.AbsoluteSize
+			if x >= p.X and x <= p.X + s.X and y >= p.Y and y <= p.Y + s.Y then return true end
+		end
+	end
+	return false
 end
 
 function Classic:destroy()

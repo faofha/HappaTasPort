@@ -82,6 +82,7 @@ ui/classic/tree
 ui/classic/build
 ui/classic/settingsrows
 ui/classic/controlsrows
+ui/classic/saves
 ui/classic/classic
 ui/app
 main
