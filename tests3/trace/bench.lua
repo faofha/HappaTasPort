@@ -135,6 +135,23 @@ A.request("idle")
 A.setInterface("New")
 M.steps(5)
 
+-- (phase 6) the MicroProfiler open on both sides, V2's default mode (gated)
+A.setSetting("Show MicroProfiler", 1)
+M.steps(5)
+measure("idle, profiler", 600)
+A.request("create")
+M.steps(5)
+A.request("unpause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
+measure("recording, profiler", 300)
+A.request("pause")
+M.steps(3)
+hrp.AssemblyLinearVelocity = Vector3.zero
+A.request("idle")
+A.setSetting("Show MicroProfiler", 0)
+M.steps(5)
+
 -- the world (phase 4): 100 client objects (20 moved by a script), a beat block group and a turret with the
 -- kit's own loops (kit-style modules), the speed hack at 0.5x, recording
 local RSt = M.services.ReplicatedStorage

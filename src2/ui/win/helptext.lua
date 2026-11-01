@@ -128,8 +128,12 @@ local TOPICS = {
 		.. "Settings and Controls are their own windows; every setting has a reset arrow (←) when it isn't at its "
 		.. "default." },
 	{ "profiler", "MicroProfiler",
-		"V2's copy of Roblox's MicroProfiler ({key:microProfiler}) comes back in a later part of HappaTAS 3. Its "
-		.. "settings (Show MicroProfiler, MicroProfiler Scale, MicroProfiler Text Offset) are kept until then." },
+		"A copy of Roblox's MicroProfiler ({key:microProfiler}). Time = the last frame, Avg = the average of every frame "
+		.. "since the count started, Max = the biggest frame so far. Aggregate Infinite counts the frames; picking it "
+		.. "starts Avg and Max again. Custom > TAS Timeline shows your run (green = the current frame, click to jump there). "
+		.. "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves the frames to the place's folder. Pause or "
+		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
+		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 	{ "limits", "Known limits",
 		"Some things can't follow the run: other players; Roblox's own timers inside the humanoid; the moment the "
 		.. "character bumps into a platform it pushes in Frame Step (the push can start a little later, or stall); "
