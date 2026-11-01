@@ -94,10 +94,14 @@ local function kitKeySet(kit)
 end
 
 section("carry columns")
-for _, key in ipairs({ "Mobile", "CO", "BT", "KE", "SK" }) do
+for _, key in ipairs({ "CO", "BT", "KE", "SK" }) do
 	local col = E.tl.cols["v2" .. key]
 	check(col and col.kind == "list" and col.v2.key == key and col.v2.keep == true, "carry column for " .. key)
 end
+-- (phase 5c: the thumbstick plugin's own column has V2's Mobile key, so no carry column is made for it)
+local mob = E.tl.cols.Mobile
+check(mob and mob.kind == "list" and mob.v2.key == "Mobile" and mob.v2.keep == true, "Mobile: the thumbstick's column")
+eq(E.tl.cols.v2Mobile, nil, "no v2Mobile carry column")
 local before = E.tl:count()
 Run.registerCarry(E.tl)
 check(E.tl.cols.v2CO ~= nil, "registering twice is harmless")
@@ -125,7 +129,7 @@ do
 	local carried = true
 	for i, f in ipairs(exp.frames) do
 		for _, key in ipairs({ "Mobile", "CO", "BT", "KE", "SK" }) do
-			local have, want = E.tl:getList("v2" .. key, i), f[key]
+			local have, want = E.tl:getList((key == "Mobile") and "Mobile" or ("v2" .. key), i), f[key]
 			if key == "KE" then want = mappedKE(want, ids) end
 			if not deepEqual(have, want) then carried = false; check(false, "frame " .. i .. " " .. key) break end
 		end
