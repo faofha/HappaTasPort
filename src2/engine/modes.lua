@@ -398,6 +398,10 @@ function Modes:back1() if not self:doubleInput() then self:holdAt(self.E.frame -
 function Modes:forward1() if not self:doubleInput() then self:holdAt(self.E.frame + 1) end end
 function Modes:back() if not self:doubleInput() then self.E.back = true; self:holdAt(self.E.frame) end end
 function Modes:forward() if not self:doubleInput() then self.E.forw = true; self:holdAt(self.E.frame) end end
+-- a held Back / Forward let go (a touch button's release; the keys' release is in engine/frame)
+function Modes:release(which)
+	if which == "back" then self.E.back = false elseif which == "forward" then self.E.forw = false end
+end
 
 -- to frame f: shown while paused, or the playback clock moved there in Test (V2 Profiler.OnScrub)
 function Modes:seek(f)

@@ -26,6 +26,7 @@ local LibraryWin = import("ui/win/library")
 local MergeWin = import("ui/win/merge")
 local HelpWin = import("ui/win/help")
 local Classic = import("ui/classic/classic")
+local Touch = import("ui/touch")
 
 local UI = {}
 UI.__index = UI
@@ -49,6 +50,7 @@ function UI.start(E)
 	self.toast = Toast.new(self)
 	self.frost = Frost.new(self)
 	self.bar = Bar.new(self)
+	if Touch.wanted(Env.svc("UserInputService")) then self.touch = Touch.new(self) end
 	SettingsWin.define(self)
 	ControlsWin.define(self)
 	InspectorWin.define(self)

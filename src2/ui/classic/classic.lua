@@ -17,6 +17,7 @@ local ControlsRows = import("ui/classic/controlsrows")
 local Saves = import("ui/classic/saves")
 local ClassicStats = import("ui/classic/stats")
 local ClassicLook = import("ui/classic/look")
+local ClassicMobile = import("ui/classic/mobile")
 local HelpText = import("ui/win/helptext")
 
 local Classic = {}
@@ -58,6 +59,7 @@ function Classic.new(ui)
 	self:buildHelp()
 	self.look = ClassicLook.new(self) -- (after every row exists: it themes what it finds)
 	self:wire()
+	ClassicMobile.wire(self)
 	self:placeMenu()
 	pcall(function() gui.Parent = parent end)
 	self.touch = self.uis ~= nil and self.uis.TouchEnabled and not self.uis.KeyboardEnabled

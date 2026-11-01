@@ -2,7 +2,7 @@
 --  ICON  (HappaTAS 3 ui kit): small icons drawn from frames and the one triangle every listed font has
 --  (▼, turned by the label's Rotation: -90 = ▶, 90 = ◀; phase 5a measured the fonts live). Kinds: play,
 --  back1 (◀|), forward1 (|▶), start (|◀), record (a round dot, the recording colour), pause (two bars),
---  marker (a diamond), chevron (▼). Coloured from the theme.
+--  marker (a diamond), chevron (▼), rewind / fastforward (two triangles). Coloured from the theme.
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
@@ -20,6 +20,8 @@ local SHAPES = {
 	pause = { { "bar", 0.22, 0.2 }, { "bar", 0.58, 0.2 } },
 	marker = { { "diamond" } },
 	chevron = { { "tri", 0, 0.5 } },
+	rewind = { { "tri", 90, 0.3 }, { "tri", 90, 0.7 } },
+	fastforward = { { "tri", -90, 0.3 }, { "tri", -90, 0.7 } },
 }
 
 function Icon.new(ctx, parent, kind, size)
