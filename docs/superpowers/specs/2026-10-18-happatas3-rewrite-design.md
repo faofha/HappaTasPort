@@ -412,6 +412,32 @@ Each phase has its own implementation plan, tests and PR.
   Roblox's dumps then; unchanged). The release loads with the profiler open and no console line, and unloads leaving
   nothing. Settings.json, Settings3.json and the place's files put back byte for byte, fps cap 60 and graphics
   quality 10 as found, HappaTasTest deleted.
+- Phase 7: the success criteria (2026-11-02; live in the EToH kit test place, Real at 60 FPS, window not focused,
+  the Roblox menu open the whole time; the release `wow` = HappaTAS 3.0.0 against V2.38.17's release, main's
+  b54e1c1:wow, whose code is the trace reference aaa21b6 line for line):
+  1. Same frames as V2: the three traces (main, V2's client object trace, the world trace) are SAME line for line in
+     the mock; each phase's live check spot-checked its systems (above). Met.
+  2. V2's files open and play the same: dzr's four runs in the place folder are file versions 1, 2, 3 and 4.
+     `tools/live/criteria3.lua` opened each in both scripts: 123 (1,401 frames, 5.704 s), Slot 1 (3,141, 12.723 s)
+     and g (347, 1.446 s) gave the same frame count and length, root position and FrameTime equal on every frame
+     (worst difference 0); Test played each in the same real time in both (length + ~0.2 s for the end check, the
+     same number of frames passed: 344 / 765 / 88 at 60 FPS) and ended within 0.05 studs of the run's last frame in
+     both. "test g" (v4) is refused by both alike ("trailing data"): V2.38.17 can't open it either. Met.
+  3. Settings.json converted: a copy of the release pointed at a test folder converted dzr's Settings.json: all 34
+     settings and all 17 key bindings carried over unchanged, the MicroProfiler table too; only V2.38.16's 5 sound
+     settings were dropped (6.3); Settings.json itself unchanged. Met.
+  4. Cost: the headless bench is within its gate in every mode (BENCH OK), and saving a 10-minute run takes 454 ms
+     against V2's 512 ms, the file 80 % of V2's (`tools/savebench3.sh`; loading 678 vs 499 ms there, the mock's LZ4
+     is Lua). Live, HappaTAS 3 costs about 0.08 ms a frame more than V2.38.17 (the layered engine core, measured in
+     the live frame cost follow-up): accepted by dzr on 2026-11-01. Met in the mock and for saving; live, an
+     accepted gap.
+  5. Unload leaves nothing: loading the release over V2's unloads V2 (its interface and MicroProfiler go, one
+     TASUserInterface left); the release loads in 0.1 s with no console line; after Unload no HappaTAS ScreenGui in
+     CoreGui or PlayerGui, no camera function hooked, no getgenv entry. Met. One thing noticed: playing a run that
+     ends in shift lock leaves shift lock on after Idle and Unload, in V2 and HappaTAS 3 alike (the game's own
+     mouse lock state, as the run left it).
+  Restored: Settings.json, Settings3.json and the place folder byte for byte, fps cap 60 and graphics quality 10
+  as found, HappaTasTest deleted, nothing loaded; the Roblox menu left open as it was.
 - ~~Exact v6 column encodings and how much smaller files get. Phase 3.~~ Answered in phase 3: numbers are
   stored losslessly as changes of their 1/1000 (times: 1/1000000) value, an unchanged value in one byte,
   anything else as its 8 bytes; LZ4 over the body. A synthetic 10-minute run (144,000 frames at 240 FPS,
