@@ -22370,7 +22370,7 @@ __mods["main"] = function(import)
 		addSaveApi(handle, k)
 		kernel = k
 		share("__HappaTAS3", handle, errs)
-		share("__HappaTAS", handle, errs)
+		share("__HappaTAS", handle)
 		local ok, err = pcall(function()
 			k.state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
 			k.bus = Bus.new(errs)

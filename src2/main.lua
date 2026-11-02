@@ -168,8 +168,9 @@ function Main.Start()
 	kernel = k
 	share("__HappaTAS3", handle, errs)
 	-- (also under V2's name: V2 run later in the same client unloads this copy instead of running beside it with
-	-- its interface deleted, V2's UI.RemoveStale removes ScreenGuis by these names)
-	share("__HappaTAS", handle, errs)
+	-- its interface deleted, V2's UI.RemoveStale removes ScreenGuis by these names; a global table that can't
+	-- be written was already reported for __HappaTAS3)
+	share("__HappaTAS", handle)
 	local ok, err = pcall(function()
 		k.state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
 		k.bus = Bus.new(errs)
