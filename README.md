@@ -5,7 +5,8 @@ HappaTAS as **one client-side Luau script** for Roblox executors. It records and
 `<executor workspace>/HappaTasPort/<PlaceId>/`.
 
 **Latest version: HappaTAS 3.0.0**, a rewrite from scratch of HappaTAS V2.38.17 with a new interface, a
-library for your runs and a faster engine. Every V2 feature stays, and your old runs and settings carry over.
+library for your runs and smaller files that save faster. Every V2 feature stays, and your old runs and settings
+carry over.
 No network code.
 
 Run `wow` (or `wow1`, the same file) in your executor.
@@ -90,8 +91,9 @@ chat or a text box.
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
   locked, mobile thumbstick replay.
-- **Unload** (Classic: More > Unload HappaTAS) undoes everything: no interface, connection, hook or changed
-  property is left. Running the script again unloads the copy already running, V2 too.
+- **Unload** (Help > Unload HappaTAS, below the topics; Classic: More > Unload HappaTAS) undoes everything: no
+  interface, connection, hook or changed property is left. Running the script again unloads the copy already
+  running, V2 too, and running V2 (from the history) unloads HappaTAS 3.
 
 ## Settings and files
 
@@ -110,7 +112,9 @@ Files, in `<executor workspace>/HappaTasPort/`:
 - `Settings3.json`: HappaTAS 3's settings, keys and windows. The first start converts V2's `Settings.json`
   (every setting and key binding; V2's old sound settings are dropped). `Settings.json` itself is never
   written, so V2 keeps its own settings. To convert V2's settings again (say you kept using V2 after trying a
-  HappaTAS 3 test build), delete `Settings3.json` and run the script.
+  HappaTAS 3 test build), unload HappaTAS first (Help > Unload HappaTAS, or rejoin; while it runs it writes
+  `Settings3.json` again within a moment), then delete `Settings3.json`, then run the script. That also resets
+  what only HappaTAS 3 has: the look, the windows and the interface choice.
 - `<PlaceId>/`: the runs of that game (`.tas`), folders as real subfolders, and `library.cache` (the runs'
   details, rebuilt when it's missing or out of date).
 - Every `.tas` file V2 saved (file versions 1 - 5, and V2's old `.json` slots) opens and plays. A run is saved
@@ -185,7 +189,7 @@ of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor,
 
 - **HappaTAS 3.0.0**: rewritten from scratch. A new interface (Dock, windows, timeline bar, Inspector) and
   the classic one; a library with folders, search, sort and numbered attempts; file format v6 (smaller,
-  safe saving); old runs and settings carry over; faster frames and everything undone on Unload; touch
+  safe saving); old runs and settings carry over; smaller files that save faster and a clean Unload; touch
   buttons and thumbstick replay on phones; the MicroProfiler on the new engine.
 - **V2.38.17**: no sounds, keys replayed with keypress only, the speed hack's walking, turning, jumps,
   gravity and coyote time on the TAS clock, coyote time kept across a pause.

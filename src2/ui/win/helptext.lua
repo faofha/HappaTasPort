@@ -19,7 +19,7 @@ HelpText.WHATS_NEW = {
 		"Library: folders, search, sort, numbered attempts",
 		"File format v6: smaller files, safe saving",
 		"Old .tas files (v1-v5) and Settings.json carry over",
-		"Faster frames, everything undone on Unload",
+		"Smaller files and faster saving, a clean Unload",
 		"Touch buttons and thumbstick replay on phones",
 		"The MicroProfiler on the new engine",
 	},
@@ -44,8 +44,10 @@ local TOPICS = {
 		"HappaTAS records what you do frame by frame and plays it back. There are three modes: Idle {key:idle}, "
 		.. "Create {key:create} and Test {key:test}.\n\nIn Create you record, pause, go back and record over your "
 		.. "mistakes. Test plays the run. The Dock at the top opens the windows; {key:menu} hides or shows the whole "
-		.. "interface.\n\nYour V2 settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
-		.. "To convert them again, delete Settings3.json and run the script." },
+		.. "interface.\n\nIf you used V2, its settings and keys were converted on the first start "
+		.. "(HappaTasPort/Settings3.json). To convert them again: unload HappaTAS first (Unload HappaTAS below the "
+		.. "topics, or rejoin), then delete HappaTasPort/Settings3.json, then run the script. That also resets what "
+		.. "only HappaTAS 3 has: the look, the windows and the interface choice." },
 	{ "whatsnew", "What's new", whatsNew() },
 	{ "idle", "Idle",
 		"Idle {key:idle} is the default mode: everything TAS related stops and you play the game like normal. The "

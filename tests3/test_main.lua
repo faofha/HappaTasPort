@@ -20,6 +20,7 @@ check(boot(3), "boots")
 check(oldUnloaded, "the older V2 copy was unloaded")
 local h = genv.__HappaTAS3
 check(type(h) == "table" and h.Version == "3.0.0", "handle published with the version")
+eq(genv.__HappaTAS, h, "also shared as __HappaTAS: V2 run later unloads this copy (review, phase 7)")
 local T = genv.__HappaTAS3_T
 check(type(T) == "table" and T.pipe ~= nil and T.state ~= nil, "debug tables published (test builds have Debug on)")
 eq(T.state:get("mode"), "Idle", "initial mode Idle")
@@ -129,6 +130,7 @@ eq(c[2], before[2], "PreSimulation connections back to before")
 eq(c[3], before[3], "PostSimulation connections back to before")
 check(not lateBound(), "no late render-step bind")
 eq(genv.__HappaTAS3, nil, "handle removed")
+eq(genv.__HappaTAS, nil, "__HappaTAS removed too")
 eq(genv.__HappaTAS3_T, nil, "debug tables removed")
 local ok = pcall(h2.Unload)
 check(ok, "Unload twice is fine")
@@ -138,6 +140,23 @@ if VARIANT ~= "nofiles" then
 end
 M.steps(3)
 eq(afterUnload, 0, "nothing runs after Unload")
+
+section("V2 started after HappaTAS 3 unloads it (V2 calls getgenv().__HappaTAS.Unload)")
+check(boot(3), "boots again")
+local h3 = genv.__HappaTAS3
+check(h3 ~= nil and genv.__HappaTAS == h3, "shared under both names")
+local v2Old = genv.__HappaTAS
+pcall(v2Old.Unload) -- (what V2's start does with an older copy)
+M.steps(2)
+eq(genv.__HappaTAS3, nil, "HappaTAS 3 unloaded")
+eq(genv.__HappaTAS, nil, "the slot is free for V2")
+local v2Handle = { Version = "V2.38.17", Unload = function() end }
+check(boot(3), "boots again")
+genv.__HappaTAS = v2Handle -- (V2 took the slot while HappaTAS 3 runs: its own Unload must not clear V2's)
+genv.__HappaTAS3.Unload()
+M.steps(2)
+eq(genv.__HappaTAS, v2Handle, "HappaTAS 3's Unload leaves another script's handle alone")
+genv.__HappaTAS = nil
 
 section("a Start that fails halfway leaves nothing behind")
 local Pipeline = __T3("kernel/pipeline")

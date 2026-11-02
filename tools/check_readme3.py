@@ -31,8 +31,14 @@ for name, key in rows:
     if not re.search(r"\|\s*%s\s*\|\s*%s\s*\|" % (re.escape(name), re.escape(shown)), readme):
         fail("the controls table has no row | %s | %s |" % (name, shown))
 
-for needed in ("Settings3.json", "unsupported file version 6", "release3.sh"):
+for needed in ("Settings3.json", "unsupported file version 6", "release3.sh",
+               "unload HappaTAS first", "Help > Unload HappaTAS"):
     if needed not in readme:
         fail("README doesn't mention %s" % needed)
+
+# (spec 13: live, HappaTAS 3's frames cost a little more than V2's; saving is what got faster)
+for claim in ("faster engine", "faster frames"):
+    if claim in readme.lower():
+        fail("README claims a %s, which spec 13's live numbers contradict" % claim)
 
 print("check_readme3: OK (%d controls)" % len(rows))

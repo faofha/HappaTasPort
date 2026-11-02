@@ -17301,7 +17301,7 @@ __mods["ui/win/helptext"] = function(import)
 			"Library: folders, search, sort, numbered attempts",
 			"File format v6: smaller files, safe saving",
 			"Old .tas files (v1-v5) and Settings.json carry over",
-			"Faster frames, everything undone on Unload",
+			"Smaller files and faster saving, a clean Unload",
 			"Touch buttons and thumbstick replay on phones",
 			"The MicroProfiler on the new engine",
 		},
@@ -17323,8 +17323,10 @@ __mods["ui/win/helptext"] = function(import)
 			"HappaTAS records what you do frame by frame and plays it back. There are three modes: Idle {key:idle}, "
 			.. "Create {key:create} and Test {key:test}.\n\nIn Create you record, pause, go back and record over your "
 			.. "mistakes. Test plays the run. The Dock at the top opens the windows; {key:menu} hides or shows the whole "
-			.. "interface.\n\nYour V2 settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
-			.. "To convert them again, delete Settings3.json and run the script." },
+			.. "interface.\n\nIf you used V2, its settings and keys were converted on the first start "
+			.. "(HappaTasPort/Settings3.json). To convert them again: unload HappaTAS first (Unload HappaTAS below the "
+			.. "topics, or rejoin), then delete HappaTasPort/Settings3.json, then run the script. That also resets what "
+			.. "only HappaTAS 3 has: the look, the windows and the interface choice." },
 		{ "whatsnew", "What's new", whatsNew() },
 		{ "idle", "Idle",
 			"Idle {key:idle} is the default mode: everything TAS related stops and you play the game like normal. The "
@@ -17464,9 +17466,11 @@ __mods["ui/win/helptext"] = function(import)
 	return HelpText
 end
 __mods["ui/win/help"] = function(import)
+	local Env = import("platform/env")
 	local W = import("ui/write")
 	local K = import("ui/kit/base")
 	local Field = import("ui/kit/field")
+	local Button = import("ui/kit/button")
 	local HelpText = import("ui/win/helptext")
 	local HelpWin = {}
 	local SIDE, PAD, ROW_H = 200, 14, 24
@@ -17486,7 +17490,7 @@ __mods["ui/win/help"] = function(import)
 		list.BorderSizePixel = 0
 		list.ScrollBarThickness = 4
 		list.Position = UDim2.new(0, 8, 0, 50)
-		list.Size = UDim2.new(0, SIDE, 1, -58)
+		list.Size = UDim2.new(0, SIDE, 1, -58 - 40)
 		list.Parent = body
 		hw.list = list
 		local lctx = {}
@@ -17494,6 +17498,12 @@ __mods["ui/win/help"] = function(import)
 		lctx.pointer = { add = function(r, z) r.clip = list; return ctx.pointer.add(r, z) end, remove = ctx.pointer.remove }
 		local conn = list:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 		hw.offs[#hw.offs + 1] = function() conn:Disconnect() end
+		hw.unload = Button.new(ctx, body, { text = "Unload HappaTAS", kind = "plain", w = SIDE - PAD })
+		hw.unload.gui.Position = UDim2.new(0, PAD, 1, -40)
+		hw.unload.onClick = function()
+			local h = Env.genv.__HappaTAS3
+			if h and h.Unload then task.spawn(h.Unload) end
+		end
 		local page = Instance.new("ScrollingFrame")
 		page.Name = "Page"
 		page.BackgroundTransparency = 1
@@ -22360,6 +22370,7 @@ __mods["main"] = function(import)
 		addSaveApi(handle, k)
 		kernel = k
 		share("__HappaTAS3", handle, errs)
+		share("__HappaTAS", handle, errs)
 		local ok, err = pcall(function()
 			k.state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
 			k.bus = Bus.new(errs)
@@ -22387,6 +22398,7 @@ __mods["main"] = function(import)
 		k.life:cleanup()
 		local genv = Env.genv
 		if genv.__HappaTAS3 == k.handle then share("__HappaTAS3", nil) end
+		if genv.__HappaTAS == k.handle then share("__HappaTAS", nil) end
 		if k.debug and genv.__HappaTAS3_T == k.debug then share("__HappaTAS3_T", nil) end
 	end
 	return Main

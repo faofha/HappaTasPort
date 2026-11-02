@@ -2,10 +2,13 @@
 --  HELP WINDOW  (HappaTAS 3 ui, spec 8.3): a search field and the topic list on the left, the topic on the
 --  right (ui/win/helptext). The search matches titles and text as you type. Keys in the text are the ones
 --  bound now, and "Missing executor functions" lists Env.notes: both are read again whenever a topic shows.
+--  Below the topics: Unload HappaTAS (V2's More > Unload; Classic keeps its own).
 -- ================================================================================================
+local Env = import("platform/env")
 local W = import("ui/write")
 local K = import("ui/kit/base")
 local Field = import("ui/kit/field")
+local Button = import("ui/kit/button")
 local HelpText = import("ui/win/helptext")
 
 local HelpWin = {}
@@ -31,7 +34,7 @@ function HelpWin.build(ui, body, win)
 	list.BorderSizePixel = 0
 	list.ScrollBarThickness = 4
 	list.Position = UDim2.new(0, 8, 0, 50)
-	list.Size = UDim2.new(0, SIDE, 1, -58)
+	list.Size = UDim2.new(0, SIDE, 1, -58 - 40)
 	list.Parent = body
 	hw.list = list
 	local lctx = {}
@@ -39,6 +42,13 @@ function HelpWin.build(ui, body, win)
 	lctx.pointer = { add = function(r, z) r.clip = list; return ctx.pointer.add(r, z) end, remove = ctx.pointer.remove }
 	local conn = list:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 	hw.offs[#hw.offs + 1] = function() conn:Disconnect() end
+
+	hw.unload = Button.new(ctx, body, { text = "Unload HappaTAS", kind = "plain", w = SIDE - PAD })
+	hw.unload.gui.Position = UDim2.new(0, PAD, 1, -40)
+	hw.unload.onClick = function()
+		local h = Env.genv.__HappaTAS3
+		if h and h.Unload then task.spawn(h.Unload) end
+	end
 
 	local page = Instance.new("ScrollingFrame")
 	page.Name = "Page"
