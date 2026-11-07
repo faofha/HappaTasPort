@@ -411,8 +411,9 @@ do
 	-- ----------------------------------------------------------------------------------------- frame step
 	-- "Speed Hack Frame Step" (speeds below 1): no scaling at all. Roblox runs its normal physics on some
 	-- frames only, and everything that moves is held still for the physics step of the frames in between
-	-- (acc += s every physics step; a step runs when acc reaches 1), like Eternal Obbying's fixed steps fed by
-	-- its TAS pace. Only frames whose physics step ran are recorded, each with the simulated time of that step,
+	-- (by time, adapted from Eternal Obbying's fixed-step loop, Client/Session.lua: acc += real dt x s, a step
+	-- runs when acc holds the time it simulates; counting events instead ran 0.5x at 0.25x when frames had 1 and 3
+	-- physics steps in turn). Only frames whose physics step ran are recorded, each with the simulated time of that step,
 	-- so walking, jumping and falling are exactly normal-speed physics (checked in the client: same heights,
 	-- states and times), and a platform you push yourself (the kit's Pushing Platform) speeds up at the normal
 	-- rate (~158 stud/s^2), which the scaling above can't do (Roblox's walking force can't be slowed). Not exact:
@@ -425,10 +426,10 @@ do
 	-- Roblox's humanoid keeps its own timers through a held step (live: no coyote jump even 0.05 s after the edge at
 	-- 0.1x, Landed over 6x too soon), so a step in a timed state always runs: the jump's push, Landed, and Running off
 	-- the floor (coyote time and the grace before Freefall). The time is held back afterwards (acc below 0, at most
-	-- MAX_DEBT steps), so the game time still follows the slider.
+	-- MAX_DEBT s of game time), so the game time still follows the slider.
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 		root = nil, hum = nil }
-	local MAX_DEBT = 60
+	local MAX_DEBT = 0.25
 	local ST = Enum.HumanoidStateType
 	local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
 	local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
@@ -462,10 +463,10 @@ do
 	function SH.StepBegin(dt)
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
-		FS.acc = FS.acc + FS.s
+		if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end -- (the first step runs)
 		local okT, must = pcall(timedState, FS.hum)
-		if FS.acc >= 1 - 1e-6 or (okT and must and FS.acc > 1 - MAX_DEBT) then
-			FS.acc = FS.acc - 1
+		if FS.acc >= dt - 1e-9 or (okT and must and FS.acc - dt > -MAX_DEBT) then
+			FS.acc = FS.acc - dt
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -596,7 +597,7 @@ do
 			if applied then SH.Restore(keepMomentum) end
 			if not FS.on then
 				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
-				FS.acc = 1 - s -- (the first step runs)
+				FS.acc = nil -- (the first step runs)
 			end
 			FS.s, FS.root, FS.hum = s, part, h
 			setAnim(s)

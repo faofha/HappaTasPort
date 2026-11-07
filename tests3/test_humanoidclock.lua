@@ -174,11 +174,13 @@ eq(E.cs.timeRate, 1, "zoom spring at normal speed when paused")
 S.Set("Speed Hack Speed", 0.5)
 
 section("Frame Step: normal physics on every other frame, everything held on the others")
--- normal frame i (DTS[i]) <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt)
+-- normal frame i <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt). Even frames: Frame Step
+-- banks time, so uneven ones change which frames run (that case: the timed-state section below)
+local EVEN = 1 / 120
 local N2 = 120
 local fsDts, fsEv, wt2 = {}, {}, walkTurn()
 for i = 1, N2 do
-	fsDts[2 * i - 1], fsDts[2 * i] = DTS[i], DTS[i]
+	fsDts[2 * i - 1], fsDts[2 * i] = EVEN, EVEN
 	if wt2[i] then fsEv[2 * i - 1] = wt2[i] end
 end
 -- (ends on a frame whose step runs: the held frame after it would record that step, which the normal run
@@ -204,7 +206,7 @@ local stepped = record(fsDts, 1, fsEv)
 M.physicsLog = nil
 S.Set("Speed Hack", 0)
 local dtsN2 = {}
-for i = 1, N2 do dtsN2[i] = DTS[i] end
+for i = 1, N2 do dtsN2[i] = EVEN end
 local plainS = record(dtsN2, 1, walkTurn())
 S.Set("Speed Hack", 1)
 near(seenS.walk, 16, 1e-9, "Frame Step: WalkSpeed untouched")
@@ -227,14 +229,14 @@ eq(freeSteps, N2 - 1, "Frame Step: and free on the others")
 S.Set("Speed Hack Speed", 0.25)
 local q4Dts, q4Ev, wt4 = {}, {}, walkTurn()
 for i = 1, 60 do
-	for k = 0, 3 do q4Dts[4 * i - 3 + k] = DTS[i] end
+	for k = 0, 3 do q4Dts[4 * i - 3 + k] = EVEN end
 	if wt4[i] then q4Ev[4 * i - 3] = wt4[i] end
 end
 for k = 238, 240 do q4Dts[k] = nil end
 local steppedQ = record(q4Dts, 1, q4Ev)
 S.Set("Speed Hack", 0)
 local dts60 = {}
-for i = 1, 60 do dts60[i] = DTS[i] end
+for i = 1, 60 do dts60[i] = EVEN end
 local plainQ4 = record(dts60, 1, walkTurn())
 S.Set("Speed Hack", 1)
 sameTAS(plainQ4, steppedQ, "Frame Step 0.25x")
@@ -285,6 +287,19 @@ do
 		tops[s] = top
 	end
 	check(tops[1] > 7 and math.abs(tops[1] - tops[0.25]) < 0.002, "a standing jump at 0.25x is as high as at 1x (" .. tops[0.25] .. " / " .. tops[1] .. ")")
+	-- the game time follows the slider by time, not by counting physics events: frames of 1 and 3 steps in turn
+	-- (counted, 0.5x ran only one kind and went 0.25x or 0.75x)
+	local uneven = {}
+	for i = 1, 600 do uneven[i] = (i % 2 == 1) and 1 / 240 or 3 / 240 end
+	local walk = { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end }
+	for _, s in ipairs({ 0.5, 0.25, 0.7 }) do
+		S.Set("Speed Hack Speed", s)
+		local r = record(uneven, 1, walk)
+		local real = 0
+		for i = 1, 600 do real = real + uneven[i] end
+		local ratio = r[#r].TotalTime / real
+		check(math.abs(ratio - s) < 0.02 * s + 0.005, s .. "x with frames of 1 and 3 steps: game time / real time " .. string.format("%.4f", ratio))
+	end
 	S.Set("Speed Hack", 1)
 	S.Set("Speed Hack Speed", 0.5)
 	M.floorEdgeX = nil

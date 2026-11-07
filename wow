@@ -9609,7 +9609,7 @@ __mods["world/time/control"] = function(import)
 		end
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 			root = nil, hum = nil }
-		local MAX_DEBT = 60
+		local MAX_DEBT = 0.25
 		local ST = Enum.HumanoidStateType
 		local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
 		local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
@@ -9641,10 +9641,10 @@ __mods["world/time/control"] = function(import)
 		function SH.StepBegin(dt)
 			if not FS.on then return true end
 			dt = tonumber(dt) or 0
-			FS.acc = FS.acc + FS.s
+			if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end
 			local okT, must = pcall(timedState, FS.hum)
-			if FS.acc >= 1 - 1e-6 or (okT and must and FS.acc > 1 - MAX_DEBT) then
-				FS.acc = FS.acc - 1
+			if FS.acc >= dt - 1e-9 or (okT and must and FS.acc - dt > -MAX_DEBT) then
+				FS.acc = FS.acc - dt
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9758,7 +9758,7 @@ __mods["world/time/control"] = function(import)
 				if applied then SH.Restore(keepMomentum) end
 				if not FS.on then
 					FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
-					FS.acc = 1 - s
+					FS.acc = nil
 				end
 				FS.s, FS.root, FS.hum = s, part, h
 				setAnim(s)
