@@ -207,7 +207,7 @@ do
 	function stub:stepTime() return self.stepT end
 	function stub:update() return self.rate end
 	function stub:stepping() return false end
-	function stub:stepBegin() calls[#calls + 1] = "stepBegin" end
+	function stub:stepBegin() calls[#calls + 1] = "stepBegin"; return true end -- (true: the step runs)
 	function stub:humanoidPre() calls[#calls + 1] = "pre" end
 	function stub:stepEnd() calls[#calls + 1] = "stepEnd" end
 	function stub:humanoidPost() calls[#calls + 1] = "post" end
