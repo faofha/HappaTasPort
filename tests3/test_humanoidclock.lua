@@ -170,8 +170,6 @@ eq(E.cs.timeRate, 1, "zoom spring at normal speed when paused")
 S.Set("Speed Hack Speed", 0.5)
 
 section("Frame Step: normal physics on every other frame, everything held on the others")
-eq(S.Get("Speed Hack Frame Step"), 0, "off by default")
-S.Set("Speed Hack Frame Step", 1)
 -- normal frame i (DTS[i]) <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt)
 local N2 = 120
 local fsDts, fsEv, wt2 = {}, {}, walkThenJump()
@@ -261,34 +259,29 @@ eq(boxF.Anchored, false, "the box isn't left anchored")
 near(boxRec[#boxRec].TotalTime, 20 / 60, 1e-5, "TAS time = the time of the steps that ran (" .. boxRec[#boxRec].TotalTime .. ")")
 M.freeParts = {}
 boxF:Destroy()
-S.Set("Speed Hack Frame Step", 0)
 
 section("Frame Step only below 1x: above it the physics is scaled")
-S.Set("Speed Hack Frame Step", 1)
 S.Set("Speed Hack Speed", 2)
 local fastFS = record(DTS, 1, walkThenJump())
-S.Set("Speed Hack Frame Step", 0)
 sameTAS(fast, fastFS, "2x with Frame Step on = 2x scaled")
 S.Set("Speed Hack Speed", 0.5)
 
-section("one recording through 0.5x Smooth, 2x, Frame Step 0.25x and off (Review Focus 5)")
+section("one recording through Frame Step 0.5x, 2x, Frame Step 0.25x and off (Review Focus 5)")
 do
 	S.Set("Speed Hack", 1)
 	S.Set("Speed Hack Speed", 0.5)
-	S.Set("Speed Hack Frame Step", 0)
 	local seenM = {}
 	local ev = {
 		[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
 		[50] = function() S.Set("Speed Hack Speed", 2) end,
-		[100] = function() S.Set("Speed Hack Frame Step", 1); S.Set("Speed Hack Speed", 0.25) end,
+		[100] = function() S.Set("Speed Hack Speed", 0.25) end,
 		[130] = function() seenM.held = hrp.Anchored end,
 		[180] = function() S.Set("Speed Hack", 0) end,
 		[200] = function() seenM.g, seenM.w, seenM.j, seenM.an, seenM.scale = workspace.Gravity, hum.WalkSpeed, hum.JumpPower, hrp.Anchored, SH.scale end,
 	}
 	local run = record({ table.unpack(DTS, 1, 220) }, 1, ev)
-	S.Set("Speed Hack Frame Step", 0)
 	S.Set("Speed Hack Speed", 0.5)
-	check(#run > 150, "frames recorded (" .. #run .. ")")
+	check(#run > 100, "frames recorded (" .. #run .. ")")
 	local worstT, minV, maxV, nonPos = 0, 1e9, 0, 0
 	for i = 2, #run do
 		worstT = math.max(worstT, math.abs(run[i].TotalTime - (run[i - 1].TotalTime + run[i].FrameTime)))
@@ -457,7 +450,7 @@ do
 			eq(states, 0, label .. ": same humanoid states (a jump's Jumping / Freefall switch may differ by a frame)")
 			return apexP, apexS, plainR
 		end
-		for _, s in ipairs({ 0.25, 0.5, 2, 4 }) do
+		for _, s in ipairs({ 2, 4 }) do
 			local _, _, walkR = compareGame(s .. "x at 240 FPS walk and stop", s, function()
 				return { [0] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
 					[0.5] = function() hum.MoveDirection = Vector3.zero end }
@@ -523,7 +516,7 @@ do
 		end
 		return false
 	end
-	for _, s in ipairs({ 0.5, 2, 4 }) do
+	for _, s in ipairs({ 2, 4 }) do
 		-- (at s, frames of s/120 game seconds: k frames = k s / 120 s)
 		local inside = math.max(1, math.floor(0.06 * 120 / s))
 		local outside = math.ceil(0.2 * 120 / s)
@@ -543,7 +536,7 @@ do
 	end
 	-- the edge of the window: a jump k frames after leaving the floor works at s exactly when it works at normal
 	-- speed, for every k from 0.11 to 0.14 s of game time (a frame: one real step, s / 240 s of game time)
-	for _, s in ipairs({ 0.5, 2 }) do
+	for _, s in ipairs({ 2 }) do
 		local frames = {}
 		for i = 1, 300 do frames[i] = s / 240 end
 		local slowFrames = {}
@@ -611,7 +604,7 @@ do
 		end
 		return false
 	end
-	for _, s in ipairs({ 1, 0.5 }) do
+	for _, s in ipairs({ 1, 2 }) do
 		check(coyotePause(s, 0.08, 0), s .. "x: paused 0.08 s after leaving the floor, 5 s later: a jump right away still works")
 		check(not coyotePause(s, 0.08, 0.06), s .. "x: paused 0.08 s after leaving the floor: a jump 0.06 s after unpausing (0.14 s) doesn't")
 	end
@@ -686,7 +679,7 @@ local function coyoteBack(s)
 	end
 	return false, n0
 end
-for _, s in ipairs({ 1, 0.5 }) do
+for _, s in ipairs({ 1, 2 }) do
 	local ok, at = coyoteBack(s)
 	check(ok, s .. "x: back to 0.06 s after leaving the floor, unpaused: a jump works (from frame " .. tostring(at) .. ")")
 end

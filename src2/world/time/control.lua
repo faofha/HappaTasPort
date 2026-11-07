@@ -3,15 +3,17 @@
 --  Create mode (V2.38.17 p16_speedhack.lua, both blocks function by function; the other systems are reached
 --  through the engine: E.co, E.kitClock, E.anim, E.settings).
 --  While a TAS is recorded (Create mode, unpaused) the character moves at s times its normal speed
---  (s = "Speed Hack Speed", 0.1 - 4; above 1 = fast motion, the same rules), like a video played slower:
+--  (s = "Speed Hack Speed", 0.1 - 4), like a video played slower or faster. Below 1x: Frame Step (below).
+--  Above 1x (fast motion), the scaling:
 --    gravity x s^2, WalkSpeed and JumpPower x s, the character's velocity x s when the slow motion starts
 --    (and / s when it stops with the character still moving), HappaTAS's animations x s. JumpHeight is left
 --    alone. Each recorded frame stores its time x s and the velocity / s (the engine, character), and its
 --    factor (column v2SK), so the TAS is in normal time and Test plays it at normal speed.
 --  The world slows down with it: constraints and body movers get their slowed values, free client objects
 --  keep their motion, conveyors move x s, the kit's bounce pad Power / swing Boost are slowed.
---  Frame Step (below 1x): no scaling; Roblox's normal physics runs on some steps and everything is held for
---  the others. The humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
+--  Frame Step (always below 1x; the scaling there made the humanoid's emulation drift: extra velocity, the
+--  floor spring and the Landed timer in real time, measured live): no scaling; Roblox's normal physics runs on
+--  some steps and everything is held for the others. The humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
 --  1000 limit) are put back on the game clock (the second block, SH.Humanoid).
 -- ================================================================================================
 local Env = import("platform/env")
@@ -575,7 +577,7 @@ do
 			if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 			return 1
 		end
-		if s < 1 and engine.settings:on("speedHackFrameStep") then
+		if s < 1 then
 			-- (from the scaled slow motion: its values off, the character's velocity back to normal)
 			if applied then SH.Restore(keepMomentum) end
 			if not FS.on then

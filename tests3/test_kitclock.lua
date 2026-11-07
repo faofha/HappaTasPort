@@ -261,7 +261,7 @@ local a = #Timer.ticks
 steps(240)
 local slowN = #Timer.ticks - a
 check(slowN >= 3 and slowN <= 5, "0.5x: 4 s of real time = 2 s of kit time (" .. slowN .. " waits of 0.5 s)")
-near(KC.rate, 0.5, 1e-9, "kit clock rate 0.5")
+near(KC.rate, 0, 1e-9, "0.5x is Frame Step: the kit clock moves on by the steps that run (rate 0)")
 local kgap = Timer.kticks[#Timer.kticks] - Timer.kticks[#Timer.kticks - 1]
 local rgap = Timer.ticks[#Timer.ticks] - Timer.ticks[#Timer.ticks - 1]
 near(kgap, 0.5, 0.01, "kit time between two waits 0.5 s")
@@ -300,12 +300,10 @@ d0 = Ride.dist
 steps(60)
 near(Ride.dist - d0, 20, 1e-6, "2x: twice the distance")
 S.Set("Speed Hack Speed", 0.5)
-S.Set("Speed Hack Frame Step", 1)
 steps(2)
 d0 = Ride.dist
 steps(60)
 near(Ride.dist - d0, 5, 1e-6, "Frame Step 0.5x: the distance of the steps that ran")
-S.Set("Speed Hack Frame Step", 0)
 click()
 steps(2)
 S.Set("Speed Hack", 0)
@@ -415,7 +413,6 @@ section("Frame Step: the kit's clock moves on by the steps that run only")
 newTAS()
 S.Set("Speed Hack", 1)
 S.Set("Speed Hack Speed", 0.5)
-S.Set("Speed Hack Frame Step", 1)
 create()
 click()
 steps(2)
@@ -425,7 +422,6 @@ local k1 = KC.Now()
 click()
 steps(2)
 near(k1 - k0, 20 / 60, 1e-6, "the kit's clock moved on by the 20 steps that ran (" .. (k1 - k0) .. ")")
-S.Set("Speed Hack Frame Step", 0)
 S.Set("Speed Hack", 0)
 idle()
 

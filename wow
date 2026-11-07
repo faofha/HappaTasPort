@@ -1408,7 +1408,6 @@ __mods["engine/settings"] = function(import)
 		row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
 		row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 		row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
-		row("speedHackFrameStep", "Speed Hack Frame Step", "Speed hack", 0, { desc = "Below 1x: normal physics on some steps, the world held on the others" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -9745,7 +9744,7 @@ __mods["world/time/control"] = function(import)
 				if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 				return 1
 			end
-			if s < 1 and engine.settings:on("speedHackFrameStep") then
+			if s < 1 then
 				if applied then SH.Restore(keepMomentum) end
 				if not FS.on then
 					FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
@@ -17569,9 +17568,9 @@ __mods["ui/win/helptext"] = function(import)
 			.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
 			.. "recording.\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 			.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
-			.. "ziplines, the kit's timers) all change speed.\n\nSpeed Hack Frame Step (below 1x): Roblox's normal "
-			.. "physics runs on some frames only and everything is held in between, so walking, jumping and pushing are "
-			.. "exactly like normal speed." },
+			.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
+			.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
+			.. "like normal speed; it moves in short full-speed bursts. Above 1x the physics is sped up instead." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "

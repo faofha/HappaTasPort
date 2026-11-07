@@ -14,7 +14,7 @@ section("every V2 setting is in the schema")
 local V2_NAMES = {
 	"Lock Camera (Test)", "Interpolate Playback", "Playback Speed", "Restart When Testing", "Show Completion Message",
 	"Lock Camera (Paused)", "Record Death & Respawn", "Record Tool Actions", "Ignore Game Processed",
-	"Speed Hack", "Speed Hack Speed", "Speed Hack Frame Step",
+	"Speed Hack", "Speed Hack Speed",
 	"Replay Keyboard", "Replay Mouse Clicks", "Replay Mouse Movement", "Normalize Mouse UV", "NohBoard Cursor",
 	"Invisible Mouse Speed Multiplier", "Window Guarding",
 	"Sync Client Objects", "Smooth Client Objects", "Frustum Culling CO", "Sync Button Timers", "Sync Lighting",
@@ -24,7 +24,7 @@ local V2_NAMES = {
 }
 local v2Rows = 0
 for _, row in ipairs(Settings.SCHEMA) do if row.v2 then v2Rows = v2Rows + 1 end end
-eq(v2Rows, 34, "34 V2 rows (V2.38.16's 39 without the 5 sound settings V2.38.17 removed)")
+eq(v2Rows, 33, "33 V2 rows (V2.38.16's 39 without the 5 sound settings V2.38.17 removed and Frame Step, always on below 1x)")
 for _, gone in ipairs({ "Enable Keyboard Sounds", "Enable Click Sounds", "Sound Trigger Mode", "Sound Volume", "Dynamic Pitch Variation" }) do
 	eq(Settings.byV2[gone], nil, "no sound setting: " .. gone)
 end

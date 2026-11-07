@@ -67,7 +67,6 @@ Settings.SCHEMA = {
 
 	row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
-	row("speedHackFrameStep", "Speed Hack Frame Step", "Speed hack", 0, { desc = "Below 1x: normal physics on some steps, the world held on the others" }),
 
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
