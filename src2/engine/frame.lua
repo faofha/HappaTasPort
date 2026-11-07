@@ -205,16 +205,37 @@ function Frame.start(E)
 				local n = tl:count()
 				if E.paused then
 					E.plugins:call("onPausedTick")
-					if n > 1 and E.back and E.frame > 1 then
-						E.frame = E.frame - 1
+					-- (with the speed hack on, a held Back / Forward goes through the run's game time at the slider's
+					-- speed; off: one frame per frame, as before. Frame Step frames are whole physics steps: one per
+					-- frame was 1/s times the recording speed, live)
+					local rate = (E.back or E.forw) and E.time:wanted() or 1
+					local moves = 1
+					if rate ~= 1 then
+						E.seekBank = (E.seekBank or 0) + dt * rate
+						moves = 0
+						local f = E.frame
+						while true do
+							local nf = E.back and f - 1 or f + 1
+							if nf < 1 or nf > n then break end
+							local ft = tl:get("FrameTime", E.back and f or nf, 1)
+							if ft > E.seekBank then break end
+							E.seekBank = E.seekBank - ft
+							f, moves = nf, moves + 1
+						end
+					else
+						E.seekBank = 0
+					end
+					if n > 1 and E.back and E.frame > 1 and moves > 0 then
+						E.frame = math.max(1, E.frame - moves)
 						M_:loadFrame(E.frame, false, true)
 						M_:publish()
 					end
-					if E.frame < n and E.forw then
-						E.frame = E.frame + 1
+					if E.frame < n and E.forw and moves > 0 then
+						E.frame = math.min(n, E.frame + moves)
 						M_:loadFrame(E.frame, false, true)
 						M_:publish()
 					end
+					if not (E.back or E.forw) then E.seekBank = 0 end
 					E.plugins:call("onStep", M_:totalAt(E.frame))
 				else
 					if E.firstFrame and n == 1 then

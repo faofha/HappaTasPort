@@ -306,6 +306,23 @@ do
 		elseif first then break end
 	end
 	check(first ~= nil and worstOff < 0.02, "0.25x: the off-floor timer follows game time in the air (worst off by " .. string.format("%.3f", worstOff) .. " s)")
+	-- holding Back / Forward goes through the run's game time at the slider's speed (live, Frame Step 0.1x: one
+	-- frame per rendered frame was 1.1 s of game time a second, 11x the recording speed)
+	local walkR = { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end }
+	local runB = record(frames, 1, walkR)
+	local function tt(f) return E.tl:get("TotalTime", f, 1) end
+	local f0 = E.frame
+	E.modes:back()
+	for _ = 1, 120 do M.step(1 / 240) end
+	E.modes:release("back")
+	local backT = tt(f0) - tt(E.frame)
+	check(#runB > 100 and math.abs(backT - 0.5 * 0.25) < 0.01, "0.25x: holding Back for 0.5 s goes back 0.125 s of game time (" .. string.format("%.4f", backT) .. ")")
+	local f1 = E.frame
+	E.modes:forward()
+	for _ = 1, 120 do M.step(1 / 240) end
+	E.modes:release("forward")
+	local fwdT = tt(E.frame) - tt(f1)
+	check(math.abs(fwdT - 0.5 * 0.25) < 0.01, "0.25x: holding Forward the same (" .. string.format("%.4f", fwdT) .. ")")
 	-- the game time follows the slider by time, not by counting physics events: frames of 1 and 3 steps in turn
 	-- (counted, 0.5x ran only one kind and went 0.25x or 0.75x)
 	local uneven = {}
