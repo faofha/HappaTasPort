@@ -133,6 +133,39 @@ eq(hw.body.Text, table.concat({
 	"Executor port - client side script",
 }, "\n"), "the five lines")
 
+section("what's new (phase 7)")
+do
+	local list = HelpText.topics(E)
+	local function topicById(id)
+		for _, t in ipairs(list) do if t.id == id then return t end end
+		return nil
+	end
+	local function order(id)
+		for i, t in ipairs(list) do if t.id == id then return i end end
+		return -1
+	end
+	eq(__T3("config").VERSION, "3.0.0", "version 3.0.0")
+	local t = topicById("whatsnew")
+	check(t ~= nil and t.title == "What's new", "a What's new topic")
+	eq(order("whatsnew"), order("start") + 1, "right after Getting started")
+	check(t ~= nil and t.body:find("HappaTAS 3.0.0", 1, true) ~= nil, "names the version")
+	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
+		check(t ~= nil and t.body:find("• " .. item, 1, true) ~= nil, "lists: " .. item)
+		check(#item <= 60, "fits a classic row: " .. item)
+	end
+	eq(HelpText.WHATS_NEW and #HelpText.WHATS_NEW.items or 0, 8, "eight items")
+	-- (review, phase 7: spec 13 measured the engine a little slower than V2 live; only saving is faster)
+	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
+		check(not item:lower():find("faster frames", 1, true), "no faster-frames claim: " .. item)
+	end
+	check(t ~= nil and t.body:find("faster saving", 1, true) ~= nil, "says what is faster: saving")
+	local start = topicById("start")
+	local u = start and start.body:find("unload HappaTAS first", 1, true)
+	local d = start and start.body:find("delete HappaTasPort/Settings3.json", 1, true)
+	check(u ~= nil and d ~= nil and u < d, "converting V2's settings again: unload first, then delete the file")
+	check(start ~= nil and start.body:find("If you used V2", 1, true) ~= nil, "only for players who had V2")
+end
+
 section("only characters every font has")
 local okChars = { [utf8.char(215)] = true, [utf8.char(9660)] = true, [utf8.char(8592)] = true, [utf8.char(8230)] = true,
 	[utf8.char(8226)] = true }
@@ -147,4 +180,15 @@ for _, t in ipairs(HelpText.topics(E)) do
 	end
 end
 eq(#bad, 0, "ASCII and × ▼ ← … • only (" .. table.concat(bad, " ") .. ")")
+section("Unload HappaTAS from the Help window (review, phase 7: the new interface had no Unload)")
+do
+	local hw = ui.helpWin
+	check(hw ~= nil and hw.unload ~= nil, "the Help window has an Unload button")
+	eq(hw and hw.unload and hw.unload.label.Text, "Unload HappaTAS", "its label")
+	if hw and hw.unload then
+		UIH.click(hw.unload.gui)
+		M.steps(5)
+	end
+	eq(getgenv().__HappaTAS3, nil, "a click unloads HappaTAS")
+end
 finish()

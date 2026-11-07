@@ -60,6 +60,10 @@ if [ "$BENCH" = 1 ]; then
   echo "$so" | grep -q "^SAVEBENCH OK" || { fail=1; echo "$so"; }
 fi
 bash tools/build3.sh --release wow3 >/dev/null || { echo "release build failed"; fail=1; }
+# (a warning, not a failure: work in progress still gates; the release itself is checked by check_release3.sh)
+if ! cmp -s wow3 wow || ! cmp -s wow wow1; then
+  echo "WARNING: wow / wow1 are not the release build of src2 (bash tools/release3.sh)"
+fi
 run main wow3
 run engine wow3
 [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOMETHING FAILED"; exit 1; }

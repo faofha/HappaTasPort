@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Bring changes made to a release build (comment-free, like `wow`) back into the commented parts.
+"""Bring changes made to a V2 release build (comment-free, like tools/release.sh's build/wow_v2; `wow` was V2 until
+HappaTAS 3.0.0) back into V2's commented parts (src/parts).
 
     python3 tools/port_release.py OLD_RELEASE NEW_RELEASE [--apply] [--report]
 

@@ -167,6 +167,10 @@ function Main.Start()
 	addSaveApi(handle, k)
 	kernel = k
 	share("__HappaTAS3", handle, errs)
+	-- (also under V2's name: V2 run later in the same client unloads this copy instead of running beside it with
+	-- its interface deleted, V2's UI.RemoveStale removes ScreenGuis by these names; a global table that can't
+	-- be written was already reported for __HappaTAS3)
+	share("__HappaTAS", handle)
 	local ok, err = pcall(function()
 		k.state = State.new({ mode = "Idle", frame = 0, paused = true }, errs)
 		k.bus = Bus.new(errs)
@@ -195,6 +199,7 @@ function Main.Unload()
 	k.life:cleanup()
 	local genv = Env.genv
 	if genv.__HappaTAS3 == k.handle then share("__HappaTAS3", nil) end
+	if genv.__HappaTAS == k.handle then share("__HappaTAS", nil) end
 	if k.debug and genv.__HappaTAS3_T == k.debug then share("__HappaTAS3_T", nil) end
 end
 

@@ -4,5 +4,5 @@
 #   bash tools/live/v2expose.sh IN.lua OUT.lua
 set -euo pipefail
 IN="$1"; OUT="$2"
-sed 's/^genv\["__HappaTAS"\] = handle -- only.*$/genv["__HappaTAS"] = handle\ngenv.__V2T = { C = C, Bridge = Bridge, InputSys = InputSys, Cursor = Cursor, AnimEngine = AnimEngine, ClientObjects = ClientObjects, Buttons = Buttons, Lighting = Lighting, ToolSync = ToolSync, SpeedHack = SpeedHack, KitClock = KitClock, KitObjects = KitObjects }/' "$IN" > "$OUT"
+sed 's/^genv\["__HappaTAS"\] = handle -- only.*$/genv["__HappaTAS"] = handle\ngenv.__V2T = { C = C, Core = Core, Store = Store, Bridge = Bridge, InputSys = InputSys, Cursor = Cursor, AnimEngine = AnimEngine, ClientObjects = ClientObjects, Buttons = Buttons, Lighting = Lighting, ToolSync = ToolSync, SpeedHack = SpeedHack, KitClock = KitClock, KitObjects = KitObjects }/' "$IN" > "$OUT"
 grep -q "__V2T" "$OUT" || { echo "v2expose: the handle line wasn't found in $IN" >&2; exit 1; }

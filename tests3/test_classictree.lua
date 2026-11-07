@@ -52,7 +52,8 @@ eq(menu.Size, UDim2.new(0, 400, 0, 400), "MainMenu 400 x 400")
 eq(menu.Position, UDim2.new(0.5, 0, 0.5, 0), "centred")
 eq(menu.BackgroundColor3, Color3.fromRGB(0, 35, 73), "V2's dark blue")
 eq(menu.Visible, false, "closed until the Menu key")
-check(c.byPath["MainMenu.Title"].Text:find("3.0.0-dev", 1, true) ~= nil, "the title carries the version")
+check(c.byPath["MainMenu.Title"].Text:find("3.0.0", 1, true) ~= nil
+	and not c.byPath["MainMenu.Title"].Text:find("-dev", 1, true), "the title carries the version (3.0.0)")
 
 section("the lists the menu fills (Task 3 fills Settings and Help)")
 local function rows(path)
@@ -69,7 +70,12 @@ eq(rows("MainMenu.SettingsFrame.List"), #Settings.SCHEMA + sections, "a row per 
 eq(rows("MainMenu.ControlsFrame.List"), #__T3("engine/controls").LIST, "a row per control (Task 4)")
 local HelpText = __T3("ui/win/helptext")
 eq(rows("MainMenu.HelpFrame.List"), 1 + #HelpText.topics(E), "Help: V2's spacer and a row per topic")
-eq(c.byPath["MainMenu.MoreFrame.List.3UpdateLog"], nil, "no update log")
+local log = c.byPath["MainMenu.MoreFrame.List.3UpdateLog"]
+check(log ~= nil, "Classic's More tab has an update log again (phase 7)")
+eq(log and c.byPath["MainMenu.MoreFrame.List.3UpdateLog.0"].Text, " HappaTAS 3.0.0", "its version line")
+eq(log and rows("MainMenu.MoreFrame.List.3UpdateLog"), 1 + #(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}),
+	"one row per item")
+check(HelpText.WHATS_NEW ~= nil and #HelpText.WHATS_NEW.items > 0, "built from Help's What's new list")
 check(c.byPath["MainMenu.MoreFrame.List.5Credits"] ~= nil, "the credits stay")
 
 section("no auto-translation, nothing per frame")

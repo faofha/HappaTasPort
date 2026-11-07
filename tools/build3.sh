@@ -41,6 +41,7 @@ if [ -n "$REL" ]; then
   VERSION=$(grep -m1 -oE 'VERSION = "[^"]+"' "$SRC/config.lua" | cut -d'"' -f2)
   python3 tools/strip.py "$OUT" "$REL" \
     "HappaTAS $VERSION - records and replays TAS runs on the client (executor script)." \
+    "Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu." \
     "Release build: comments and blank lines removed. The commented source is src2/ (HappaTasPort repository)."
 fi
 echo "$OUT"
