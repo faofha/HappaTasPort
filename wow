@@ -9931,7 +9931,7 @@ __mods["world/time/control"] = function(import)
 					and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
 				if hum.FloorMaterial ~= Air and not falling then
 					if cy.off ~= nil then
-						local blocked = cy.disabled
+						local blocked = cy.disabled and SH.scale ~= 1
 						cy.off, cy.jumped, cy.restored = nil, false, false
 						cy.pinN, cy.vt, cy.finish = nil, nil, nil
 						setJumping(hum, true)

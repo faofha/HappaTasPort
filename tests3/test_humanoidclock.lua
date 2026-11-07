@@ -693,4 +693,37 @@ end
 M.floorEdgeX = nil
 hum.Jump = false
 
+section("1x: jump held through a pause in the air, the next jump is Roblox's")
+-- (found live: on landing after a pause in the air with the jump held, HappaTAS made the jump itself as soon as it
+-- saw the floor, still Landed, ~25 ms after touching it instead of Roblox's ~55 ms, at 75 FPS and up. Only the
+-- scaled motion needs that jump: at 1x Roblox makes it once Jumping is enabled again)
+do
+	local HC = E.time.SH.Humanoid
+	local cy = HC.coyote
+	local function landing(scale)
+		local calls = {}
+		local fakeHum = { Jump = true, FloorMaterial = Enum.Material.Plastic }
+		function fakeHum:GetState() return Enum.HumanoidStateType.Landed end
+		function fakeHum:ChangeState(st) calls[#calls + 1] = st end
+		function fakeHum:SetStateEnabled() end
+		local fakeRoot = { Parent = workspace, Anchored = false, AssemblyLinearVelocity = Vector3.zero }
+		local saved = E.time.SH.scale
+		E.time.SH.scale = scale
+		cy.off, cy.jumped, cy.restored, cy.disabled, cy.vy0 = 0.5, true, true, true, 0
+		HC.Post(1 / 240, fakeHum, fakeRoot, true)
+		E.time.SH.scale = saved
+		cy.disabled = false
+		local jumps = 0
+		for _, st in ipairs(calls) do if st == Enum.HumanoidStateType.Jumping then jumps = jumps + 1 end end
+		return jumps, cy.off
+	end
+	local j1, off1 = landing(1)
+	eq(off1, nil, "1x: the landing ends the timer")
+	eq(j1, 0, "1x: HappaTAS makes no jump on landing (Roblox does)")
+	local j2 = landing(0.5)
+	eq(j2, 1, "0.5x: the jump blocked in the air is made on landing")
+	local j3 = landing(2)
+	eq(j3, 1, "2x: the same")
+end
+
 finish()

@@ -793,8 +793,10 @@ do
 				and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
 			if hum.FloorMaterial ~= Air and not falling then
 				if cy.off ~= nil then
-					-- (landed: a jump held down is taken on this step; it was off for the step, so it is made here)
-					local blocked = cy.disabled
+					-- (landed: a jump held down is taken on this step; it was off for the step, so it is made here.
+					-- Only in scaled motion: at 1x Roblox makes it once Jumping is on again, after Landed - made here it
+					-- came ~30 ms early, measured live)
+					local blocked = cy.disabled and SH.scale ~= 1
 					cy.off, cy.jumped, cy.restored = nil, false, false
 					cy.pinN, cy.vt, cy.finish = nil, nil, nil -- (the next push is a new jump)
 					setJumping(hum, true)
