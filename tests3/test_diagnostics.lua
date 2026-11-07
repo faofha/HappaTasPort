@@ -52,7 +52,7 @@ M.steps(2)
 local sw = ui.settingsWin
 check(sw and sw.diag ~= nil, "Settings has Copy diagnostics")
 copied = nil
-sw.diag.onClick()
+UIH.click(sw.diag.gui)
 check(copied ~= nil and copied:find("HappaTAS diagnostics", 1, true) == 1, "copied to the clipboard")
 
 section("no clipboard: a file in the HappaTasPort folder")

@@ -193,7 +193,7 @@ function SettingsWin.build(ui, body, win)
 	-- search
 	local search = Field.new(ctx, body, { search = true, placeholder = "Search settings", w = 300 })
 	search.gui.Position = UDim2.new(0, PAD, 0, 10)
-	search.gui.Size = UDim2.new(1, -PAD * 2, 0, 32)
+	search.gui.Size = UDim2.new(1, -PAD * 3 - 96, 0, 32)
 	sw.search = search
 	-- chips (wrapped to the window's default width)
 	local x, y = PAD, 50
@@ -212,7 +212,7 @@ function SettingsWin.build(ui, body, win)
 	list.BackgroundTransparency = 1
 	list.BorderSizePixel = 0
 	list.Position = UDim2.new(0, 0, 0, top)
-	list.Size = UDim2.new(1, 0, 1, -top - 40)
+	list.Size = UDim2.new(1, 0, 1, -top)
 	list.ScrollBarThickness = 4
 	list.CanvasSize = UDim2.new(0, 0, 0, 0)
 	list.Parent = body
@@ -325,8 +325,8 @@ function SettingsWin.build(ui, body, win)
 		end
 	end
 	-- (a read-only report to share when the physics acts differently on another PC)
-	sw.diag = Button.new(ctx, body, { text = "Copy diagnostics", kind = "plain", w = 160 })
-	sw.diag.gui.Position = UDim2.new(0, PAD, 1, -36)
+	sw.diag = Button.new(ctx, body, { text = "Diagnostics", kind = "plain", w = 96, h = 32 })
+	sw.diag.gui.Position = UDim2.new(1, -PAD - 96, 0, 10)
 	sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 	filter()
 	ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
