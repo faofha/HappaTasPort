@@ -110,15 +110,20 @@ function Frame.start(E)
 		-- and coyote timer on the TAS clock (the frames time control is on for). (Outside Create there is
 		-- nothing to step or hold: time control is back to normal there, see TimeControl:update)
 		if E.mode ~= 2 then return end
-		E.time:stepBegin(dt)
-		if not E.paused or E.firstFrame then
+		-- (a held step is no game time: the humanoid's controllers and coyote timer skip it, measured in the mock:
+		-- the off-floor timer ran 4x too fast at 0.25x)
+		E.stepHeld = not E.time:stepBegin(dt)
+		if (not E.paused or E.firstFrame) and not E.stepHeld then
 			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end
 	end
 
 	local function postSimulation(dt)
 		if E.mode ~= 2 then return end -- (see preSimulation)
+		local held = E.stepHeld
+		E.stepHeld = false
 		E.time:stepEnd()
+		if held then return end
 		local ch = E.char
 		local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
 		E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)

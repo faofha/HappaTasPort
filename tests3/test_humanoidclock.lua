@@ -287,6 +287,25 @@ do
 		tops[s] = top
 	end
 	check(tops[1] > 7 and math.abs(tops[1] - tops[0.25]) < 0.002, "a standing jump at 0.25x is as high as at 1x (" .. tops[0.25] .. " / " .. tops[1] .. ")")
+	-- a held step moves no timer of HappaTAS's own: in the air the off-floor timer is the game time since the jump
+	S.Set("Speed Hack Speed", 0.25)
+	local seenOff = {}
+	local evJ = jumpAt(20)
+	for i = 21, 400 do
+		evJ[i] = function()
+			local n = E.tl:count()
+			seenOff[#seenOff + 1] = { E.time.SH.Humanoid.coyote.off, n > 0 and E.tl:get("TotalTime", n, 1) or 0 }
+		end
+	end
+	record(frames, 1, evJ)
+	local first, worstOff = nil, 0
+	for _, e in ipairs(seenOff) do
+		if e[1] then
+			first = first or (e[2] - e[1])
+			worstOff = math.max(worstOff, math.abs((e[2] - first) - e[1]))
+		elseif first then break end
+	end
+	check(first ~= nil and worstOff < 0.02, "0.25x: the off-floor timer follows game time in the air (worst off by " .. string.format("%.3f", worstOff) .. " s)")
 	-- the game time follows the slider by time, not by counting physics events: frames of 1 and 3 steps in turn
 	-- (counted, 0.5x ran only one kind and went 0.25x or 0.75x)
 	local uneven = {}

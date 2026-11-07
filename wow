@@ -12293,14 +12293,17 @@ __mods["engine/frame"] = function(import)
 				ch.hum:Move(ch.hrp.AssemblyLinearVelocity)
 			end
 			if E.mode ~= 2 then return end
-			E.time:stepBegin(dt)
-			if not E.paused or E.firstFrame then
+			E.stepHeld = not E.time:stepBegin(dt)
+			if (not E.paused or E.firstFrame) and not E.stepHeld then
 				if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 			end
 		end
 		local function postSimulation(dt)
 			if E.mode ~= 2 then return end
+			local held = E.stepHeld
+			E.stepHeld = false
 			E.time:stepEnd()
+			if held then return end
 			local ch = E.char
 			local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
 			E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
