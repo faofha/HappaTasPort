@@ -363,8 +363,22 @@ near(z1 - z0, 6 * 20 / 60, 1e-6, "the box moved on the 20 steps that ran only")
 near(boxF.AssemblyLinearVelocity.Z, 6, 1e-9, "the box keeps its velocity")
 eq(boxF.Anchored, false, "the box isn't left anchored")
 near(boxRec[#boxRec].TotalTime, 20 / 60, 1e-5, "TAS time = the time of the steps that ran (" .. boxRec[#boxRec].TotalTime .. ")")
+-- a part the game adds while frame stepping (a pushbox, a bullet) is held from the next held step on
+local late = Instance.new("Part")
+late.Name = "LateBox"
+late.Anchored = false
+late.CFrame = CFrame.new(60, 10, 0)
+late.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+local lz0, lz1
+local evL = {}
+evL[5] = function() late.Parent = CPf; M.freeParts[#M.freeParts + 1] = late end
+evL[6] = function() lz0 = late.Position.Z end
+evL[36] = function() lz1 = late.Position.Z end
+record(fixed, 1, evL)
+check(lz0 and lz1 and math.abs((lz1 - lz0) - 6 * 15 / 60) < 6 / 60 + 1e-6, "a part added while frame stepping moves on the steps that ran only (" .. tostring(lz1 and lz1 - lz0) .. ")")
 M.freeParts = {}
 boxF:Destroy()
+late:Destroy()
 
 section("Frame Step only below 1x: above it the physics is scaled")
 S.Set("Speed Hack Speed", 2)

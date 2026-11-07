@@ -531,6 +531,7 @@ do
 	end
 	local function stopStep()
 		if not FS.on then return end
+		if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 		SH.StepEnd()
 		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 	end
@@ -598,6 +599,11 @@ do
 			if not FS.on then
 				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
 				FS.acc = nil -- (the first step runs)
+				-- (a part the game adds, a pushbox or a bullet, is held from the next held step: the scan otherwise
+				-- runs every 30 held steps, and the part moved at full speed until then)
+				FS.addConn = workspace.DescendantAdded:Connect(function(d)
+					if d:IsA("BasePart") then FS.scanIn = 0 end
+				end)
 			end
 			FS.s, FS.root, FS.hum = s, part, h
 			setAnim(s)

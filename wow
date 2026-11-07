@@ -9703,6 +9703,7 @@ __mods["world/time/control"] = function(import)
 		end
 		local function stopStep()
 			if not FS.on then return end
+			if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 			SH.StepEnd()
 			FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 		end
@@ -9759,6 +9760,9 @@ __mods["world/time/control"] = function(import)
 				if not FS.on then
 					FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
 					FS.acc = nil
+					FS.addConn = workspace.DescendantAdded:Connect(function(d)
+						if d:IsA("BasePart") then FS.scanIn = 0 end
+					end)
 				end
 				FS.s, FS.root, FS.hum = s, part, h
 				setAnim(s)
