@@ -90,6 +90,8 @@ __mods["platform/env"] = function(import)
 	Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 	Env.getcustomasset = fn(getcustomasset, getsynasset)
 	Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
+	Env.setclipboard = fn(setclipboard, toclipboard)
+	Env.getfpscap = fn(getfpscap)
 	if not Env.gethui then Env.gethui = fn(synT.gethui) end
 	do
 		local name = "get" .. "fenv"
@@ -1060,15 +1062,19 @@ __mods["kernel/errors"] = function(import)
 	local Errors = {}
 	Errors.__index = Errors
 	local MAX_PRINTED = 25
+	local MAX_LAST = 10
 	function Errors.new(printFn)
-		return setmetatable({ print = printFn or warn, seen = {}, printed = 0, counts = {} }, Errors)
+		return setmetatable({ print = printFn or warn, seen = {}, printed = 0, counts = {}, last = {} }, Errors)
 	end
 	function Errors:report(source, err)
 		source = tostring(source)
 		self.counts[source] = (self.counts[source] or 0) + 1
 		local msg = "[HappaTAS3] " .. source .. ": " .. tostring(err)
-		if self.seen[msg] or self.printed >= MAX_PRINTED then return end
+		if self.seen[msg] then return end
 		self.seen[msg] = true
+		if #self.last >= MAX_LAST then table.remove(self.last, 1) end
+		self.last[#self.last + 1] = msg
+		if self.printed >= MAX_PRINTED then return end
 		self.printed = self.printed + 1
 		pcall(self.print, msg)
 	end
@@ -12459,6 +12465,141 @@ __mods["engine/frame"] = function(import)
 	end
 	return Frame
 end
+__mods["engine/diagnostics"] = function(import)
+	local CONFIG = import("config")
+	local Env = import("platform/env")
+	local Diag = {}
+	local N = 4096
+	local WINDOW = 10
+	local STEP = 1 / 240
+	local FUNCS = { "writefile", "readfile", "isfile", "isfolder", "makefolder", "listfiles", "delfile", "appendfile",
+		"delfolder", "gethui", "cloneref", "getgc", "filtergc", "getconnections", "hookfunction", "restorefunction",
+		"iscclosure", "getloadedmodules", "setreadonly", "isreadonly", "isactive", "keypress", "keyrelease",
+		"mousemoveabs", "mousemoverel", "mousescroll", "getcustomasset", "identifyexecutor", "envOf", "setclipboard" }
+	local function ring() return { t = table.create(N, 0), v = table.create(N, 0), i = 0, n = 0 } end
+	local function push(r, t, v)
+		local i = r.i % N + 1
+		r.t[i], r.v[i], r.i = t, v, i
+		if r.n < N then r.n = r.n + 1 end
+	end
+	local function recent(r, now)
+		local out = {}
+		for k = r.n - 1, 0, -1 do
+			local i = (r.i - k - 1) % N + 1
+			if now - r.t[i] <= WINDOW then out[#out + 1] = r.v[i] end
+		end
+		return out
+	end
+	function Diag.start(E)
+		local d = { frames = ring(), steps = ring() }
+		E.diag = d
+		E.pipe:add("Heartbeat", 95, "diagnostics.frame", function(dt) push(d.frames, os.clock(), dt) end, "diagnostics")
+		E.pipe:add("PostSimulation", 95, "diagnostics.step", function(dt) push(d.steps, os.clock(), dt) end, "diagnostics")
+	end
+	local function fmt(v)
+		if type(v) == "number" then return string.format("%.6g", v) end
+		return tostring(v)
+	end
+	function Diag.report(E)
+		local d = E.diag
+		local now = os.clock()
+		local L = {}
+		local function add(s) L[#L + 1] = s end
+		add("HappaTAS diagnostics")
+		add("Version: " .. CONFIG.VERSION .. "   Executor: " .. tostring(Env.executor) .. "   Date: " .. os.date("%Y-%m-%d %H:%M:%S"))
+		add("Interface: " .. tostring(E.settings:get("interface")) .. "   Touch: "
+			.. tostring(game:GetService("UserInputService").TouchEnabled) .. "   Place: " .. tostring(game.PlaceId))
+		local have, miss = {}, {}
+		for _, name in ipairs(FUNCS) do
+			if Env[name] then have[#have + 1] = name else miss[#miss + 1] = name end
+		end
+		add("Executor functions present: " .. table.concat(have, ", "))
+		add("Executor functions missing: " .. (#miss > 0 and table.concat(miss, ", ") or "none"))
+		for _, n in ipairs(Env.notes) do add("  note: " .. n) end
+		local ft = d and recent(d.frames, now) or {}
+		local sum, worst = 0, 0
+		for _, v in ipairs(ft) do
+			sum = sum + v
+			if v > worst then worst = v end
+		end
+		if #ft > 0 then
+			add(string.format("Frames (last %d s): %d, FPS %.1f, average %.2f ms, worst %.2f ms", WINDOW, #ft, #ft / math.max(sum, 1e-6),
+				1000 * sum / #ft, 1000 * worst))
+		else
+			add("Frames: no samples")
+		end
+		if Env.getfpscap then
+			local ok, v = pcall(Env.getfpscap)
+			if ok then add("FPS cap: " .. fmt(v)) end
+		end
+		local st = d and recent(d.steps, now) or {}
+		local hist, whole, offMax, steps = {}, 0, 0, 0
+		for _, v in ipairs(st) do
+			local n = v / STEP
+			local r = math.floor(n + 0.5)
+			local off = math.abs(n - r)
+			if off < 1e-3 then whole = whole + 1 end
+			if off > offMax then offMax = off end
+			steps = steps + n
+			local key = off < 1e-3 and tostring(r) or string.format("%.2f", n)
+			hist[key] = (hist[key] or 0) + 1
+		end
+		if #st > 0 then
+			local h = {}
+			for k, c in pairs(hist) do h[#h + 1] = k .. " step(s) x" .. c end
+			table.sort(h)
+			add(string.format("Physics (last %d s): %d PostSimulation events, %.3f steps each on average, %.1f %% whole 1/240 s steps (largest off: %.4f of a step)",
+				WINDOW, #st, steps / #st, 100 * whole / #st, offMax))
+			add("  " .. table.concat(h, ", "))
+		else
+			add("Physics: no samples")
+		end
+		local mode = ({ "Idle", "Create", "Test" })[E.mode or 1] or tostring(E.mode)
+		add("Mode: " .. mode .. "   paused: " .. tostring(E.paused) .. "   frames: " .. tostring(E.tl:count()))
+		local SH = E.time and E.time.SH
+		if SH then
+			local FS = SH.FS or {}
+			add("Speed hack now: wanted " .. fmt(SH.Wanted()) .. ", physics scale " .. fmt(SH.scale) .. ", animation rate " .. fmt(SH.anim)
+				.. ", Frame Step " .. (FS.on and ("on (" .. fmt(FS.s) .. ")") or "off"))
+			local cy = SH.Humanoid and SH.Humanoid.coyote
+			if cy then
+				add("Coyote now: enforcing " .. tostring(cy.enforce == true) .. ", restored " .. tostring(cy.restored)
+					.. ", off floor " .. fmt(cy.off) .. " s, jumped " .. tostring(cy.jumped) .. ", Jumping disabled by it "
+					.. tostring(cy.disabled) .. ", Freefall disabled by it " .. tostring(cy.noFall))
+			end
+		end
+		local hum = E.char and E.char.hum
+		if hum then
+			local ok, s = pcall(function()
+				return string.format("Humanoid: state %s, WalkSpeed %s, JumpPower %s, Jumping enabled %s, Freefall enabled %s, Gravity %s",
+					hum:GetState().Name, fmt(hum.WalkSpeed), fmt(hum.JumpPower), tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Jumping)),
+					tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Freefall)), fmt(workspace.Gravity))
+			end)
+			if ok then add(s) end
+		end
+		add("Settings:")
+		local keys = {}
+		for k in pairs(E.settings.values) do keys[#keys + 1] = k end
+		table.sort(keys)
+		for _, k in ipairs(keys) do add("  " .. k .. " = " .. fmt(E.settings.values[k])) end
+		local errs = E.errs
+		local counts = {}
+		for src, c in pairs(errs.counts) do counts[#counts + 1] = src .. " x" .. c end
+		table.sort(counts)
+		add("Errors per source: " .. (#counts > 0 and table.concat(counts, ", ") or "none"))
+		for _, m in ipairs(errs.last) do add("  " .. m) end
+		return table.concat(L, "\n")
+	end
+	function Diag.share(E)
+		local text = Diag.report(E)
+		if Env.setclipboard and pcall(Env.setclipboard, text) then return "Diagnostics copied to the clipboard" end
+		local path = "HappaTasPort/diagnostics-" .. os.date("%Y%m%d-%H%M%S") .. ".txt"
+		E.files:makeFolder("HappaTasPort")
+		if E.files:write(path, text) then return "Diagnostics saved to " .. path end
+		return "Diagnostics: no clipboard and no file functions"
+	end
+	return Diag
+end
 __mods["ui/write"] = function(import)
 	local W = { version = 0 }
 	local last = setmetatable({}, { __mode = "k" })
@@ -15580,6 +15721,7 @@ __mods["ui/win/settings"] = function(import)
 	local Row = import("ui/kit/row")
 	local ColorPicker = import("ui/kit/colorpicker")
 	local Bezier = import("ui/kit/bezier")
+	local Diagnostics = import("engine/diagnostics")
 	local SettingsWin = {}
 	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
@@ -15754,7 +15896,7 @@ __mods["ui/win/settings"] = function(import)
 		list.BackgroundTransparency = 1
 		list.BorderSizePixel = 0
 		list.Position = UDim2.new(0, 0, 0, top)
-		list.Size = UDim2.new(1, 0, 1, -top)
+		list.Size = UDim2.new(1, 0, 1, -top - 40)
 		list.ScrollBarThickness = 4
 		list.CanvasSize = UDim2.new(0, 0, 0, 0)
 		list.Parent = body
@@ -15862,6 +16004,9 @@ __mods["ui/win/settings"] = function(import)
 				W.bump()
 			end
 		end
+		sw.diag = Button.new(ctx, body, { text = "Copy diagnostics", kind = "plain", w = 160 })
+		sw.diag.gui.Position = UDim2.new(0, PAD, 1, -36)
+		sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 		filter()
 		ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 		return sw
@@ -22263,6 +22408,7 @@ __mods["main"] = function(import)
 	local SettingsFile = import("persist/settingsfile")
 	local UIApp = import("ui/app")
 	local ProfilerApp = import("profiler/app")
+	local Diagnostics = import("engine/diagnostics")
 	local Main = {}
 	local kernel = nil
 	local function share(key, value, errs)
@@ -22304,6 +22450,7 @@ __mods["main"] = function(import)
 		E.persist = Persist.new(E)
 		E.modes = Modes.new(E)
 		k.pipe:keep("engine")
+		Diagnostics.start(E)
 		E.inputs:start()
 		Frame.start(E)
 		E.cs:start()
@@ -22341,6 +22488,11 @@ __mods["main"] = function(import)
 			local E, why = engine()
 			if not E then return false, why end
 			return E.persist:load(path)
+		end
+		handle.Diagnostics = function()
+			local E = k.engine
+			if not E then return nil, "HappaTAS isn't running" end
+			return Diagnostics.report(E)
 		end
 		handle.List = function()
 			local E, why = engine()

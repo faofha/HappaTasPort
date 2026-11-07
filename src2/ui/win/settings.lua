@@ -19,6 +19,7 @@ local Button = import("ui/kit/button")
 local Row = import("ui/kit/row")
 local ColorPicker = import("ui/kit/colorpicker")
 local Bezier = import("ui/kit/bezier")
+local Diagnostics = import("engine/diagnostics")
 
 local SettingsWin = {}
 
@@ -211,7 +212,7 @@ function SettingsWin.build(ui, body, win)
 	list.BackgroundTransparency = 1
 	list.BorderSizePixel = 0
 	list.Position = UDim2.new(0, 0, 0, top)
-	list.Size = UDim2.new(1, 0, 1, -top)
+	list.Size = UDim2.new(1, 0, 1, -top - 40)
 	list.ScrollBarThickness = 4
 	list.CanvasSize = UDim2.new(0, 0, 0, 0)
 	list.Parent = body
@@ -323,6 +324,10 @@ function SettingsWin.build(ui, body, win)
 			W.bump()
 		end
 	end
+	-- (a read-only report to share when the physics acts differently on another PC)
+	sw.diag = Button.new(ctx, body, { text = "Copy diagnostics", kind = "plain", w = 160 })
+	sw.diag.gui.Position = UDim2.new(0, PAD, 1, -36)
+	sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 	filter()
 	ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 	return sw
