@@ -789,6 +789,9 @@ function M.physics(dt)
 	if not ch then return end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	if M.physicsLog and hrp then M.physicsLog[#M.physicsLog + 1] = { hrp, hrp.Anchored } end
+	-- (Roblox's humanoid keeps its off-floor timer through a step its root is anchored for: measured live,
+	-- Frame Step's held steps used up coyote time)
+	if hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController and RC.engOff > 0 then RC.engOff = RC.engOff + dt end
 	if not hrp or hrp.Anchored then return end
 	if M.humanoidPhysics then
 		local hum = ch:FindFirstChildOfClass("Humanoid")

@@ -422,8 +422,21 @@ do
 	-- PostSimulation of that frame, then put back with the velocities they had: outside the physics step
 	-- nothing is held, so pausing, testing and Idle never see it. The kit's clock moves on by each step that ran
 	-- (KitClock.Advance), the client objects' physics clock skips the held steps (ClientObjects.SkipSim).
+	-- Roblox's humanoid keeps its own timers through a held step (live: no coyote jump even 0.05 s after the edge at
+	-- 0.1x, Landed over 6x too soon), so a step in a timed state always runs: the jump's push, Landed, and Running off
+	-- the floor (coyote time and the grace before Freefall). The time is held back afterwards (acc below 0, at most
+	-- MAX_DEBT steps), so the game time still follows the slider.
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-		root = nil }
+		root = nil, hum = nil }
+	local MAX_DEBT = 60
+	local ST = Enum.HumanoidStateType
+	local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
+	local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
+	local function timedState(h)
+		if not (h and h.Parent) then return false end
+		local st = h:GetState()
+		return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
+	end
 	SH.FS = FS
 	local function collectStepParts()
 		local list, done = {}, {}
@@ -450,7 +463,8 @@ do
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
 		FS.acc = FS.acc + FS.s
-		if FS.acc >= 1 - 1e-6 then
+		local okT, must = pcall(timedState, FS.hum)
+		if FS.acc >= 1 - 1e-6 or (okT and must and FS.acc > 1 - MAX_DEBT) then
 			FS.acc = FS.acc - 1
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
@@ -517,7 +531,7 @@ do
 	local function stopStep()
 		if not FS.on then return end
 		SH.StepEnd()
-		FS.on, FS.pending, FS.ranDt, FS.root, FS.parts = false, 0, 0, nil, {}
+		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 	end
 
 	local function applyValues(h, s)
@@ -584,7 +598,7 @@ do
 				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
 				FS.acc = 1 - s -- (the first step runs)
 			end
-			FS.s, FS.root = s, part
+			FS.s, FS.root, FS.hum = s, part, h
 			setAnim(s)
 			return 1
 		end

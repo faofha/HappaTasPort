@@ -96,6 +96,10 @@ local function record(dts, mul, events)
 end
 
 local function jumpAt(k) return { [k] = function() M.jumpNow = true end } end
+-- (walking and turning only: no timed humanoid state, so Frame Step runs and holds steps strictly by the slider)
+local function walkTurn()
+	return { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end, [150] = function() hum.MoveDirection = Vector3.new(0, 0, 1) end }
+end
 local function walkThenJump()
 	local ev = {}
 	ev[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end
@@ -172,7 +176,7 @@ S.Set("Speed Hack Speed", 0.5)
 section("Frame Step: normal physics on every other frame, everything held on the others")
 -- normal frame i (DTS[i]) <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt)
 local N2 = 120
-local fsDts, fsEv, wt2 = {}, {}, walkThenJump()
+local fsDts, fsEv, wt2 = {}, {}, walkTurn()
 for i = 1, N2 do
 	fsDts[2 * i - 1], fsDts[2 * i] = DTS[i], DTS[i]
 	if wt2[i] then fsEv[2 * i - 1] = wt2[i] end
@@ -201,7 +205,7 @@ M.physicsLog = nil
 S.Set("Speed Hack", 0)
 local dtsN2 = {}
 for i = 1, N2 do dtsN2[i] = DTS[i] end
-local plainS = record(dtsN2, 1, walkThenJump())
+local plainS = record(dtsN2, 1, walkTurn())
 S.Set("Speed Hack", 1)
 near(seenS.walk, 16, 1e-9, "Frame Step: WalkSpeed untouched")
 near(seenS.grav, G0, 1e-9, "Frame Step: gravity untouched")
@@ -221,7 +225,7 @@ eq(freeSteps, N2 - 1, "Frame Step: and free on the others")
 
 -- 0.25x: one step in four runs
 S.Set("Speed Hack Speed", 0.25)
-local q4Dts, q4Ev, wt4 = {}, {}, walkThenJump()
+local q4Dts, q4Ev, wt4 = {}, {}, walkTurn()
 for i = 1, 60 do
 	for k = 0, 3 do q4Dts[4 * i - 3 + k] = DTS[i] end
 	if wt4[i] then q4Ev[4 * i - 3] = wt4[i] end
@@ -231,10 +235,61 @@ local steppedQ = record(q4Dts, 1, q4Ev)
 S.Set("Speed Hack", 0)
 local dts60 = {}
 for i = 1, 60 do dts60[i] = DTS[i] end
-local plainQ4 = record(dts60, 1, walkThenJump())
+local plainQ4 = record(dts60, 1, walkTurn())
 S.Set("Speed Hack", 1)
 sameTAS(plainQ4, steppedQ, "Frame Step 0.25x")
 S.Set("Speed Hack Speed", 0.5)
+
+section("Frame Step: a step in one of the humanoid's timed states always runs")
+-- (Roblox's humanoid keeps its timers through held steps; live at 0.1x / 0.5x there was no coyote jump even
+-- 0.05 s after the edge, and Landed ran out 6x too soon. Coyote time here: the mock's off-floor timer)
+do
+	M.floorEdgeX = 6
+	local function ledgeAt(gameT)
+		local ev = { [1] = function()
+			hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(1, 0, 0))
+			hum.MoveDirection = Vector3.new(1, 0, 0)
+		end }
+		local leftT = nil
+		for i = 2, 900 do
+			ev[i] = function()
+				local n = E.tl:count()
+				local t = n > 0 and E.tl:get("TotalTime", n, 1) or 0
+				if not leftT and hrp.Position.X >= 6 then leftT = t end
+				if leftT and t >= leftT + gameT then hum.Jump = true end
+			end
+		end
+		return ev
+	end
+	local function jumpedIn(r)
+		for _, fr in ipairs(r) do
+			if fr.State == Enum.HumanoidStateType.Jumping.Value then return true end
+		end
+		return false
+	end
+	local frames = {}
+	for i = 1, 900 do frames[i] = 1 / 240 end
+	for _, s in ipairs({ 1, 0.5, 0.25 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		check(jumpedIn(record(frames, 1, ledgeAt(0.06))), s .. "x: a jump 0.06 s of game time after leaving the floor works")
+		check(not jumpedIn(record(frames, 1, ledgeAt(0.2))), s .. "x: one 0.2 s after doesn't")
+	end
+	M.floorEdgeX = nil
+	local tops = {}
+	for _, s in ipairs({ 1, 0.25 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		local top = 0
+		for _, fr in ipairs(record(frames, 1, jumpAt(20))) do if fr.Cframe then top = math.max(top, fr.Cframe[2]) end end
+		tops[s] = top
+	end
+	check(tops[1] > 7 and math.abs(tops[1] - tops[0.25]) < 0.002, "a standing jump at 0.25x is as high as at 1x (" .. tops[0.25] .. " / " .. tops[1] .. ")")
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.5)
+	M.floorEdgeX = nil
+	hum.Jump = false
+end
 
 section("Frame Step: free parts and the kit's clock only move on the steps that run")
 local CPf = workspace:FindFirstChild("ClientParts")
