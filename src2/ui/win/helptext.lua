@@ -15,7 +15,7 @@ HelpText.WHATS_NEW = {
 	version = CONFIG.VERSION,
 	items = {
 		"A new interface: Dock, windows, timeline bar, Inspector",
-		"The classic interface is still there (Settings > Interface)",
+		"Classic interface: a switch in Settings",
 		"Library: folders, search, sort, numbered attempts",
 		"File format v6: smaller files, safe saving",
 		"Old .tas files (v1-v5) and Settings.json carry over",

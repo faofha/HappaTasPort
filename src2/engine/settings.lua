@@ -84,8 +84,9 @@ Settings.SCHEMA = {
 	row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
 	row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
 
-	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
-		desc = "New is HappaTAS 3's interface, Classic is V2's" }),
+	-- (a switch in both interfaces: off = "New", on = "Classic"; the saved value stays the name)
+	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" }, switch = { "New", "Classic" },
+		desc = "On: V2's classic interface. Off: HappaTAS 3's" }),
 	row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 	row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 	row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -104,7 +105,7 @@ local NAMES = {
 	textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-	interface = "Interface",
+	interface = "Classic interface",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do

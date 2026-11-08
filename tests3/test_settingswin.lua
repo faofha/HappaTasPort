@@ -41,7 +41,7 @@ for _, def in ipairs(Settings.SCHEMA) do
 		check(r ~= nil, "a row for " .. def.key)
 		if r then
 			n = n + 1
-			local want = (def.kind == "toggle" and "toggle") or (def.kind == "color" and "swatch") or (def.key == "theme" and "theme")
+			local want = ((def.kind == "toggle" or def.switch) and "toggle") or (def.kind == "color" and "swatch") or (def.key == "theme" and "theme")
 				or (def.kind == "choice" and (#def.options <= 4 and "segmented" or "dropdown"))
 				or (def.kind == "number" and ((def.min and def.max) and "slider" or "field"))
 			eq(r.kind, want, def.key .. " is a " .. tostring(want))

@@ -151,6 +151,13 @@ local function controlFor(ctx, s, def, sw)
 	local ctl, kind
 	if key == "theme" then
 		ctl, kind = themeControl(ctx, s, sw), "theme"
+	elseif def.switch then
+		-- (a choice of two shown as a switch: off = switch[1], on = switch[2])
+		ctl, kind = Toggle.new(ctx, nil), "toggle"
+		ctl.onChange = function(on) s:set(key, def.switch[on and 2 or 1]) end
+		ctl:set(v == def.switch[2])
+		local set = ctl.set
+		ctl.set = function(c, x) set(c, x == def.switch[2] or x == true) end
 	elseif def.kind == "toggle" then
 		ctl, kind = Toggle.new(ctx, nil), "toggle"
 		ctl.onChange = function(on) s:set(key, on and 1 or 0) end

@@ -1418,8 +1418,8 @@ __mods["engine/settings"] = function(import)
 		row("syncLighting", "Sync Lighting", "World sync", 1, { desc = "Records and replays lighting changes" }),
 		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
 		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
-		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
-			desc = "New is HappaTAS 3's interface, Classic is V2's" }),
+		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" }, switch = { "New", "Classic" },
+			desc = "On: V2's classic interface. Off: HappaTAS 3's" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 		row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 		row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -1436,7 +1436,7 @@ __mods["engine/settings"] = function(import)
 		textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-		interface = "Interface",
+		interface = "Classic interface",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -16173,6 +16173,12 @@ __mods["ui/win/settings"] = function(import)
 		local ctl, kind
 		if key == "theme" then
 			ctl, kind = themeControl(ctx, s, sw), "theme"
+		elseif def.switch then
+			ctl, kind = Toggle.new(ctx, nil), "toggle"
+			ctl.onChange = function(on) s:set(key, def.switch[on and 2 or 1]) end
+			ctl:set(v == def.switch[2])
+			local set = ctl.set
+			ctl.set = function(c, x) set(c, x == def.switch[2] or x == true) end
 		elseif def.kind == "toggle" then
 			ctl, kind = Toggle.new(ctx, nil), "toggle"
 			ctl.onChange = function(on) s:set(key, on and 1 or 0) end
@@ -17775,7 +17781,7 @@ __mods["ui/win/helptext"] = function(import)
 		version = CONFIG.VERSION,
 		items = {
 			"A new interface: Dock, windows, timeline bar, Inspector",
-			"The classic interface is still there (Settings > Interface)",
+			"Classic interface: a switch in Settings",
 			"Library: folders, search, sort, numbered attempts",
 			"File format v6: smaller files, safe saving",
 			"Old .tas files (v1-v5) and Settings.json carry over",
@@ -18701,12 +18707,14 @@ __mods["ui/classic/settingsrows"] = function(import)
 			order = order + 1
 			local key = def.key
 			local r
-			if def.kind == "toggle" then
+			if def.kind == "toggle" or def.switch then
 				local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 				f.Parent = list
 				r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+				local sw = def.switch
 				local function show(v, instant)
-					local on = v ~= 0
+					local on
+					if sw then on = v == sw[2] else on = v ~= 0 end
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
@@ -18719,7 +18727,9 @@ __mods["ui/classic/settingsrows"] = function(import)
 					end
 				end
 				show(s:get(key), true)
-				life:connect(r.switch.MouseButton1Click, function() s:set(key, s:on(key) and 0 or 1) end)
+				life:connect(r.switch.MouseButton1Click, function()
+					if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+				end)
 				classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 			else
 				local f = ClassicBuild.node(inputRow(def, order), ClassicTree.STYLES)

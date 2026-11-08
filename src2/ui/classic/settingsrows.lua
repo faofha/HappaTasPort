@@ -67,12 +67,14 @@ function SettingsRows.build(classic)
 		order = order + 1
 		local key = def.key
 		local r
-		if def.kind == "toggle" then
+		if def.kind == "toggle" or def.switch then
 			local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 			f.Parent = list
 			r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+			local sw = def.switch -- (a choice of two shown as a switch: off = sw[1], on = sw[2])
 			local function show(v, instant)
-				local on = v ~= 0
+				local on
+				if sw then on = v == sw[2] else on = v ~= 0 end
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
@@ -86,7 +88,9 @@ function SettingsRows.build(classic)
 				end
 			end
 			show(s:get(key), true)
-			life:connect(r.switch.MouseButton1Click, function() s:set(key, s:on(key) and 0 or 1) end)
+			life:connect(r.switch.MouseButton1Click, function()
+				if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+			end)
 			classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 		else
 			local f = ClassicBuild.node(inputRow(def, order), ClassicTree.STYLES)

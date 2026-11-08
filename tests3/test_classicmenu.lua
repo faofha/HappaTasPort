@@ -182,4 +182,22 @@ tr.Text = "Mine"
 tr.FocusLost:Fire(true, nil)
 eq(E.settings:get("theme"), "Mine", "a saved look by name")
 eq(E.settings:get("accentColor"), "#112233", "its values loaded")
+
+section("the interface setting is a switch (Classic interface), the saved value still New / Classic")
+local ir = ui.classic.settingsRows.interface
+check(ir and ir.switch ~= nil and ir.input == nil, "a switch, not a text box")
+eq(ir and ir.label.Text, "Classic interface", "named Classic interface")
+eq(ir and ir.on, true, "on in Classic")
+ir.switch.MouseButton1Click:Fire()
+M.steps(2)
+eq(E.settings:get("interface"), "New", "switched off: the New interface (saved as New)")
+eq(ui.live, "New", "the New interface is up")
+local nr = ui.settingsWin and ui.settingsWin.rows.interface
+if not nr then ui.wm:open("settings"); M.steps(2); nr = ui.settingsWin.rows.interface end
+eq(nr.kind, "toggle", "a toggle in the New interface's Settings too")
+eq(nr.ctl.value, false, "off there")
+nr.ctl.onChange(true)
+M.steps(2)
+eq(E.settings:get("interface"), "Classic", "switched on: saved as Classic")
+eq(ui.live, "Classic", "Classic is up again")
 finish()
