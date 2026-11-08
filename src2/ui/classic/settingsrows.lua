@@ -1,6 +1,7 @@
 -- ================================================================================================
 --  CLASSIC SETTINGS ROWS  (HappaTAS 3 ui, spec 8.5): the classic Settings tab as V2.38.17 had it: a row per
---  setting V2.38.17 has (its label and section names), plus the Classic interface switch; the New interface's
+--  setting V2.38.17 has (its label and section names), plus the Classic interface switch and a switch per mode of
+--  Speed Hack In ("Speed Hack in Idle" / "in Create": the one multi setting); the New interface's
 --  own settings (Appearance) are not shown here and keep their values. A switch for a toggle, V2's input box for
 --  everything else. A row shows the store when it is built and follows its change events; a value the store
 --  refuses shows the old one again. Nothing here keeps a copy of a setting.
@@ -22,7 +23,8 @@ local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed =
 	microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 	allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
 local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
-local function shownHere(def) return def.v2 ~= nil or def.key == "interface" end
+-- (and a multi row with Classic labels: a switch per option, keyed "<key>:<option>")
+local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) end
 local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)
@@ -75,7 +77,41 @@ function SettingsRows.build(classic)
 			h.Parent = list
 			height = height + HEADER_H
 		end
-		if shownHere(def) then
+		if shownHere(def) and def.kind == "multi" then
+		-- a switch per option ("Speed Hack in Idle"): each one ticks or unticks its option in the one setting
+		local key = def.key
+		for _, o in ipairs(def.options) do
+			order = order + 1
+			local f = ClassicBuild.node(toggleRow({ key = key .. ":" .. o, name = def.classic[o] or o }, order), ClassicTree.STYLES)
+			f.Parent = list
+			local r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+			local function show(instant)
+				local on = s:has(key, o)
+				if r.on == on then return end
+				r.on = on
+				local target = on and SWITCH_ON or SWITCH_OFF
+				if instant or not ts then
+					r.knob.Position, r.knob.BackgroundColor3 = target.Position, target.BackgroundColor3
+				else
+					r.knob.BackgroundColor3 = target.BackgroundColor3
+					ts:Create(r.knob, TweenInfo.new(0.25), { Position = target.Position }):Play()
+				end
+			end
+			show(true)
+			life:connect(r.switch.MouseButton1Click, function()
+				local out = {}
+				for _, x in ipairs(def.options) do
+					local on = s:has(key, x)
+					if x == o then on = not on end
+					if on then out[#out + 1] = x end
+				end
+				s:set(key, table.concat(out, ","))
+			end)
+			classic.offs[#classic.offs + 1] = s:changed(key, function() show(false) end)
+			rows[key .. ":" .. o] = r
+			height = height + ROW_H
+		end
+		elseif shownHere(def) then
 		order = order + 1
 		local key = def.key
 		local r

@@ -1060,7 +1060,14 @@ TimeControl.__index = TimeControl
 
 local function announce()
 	local s = SH.Wanted()
-	local text = (s ~= 1) and ("Speed Hack: " .. tostring(Util.round(s, 1000)) .. "x while recording") or "Speed Hack: Off"
+	local text = "Speed Hack: Off"
+	if s ~= 1 then
+		-- (where it works: "Speed Hack In")
+		local st = engine.settings
+		local idle, create = st:has("speedHackModes", "Idle"), st:has("speedHackModes", "Create")
+		local where = (idle and create and "in Idle and while recording") or (idle and "in Idle") or (create and "while recording")
+		text = where and ("Speed Hack: " .. tostring(Util.round(s, 1000)) .. "x " .. where) or "Speed Hack: on, but no mode is ticked in Speed Hack In"
+	end
 	engine.modes:status(text, true)
 end
 
@@ -1077,6 +1084,9 @@ function TimeControl.new(E)
 		if v ~= 0 then SH.World.Track() end
 	end))
 	E.life:own(E.settings:changed("speedHackSpeed", function()
+		if E.settings:on("speedHack") then announce() end
+	end))
+	E.life:own(E.settings:changed("speedHackModes", function()
 		if E.settings:on("speedHack") then announce() end
 	end))
 	-- (the list of the world's constraints is kept from the moment the speed hack is switched on)

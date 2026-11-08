@@ -3,7 +3,8 @@
 --  listeners. Each row keeps its V2.38.16 name (`v2`) so Settings.json from V2 can be converted (phase 3).
 --  kind "toggle" = 0 / 1, "number" = clamped to min / max (integer: rounded; nonzero: 0 refused),
 --  "choice" = one of `options` (matched without case, stored as written there), "color" = "#RRGGBB",
---  "text" = a string of at most 40 characters. Every row has a `desc` (the line under its name in the
+--  "text" = a string of at most 40 characters, "multi" = some of `options`, stored "A,B" in their order ("" for
+--  none; Settings:has(key, option) reads one). Every row has a `desc` (the line under its name in the
 --  Settings window). Defaults are V2.38.16's; the Appearance rows (phase 5a, no V2 name) come from the mockup.
 -- ================================================================================================
 local Settings = {}
@@ -67,6 +68,10 @@ Settings.SCHEMA = {
 
 	row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
+	-- (no V2 name: the Classic interface shows it as a switch per mode, `classic` = their labels)
+	row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
+		classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
+		desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
 
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
@@ -105,7 +110,7 @@ local NAMES = {
 	textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-	interface = "Classic interface",
+	interface = "Classic interface", speedHackModes = "Speed Hack In",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do
@@ -138,6 +143,20 @@ function Settings.sanitize(def, v)
 	elseif def.kind == "text" then
 		if type(v) ~= "string" or #v > 40 then return nil end
 		return v
+	elseif def.kind == "multi" then
+		-- (several of `options`: stored as "A,B" in the options' order, "" for none; a list works too)
+		if type(v) == "table" then v = table.concat(v, ",") end
+		if type(v) ~= "string" then return nil end
+		local picked, any = {}, false
+		for word in v:gmatch("[^,]+") do
+			local w = word:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+			if w ~= "" and w ~= "none" then any = true end
+			for _, o in ipairs(def.options) do if o:lower() == w then picked[o] = true end end
+		end
+		local out = {}
+		for _, o in ipairs(def.options) do if picked[o] then out[#out + 1] = o end end
+		if any and #out == 0 then return nil end
+		return table.concat(out, ",")
 	end
 	v = tonumber(v)
 	if v == nil or v ~= v or v == math.huge or v == -math.huge then return nil end
@@ -160,6 +179,13 @@ function Settings:get(key) return self.values[key] or 0 end
 function Settings:on(key)
 	local v = self.values[key]
 	return v ~= nil and v ~= 0
+end
+
+-- a multi row: is `option` one of those picked
+function Settings:has(key, option)
+	local v = self.values[key]
+	if type(v) ~= "string" then return false end
+	return ("," .. v .. ","):find("," .. option .. ",", 1, true) ~= nil
 end
 
 -- false when the key is unknown or the value isn't allowed; listeners run only on a change

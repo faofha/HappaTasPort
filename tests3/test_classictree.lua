@@ -65,11 +65,15 @@ local function rows(path)
 end
 local Settings = __T3("engine/settings")
 local sections, seen = 0, {}
--- (V2.38.17's settings and the Classic interface switch: the New interface's own are not shown, Part E2)
+-- (V2.38.17's settings and the Classic interface switch: the New interface's own are not shown, Part E2; a multi
+-- row with Classic labels, Speed Hack In, is a switch per option)
 local shownN = 0
 for _, def in ipairs(Settings.SCHEMA) do
 	if def.v2 or def.key == "interface" then
 		shownN = shownN + 1
+		if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end
+	elseif def.kind == "multi" and def.classic then
+		shownN = shownN + #def.options
 		if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end
 	end
 end

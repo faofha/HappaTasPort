@@ -1404,6 +1404,9 @@ __mods["engine/settings"] = function(import)
 		row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
 		row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 		row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
+		row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
+			classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
+			desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -1436,7 +1439,7 @@ __mods["engine/settings"] = function(import)
 		textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-		interface = "Classic interface",
+		interface = "Classic interface", speedHackModes = "Speed Hack In",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -1466,6 +1469,19 @@ __mods["engine/settings"] = function(import)
 		elseif def.kind == "text" then
 			if type(v) ~= "string" or #v > 40 then return nil end
 			return v
+		elseif def.kind == "multi" then
+			if type(v) == "table" then v = table.concat(v, ",") end
+			if type(v) ~= "string" then return nil end
+			local picked, any = {}, false
+			for word in v:gmatch("[^,]+") do
+				local w = word:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+				if w ~= "" and w ~= "none" then any = true end
+				for _, o in ipairs(def.options) do if o:lower() == w then picked[o] = true end end
+			end
+			local out = {}
+			for _, o in ipairs(def.options) do if picked[o] then out[#out + 1] = o end end
+			if any and #out == 0 then return nil end
+			return table.concat(out, ",")
 		end
 		v = tonumber(v)
 		if v == nil or v ~= v or v == math.huge or v == -math.huge then return nil end
@@ -1485,6 +1501,11 @@ __mods["engine/settings"] = function(import)
 	function Settings:on(key)
 		local v = self.values[key]
 		return v ~= nil and v ~= 0
+	end
+	function Settings:has(key, option)
+		local v = self.values[key]
+		if type(v) ~= "string" then return false end
+		return ("," .. v .. ","):find("," .. option .. ",", 1, true) ~= nil
 	end
 	function Settings:set(key, v)
 		local def = Settings.byKey[key]
@@ -10198,7 +10219,13 @@ __mods["world/time/control"] = function(import)
 	TimeControl.__index = TimeControl
 	local function announce()
 		local s = SH.Wanted()
-		local text = (s ~= 1) and ("Speed Hack: " .. tostring(Util.round(s, 1000)) .. "x while recording") or "Speed Hack: Off"
+		local text = "Speed Hack: Off"
+		if s ~= 1 then
+			local st = engine.settings
+			local idle, create = st:has("speedHackModes", "Idle"), st:has("speedHackModes", "Create")
+			local where = (idle and create and "in Idle and while recording") or (idle and "in Idle") or (create and "while recording")
+			text = where and ("Speed Hack: " .. tostring(Util.round(s, 1000)) .. "x " .. where) or "Speed Hack: on, but no mode is ticked in Speed Hack In"
+		end
 		engine.modes:status(text, true)
 	end
 	function TimeControl.new(E)
@@ -10212,6 +10239,9 @@ __mods["world/time/control"] = function(import)
 			if v ~= 0 then SH.World.Track() end
 		end))
 		E.life:own(E.settings:changed("speedHackSpeed", function()
+			if E.settings:on("speedHack") then announce() end
+		end))
+		E.life:own(E.settings:changed("speedHackModes", function()
 			if E.settings:on("speedHack") then announce() end
 		end))
 		if E.settings:on("speedHack") then SH.World.Track() end
@@ -12580,6 +12610,9 @@ __mods["engine/frame"] = function(import)
 				end
 				if E.paused then E.cam:holdPaused() end
 				E.cam:updateMouseMode()
+			elseif mode == 1 and E.timeIdle then
+				E.time:frameStart()
+				E.time:stepTime()
 			elseif mode == 3 and ch:loaded() and E.frame + 1 <= tl:count() and E.testTime >= 0 then
 				local p = M_:playbackPose()
 				ch:sync(p.root, p.lin, p.ang)
@@ -12587,8 +12620,11 @@ __mods["engine/frame"] = function(import)
 				if M_:setCam() then E.cs:updateGhost(p.Zoom, dt, false) end
 			end
 			local hum = ch.hum
-			local recording = mode == 2 and (not E.paused or E.firstFrame) and ch:loaded() and hum.Health > 0
-			E.recScale = E.time:update(recording, hum, ch.hrp, mode ~= 3)
+			local s = E.settings
+			local recording = mode == 2 and (not E.paused or E.firstFrame) and s:has("speedHackModes", "Create") and ch:loaded()
+				and hum.Health > 0
+			E.timeIdle = mode == 1 and s:on("speedHack") and s:has("speedHackModes", "Idle") and ch:loaded() and hum.Health > 0
+			E.recScale = E.time:update(recording or E.timeIdle, hum, ch.hrp, mode ~= 3)
 			local rate = E.time.anim
 			if rate ~= lastRate then
 				lastRate = rate
@@ -12608,6 +12644,7 @@ __mods["engine/frame"] = function(import)
 			elseif kitCur.on then
 				E.kitObjects:frame(1, tl, 0, 0, false)
 			end
+			if mode == 1 and E.timeIdle then kitRate = E.time:stepping() and 0 or E.recScale end
 			E.kitClock:setRate(kitRate)
 			E.plugins:call("onFrameEnd", dt)
 		end
@@ -12625,20 +12662,20 @@ __mods["engine/frame"] = function(import)
 				end
 				ch.hum:Move(ch.hrp.AssemblyLinearVelocity)
 			end
-			if E.mode ~= 2 then return end
+			if E.mode ~= 2 and not E.timeIdle then return end
 			E.stepHeld = not E.time:stepBegin(dt)
-			if (not E.paused or E.firstFrame) and not E.stepHeld then
+			if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
 				if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 			end
 		end
 		local function postSimulation(dt)
-			if E.mode ~= 2 then return end
+			if E.mode ~= 2 and not E.timeIdle then return end
 			local held = E.stepHeld
 			E.stepHeld = false
 			E.time:stepEnd()
 			if held then return end
 			local ch = E.char
-			local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
+			local recording = (E.mode == 2 and (not E.paused or E.firstFrame) or E.timeIdle) and ch:loaded()
 			E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
 		end
 		local function holdPose(f)
@@ -14318,7 +14355,8 @@ __mods["ui/kit/dropdown"] = function(import)
 	function Dropdown.new(ctx, parent, opts)
 		local self = K.new(ctx, Dropdown)
 		self.options, self.fontPreview, self.w = opts.options, opts.fontPreview == true, opts.w or 150
-		self.value = opts.options[1]
+		self.multi = opts.multi == true
+		self.value = self.multi and "" or opts.options[1]
 		local gui = K.frame("Dropdown", parent, Color3.new(1, 1, 1))
 		gui.BackgroundTransparency = 0.88
 		gui.Size = UDim2.new(0, self.w, 0, 24)
@@ -14339,11 +14377,38 @@ __mods["ui/kit/dropdown"] = function(import)
 		self:show()
 		return self
 	end
-	function Dropdown:show() W.set(self.label, "Text", tostring(self.value)) end
+	function Dropdown:picked(o)
+		if not self.multi then return o == self.value end
+		return ("," .. tostring(self.value) .. ","):find("," .. o .. ",", 1, true) ~= nil
+	end
+	function Dropdown:show()
+		local text = tostring(self.value)
+		if self.multi then text = (text == "") and "None" or text:gsub(",", ", ") end
+		W.set(self.label, "Text", text)
+		if self.items then
+			for o, it in pairs(self.items) do
+				W.set(it.item, "BackgroundTransparency", self:picked(o) and 0.84 or 1)
+				if it.dot then W.set(it.dot, "Visible", self:picked(o)) end
+			end
+		end
+	end
 	function Dropdown:set(v)
-		if not table.find(self.options, v) then return end
+		if self.multi then
+			if type(v) ~= "string" then return end
+		elseif not table.find(self.options, v) then
+			return
+		end
 		self.value = v
 		self:show()
+	end
+	function Dropdown:toggled(o)
+		local out = {}
+		for _, x in ipairs(self.options) do
+			local on = self:picked(x)
+			if x == o then on = not on end
+			if on then out[#out + 1] = x end
+		end
+		return table.concat(out, ",")
 	end
 	function Dropdown:open()
 		if self.pop then return end
@@ -14352,6 +14417,7 @@ __mods["ui/kit/dropdown"] = function(import)
 		self.pop = pop
 		self.list = pop.frame
 		local theme = self.ctx.theme
+		self.items = {}
 		pop.catcherRect.onHover = function(on) if on and self.fontPreview then theme:preview(nil) end end
 		for i, o in ipairs(self.options) do
 			local item = K.text("TextLabel", "Item", pop.frame)
@@ -14360,7 +14426,7 @@ __mods["ui/kit/dropdown"] = function(import)
 			item.Size = UDim2.new(1, -8, 0, rowH)
 			item.TextXAlignment = Enum.TextXAlignment.Left
 			item.BackgroundColor3 = Color3.new(1, 1, 1)
-			item.BackgroundTransparency = (o == self.value) and 0.84 or 1
+			item.BackgroundTransparency = self:picked(o) and 0.84 or 1
 			item.ZIndex = 3
 			local pad = Instance.new("UIPadding")
 			pad.PaddingLeft = UDim.new(0, 10)
@@ -14369,13 +14435,32 @@ __mods["ui/kit/dropdown"] = function(import)
 			item.FontFace = self.fontPreview and Font.new(family(o)) or theme.font("text")
 			item.TextSize = theme.size(12.5)
 			item.TextColor3 = theme.c.text
+			local dot
+			if self.multi then
+				dot = K.text("TextLabel", "Dot", item)
+				dot.Text = "•"
+				dot.AnchorPoint = Vector2.new(1, 0.5)
+				dot.Position = UDim2.new(1, -8, 0.5, 0)
+				dot.Size = UDim2.new(0, 12, 1, 0)
+				dot.TextColor3 = theme.c.text
+				dot.TextSize = theme.size(14)
+				dot.Visible = self:picked(o)
+				dot.ZIndex = 4
+			end
+			self.items[o] = { item = item, dot = dot }
 			pop:add({ gui = item,
 				onHover = function(on)
-					W.set(item, "BackgroundTransparency", (on or o == self.value) and 0.84 or 1)
+					W.set(item, "BackgroundTransparency", (on or self:picked(o)) and 0.84 or 1)
 					if self.fontPreview then theme:preview(on and o or nil) end
 				end,
 				onRelease = function(_, clicked)
 					if not clicked then return end
+					if self.multi then
+						self.value = self:toggled(o)
+						self:show()
+						if self.onChange then self.onChange(self.value) end
+						return
+					end
 					self.value = o
 					self:show()
 					self:close()
@@ -14384,7 +14469,7 @@ __mods["ui/kit/dropdown"] = function(import)
 		end
 		pop.onClose = function()
 			if self.fontPreview then theme:preview(nil) end
-			self.pop, self.list = nil, nil
+			self.pop, self.list, self.items = nil, nil, nil
 		end
 	end
 	function Dropdown:close()
@@ -16226,6 +16311,10 @@ __mods["ui/win/settings"] = function(import)
 			end
 			ctl.onChange = function(o) s:set(key, o) end
 			ctl:set(v)
+		elseif def.kind == "multi" then
+			ctl, kind = Dropdown.new(ctx, nil, { options = def.options, multi = true, w = 150 }), "multi"
+			ctl.onChange = function(o) s:set(key, o) end
+			ctl:set(v)
 		elseif def.min and def.max then
 			ctl, kind = Slider.new(ctx, nil, { min = def.min, max = def.max, step = def.integer and 1 or nil, fmt = fmtFor(key),
 				sanitize = function(t) return Settings.sanitize(def, t) end }), "slider"
@@ -17916,7 +18005,8 @@ __mods["ui/win/helptext"] = function(import)
 		{ "speed", "Speed Hack (Slow / Fast Motion)",
 			"Turn on Speed Hack to record in slow or fast motion, like a video played slower or faster. Speed Hack Speed "
 			.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
-			.. "recording.\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
+			.. "recording. Speed Hack In picks where it works: Create (recording, the default) and / or Idle (playing "
+			.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 			.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 			.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
 			.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
@@ -18676,7 +18766,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
 	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
-	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" end
+	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) end
 	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 	local function toggleRow(def, order)
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
@@ -18723,7 +18813,40 @@ __mods["ui/classic/settingsrows"] = function(import)
 				h.Parent = list
 				height = height + HEADER_H
 			end
-			if shownHere(def) then
+			if shownHere(def) and def.kind == "multi" then
+			local key = def.key
+			for _, o in ipairs(def.options) do
+				order = order + 1
+				local f = ClassicBuild.node(toggleRow({ key = key .. ":" .. o, name = def.classic[o] or o }, order), ClassicTree.STYLES)
+				f.Parent = list
+				local r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+				local function show(instant)
+					local on = s:has(key, o)
+					if r.on == on then return end
+					r.on = on
+					local target = on and SWITCH_ON or SWITCH_OFF
+					if instant or not ts then
+						r.knob.Position, r.knob.BackgroundColor3 = target.Position, target.BackgroundColor3
+					else
+						r.knob.BackgroundColor3 = target.BackgroundColor3
+						ts:Create(r.knob, TweenInfo.new(0.25), { Position = target.Position }):Play()
+					end
+				end
+				show(true)
+				life:connect(r.switch.MouseButton1Click, function()
+					local out = {}
+					for _, x in ipairs(def.options) do
+						local on = s:has(key, x)
+						if x == o then on = not on end
+						if on then out[#out + 1] = x end
+					end
+					s:set(key, table.concat(out, ","))
+				end)
+				classic.offs[#classic.offs + 1] = s:changed(key, function() show(false) end)
+				rows[key .. ":" .. o] = r
+				height = height + ROW_H
+			end
+			elseif shownHere(def) then
 			order = order + 1
 			local key = def.key
 			local r

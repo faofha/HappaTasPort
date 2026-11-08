@@ -42,7 +42,7 @@ for _, def in ipairs(Settings.SCHEMA) do
 		if r then
 			n = n + 1
 			local want = ((def.kind == "toggle" or def.switch) and "toggle") or (def.kind == "color" and "swatch") or (def.key == "theme" and "theme")
-				or (def.kind == "choice" and (#def.options <= 4 and "segmented" or "dropdown"))
+				or (def.kind == "choice" and (#def.options <= 4 and "segmented" or "dropdown")) or (def.kind == "multi" and "multi")
 				or (def.kind == "number" and ((def.min and def.max) and "slider" or "field"))
 			eq(r.kind, want, def.key .. " is a " .. tostring(want))
 			check(UIH.find(r.row.gui, def.name) ~= nil, def.key .. " shows its name (" .. tostring(def.name) .. ")")
@@ -165,6 +165,28 @@ eq(sw.bezier.gui.Visible, false, "hidden for a Roblox easing")
 s:set("easing", "Custom")
 eq(sw.bezier.gui.Visible, true, "shown for Custom")
 s:set("easing", "Preset")
+
+section("Speed Hack In: a dropdown that ticks several")
+do
+	local mr = reveal("speedHackModes")
+	local dd = mr.ctl
+	eq(dd.label.Text, "Create", "shows the default")
+	UIH.click(dd.gui)
+	check(dd.list ~= nil, "opens")
+	UIH.click(UIH.find(dd.list, "Idle"))
+	eq(s:get("speedHackModes"), "Idle,Create", "ticking Idle adds it")
+	check(dd.list ~= nil, "the list stays open to tick more")
+	eq(dd.label.Text, "Idle, Create", "the label lists both")
+	UIH.click(UIH.find(dd.list, "Create"))
+	eq(s:get("speedHackModes"), "Idle", "ticking Create again takes it off")
+	UIH.click(UIH.find(dd.list, "Idle"))
+	eq(s:get("speedHackModes"), "", "none")
+	eq(dd.label.Text, "None", "the label says None")
+	dd:close()
+	s:set("speedHackModes", "Create")
+	M.steps(1)
+	eq(dd.label.Text, "Create", "a change made elsewhere shows")
+end
 
 section("the reset button at another interface scale (review: it sat over the row's name)")
 s:set("interfaceScale", 150)

@@ -247,6 +247,28 @@ do
 	eq(Settings.byKey.glass.order < Settings.byKey.lockCameraTest.order, true, "Appearance comes first (spec 8.3's section order)")
 end
 
+section("speed hack in: several modes picked at once (kind multi)")
+do
+	local def = Settings.byKey.speedHackModes
+	check(def ~= nil and def.kind == "multi", "the Speed Hack In row, a multi")
+	eq(def and def.default, "Create", "default: Create only (as before)")
+	eq(def and table.concat(def.options, ","), "Idle,Create", "options: Idle, Create")
+	eq(Settings.sanitize(def, "Create"), "Create", "one")
+	eq(Settings.sanitize(def, "create, idle"), "Idle,Create", "any case and order, stored in the options' order")
+	eq(Settings.sanitize(def, { "Create", "Idle" }), "Idle,Create", "a list too")
+	eq(Settings.sanitize(def, "Idle,Bogus"), "Idle", "an unknown name is dropped")
+	eq(Settings.sanitize(def, ""), "", "none picked")
+	eq(Settings.sanitize(def, "None"), "", "None = none picked")
+	eq(Settings.sanitize(def, "Bogus"), nil, "only unknown names: refused")
+	eq(Settings.sanitize(def, 5), nil, "not text: refused")
+	local s = Settings.new()
+	check(s:has("speedHackModes", "Create") and not s:has("speedHackModes", "Idle"), "has: Create, not Idle")
+	s:set("speedHackModes", "Idle,Create")
+	check(s:has("speedHackModes", "Idle") and s:has("speedHackModes", "Create"), "has: both")
+	s:set("speedHackModes", "")
+	check(not s:has("speedHackModes", "Create"), "has: none")
+end
+
 section("every row has a desc (phase 5a)")
 for _, row in ipairs(Settings.SCHEMA) do
 	check(type(row.desc) == "string" and #row.desc >= 8 and #row.desc <= 90, "desc for " .. row.key .. " (" .. tostring(row.desc) .. ")")
