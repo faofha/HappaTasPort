@@ -1,9 +1,9 @@
 -- ================================================================================================
---  CLASSIC SETTINGS ROWS  (HappaTAS 3 ui, spec 8.5): the classic Settings tab, one V2.38.17-style row per
---  setting of the one store (spec 6.3), the Appearance ones too: a switch for a toggle, V2's input box for
---  everything else (a choice typed, matched without case; a colour as #RRGGBB). A row shows the store when
---  it is built and follows its change events; a value the store refuses shows the old one again. Nothing
---  here keeps a copy of a setting.
+--  CLASSIC SETTINGS ROWS  (HappaTAS 3 ui, spec 8.5): the classic Settings tab as V2.38.17 had it: a row per
+--  setting V2.38.17 has (its label and section names), plus the Classic interface switch; the New interface's
+--  own settings (Appearance) are not shown here and keep their values. A switch for a toggle, V2's input box for
+--  everything else. A row shows the store when it is built and follows its change events; a value the store
+--  refuses shows the old one again. Nothing here keeps a copy of a setting.
 -- ================================================================================================
 local Env = import("platform/env")
 local Settings = import("engine/settings")
@@ -15,14 +15,21 @@ local SettingsRows = {}
 
 local u, v2 = UDim2.new, Vector2.new
 local ROW_H, HEADER_H = 30, 28
-local SWITCH_ON = { Position = u(1, 0, 0.5, 0) }
+local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) } -- (V2.38.17's knobs)
+-- V2.38.17's labels and section names where they differ from its setting names
+local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
+	invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
+	microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
+	allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
+local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
+local function shownHere(def) return def.v2 ~= nil or def.key == "interface" end
 local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)
 local function toggleRow(def, order)
 	return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 		{ "UICorner", "UICorner", 5, {} },
-		{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = 16 } },
+		{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = LABELS[def.key] or def.name, TextSize = 16 } },
 		{ "TextButton", "Switch", 36, { Position = u(0.9, 0, 0.5, 0), Size = u(0, 30, 0, 15), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13 }, {
 			{ "UICorner", "UICorner", 37, {} },
 			{ "Frame", "Switcher", 38, { Position = u(0, 0, 0.5, 0), Size = u(0, 22, 0, 22), AnchorPoint = v2(0.5, 0.5) }, {
@@ -33,14 +40,15 @@ local function toggleRow(def, order)
 	} }
 end
 local function inputRow(def, order)
-	local labelSize = (#def.name > 24) and 13 or 16
+	local label = LABELS[def.key] or def.name
+	local labelSize = (#label > 24) and 13 or 16
 	return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 		{ "UICorner", "UICorner", 5, {} },
 		{ "TextBox", "Input", 40, { Position = u(0.9, 0, 0.5, 0), Size = u(0.15, 0, 0.7, 0), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13, PlaceholderText = "" }, {
 			{ "UICorner", "UICorner", 5, {} },
 			{ "UIStroke", "UIStroke", 41, {} },
 		} },
-		{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = labelSize } },
+		{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = label, TextSize = labelSize } },
 		{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
 	} }
 end
@@ -55,29 +63,34 @@ function SettingsRows.build(classic)
 	local ts = Env.svc("TweenService")
 	local rows, last, order, height = {}, nil, 0, 0
 	for _, def in ipairs(Settings.SCHEMA) do
-		if def.section ~= last then
+		if not shownHere(def) then
+			-- (the New interface's only)
+		elseif def.section ~= last then
 			last = def.section
 			order = order + 1
-			local h = ClassicBuild.node({ "TextLabel", "Section_" .. def.section, 16, { Size = u(1, 0, 0, HEADER_H), Text = def.section,
+			local secName = SECTIONS[def.section] or def.section
+			local h = ClassicBuild.node({ "TextLabel", "Section_" .. secName, 16, { Size = u(1, 0, 0, HEADER_H), Text = secName,
 				TextSize = 14, LayoutOrder = order } }, ClassicTree.STYLES)
 			pcall(function() h.TextColor3 = Color3.fromRGB(140, 205, 255) end) -- (V2's section colour)
 			h.Parent = list
 			height = height + HEADER_H
 		end
+		if shownHere(def) then
 		order = order + 1
 		local key = def.key
 		local r
-		if def.kind == "toggle" then
+		if def.kind == "toggle" or def.switch then
 			local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 			f.Parent = list
 			r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+			local sw = def.switch -- (a choice of two shown as a switch: off = sw[1], on = sw[2])
 			local function show(v, instant)
-				local on = v ~= 0
+				local on
+				if sw then on = v == sw[2] else on = v ~= 0 end
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
-				-- (an on switch in the accent colour: ui/classic/look)
-				local bg = on and Color3.fromHex(tostring(s:get("accentColor")):sub(2)) or target.BackgroundColor3
+				local bg = target.BackgroundColor3
 				if instant or not ts then
 					r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 				else
@@ -86,7 +99,9 @@ function SettingsRows.build(classic)
 				end
 			end
 			show(s:get(key), true)
-			life:connect(r.switch.MouseButton1Click, function() s:set(key, s:on(key) and 0 or 1) end)
+			life:connect(r.switch.MouseButton1Click, function()
+				if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+			end)
 			classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 		else
 			local f = ClassicBuild.node(inputRow(def, order), ClassicTree.STYLES)
@@ -110,6 +125,7 @@ function SettingsRows.build(classic)
 		end
 		rows[key] = r
 		height = height + ROW_H
+		end
 	end
 	-- (the list and its scroller fit every row: V2's lists were sized by hand for V2's settings)
 	list.Size = u(0, 360, 0, height)

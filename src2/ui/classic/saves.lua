@@ -86,7 +86,6 @@ function Saves.build(classic)
 		local s = { frame = f, name = f.N, save = f.Buttons.Save, load = f.Buttons.Load, merge = f.MoreButtons.Merge,
 			delete = f.MoreButtons.Delete, slotName = name, path = path }
 		sv.slots[#sv.slots + 1] = s
-		if classic.look then classic.look:adoptAll(f) end
 		life:connect(f.N.FocusLost, function()
 			local old = s.slotName
 			local clean = Files.cleanName(f.N.Text)

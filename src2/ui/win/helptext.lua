@@ -15,7 +15,7 @@ HelpText.WHATS_NEW = {
 	version = CONFIG.VERSION,
 	items = {
 		"A new interface: Dock, windows, timeline bar, Inspector",
-		"The classic interface is still there (Settings > Interface)",
+		"Classic interface: a switch in Settings",
 		"Library: folders, search, sort, numbered attempts",
 		"File format v6: smaller files, safe saving",
 		"Old .tas files (v1-v5) and Settings.json carry over",
@@ -145,9 +145,9 @@ local TOPICS = {
 		.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
 		.. "recording.\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
-		.. "ziplines, the kit's timers) all change speed.\n\nSpeed Hack Frame Step (below 1x): Roblox's normal "
-		.. "physics runs on some frames only and everything is held in between, so walking, jumping and pushing are "
-		.. "exactly like normal speed." },
+		.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
+		.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
+		.. "like normal speed; it moves in short full-speed bursts. Above 1x the physics is sped up instead." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "

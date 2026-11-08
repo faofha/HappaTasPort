@@ -361,6 +361,7 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 				JumpTime = math.round(jumpAnimTime * 1000) / 1000,
 				Speed = math.round(currentAnimSpeed * 1000) / 1000,
 				Anims = StartOfTAS and { { AnimToNumber[currentAnim] or 1, 0 } } or useFrameAnims(),
+				Time = math.round(currentAnimTrack.TimePosition * 1000) / 1000,
 			}
 		end
 		return nil
@@ -379,8 +380,30 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 		jumpAnimTime = AnimData.JumpTime or 0
 		setAnimationSpeed((AnimData.Speed or 1) * (PlaybackSpeed or 1), true)
 		if TimeDifference and currentAnimTrack then
-			currentAnimTrack.TimePosition = TimeDifference
+			local track = currentAnimTrack
+			track.TimePosition = TimeDifference
+			-- (a track started just now may not take a time yet: once more after this frame)
+			task.defer(function()
+				if currentAnimTrack == track and track.IsPlaying and track.Speed == 0 then track.TimePosition = TimeDifference end
+			end)
 		end
+	end
+
+	-- interpolated playback: the playing track back on the recorded time when it is more than `tolerance` off
+	-- (a looped track wraps); it isn't written otherwise
+	-- Only a looped track is put back (idle, walk, climb: the ones that run on for long): a track that doesn't loop
+	-- (the jump) put near its end fires its End keyframe and the engine starts the next animation afresh (live).
+	-- (one engine read a frame: Length is read once per track, Looped only when the track is off)
+	local followTrack, followLen
+	function self.Follow(want, tolerance)
+		local track = currentAnimTrack
+		if not track then return end
+		if track ~= followTrack then followTrack, followLen = track, track.Length end
+		local len = followLen
+		if not (len > 0) then return end
+		local d = (track.TimePosition - want + len / 2) % len - len / 2
+		if math.abs(d) <= tolerance or not track.Looped then return end
+		track.TimePosition = want % len
 	end
 
 	function self.Lock(lock) LockAnimations = lock end
@@ -446,6 +469,9 @@ function Animation.new(E)
 	tl:addColumn("AnimJump", "f64", 1, { key = "Anim", field = "JumpTime" })
 	tl:addColumn("AnimSpeed", "f64", 1, { key = "Anim", field = "Speed" })
 	tl:addColumn("AnimList", "list", 1, { key = "Anim", field = "Anims", default = {}, keep = function(v) return #v > 0 end })
+	-- (the playing track's own time: a rewind / Test puts it back as it was, it can't be worked out from the frame
+	-- times when the track loops or was stopped. Not in older files: worked out as before there)
+	tl:addColumn("AnimTime", "list", 1, { key = "Anim", field = "Time" })
 	E.life:own(function() self:shutdown() end)
 	return self
 end
@@ -517,11 +543,13 @@ function Animation:fill(tl, i)
 		tl:set("AnimJump", i, 1, d.JumpTime)
 		tl:set("AnimSpeed", i, 1, d.Speed)
 		tl:setList("AnimList", i, d.Anims)
+		tl:setList("AnimTime", i, d.Time)
 	else
 		tl:set("AnimPose", i, 1, EMPTY.Pose)
 		tl:set("AnimJump", i, 1, EMPTY.JumpTime)
 		tl:set("AnimSpeed", i, 1, EMPTY.Speed)
 		tl:setList("AnimList", i, nil)
+		tl:setList("AnimTime", i, nil)
 	end
 end
 
@@ -530,6 +558,7 @@ local function dataAt(tl, i)
 end
 local NONE = {}
 local function animsAt(tl, i) return tl:getList("AnimList", i) or NONE end
+local function timeAt(tl, i) return tl:getList("AnimTime", i) end
 
 function Animation:set(data, anims, speed, timeDiff)
 	local e = self.current
@@ -542,13 +571,24 @@ function Animation:lock(mode)
 end
 
 -- the frame's animation state, and its animations (Test, held frames)
-function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
 -- a frame passed in interpolated playback: only its last started animation
 function Animation:passFrame(tl, i, speed)
 	local a = animsAt(tl, i)
-	self:set(dataAt(tl, i), { a[#a] }, speed)
+	self:set(dataAt(tl, i), { a[#a] }, speed, (#a > 0) and timeAt(tl, i) or nil)
 end
-function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
+-- interpolated playback at TAS time t on frame i: between animation starts the track runs by itself, and in a
+-- Frame Step run its saved time doesn't grow evenly with the game time (every step runs in a timed state, steps are
+-- held after it): it is put back on the saved time when more than 0.03 s off (live, 0.5x: 0.185 s off without this)
+local FOLLOW_TOLERANCE = 0.03
+function Animation:follow(tl, i, t)
+	local e = self.current
+	local saved = timeAt(tl, i)
+	if not (e and saved) then return end
+	local want = saved + math.max(0, t - tl:get("TotalTime", i, 1)) * tl:get("AnimSpeed", i, 1)
+	e.Follow(want, FOLLOW_TOLERANCE)
+end
 
 -- paused on frame i (or unpausing from it); backtrack = the animation back to where it was then
 function Animation:loadFrame(tl, i, unpausing, backtrack)
@@ -569,6 +609,7 @@ function Animation:loadFrame(tl, i, unpausing, backtrack)
 		end
 	end
 	if not backSpeed then backSpeed = 1 end
+	if backtrack then animTime = timeAt(tl, i) or animTime end
 	self:set(dataAt(tl, i), backAnim, (not unpausing) and 0 or backSpeed, backtrack and animTime or nil)
 end
 

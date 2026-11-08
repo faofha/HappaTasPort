@@ -3,15 +3,17 @@
 --  Create mode (V2.38.17 p16_speedhack.lua, both blocks function by function; the other systems are reached
 --  through the engine: E.co, E.kitClock, E.anim, E.settings).
 --  While a TAS is recorded (Create mode, unpaused) the character moves at s times its normal speed
---  (s = "Speed Hack Speed", 0.1 - 4; above 1 = fast motion, the same rules), like a video played slower:
+--  (s = "Speed Hack Speed", 0.1 - 4), like a video played slower or faster. Below 1x: Frame Step (below).
+--  Above 1x (fast motion), the scaling:
 --    gravity x s^2, WalkSpeed and JumpPower x s, the character's velocity x s when the slow motion starts
 --    (and / s when it stops with the character still moving), HappaTAS's animations x s. JumpHeight is left
 --    alone. Each recorded frame stores its time x s and the velocity / s (the engine, character), and its
 --    factor (column v2SK), so the TAS is in normal time and Test plays it at normal speed.
 --  The world slows down with it: constraints and body movers get their slowed values, free client objects
 --  keep their motion, conveyors move x s, the kit's bounce pad Power / swing Boost are slowed.
---  Frame Step (below 1x): no scaling; Roblox's normal physics runs on some steps and everything is held for
---  the others. The humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
+--  Frame Step (always below 1x; the scaling there made the humanoid's emulation drift: extra velocity, the
+--  floor spring and the Landed timer in real time, measured live): no scaling; Roblox's normal physics runs on
+--  some steps and everything is held for the others. The humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
 --  1000 limit) are put back on the game clock (the second block, SH.Humanoid).
 -- ================================================================================================
 local Env = import("platform/env")
@@ -409,8 +411,9 @@ do
 	-- ----------------------------------------------------------------------------------------- frame step
 	-- "Speed Hack Frame Step" (speeds below 1): no scaling at all. Roblox runs its normal physics on some
 	-- frames only, and everything that moves is held still for the physics step of the frames in between
-	-- (acc += s every physics step; a step runs when acc reaches 1), like Eternal Obbying's fixed steps fed by
-	-- its TAS pace. Only frames whose physics step ran are recorded, each with the simulated time of that step,
+	-- (by time, adapted from Eternal Obbying's fixed-step loop, Client/Session.lua: acc += real dt x s, a step
+	-- runs when acc holds the time it simulates; counting events instead ran 0.5x at 0.25x when frames had 1 and 3
+	-- physics steps in turn). Only frames whose physics step ran are recorded, each with the simulated time of that step,
 	-- so walking, jumping and falling are exactly normal-speed physics (checked in the client: same heights,
 	-- states and times), and a platform you push yourself (the kit's Pushing Platform) speeds up at the normal
 	-- rate (~158 stud/s^2), which the scaling above can't do (Roblox's walking force can't be slowed). Not exact:
@@ -420,9 +423,39 @@ do
 	-- PostSimulation of that frame, then put back with the velocities they had: outside the physics step
 	-- nothing is held, so pausing, testing and Idle never see it. The kit's clock moves on by each step that ran
 	-- (KitClock.Advance), the client objects' physics clock skips the held steps (ClientObjects.SkipSim).
+	-- Roblox's humanoid keeps its own timers through a held step (live: no coyote jump even 0.05 s after the edge at
+	-- 0.1x, Landed over 6x too soon), so a step in a timed state always runs: the jump's push, Landed, and Running off
+	-- the floor (coyote time and the grace before Freefall). The time is held back afterwards (acc below 0, at most
+	-- MAX_DEBT s of game time), so the game time still follows the slider.
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-		root = nil }
+		root = nil, hum = nil }
+	local MAX_DEBT = 0.25
+	local ST = Enum.HumanoidStateType
+	local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
+	local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
+	local function timedState(h)
+		if not (h and h.Parent) then return false end
+		local st = h:GetState()
+		return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
+	end
 	SH.FS = FS
+	-- a free part your character touches (a platform it pushes or stands on) also runs every step: holding both
+	-- broke the contact each held step (live, the kit's Pushing Platform: 0.42 studs pushed by 0.3 s at 0.5x
+	-- against 3.5 - 4.9 at 1x; with every step of the contact run, 2.95)
+	local touchParams = OverlapParams.new()
+	touchParams.FilterType = Enum.RaycastFilterType.Exclude
+	local function touchingHeld()
+		local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+		local set = FS.rootSet
+		if not (ch and set and next(set)) then return false end
+		touchParams.FilterDescendantsInstances = { ch }
+		local cf, size = ch:GetBoundingBox()
+		for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
+			local r = h.AssemblyRootPart or h
+			if set[r] then return true end
+		end
+		return false
+	end
 	local function collectStepParts()
 		local list, done = {}, {}
 		eachWorldPart(function(p)
@@ -432,7 +465,7 @@ do
 			done[rootP] = true
 			list[#list + 1] = rootP
 		end)
-		FS.parts = list
+		FS.parts, FS.rootSet = list, done
 	end
 	local function hold(p)
 		local n = FS.n + 1
@@ -447,9 +480,18 @@ do
 	function SH.StepBegin(dt)
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
-		FS.acc = FS.acc + FS.s
-		if FS.acc >= 1 - 1e-6 then
-			FS.acc = FS.acc - 1
+		if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end -- (the first step runs)
+		local run = FS.acc >= dt - 1e-9
+		if not run and FS.acc - dt > -MAX_DEBT then
+			local okT, must = pcall(timedState, FS.hum)
+			if not (okT and must) then
+				if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
+				okT, must = pcall(touchingHeld)
+			end
+			run = okT and must
+		end
+		if run then
+			FS.acc = FS.acc - dt
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -514,8 +556,9 @@ do
 	end
 	local function stopStep()
 		if not FS.on then return end
+		if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 		SH.StepEnd()
-		FS.on, FS.pending, FS.ranDt, FS.root, FS.parts = false, 0, 0, nil, {}
+		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 	end
 
 	local function applyValues(h, s)
@@ -575,14 +618,19 @@ do
 			if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 			return 1
 		end
-		if s < 1 and engine.settings:on("speedHackFrameStep") then
+		if s < 1 then
 			-- (from the scaled slow motion: its values off, the character's velocity back to normal)
 			if applied then SH.Restore(keepMomentum) end
 			if not FS.on then
 				FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
-				FS.acc = 1 - s -- (the first step runs)
+				FS.acc = nil -- (the first step runs)
+				-- (a part the game adds, a pushbox or a bullet, is held from the next held step: the scan otherwise
+				-- runs every 30 held steps, and the part moved at full speed until then)
+				FS.addConn = workspace.DescendantAdded:Connect(function(d)
+					if d:IsA("BasePart") then FS.scanIn = 0 end
+				end)
 			end
-			FS.s, FS.root = s, part
+			FS.s, FS.root, FS.hum = s, part, h
 			setAnim(s)
 			return 1
 		end
@@ -793,8 +841,10 @@ do
 				and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
 			if hum.FloorMaterial ~= Air and not falling then
 				if cy.off ~= nil then
-					-- (landed: a jump held down is taken on this step; it was off for the step, so it is made here)
-					local blocked = cy.disabled
+					-- (landed: a jump held down is taken on this step; it was off for the step, so it is made here.
+					-- Only in scaled motion: at 1x Roblox makes it once Jumping is on again, after Landed - made here it
+					-- came ~30 ms early, measured live)
+					local blocked = cy.disabled and SH.scale ~= 1
 					cy.off, cy.jumped, cy.restored = nil, false, false
 					cy.pinN, cy.vt, cy.finish = nil, nil, nil -- (the next push is a new jump)
 					setJumping(hum, true)

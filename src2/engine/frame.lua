@@ -110,15 +110,20 @@ function Frame.start(E)
 		-- and coyote timer on the TAS clock (the frames time control is on for). (Outside Create there is
 		-- nothing to step or hold: time control is back to normal there, see TimeControl:update)
 		if E.mode ~= 2 then return end
-		E.time:stepBegin(dt)
-		if not E.paused or E.firstFrame then
+		-- (a held step is no game time: the humanoid's controllers and coyote timer skip it, measured in the mock:
+		-- the off-floor timer ran 4x too fast at 0.25x)
+		E.stepHeld = not E.time:stepBegin(dt)
+		if (not E.paused or E.firstFrame) and not E.stepHeld then
 			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end
 	end
 
 	local function postSimulation(dt)
 		if E.mode ~= 2 then return end -- (see preSimulation)
+		local held = E.stepHeld
+		E.stepHeld = false
 		E.time:stepEnd()
+		if held then return end
 		local ch = E.char
 		local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
 		E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
@@ -162,6 +167,7 @@ function Frame.start(E)
 					E.tools:replayFrame(tl, k, ch.model)
 				end
 			end
+			E.anim:follow(tl, f, E.testTime)
 			if tl:getList("Died", f) then ch:changeState(Enum.HumanoidStateType.Dead) end
 			E.tools:step(ch.model, ch.hum)
 		else
@@ -200,16 +206,37 @@ function Frame.start(E)
 				local n = tl:count()
 				if E.paused then
 					E.plugins:call("onPausedTick")
-					if n > 1 and E.back and E.frame > 1 then
-						E.frame = E.frame - 1
+					-- (with the speed hack on, a held Back / Forward goes through the run's game time at the slider's
+					-- speed; off: one frame per frame, as before. Frame Step frames are whole physics steps: one per
+					-- frame was 1/s times the recording speed, live)
+					local rate = (E.back or E.forw) and E.time:wanted() or 1
+					local moves = 1
+					if rate ~= 1 then
+						E.seekBank = (E.seekBank or 0) + dt * rate
+						moves = 0
+						local f = E.frame
+						while true do
+							local nf = E.back and f - 1 or f + 1
+							if nf < 1 or nf > n then break end
+							local ft = tl:get("FrameTime", E.back and f or nf, 1)
+							if ft > E.seekBank then break end
+							E.seekBank = E.seekBank - ft
+							f, moves = nf, moves + 1
+						end
+					else
+						E.seekBank = 0
+					end
+					if n > 1 and E.back and E.frame > 1 and moves > 0 then
+						E.frame = math.max(1, E.frame - moves)
 						M_:loadFrame(E.frame, false, true)
 						M_:publish()
 					end
-					if E.frame < n and E.forw then
-						E.frame = E.frame + 1
+					if E.frame < n and E.forw and moves > 0 then
+						E.frame = math.min(n, E.frame + moves)
 						M_:loadFrame(E.frame, false, true)
 						M_:publish()
 					end
+					if not (E.back or E.forw) then E.seekBank = 0 end
 					E.plugins:call("onStep", M_:totalAt(E.frame))
 				else
 					if E.firstFrame and n == 1 then

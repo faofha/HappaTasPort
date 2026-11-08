@@ -3,16 +3,16 @@
 --  in the classic interface, with the Inspector's values (ui/win/inspectorvalues: the same numbers) in V2's
 --  lines (" Root Position: x, y, z"). One panel by mode while its Show Stats setting is on; Test at another
 --  playback speed always shows (V2's rule); Create's panel is darker while paused. Stats Text Size sizes the
---  panels as V2's SetStatsSize did. Updated as the Inspector is: 5 times a second while the character can
---  move (skipped when nothing moved), on a change while paused; only while Classic is live. A text is
---  written only when it changes.
+--  panels as V2's SetStatsSize did. Updated as the Inspector is: 5 times a second whether anything moves or
+--  not (frame time and the rest change by themselves), at once on a change of the frame shown while paused;
+--  only while Classic is live. A text is written only when it changes.
 -- ================================================================================================
 local IV = import("ui/win/inspectorvalues")
 
 local ClassicStats = {}
 ClassicStats.__index = ClassicStats
 
-local FAST_EVERY, PERF_EVERY = 12, 1
+local FAST_EVERY, PERF_EVERY = 0.2, 1 -- (seconds)
 local SHOW = { "showStatsIdle", "showStatsCreate", "showStatsTest" }
 local PANEL = { "IdleStats", "CreateStats", "TestStats" }
 -- V2's rows: { panel row name, label, IV key }
@@ -30,7 +30,7 @@ local ROWS = {
 function ClassicStats.new(classic)
 	local E = classic.E
 	local self = setmetatable({ classic = classic, E = E, b = classic.byPath, last = {}, lastVis = {}, memo = {}, values = {},
-		want = {}, perf = { dt = 0, fps = 0, ms = 0 }, tick = 0, still = {}, perfT = 0, perfFrames = 0 }, ClassicStats)
+		want = {}, perf = { dt = 0, fps = 0, ms = 0 }, fastT = 0, perfT = 0, perfFrames = 0 }, ClassicStats)
 	for _, list in pairs(ROWS) do
 		for _, r in ipairs(list) do self.want[r[3]] = true end
 	end
@@ -41,11 +41,6 @@ function ClassicStats.new(classic)
 	classic.offs[#classic.offs + 1] = s:changed("statsTextSize", function(v) self:size(v) end)
 	classic.offs[#classic.offs + 1] = E.state:watch("mode", function() self:update(true) end)
 	classic.offs[#classic.offs + 1] = E.bus:on("uiShown", function() self:follow() end)
-	local uis = classic.uis
-	for _, sig in ipairs({ uis.InputBegan, uis.InputEnded }) do
-		local conn = classic.ui.life:connect(sig, function() self.keyed = true end)
-		classic.offs[#classic.offs + 1] = function() classic.ui.life:drop(conn) end
-	end
 	classic.offs[#classic.offs + 1] = function() if self.off then self.off(); self.off = nil end end
 	self:size(s:get("statsTextSize"))
 	self:follow()
@@ -94,21 +89,6 @@ function ClassicStats:follow()
 	end
 end
 
--- whether anything a row shows can have changed (the Inspector's rule)
-function ClassicStats:moved()
-	local E, s = self.E, self.still
-	local hrp = E.char and E.char.hrp
-	local pos = hrp and hrp.Position
-	local cam = workspace.CurrentCamera
-	local cf = cam and cam.CFrame
-	local m = E.inputs.uis:GetMouseLocation()
-	local n = E.tl:count()
-	local same = not self.keyed and s.pos == pos and s.cf == cf and s.m == m and s.mode == E.mode and s.frame == E.frame and s.n == n
-	s.pos, s.cf, s.m, s.mode, s.frame, s.n = pos, cf, m, E.mode, E.frame, n
-	self.keyed = false
-	return not same
-end
-
 function ClassicStats:step(dt)
 	local E = self.E
 	self.perfT = self.perfT + (dt or 0)
@@ -118,16 +98,20 @@ function ClassicStats:step(dt)
 		self.perf.fps = self.perfFrames / self.perfT
 		self.perfT, self.perfFrames = 0, 0
 	end
+	self.fastT = self.fastT + (dt or 0)
+	local changed = false
 	if E.mode == 2 and E.paused then
 		local tl = E.tl
 		local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0)
-		if key == self.pausedKey then return end
+		changed = key ~= self.pausedKey
 		self.pausedKey = key
 	else
 		self.pausedKey = nil
-		self.tick = self.tick + 1
-		if self.tick % FAST_EVERY ~= 0 or not self:moved() then return end
 	end
+	-- (paused: only FPS / HappaTAS ms change, measured once a second: a second between updates is enough)
+	local every = (E.mode == 2 and E.paused) and PERF_EVERY or FAST_EVERY
+	if not changed and self.fastT < every then return end
+	self.fastT = 0
 	self:update(false)
 end
 
@@ -137,7 +121,6 @@ function ClassicStats:update(force)
 	if self.classic.ui.live ~= "Classic" then return end
 	local mode = E.mode or 1
 	local s = E.settings
-	if self.classic.look then self.classic.look:recording(mode == 2 and not E.paused) end
 	local shown = s:on(SHOW[mode] or "showStatsIdle") or (mode == 3 and s:get("playbackSpeed") ~= 1)
 	for i, name in ipairs(PANEL) do setVisible(self, b[name], shown and i == mode) end
 	if not shown then return end

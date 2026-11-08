@@ -55,6 +55,8 @@ Env.mouse2press, Env.mouse2release = fn(mouse2press, mouse2down), fn(mouse2relea
 Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 Env.getcustomasset = fn(getcustomasset, getsynasset)
 Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
+Env.setclipboard = fn(setclipboard, toclipboard)
+Env.getfpscap = fn(getfpscap)
 if not Env.gethui then Env.gethui = fn(synT.gethui) end
 
 -- the environment of a game function (the Kit Clock puts its own task / os into the EToH kit's module

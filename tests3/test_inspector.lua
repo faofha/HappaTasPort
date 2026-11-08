@@ -190,11 +190,15 @@ do
 	insp:update(false, false)
 	Util.round = oRound
 	check(rounds <= 1, "standing still: no number formatted again (" .. rounds .. ")")
-	-- (standing still in Idle: the values are only worked out on the once-a-second ticks)
+	-- (standing still in Idle: the values still update at a steady rate, 5 times a second; the frame time and FPS
+	-- change though nothing moves. Live: frame time and FPS stood still with the character)
 	local oValues, calls = IV.values, 0
 	IV.values = function(...) calls = calls + 1; return oValues(...) end
 	M.steps(120, 1 / 60)
-	check(calls <= 2, "still: worked out " .. calls .. " times in 2 s")
+	check(calls >= 9 and calls <= 11, "still: worked out " .. calls .. " times in 2 s (5 a second)")
+	local ftRow = insp.rows.frameTime
+	for _ = 1, 30 do M.step(1 / 30) end
+	check(ftRow and ftRow.value.Text:find("33", 1, true) ~= nil, "still, frames of 1/30 s: the frame time shows them (" .. tostring(ftRow and ftRow.value.Text) .. ")")
 	calls = 0
 	hrp.AssemblyLinearVelocity = Vector3.new(10, 0, 0)
 	M.steps(120, 1 / 60)
@@ -266,6 +270,17 @@ eq(T.pipe.timing, true, "open again")
 wm:close("inspector")
 M.steps(2)
 eq(T.pipe.timing, false, "window closed: not timed")
+M.steps(60, 1 / 60)
+
+section("paused: FPS keeps updating though the frame shown doesn't change")
+wm:open("inspector")
+M.steps(2)
+eq(E.mode == 2 and E.paused, true, "(paused in Create)")
+for _ = 1, 75 do M.step(1 / 30) end
+local fpsText = insp.rows.fps.value.Text
+check(fpsText:find("^3[01]") ~= nil, "the FPS row follows (" .. fpsText .. ")")
+eq(insp.rows.frameTime.value.Text, tostring(E.tl:get("FrameTime", E.frame, 1)), "the frame time row: the shown frame's own")
+wm:close("inspector")
 M.steps(60, 1 / 60)
 
 section("remembered after a re-run")

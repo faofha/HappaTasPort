@@ -191,8 +191,10 @@ lt("off")
 modeLine("B.end")
 
 -- ---------------------------------------------------------------------------------------------- part C
--- time control, Smooth: walking, a jump, a spinner (hinge motor), a conveyor (anchored part with a
+-- time control: walking, a jump, a spinner (hinge motor), a conveyor (anchored part with a
 -- velocity), a free box, a VectorForce and a bounce pad's kit config, recorded at 0.5x and at 2x, tested
+-- (below 1x HappaTAS 3 always runs Frame Step, so V2 runs it too from here on; 2x is scaled in both)
+A.setSetting("Speed Hack Frame Step", 1)
 M.humanoidPhysics = true
 M.robloxController = true
 local _, hum = A.char()
@@ -265,10 +267,8 @@ modeLine("C.end")
 -- ---------------------------------------------------------------------------------------------- part D
 -- Frame Step at 0.5x and 0.25x (the same walk / jump / world), then walking off an edge with a pause inside
 -- the coyote window and a jump after unpausing
-A.setSetting("Speed Hack Frame Step", 1)
 runC(0.5, "D05")
 runC(0.25, "D025")
-A.setSetting("Speed Hack Frame Step", 0)
 local function edge(speed, tag)
 	A.setSetting("Speed Hack Speed", speed)
 	A.setSetting("Speed Hack", speed == 1 and 0 or 1)
@@ -322,6 +322,8 @@ modeLine("D.end")
 -- ---------------------------------------------------------------------------------------------- part E
 -- the Kit Clock: a kit module (its own environment, like the kit's) moves a platform every 0.25 s with
 -- task.wait, starts a 0.4 s push with task.delay and reads os.clock; recorded at 1x, paused, at 0.5x, tested
+-- (from an empty TAS: part D's last run is one HappaTAS 3 records differently on purpose, see test_all3.sh)
+key(Enum.KeyCode.Backspace); M.steps(2); key(Enum.KeyCode.Backspace); M.steps(2)
 local RSt = M.services.ReplicatedStorage
 local fw = Instance.new("Folder"); fw.Name = "Framework"; fw.Parent = RSt
 local kitF = Instance.new("Folder"); kitF.Name = "Kit"; kitF.Parent = fw
@@ -352,8 +354,11 @@ M.steps(2)
 A.setSetting("Kit Scripts On TAS Clock", 1)
 M.steps(3)
 local loop = task.spawn(Mover.Loop, plat)
+-- (the kit clock from part E's first reading: before it, it carries part D's runs)
+local clockBase
 local function kt(tag)
-	out("W.kit", tag, A.mode(), A.frame(), tostring(plat.CFrame.Position), Mover.steps, Mover.pushes, num(Mover.Clock()))
+	clockBase = clockBase or Mover.Clock()
+	out("W.kit", tag, A.mode(), A.frame(), tostring(plat.CFrame.Position), Mover.steps, Mover.pushes, num(Mover.Clock() - clockBase))
 end
 for i = 1, 30 do M.step(1 / 60); if i % 10 == 0 then kt("idle" .. i) end end
 key(Enum.KeyCode.Two)

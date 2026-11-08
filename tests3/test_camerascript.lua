@@ -105,6 +105,20 @@ eq(cs:isShiftlocked(), true, "isShiftlocked reads the controller")
 cs:shiftlockSwitch()
 eq(cs:getZoom(), 20, "getZoom reads the controller")
 
+section("a zoom set at once snaps on the camera's own next update (not one of ours with an old focus)")
+-- (the user's file: on 4 of 7 unpauses the camera went in to ~3.3 studs and sprang back out to 7.3 while the
+-- saved zoom stayed 7.16. HappaTAS ran the zoom update itself with the camera's focus from before the pause)
+callLog = {}
+local coZ = coroutine.create(function() cs:setZoom(15, true) end)
+coroutine.resume(coZ)
+M.steps(1)
+local ours = 0
+for _, e in ipairs(callLog) do if e[1] == "zoomUpdate" then ours = ours + 1 end end
+eq(ours, 0, "setZoom(static) runs no zoom update itself")
+local snapped = M.callHooked(origZU, 1 / 60, CFrame.new(), 0)
+eq(snapped, 100, "the camera's next update snaps (no spring)")
+eq(M.callHooked(origZU, 1 / 60, CFrame.new(), 0), 1 / 60, "and the one after is normal")
+
 section("ghost: the see-through character")
 local char = M.player.Character
 local head = char:FindFirstChild("Head")

@@ -19,6 +19,7 @@ local Button = import("ui/kit/button")
 local Row = import("ui/kit/row")
 local ColorPicker = import("ui/kit/colorpicker")
 local Bezier = import("ui/kit/bezier")
+local Diagnostics = import("engine/diagnostics")
 
 local SettingsWin = {}
 
@@ -150,6 +151,13 @@ local function controlFor(ctx, s, def, sw)
 	local ctl, kind
 	if key == "theme" then
 		ctl, kind = themeControl(ctx, s, sw), "theme"
+	elseif def.switch then
+		-- (a choice of two shown as a switch: off = switch[1], on = switch[2])
+		ctl, kind = Toggle.new(ctx, nil), "toggle"
+		ctl.onChange = function(on) s:set(key, def.switch[on and 2 or 1]) end
+		ctl:set(v == def.switch[2])
+		local set = ctl.set
+		ctl.set = function(c, x) set(c, x == def.switch[2] or x == true) end
 	elseif def.kind == "toggle" then
 		ctl, kind = Toggle.new(ctx, nil), "toggle"
 		ctl.onChange = function(on) s:set(key, on and 1 or 0) end
@@ -192,7 +200,7 @@ function SettingsWin.build(ui, body, win)
 	-- search
 	local search = Field.new(ctx, body, { search = true, placeholder = "Search settings", w = 300 })
 	search.gui.Position = UDim2.new(0, PAD, 0, 10)
-	search.gui.Size = UDim2.new(1, -PAD * 2, 0, 32)
+	search.gui.Size = UDim2.new(1, -PAD * 3 - 96, 0, 32)
 	sw.search = search
 	-- chips (wrapped to the window's default width)
 	local x, y = PAD, 50
@@ -323,6 +331,10 @@ function SettingsWin.build(ui, body, win)
 			W.bump()
 		end
 	end
+	-- (a read-only report to share when the physics acts differently on another PC)
+	sw.diag = Button.new(ctx, body, { text = "Diagnostics", kind = "plain", w = 96, h = 32 })
+	sw.diag.gui.Position = UDim2.new(1, -PAD - 96, 0, 10)
+	sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 	filter()
 	ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 	return sw

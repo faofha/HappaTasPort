@@ -16,7 +16,6 @@ local SettingsRows = import("ui/classic/settingsrows")
 local ControlsRows = import("ui/classic/controlsrows")
 local Saves = import("ui/classic/saves")
 local ClassicStats = import("ui/classic/stats")
-local ClassicLook = import("ui/classic/look")
 local ClassicMobile = import("ui/classic/mobile")
 local HelpText = import("ui/win/helptext")
 
@@ -57,7 +56,6 @@ function Classic.new(ui)
 	self.saves = Saves.build(self)
 	self.stats = ClassicStats.new(self)
 	self:buildHelp()
-	self.look = ClassicLook.new(self) -- (after every row exists: it themes what it finds)
 	self:wire()
 	ClassicMobile.wire(self)
 	self:placeMenu()
@@ -111,13 +109,10 @@ end
 -- Saves again rebuilt its rows, and a new row's restyle chose it again)
 function Classic:paintTabs()
 	local b = self.byPath
-	local black = Color3.new(0, 0, 0)
+	-- (V2.38.17: only the transparency marks the selected tab, the colour is the tab's own)
 	for _, t in ipairs(TABS) do
 		local tb = b["MainMenu." .. t .. "Toggle"]
-		local on = t == self.tabName
-		tb.BackgroundTransparency = on and 0.5 or 0.75
-		local want = (on and self.look) and self.look:accent() or black
-		if tb.BackgroundColor3 ~= want then tb.BackgroundColor3 = want end
+		tb.BackgroundTransparency = (t == self.tabName) and 0.5 or 0.75
 	end
 end
 

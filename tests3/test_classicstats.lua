@@ -31,6 +31,13 @@ eq(row("IdleStats", "4"), " Root Linear Velocity: " .. v.velocity, "velocity")
 eq(row("IdleStats", "6"), " Camera Rotation: " .. v.cameraRotation, "camera")
 eq(row("IdleStats", "7"), " Humanoid State: " .. v.state, "state")
 eq(row("IdleStats", "8"), " Zoom: " .. v.zoom, "zoom")
+-- (standing still: the frame time follows anyway, at a steady rate; it stood still with the character)
+local hrp0 = E.char.hrp
+hrp0.AssemblyLinearVelocity, hrp0.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+M.steps(30, 1 / 60)
+for _ = 1, 30 do M.step(1 / 30) end
+check(row("IdleStats", "1"):find("0.0333", 1, true) ~= nil, "still, frames of 1/30 s: Frame Time shows them (" .. row("IdleStats", "1") .. ")")
+M.steps(10, 1 / 60)
 
 section("Create, paused on a frame")
 E.modes:request("create")

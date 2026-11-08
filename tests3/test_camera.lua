@@ -93,4 +93,53 @@ key(Enum.KeyCode.Three)
 M.step(1 / 60)
 eq(cam.CameraType, Enum.CameraType.Custom, "Lock Camera (Test) off: the game's camera")
 key(Enum.KeyCode.One)
+M.steps(2)
+E.settings:set("lockCameraTest", 1)
+
+section("unpausing: a camera pulled in although nothing is in the way goes back to its zoom")
+-- (the user's file: on 4 of 7 unpauses the camera went to ~3.3 studs and sprang back out to 7.3 over ~10
+-- frames, the saved zoom 7.16 all along. Here the pull-in is a camera write after HappaTAS's; the mock's
+-- raycasts hit nothing)
+E.modes:setRun({})
+M.steps(1)
+key(Enum.KeyCode.Two)
+M.steps(2)
+click()
+for _ = 1, 8 do
+	local hrp = E.char.hrp
+	cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.new(0, 0, E.cs:getZoom())
+	M.step(1 / 60)
+end
+click()
+M.steps(3)
+local zoomCalls = {}
+local origSetZoom = E.cs.setZoom
+E.cs.setZoom = function(selfCs, z, static)
+	zoomCalls[#zoomCalls + 1] = { z, static }
+	return origSetZoom(selfCs, z, static)
+end
+local z0 = tl:get("Zoom", tl:count(), 1)
+click() -- (unpause)
+M.step(1 / 60)
+zoomCalls = {}
+local pull = M.services.RunService.Heartbeat:Connect(function()
+	local hrp = E.char.hrp
+	cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0)) * CFrame.new(0, 0, 3.3)
+end)
+M.step(1 / 60)
+pull:Disconnect()
+M.step(1 / 60)
+local back = false
+for _, c in ipairs(zoomCalls) do if c[2] == true and math.abs(c[1] - z0) < 0.01 then back = true end end
+check(back, "pulled in to 3.3 right after unpausing: the zoom is set again at once (" .. #zoomCalls .. " calls)")
+for _ = 1, 30 do M.step(1 / 60) end
+zoomCalls = {}
+local hrpNow = E.char.hrp
+cam.CFrame = CFrame.new(hrpNow.Position + Vector3.new(0, 1.5, 0)) * CFrame.new(0, 0, 3.3)
+M.step(1 / 60)
+eq(#zoomCalls, 0, "later on, the camera is the game's")
+E.cs.setZoom = origSetZoom
+click()
+M.steps(2)
+key(Enum.KeyCode.One)
 finish()

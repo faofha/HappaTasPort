@@ -1,7 +1,8 @@
 -- ================================================================================================
--- HappaTAS 3, phase 4: time control, Smooth slow / fast motion and the world (V2.38.17's
+-- HappaTAS 3, phase 4: time control, fast motion (the scaling: above 1x only) and the world (V2.38.17's
 -- tests/test_speedhack.lua sections, the same fixtures, numbers and mock humanoid model, through a shim for
 -- the V2 internals it read). Frame Step and the humanoid clock: tests3/test_humanoidclock.lua.
+--   (below 1x it is always Frame Step: tests3/test_humanoidclock.lua)
 --   * a TAS recorded at speed s with real frames dt is the same TAS as one recorded at normal speed with
 --     frames dt x s (positions, velocities, times, animation speeds, jump timer), at uneven frame rates
 --   * gravity x s^2, WalkSpeed / JumpPower x s while recording, normal again while paused, in Idle / Test
@@ -145,11 +146,12 @@ end
 section("off by default: nothing changes")
 eq(S.Get("Speed Hack"), 0, "Speed Hack off by default")
 eq(S.Get("Speed Hack Speed"), 0.5, "speed 0.5 by default")
-local plain = record(DTS, 0.5, walkThenJump())
+S.Set("Speed Hack Speed", 2) -- (the scaling: above 1x)
+local plain = record(DTS, 2, walkThenJump())
 eq(SH.scale, 1, "factor 1")
 check(#plain >= 230, "recorded (" .. #plain .. " frames)")
 
-section("a slow recording is the TAS a normal recording with shorter frames makes")
+section("a fast recording is the TAS a normal recording with longer frames makes")
 S.Set("Speed Hack", 1)
 eq(SH.scale, 1, "switching it on while not recording changes nothing yet")
 eq(workspace.Gravity, G0, "gravity untouched")
@@ -161,15 +163,15 @@ ev[30] = function()
 	trackSeen = t and t.Speed
 end
 local slow = record(DTS, 1, ev)
-near(walkSpeedSeen, 8, 1e-9, "recording: WalkSpeed x 0.5")
-near(jumpSeen, 25, 1e-9, "recording: JumpPower x 0.5")
-near(gravSeen, G0 * 0.25, 1e-6, "recording: gravity x 0.25")
-near(trackSeen, (16 / 14.5) * 0.5, 1e-6, "recording: the walk animation plays at half its speed")
-sameTAS(plain, slow, "0.5x at real frames dt vs 1x at frames dt x 0.5", 2)
--- the recorded time is normal time: the slow run took twice as long in real time
+near(walkSpeedSeen, 32, 1e-9, "recording: WalkSpeed x 2")
+near(jumpSeen, 100, 1e-9, "recording: JumpPower x 2")
+near(gravSeen, G0 * 4, 1e-6, "recording: gravity x 4")
+near(trackSeen, (16 / 14.5) * 2, 1e-6, "recording: the walk animation plays twice as fast")
+sameTAS(plain, slow, "2x at real frames dt vs 1x at frames dt x 2", 2)
+-- the recorded time is normal time: the fast run took half as long in real time
 local realT = 0
 for i = 1, #slow do realT = realT + DTS[i] end
-near(slow[#slow].TotalTime, realT * 0.5, 1e-4, "TAS time = half the real recording time")
+near(slow[#slow].TotalTime, realT * 2, 1e-4, "TAS time = twice the real recording time")
 section("paused: everything normal again")
 eq(C.paused, true, "paused")
 eq(SH.scale, 1, "factor 1 while paused")
@@ -177,16 +179,16 @@ near(hum.WalkSpeed, 16, 1e-9, "WalkSpeed back")
 near(hum.JumpPower, 50, 1e-9, "JumpPower back")
 near(workspace.Gravity, G0, 1e-9, "gravity back")
 local wt = walkTrack()
-check(wt == nil or wt.Speed ~= (16 / 14.5) * 0.5, "the walk track isn't left at the slow speed")
+check(wt == nil or wt.Speed ~= (16 / 14.5) * 2, "the walk track isn't left at the fast speed")
 
 section("other speeds, uneven frames")
-S.Set("Speed Hack Speed", 0.25)
+S.Set("Speed Hack Speed", 1.5)
 local slowQ = record(DTS, 1, walkThenJump())
 S.Set("Speed Hack", 0)
-local plainQ = record(DTS, 0.25, walkThenJump())
+local plainQ = record(DTS, 1.5, walkThenJump())
 S.Set("Speed Hack", 1)
-sameTAS(plainQ, slowQ, "0.25x", 2)
-S.Set("Speed Hack Speed", 0.5)
+sameTAS(plainQ, slowQ, "1.5x", 2)
+S.Set("Speed Hack Speed", 2)
 
 section("fast motion (speeds above 1): the TAS a normal recording with longer frames makes")
 S.Set("Speed Hack Speed", 2)
@@ -210,12 +212,11 @@ sameTAS(plainF, fast, "2x at real frames dt vs 1x at frames dt x 2")
 near(hum.WalkSpeed, 16, 1e-9, "2x: WalkSpeed back when paused")
 near(workspace.Gravity, G0, 1e-9, "2x: gravity back when paused")
 eq(E.cs.timeRate, 1, "zoom spring at normal speed when paused")
-S.Set("Speed Hack Speed", 0.5)
 
 section("JumpHeight jumps (UseJumpPower off) reach the same height")
 hum.UseJumpPower = false
 S.Set("Speed Hack", 0)
-local plainH = record(DTS, 0.5, jumpAt(10))
+local plainH = record(DTS, 2, jumpAt(10))
 S.Set("Speed Hack", 1)
 local jh0 = hum.JumpHeight
 local slowH = record(DTS, 1, jumpAt(10))
@@ -227,28 +228,28 @@ for _, f in ipairs(slowH) do if f.Cframe then topS = math.max(topS, f.Cframe[2])
 check(topP > 7 and math.abs(topP - topS) < 0.002, "same jump height (" .. topP .. " / " .. topS .. ")")
 hum.UseJumpPower = true
 
-section("slow motion starting / stopping in mid-air keeps the jump going")
--- A: normal speed all along. B: the same jump, 0.5x from frame 70 (rising) to frame 100 (falling); B's real
--- frames are DTS x 0.5 at normal speed and DTS while slowed, so both record the same normal-time frames
+section("fast motion starting / stopping in mid-air keeps the jump going")
+-- A: normal speed all along. B: the same jump, 2x from frame 70 (rising) to frame 100 (falling); B's real
+-- frames are DTS x 2 at normal speed and DTS while sped up, so both record the same normal-time frames
 local seen = {}
 S.Set("Speed Hack", 0)
 local realA, realB = {}, {}
 for i = 1, 160 do
-	realA[i] = DTS[i] * 0.5
-	realB[i] = (i >= 70 and i < 100) and DTS[i] or DTS[i] * 0.5
+	realA[i] = DTS[i] * 2
+	realB[i] = (i >= 70 and i < 100) and DTS[i] or DTS[i] * 2
 end
-local airA = record(realA, 1, jumpAt(40))
-local evB = jumpAt(40)
+local airA = record(realA, 1, jumpAt(60))
+local evB = jumpAt(60)
 evB[70] = function() S.Set("Speed Hack", 1); seen.vy70 = hrp.AssemblyLinearVelocity.Y end
 evB[71] = function() seen.vy71 = hrp.AssemblyLinearVelocity.Y end
 evB[100] = function() S.Set("Speed Hack", 0) end
 local airB = record(realB, 1, evB)
 check(seen.vy70 > 5, "frame 70 is in the rising part of the jump (" .. tostring(seen.vy70) .. ")")
-check(math.abs(seen.vy71 - (seen.vy70 * 0.5 - G0 * 0.25 * DTS[70])) < 1e-6, "the vertical speed is halved when the slow motion starts")
-sameTAS(airA, airB, "slow motion on / off in mid-air")
+check(math.abs(seen.vy71 - (seen.vy70 * 2 - G0 * 4 * DTS[70])) < 1e-3, "the vertical speed is doubled when the fast motion starts (" .. tostring(seen.vy71) .. ")")
+sameTAS(airA, airB, "fast motion on / off in mid-air")
 -- paused in mid-air, switched on while paused, unpaused: the jump goes on (the velocity HappaTAS puts back
--- on the character is the recorded normal one: x 0.5 when the slow motion starts)
-local paused = record(realA, 1, jumpAt(140)) -- ends 20 frames after the jump: in mid-air
+-- on the character is the recorded normal one: x 2 when the fast motion starts)
+local paused = record(realA, 1, jumpAt(153)) -- ends 7 frames after the jump: in mid-air
 local last = paused[#paused]
 check(last.Velocity.Linear[2] > 5, "paused in mid-air, rising (" .. last.Velocity.Linear[2] .. ")")
 S.Set("Speed Hack", 1)
@@ -258,22 +259,21 @@ click()
 steps(2)
 local after = C.data[#paused + 1]
 local expect = last.Velocity.Linear[2] - G0 * after.FrameTime
-check(after and math.abs(after.Velocity.Linear[2] - expect) < 0.01, "after unpausing at 0.5x the jump goes on: vy " .. tostring(after and after.Velocity.Linear[2]) .. " (" .. expect .. ")")
-S.Set("Speed Hack Speed", 0.5)
+check(after and math.abs(after.Velocity.Linear[2] - expect) < 0.01, "after unpausing at 2x the jump goes on: vy " .. tostring(after and after.Velocity.Linear[2]) .. " (" .. expect .. ")")
 
 section("speed changed / switched off while recording: the motion goes on")
 local ev2 = {
 	[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
-	[40] = function() seen.v40 = hrp.AssemblyLinearVelocity.X; S.Set("Speed Hack Speed", 0.25) end,
+	[40] = function() seen.v40 = hrp.AssemblyLinearVelocity.X; S.Set("Speed Hack Speed", 1.5) end,
 	[42] = function() seen.v42 = hrp.AssemblyLinearVelocity.X; seen.w42 = hum.WalkSpeed; seen.g42 = workspace.Gravity end,
 	[80] = function() S.Set("Speed Hack", 0) end,
 	[82] = function() seen.v82 = hrp.AssemblyLinearVelocity.X; seen.w82 = hum.WalkSpeed; seen.g82 = workspace.Gravity end,
 }
 local mixed = record({ table.unpack(DTS, 1, 120) }, 1, ev2)
-near(seen.v40, 8, 1e-6, "0.5x: moving at 8")
-near(seen.v42, 4, 1e-6, "0.25x: moving at 4")
-near(seen.w42, 4, 1e-9, "0.25x: WalkSpeed 4")
-near(seen.g42, G0 / 16, 1e-6, "0.25x: gravity / 16")
+near(seen.v40, 32, 1e-6, "2x: moving at 32")
+near(seen.v42, 24, 1e-6, "1.5x: moving at 24")
+near(seen.w42, 24, 1e-9, "1.5x: WalkSpeed 24")
+near(seen.g42, G0 * 2.25, 1e-6, "1.5x: gravity x 2.25")
 near(seen.v82, 16, 1e-6, "off: moving at 16 again")
 near(seen.w82, 16, 1e-9, "off: WalkSpeed 16")
 near(seen.g82, G0, 1e-9, "off: normal gravity")
@@ -285,31 +285,31 @@ end
 near(maxV, 16, 1e-3, "recorded velocity always the normal 16 (max)")
 near(minV, 16, 1e-3, "recorded velocity always the normal 16 (min)")
 local f60, f100 = mixed[60], mixed[100]
-near(f60.FrameTime, r(DTS[60] * 0.25, 1000000), 2e-6, "0.25x frame time")
+near(f60.FrameTime, r(DTS[60] * 1.5, 1000000), 2e-6, "1.5x frame time")
 near(f100.FrameTime, r(DTS[100], 1000000), 2e-6, "normal frame time after switching off")
 S.Set("Speed Hack", 1)
-S.Set("Speed Hack Speed", 0.5)
+S.Set("Speed Hack Speed", 2)
 
-section("values the game writes while slowed become the normal ones")
+section("values the game writes while sped up become the normal ones")
 local ev3 = {
 	[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
-	[20] = function() hum.WalkSpeed = 32 end, -- a speed pad
+	[20] = function() hum.WalkSpeed = 40 end, -- a speed pad
 	[22] = function() seen.w22 = hum.WalkSpeed end,
 	[28] = function() seen.v22 = hrp.AssemblyLinearVelocity.X end, -- (the walk speeds up over a few frames)
 	[30] = function() workspace.Gravity = 100 end, -- a gravity change
 	[32] = function() seen.g32 = workspace.Gravity end,
 }
 local padded = record({ table.unpack(DTS, 1, 60) }, 1, ev3)
-near(seen.w22, 16, 1e-6, "WalkSpeed 32 from the game -> 16 while slowed")
-near(seen.v22, 16, 1e-2, "moving at 16 (= 32 at normal speed)")
-near(padded[40].Velocity.Linear[1], 32, 1e-3, "recorded velocity 32")
-near(seen.g32, 25, 1e-6, "gravity 100 from the game -> 25 while slowed")
-near(hum.WalkSpeed, 32, 1e-6, "paused: the game's WalkSpeed 32 stays")
+near(seen.w22, 80, 1e-6, "WalkSpeed 40 from the game -> 80 while sped up")
+near(seen.v22, 80, 1e-2, "moving at 80 (= 40 at normal speed)")
+near(padded[40].Velocity.Linear[1], 40, 1e-3, "recorded velocity 40")
+near(seen.g32, 400, 1e-6, "gravity 100 from the game -> 400 while sped up")
+near(hum.WalkSpeed, 40, 1e-6, "paused: the game's WalkSpeed 40 stays")
 near(workspace.Gravity, 100, 1e-6, "paused: the game's gravity 100 stays")
 workspace.Gravity = G0
 hum.WalkSpeed = 16
 
-section("bounce pads (EToH kit): the pad's Power is a velocity, x s while slowed")
+section("bounce pads (EToH kit): the pad's Power is a velocity, x s while sped up")
 -- the kit keeps a pad's configuration as a plain table (Utility/Config GetConfig) and its Touched handler
 -- sets the character's velocity to Power itself: the same bounce in TAS time at any speed
 do
@@ -328,28 +328,28 @@ do
 		end }
 	end
 	S.Set("Speed Hack", 0)
-	local plainB = record(DTS, 0.5, bounceAt(10))
+	local plainB = record(DTS, 2, bounceAt(10))
 	S.Set("Speed Hack", 1)
 	local seenP, seenB
 	local evB = bounceAt(10)
 	evB[5] = function() seenP, seenB = padCfg.Power, boostCfg.Power end
 	local slowB = record(DTS, 1, evB)
-	near(seenP, 50, 1e-9, "recording at 0.5x: the pad's Power is 50")
+	near(seenP, 200, 1e-9, "recording at 2x: the pad's Power is 200")
 	eq(seenB, 32, "a booster's Power is not touched")
-	sameTAS(plainB, slowB, "bounce pad at 0.5x")
+	sameTAS(plainB, slowB, "bounce pad at 2x")
 	local topP, topS = 0, 0
 	for _, f in ipairs(plainB) do if f.Cframe then topP = math.max(topP, f.Cframe[2]) end end
 	for _, f in ipairs(slowB) do if f.Cframe then topS = math.max(topS, f.Cframe[2]) end end
 	check(topP > 20 and math.abs(topP - topS) < 0.002, "same bounce height (" .. topP .. " / " .. topS .. ")")
 	eq(padCfg.Power, 100, "paused: Power 100 again")
-	-- the kit writes a new Power while slowed (the pad's attribute changed): that is the new normal value
+	-- the kit writes a new Power while sped up (the pad's attribute changed): that is the new normal value
 	local seen2
 	local ev2b = {
 		[5] = function() padCfg.Power = 80 end,
 		[8] = function() seen2 = padCfg.Power end,
 	}
 	record({ table.unpack(DTS, 1, 20) }, 1, ev2b)
-	near(seen2, 40, 1e-9, "the kit's own Power 80 while slowed -> 40")
+	near(seen2, 160, 1e-9, "the kit's own Power 80 while sped up -> 160")
 	eq(padCfg.Power, 80, "paused: the kit's Power 80 stays")
 	padCfg.Power = 100
 	-- a pad the kit sets up while the speed hack is on is found too
@@ -365,7 +365,7 @@ do
 		[100] = function() seen3 = lateCfg.Power end,
 	}
 	record({ table.unpack(DTS, 1, 110) }, 1, ev3b)
-	near(seen3, 30, 1e-9, "a pad added while recording: Power 60 -> 30")
+	near(seen3, 120, 1e-9, "a pad added while recording: Power 60 -> 120")
 	eq(lateCfg.Power, 60, "paused: Power 60 again")
 	lateInst:Destroy()
 end
@@ -377,7 +377,7 @@ eq(SH.scale, 1, "Idle: factor 1")
 near(hum.WalkSpeed, 16, 1e-9, "Idle: WalkSpeed 16")
 near(workspace.Gravity, G0, 1e-9, "Idle: normal gravity")
 hum.MoveDirection = Vector3.zero
--- Test plays the slow recording at normal speed
+-- Test plays the fast recording at normal speed
 C.data = slow
 C.DataChanged()
 key(Enum.KeyCode.Three)
@@ -390,7 +390,7 @@ while C.mode == 3 and frames < 2000 do
 	if workspace.Gravity ~= G0 or SH.scale ~= 1 then gTest = false end
 end
 check(gTest, "Test: normal gravity and factor 1 all along")
-near(M.now - t0, slow[#slow].TotalTime, 0.05, "Test takes the TAS time (half the real recording time)")
+near(M.now - t0, slow[#slow].TotalTime, 0.05, "Test takes the TAS time (twice the real recording time)")
 
 section("dead: normal time, a new character gets its own values")
 local ev4 = {
@@ -408,14 +408,14 @@ key(Enum.KeyCode.Two)
 steps(2)
 click()
 steps(5)
-eq(SH.scale, 0.5, "recording again at 0.5x")
+eq(SH.scale, 2, "recording again at 2x")
 local oldHum = hum
 local newChar = M.makeCharacter(Vector3.new(0, 3, 10))
 M.player.CharacterAdded:Fire(newChar)
 steps(10)
 hum, hrp = C.Humanoid, C.HRP
 check(hum ~= oldHum, "new humanoid")
-near(hum.WalkSpeed, 8, 1e-9, "new character: its own WalkSpeed 16 x 0.5")
+near(hum.WalkSpeed, 32, 1e-9, "new character: its own WalkSpeed 16 x 2")
 click()
 steps(2)
 near(hum.WalkSpeed, 16, 1e-9, "new character: 16 again when paused")
@@ -462,18 +462,19 @@ check(not hRecorded, "the Toggle Speed Hack key is not recorded")
 eq(S.Get("Speed Hack"), before, "switched twice while recording")
 
 section("Unload puts everything back")
+S.Set("Speed Hack Speed", 2)
 key(Enum.KeyCode.Two)
 steps(2)
 hum.MoveDirection = Vector3.new(1, 0, 0)
 click()
 steps(10)
-eq(SH.scale, 0.5, "recording at 0.5x")
-near(workspace.Gravity, G0 * 0.25, 1e-6, "slowed gravity")
+eq(SH.scale, 2, "recording at 2x")
+near(workspace.Gravity, G0 * 4, 1e-6, "sped up gravity")
 local vBefore = hrp.AssemblyLinearVelocity.X
 getgenv().__HappaTAS3.Unload()
 near(workspace.Gravity, G0, 1e-9, "Unload: normal gravity")
 near(hum.WalkSpeed, 16, 1e-9, "Unload: WalkSpeed 16")
 near(hum.JumpPower, 50, 1e-9, "Unload: JumpPower 50")
-near(hrp.AssemblyLinearVelocity.X, vBefore * 2, 1e-6, "Unload: the character goes on at normal speed")
+near(hrp.AssemblyLinearVelocity.X, vBefore * 0.5, 1e-6, "Unload: the character goes on at normal speed")
 
 finish()

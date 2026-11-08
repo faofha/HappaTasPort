@@ -226,7 +226,7 @@ do
 	press()
 	lighting.ClockTime = 20
 	M.steps(30)
-	near(workspace.Gravity, G0 * 0.25, 1e-6, "slowed while recording")
+	near(workspace.Gravity, G0, 1e-6, "0.5x is Frame Step: gravity not scaled while recording")
 	check(rawget(timerEnv, "task") ~= nil, "the kit's module on the TAS clock")
 	unload(E)
 	stopKit()

@@ -5,6 +5,7 @@
 --  The camera is only posed while it is locked: Lock Camera (Paused) in Create, Lock Camera (Test) in
 --  Test. FIRST_PERSON: a zoom at or below 0.55 counts as first person (the mouse stays locked).
 -- ================================================================================================
+local Env = import("platform/env")
 local Util = import("engine/util")
 local CameraScript = import("platform/camerascript")
 
@@ -18,6 +19,10 @@ function Camera.new(E)
 	tl:addColumn("CamCframe", "f64", 12, { key = "CamCframe", keepOnChange = true })
 	tl:addColumn("Zoom", "f64", 1, { key = "Zoom" })
 	tl:addColumn("ShiftLock", "u8", 1, { key = "ShiftLock" })
+	-- (a mouse wheel turn ends the unpause guard below: the zoom is yours again)
+	E.life:connect(Env.svc("UserInputService").InputChanged, function(io)
+		if io.UserInputType == Enum.UserInputType.MouseWheel then self.wheelAt = os.clock() end
+	end)
 	return self
 end
 
@@ -74,6 +79,47 @@ function Camera:update(src, unlockShift)
 end
 
 -- paused with a locked camera: the camera stays on the frame shown
+-- after an unpause, a camera pulled in although nothing is in the way is put back on its zoom (the user's file:
+-- on 4 of 7 unpauses the camera went to ~3.3 studs and sprang back out to 7.3 over ~10 frames, the saved zoom
+-- 7.16 all along). Only for the first GUARD_FRAMES frames, only while the zoom is still the paused one, never
+-- when a ray from the head to the camera's paused distance hits something (then the game's camera is right)
+local GUARD_FRAMES = 20
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+local function focusOf(E)
+	local m = E.char.model
+	local head = m and m:FindFirstChild("Head")
+	if head then return head.Position end
+	local hrp = E.char.hrp
+	return hrp and (hrp.Position + Vector3.new(0, 1.5, 0))
+end
+
+function Camera:onRestoreUnpause(tl, i)
+	local E = self.E
+	local cam, f = workspace.CurrentCamera, focusOf(E)
+	self.guard = nil
+	if not (cam and f and E.modes:setCam()) then return end
+	local z = self:zoomAt(tl, i)
+	if not z or z < 1 then return end -- (first person: no distance to keep)
+	self.guard = { n = GUARD_FRAMES, dist = (cam.CFrame.Position - f).Magnitude, zoom = z, t0 = os.clock() }
+end
+
+function Camera:onFrameEnd()
+	local g = self.guard
+	if not g then return end
+	local E = self.E
+	g.n = g.n - 1
+	if g.n <= 0 or E.mode ~= 2 or E.paused then self.guard = nil return end
+	local cam, f = workspace.CurrentCamera, focusOf(E)
+	if not (cam and f) then return end
+	if self.wheelAt and self.wheelAt >= g.t0 then self.guard = nil return end -- (you zoomed since)
+	local off = cam.CFrame.Position - f
+	if off.Magnitude >= g.dist - 0.5 or off.Magnitude < 1e-3 then return end
+	rayParams.FilterDescendantsInstances = { E.char.model }
+	if workspace:Raycast(f, off.Unit * g.dist, rayParams) then return end
+	E.cs:setZoom(g.zoom, true)
+end
+
 function Camera:holdPaused()
 	local E = self.E
 	if E.mode ~= 2 or not E.paused or E.firstFrame or E.lookAround or not E.modes:setCam() then return end

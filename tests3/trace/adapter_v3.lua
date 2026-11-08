@@ -24,9 +24,22 @@ function A.request(action) E.modes:request(action) end
 function A.frame() return E.frame end
 function A.paused() return E.paused end
 function A.count() return E.tl:count() end
-function A.frameV2(i) return E.tl:toV2(i) end
-function A.frames() return E.tl:toV2All() end
-function A.setSetting(name, v) E.settings:set(Settings.byV2[name].key, v) end
+-- (the animation track's own time, Anim.Time, is HappaTAS 3's: V2 has no such field, the trace leaves it out)
+local function noTime(fr)
+	if fr and fr.Anim then fr.Anim.Time = nil end
+	return fr
+end
+function A.frameV2(i) return noTime(E.tl:toV2(i)) end
+function A.frames()
+	local all = E.tl:toV2All()
+	for i = 1, #all do noTime(all[i]) end
+	return all
+end
+-- (HappaTAS 3 has no Speed Hack Frame Step setting: below 1x it always runs Frame Step)
+function A.setSetting(name, v)
+	if name == "Speed Hack Frame Step" then return end
+	E.settings:set(Settings.byV2[name].key, v)
+end
 function A.char() return E.char.hrp, E.char.hum end
 function A.coReady() return E.co:isReady() end
 function A.coCount() return (E.co:counts()) end

@@ -400,12 +400,11 @@ function CameraScript.new(life, errs, hooks)
 		for _, zc in ipairs(zoomControllers) do visit(zc) end
 	end
 
+	-- the camera's own next zoom update lands on the zoom at once (the patched Update, above). It used to run one
+	-- here too, with the camera's focus from before an unpause: the occlusion check could pull the zoom in, and the
+	-- spring then took it back out (the user's file: 4 of 7 unpauses went to ~3.3 studs, then 7.3)
 	function cs:removeZoomSpring()
 		snapZoom = true
-		if zoomModTbl and type(zoomModTbl.Update) == "function" then
-			local cam = workspace.CurrentCamera
-			gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
-		end
 	end
 
 	-- static = land on the zoom at once (no spring)

@@ -96,6 +96,10 @@ local function record(dts, mul, events)
 end
 
 local function jumpAt(k) return { [k] = function() M.jumpNow = true end } end
+-- (walking and turning only: no timed humanoid state, so Frame Step runs and holds steps strictly by the slider)
+local function walkTurn()
+	return { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end, [150] = function() hum.MoveDirection = Vector3.new(0, 0, 1) end }
+end
 local function walkThenJump()
 	local ev = {}
 	ev[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end
@@ -170,13 +174,13 @@ eq(E.cs.timeRate, 1, "zoom spring at normal speed when paused")
 S.Set("Speed Hack Speed", 0.5)
 
 section("Frame Step: normal physics on every other frame, everything held on the others")
-eq(S.Get("Speed Hack Frame Step"), 0, "off by default")
-S.Set("Speed Hack Frame Step", 1)
--- normal frame i (DTS[i]) <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt)
+-- normal frame i <-> frame step frames 2i - 1 (physics runs) and 2i (held, the same dt). Even frames: Frame Step
+-- banks time, so uneven ones change which frames run (that case: the timed-state section below)
+local EVEN = 1 / 120
 local N2 = 120
-local fsDts, fsEv, wt2 = {}, {}, walkThenJump()
+local fsDts, fsEv, wt2 = {}, {}, walkTurn()
 for i = 1, N2 do
-	fsDts[2 * i - 1], fsDts[2 * i] = DTS[i], DTS[i]
+	fsDts[2 * i - 1], fsDts[2 * i] = EVEN, EVEN
 	if wt2[i] then fsEv[2 * i - 1] = wt2[i] end
 end
 -- (ends on a frame whose step runs: the held frame after it would record that step, which the normal run
@@ -202,8 +206,8 @@ local stepped = record(fsDts, 1, fsEv)
 M.physicsLog = nil
 S.Set("Speed Hack", 0)
 local dtsN2 = {}
-for i = 1, N2 do dtsN2[i] = DTS[i] end
-local plainS = record(dtsN2, 1, walkThenJump())
+for i = 1, N2 do dtsN2[i] = EVEN end
+local plainS = record(dtsN2, 1, walkTurn())
 S.Set("Speed Hack", 1)
 near(seenS.walk, 16, 1e-9, "Frame Step: WalkSpeed untouched")
 near(seenS.grav, G0, 1e-9, "Frame Step: gravity untouched")
@@ -223,20 +227,120 @@ eq(freeSteps, N2 - 1, "Frame Step: and free on the others")
 
 -- 0.25x: one step in four runs
 S.Set("Speed Hack Speed", 0.25)
-local q4Dts, q4Ev, wt4 = {}, {}, walkThenJump()
+local q4Dts, q4Ev, wt4 = {}, {}, walkTurn()
 for i = 1, 60 do
-	for k = 0, 3 do q4Dts[4 * i - 3 + k] = DTS[i] end
+	for k = 0, 3 do q4Dts[4 * i - 3 + k] = EVEN end
 	if wt4[i] then q4Ev[4 * i - 3] = wt4[i] end
 end
 for k = 238, 240 do q4Dts[k] = nil end
 local steppedQ = record(q4Dts, 1, q4Ev)
 S.Set("Speed Hack", 0)
 local dts60 = {}
-for i = 1, 60 do dts60[i] = DTS[i] end
-local plainQ4 = record(dts60, 1, walkThenJump())
+for i = 1, 60 do dts60[i] = EVEN end
+local plainQ4 = record(dts60, 1, walkTurn())
 S.Set("Speed Hack", 1)
 sameTAS(plainQ4, steppedQ, "Frame Step 0.25x")
 S.Set("Speed Hack Speed", 0.5)
+
+section("Frame Step: a step in one of the humanoid's timed states always runs")
+-- (Roblox's humanoid keeps its timers through held steps; live at 0.1x / 0.5x there was no coyote jump even
+-- 0.05 s after the edge, and Landed ran out 6x too soon. Coyote time here: the mock's off-floor timer)
+do
+	M.floorEdgeX = 6
+	local function ledgeAt(gameT)
+		local ev = { [1] = function()
+			hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(1, 0, 0))
+			hum.MoveDirection = Vector3.new(1, 0, 0)
+		end }
+		local leftT = nil
+		for i = 2, 900 do
+			ev[i] = function()
+				local n = E.tl:count()
+				local t = n > 0 and E.tl:get("TotalTime", n, 1) or 0
+				if not leftT and hrp.Position.X >= 6 then leftT = t end
+				if leftT and t >= leftT + gameT then hum.Jump = true end
+			end
+		end
+		return ev
+	end
+	local function jumpedIn(r)
+		for _, fr in ipairs(r) do
+			if fr.State == Enum.HumanoidStateType.Jumping.Value then return true end
+		end
+		return false
+	end
+	local frames = {}
+	for i = 1, 900 do frames[i] = 1 / 240 end
+	for _, s in ipairs({ 1, 0.5, 0.25 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		check(jumpedIn(record(frames, 1, ledgeAt(0.06))), s .. "x: a jump 0.06 s of game time after leaving the floor works")
+		check(not jumpedIn(record(frames, 1, ledgeAt(0.2))), s .. "x: one 0.2 s after doesn't")
+	end
+	M.floorEdgeX = nil
+	local tops = {}
+	for _, s in ipairs({ 1, 0.25 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		local top = 0
+		for _, fr in ipairs(record(frames, 1, jumpAt(20))) do if fr.Cframe then top = math.max(top, fr.Cframe[2]) end end
+		tops[s] = top
+	end
+	check(tops[1] > 7 and math.abs(tops[1] - tops[0.25]) < 0.002, "a standing jump at 0.25x is as high as at 1x (" .. tops[0.25] .. " / " .. tops[1] .. ")")
+	-- a held step moves no timer of HappaTAS's own: in the air the off-floor timer is the game time since the jump
+	S.Set("Speed Hack Speed", 0.25)
+	local seenOff = {}
+	local evJ = jumpAt(20)
+	for i = 21, 400 do
+		evJ[i] = function()
+			local n = E.tl:count()
+			seenOff[#seenOff + 1] = { E.time.SH.Humanoid.coyote.off, n > 0 and E.tl:get("TotalTime", n, 1) or 0 }
+		end
+	end
+	record(frames, 1, evJ)
+	local first, worstOff = nil, 0
+	for _, e in ipairs(seenOff) do
+		if e[1] then
+			first = first or (e[2] - e[1])
+			worstOff = math.max(worstOff, math.abs((e[2] - first) - e[1]))
+		elseif first then break end
+	end
+	check(first ~= nil and worstOff < 0.02, "0.25x: the off-floor timer follows game time in the air (worst off by " .. string.format("%.3f", worstOff) .. " s)")
+	-- holding Back / Forward goes through the run's game time at the slider's speed (live, Frame Step 0.1x: one
+	-- frame per rendered frame was 1.1 s of game time a second, 11x the recording speed)
+	local walkR = { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end }
+	local runB = record(frames, 1, walkR)
+	local function tt(f) return E.tl:get("TotalTime", f, 1) end
+	local f0 = E.frame
+	E.modes:back()
+	for _ = 1, 120 do M.step(1 / 240) end
+	E.modes:release("back")
+	local backT = tt(f0) - tt(E.frame)
+	check(#runB > 100 and math.abs(backT - 0.5 * 0.25) < 0.01, "0.25x: holding Back for 0.5 s goes back 0.125 s of game time (" .. string.format("%.4f", backT) .. ")")
+	local f1 = E.frame
+	E.modes:forward()
+	for _ = 1, 120 do M.step(1 / 240) end
+	E.modes:release("forward")
+	local fwdT = tt(E.frame) - tt(f1)
+	check(math.abs(fwdT - 0.5 * 0.25) < 0.01, "0.25x: holding Forward the same (" .. string.format("%.4f", fwdT) .. ")")
+	-- the game time follows the slider by time, not by counting physics events: frames of 1 and 3 steps in turn
+	-- (counted, 0.5x ran only one kind and went 0.25x or 0.75x)
+	local uneven = {}
+	for i = 1, 600 do uneven[i] = (i % 2 == 1) and 1 / 240 or 3 / 240 end
+	local walk = { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end }
+	for _, s in ipairs({ 0.5, 0.25, 0.7 }) do
+		S.Set("Speed Hack Speed", s)
+		local r = record(uneven, 1, walk)
+		local real = 0
+		for i = 1, 600 do real = real + uneven[i] end
+		local ratio = r[#r].TotalTime / real
+		check(math.abs(ratio - s) < 0.02 * s + 0.005, s .. "x with frames of 1 and 3 steps: game time / real time " .. string.format("%.4f", ratio))
+	end
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.5)
+	M.floorEdgeX = nil
+	hum.Jump = false
+end
 
 section("Frame Step: free parts and the kit's clock only move on the steps that run")
 local CPf = workspace:FindFirstChild("ClientParts")
@@ -259,36 +363,63 @@ near(z1 - z0, 6 * 20 / 60, 1e-6, "the box moved on the 20 steps that ran only")
 near(boxF.AssemblyLinearVelocity.Z, 6, 1e-9, "the box keeps its velocity")
 eq(boxF.Anchored, false, "the box isn't left anchored")
 near(boxRec[#boxRec].TotalTime, 20 / 60, 1e-5, "TAS time = the time of the steps that ran (" .. boxRec[#boxRec].TotalTime .. ")")
+-- a part the game adds while frame stepping (a pushbox, a bullet) is held from the next held step on
+local late = Instance.new("Part")
+late.Name = "LateBox"
+late.Anchored = false
+late.CFrame = CFrame.new(60, 10, 0)
+late.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+local lz0, lz1
+local evL = {}
+evL[5] = function() late.Parent = CPf; M.freeParts[#M.freeParts + 1] = late end
+evL[6] = function() lz0 = late.Position.Z end
+evL[36] = function() lz1 = late.Position.Z end
+record(fixed, 1, evL)
+check(lz0 and lz1 and math.abs((lz1 - lz0) - 6 * 15 / 60) < 6 / 60 + 1e-6, "a part added while frame stepping moves on the steps that ran only (" .. tostring(lz1 and lz1 - lz0) .. ")")
+-- a free part your character touches (a platform it pushes or stands on) runs every step for a while (live:
+-- holding broke the contact, the kit's Pushing Platform started 0.3 s late at 0.5x)
 M.freeParts = {}
+late:Destroy()
+local touch = Instance.new("Part")
+touch.Name = "Touched"
+touch.Anchored = false
+touch.Size = Vector3.new(2, 2, 2)
+touch.CFrame = CFrame.new(1, 3, 0)
+touch.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+touch.Parent = CPf
+M.freeParts = { touch }
+local tz0, tz1
+local evT = {}
+evT[1] = function() tz0 = touch.Position.Z end
+evT[11] = function() tz1 = touch.Position.Z end
+record({ table.unpack(fixed, 1, 12) }, 1, evT)
+check(tz0 and tz1 and math.abs((tz1 - tz0) - 6 * 10 / 60) < 1e-6, "a free part touching the character moves on every step (" .. tostring(tz1 and tz1 - tz0) .. ")")
+M.freeParts = {}
+touch:Destroy()
 boxF:Destroy()
-S.Set("Speed Hack Frame Step", 0)
 
 section("Frame Step only below 1x: above it the physics is scaled")
-S.Set("Speed Hack Frame Step", 1)
 S.Set("Speed Hack Speed", 2)
 local fastFS = record(DTS, 1, walkThenJump())
-S.Set("Speed Hack Frame Step", 0)
 sameTAS(fast, fastFS, "2x with Frame Step on = 2x scaled")
 S.Set("Speed Hack Speed", 0.5)
 
-section("one recording through 0.5x Smooth, 2x, Frame Step 0.25x and off (Review Focus 5)")
+section("one recording through Frame Step 0.5x, 2x, Frame Step 0.25x and off (Review Focus 5)")
 do
 	S.Set("Speed Hack", 1)
 	S.Set("Speed Hack Speed", 0.5)
-	S.Set("Speed Hack Frame Step", 0)
 	local seenM = {}
 	local ev = {
 		[1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
 		[50] = function() S.Set("Speed Hack Speed", 2) end,
-		[100] = function() S.Set("Speed Hack Frame Step", 1); S.Set("Speed Hack Speed", 0.25) end,
+		[100] = function() S.Set("Speed Hack Speed", 0.25) end,
 		[130] = function() seenM.held = hrp.Anchored end,
 		[180] = function() S.Set("Speed Hack", 0) end,
 		[200] = function() seenM.g, seenM.w, seenM.j, seenM.an, seenM.scale = workspace.Gravity, hum.WalkSpeed, hum.JumpPower, hrp.Anchored, SH.scale end,
 	}
 	local run = record({ table.unpack(DTS, 1, 220) }, 1, ev)
-	S.Set("Speed Hack Frame Step", 0)
 	S.Set("Speed Hack Speed", 0.5)
-	check(#run > 150, "frames recorded (" .. #run .. ")")
+	check(#run > 100, "frames recorded (" .. #run .. ")")
 	local worstT, minV, maxV, nonPos = 0, 1e9, 0, 0
 	for i = 2, #run do
 		worstT = math.max(worstT, math.abs(run[i].TotalTime - (run[i - 1].TotalTime + run[i].FrameTime)))
@@ -457,7 +588,7 @@ do
 			eq(states, 0, label .. ": same humanoid states (a jump's Jumping / Freefall switch may differ by a frame)")
 			return apexP, apexS, plainR
 		end
-		for _, s in ipairs({ 0.25, 0.5, 2, 4 }) do
+		for _, s in ipairs({ 2, 4 }) do
 			local _, _, walkR = compareGame(s .. "x at 240 FPS walk and stop", s, function()
 				return { [0] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end,
 					[0.5] = function() hum.MoveDirection = Vector3.zero end }
@@ -523,7 +654,7 @@ do
 		end
 		return false
 	end
-	for _, s in ipairs({ 0.5, 2, 4 }) do
+	for _, s in ipairs({ 2, 4 }) do
 		-- (at s, frames of s/120 game seconds: k frames = k s / 120 s)
 		local inside = math.max(1, math.floor(0.06 * 120 / s))
 		local outside = math.ceil(0.2 * 120 / s)
@@ -543,7 +674,7 @@ do
 	end
 	-- the edge of the window: a jump k frames after leaving the floor works at s exactly when it works at normal
 	-- speed, for every k from 0.11 to 0.14 s of game time (a frame: one real step, s / 240 s of game time)
-	for _, s in ipairs({ 0.5, 2 }) do
+	for _, s in ipairs({ 2 }) do
 		local frames = {}
 		for i = 1, 300 do frames[i] = s / 240 end
 		local slowFrames = {}
@@ -611,7 +742,7 @@ do
 		end
 		return false
 	end
-	for _, s in ipairs({ 1, 0.5 }) do
+	for _, s in ipairs({ 1, 2 }) do
 		check(coyotePause(s, 0.08, 0), s .. "x: paused 0.08 s after leaving the floor, 5 s later: a jump right away still works")
 		check(not coyotePause(s, 0.08, 0.06), s .. "x: paused 0.08 s after leaving the floor: a jump 0.06 s after unpausing (0.14 s) doesn't")
 	end
@@ -686,11 +817,44 @@ local function coyoteBack(s)
 	end
 	return false, n0
 end
-for _, s in ipairs({ 1, 0.5 }) do
+for _, s in ipairs({ 1, 2 }) do
 	local ok, at = coyoteBack(s)
 	check(ok, s .. "x: back to 0.06 s after leaving the floor, unpaused: a jump works (from frame " .. tostring(at) .. ")")
 end
 M.floorEdgeX = nil
 hum.Jump = false
+
+section("1x: jump held through a pause in the air, the next jump is Roblox's")
+-- (found live: on landing after a pause in the air with the jump held, HappaTAS made the jump itself as soon as it
+-- saw the floor, still Landed, ~25 ms after touching it instead of Roblox's ~55 ms, at 75 FPS and up. Only the
+-- scaled motion needs that jump: at 1x Roblox makes it once Jumping is enabled again)
+do
+	local HC = E.time.SH.Humanoid
+	local cy = HC.coyote
+	local function landing(scale)
+		local calls = {}
+		local fakeHum = { Jump = true, FloorMaterial = Enum.Material.Plastic }
+		function fakeHum:GetState() return Enum.HumanoidStateType.Landed end
+		function fakeHum:ChangeState(st) calls[#calls + 1] = st end
+		function fakeHum:SetStateEnabled() end
+		local fakeRoot = { Parent = workspace, Anchored = false, AssemblyLinearVelocity = Vector3.zero }
+		local saved = E.time.SH.scale
+		E.time.SH.scale = scale
+		cy.off, cy.jumped, cy.restored, cy.disabled, cy.vy0 = 0.5, true, true, true, 0
+		HC.Post(1 / 240, fakeHum, fakeRoot, true)
+		E.time.SH.scale = saved
+		cy.disabled = false
+		local jumps = 0
+		for _, st in ipairs(calls) do if st == Enum.HumanoidStateType.Jumping then jumps = jumps + 1 end end
+		return jumps, cy.off
+	end
+	local j1, off1 = landing(1)
+	eq(off1, nil, "1x: the landing ends the timer")
+	eq(j1, 0, "1x: HappaTAS makes no jump on landing (Roblox does)")
+	local j2 = landing(0.5)
+	eq(j2, 1, "0.5x: the jump blocked in the air is made on landing")
+	local j3 = landing(2)
+	eq(j3, 1, "2x: the same")
+end
 
 finish()

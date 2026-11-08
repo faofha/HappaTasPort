@@ -40,10 +40,12 @@ world/buttons
 world/lighting
 world/time/control
 world/kit/clock
+world/kit/vanishers
 world/kit/objects
 engine/merge
 engine/modes
 engine/frame
+engine/diagnostics
 ui/write
 ui/root
 ui/pointer
@@ -86,7 +88,6 @@ ui/classic/settingsrows
 ui/classic/controlsrows
 ui/classic/saves
 ui/classic/stats
-ui/classic/look
 ui/classic/mobile
 ui/classic/classic
 ui/app

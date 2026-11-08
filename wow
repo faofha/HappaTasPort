@@ -90,6 +90,8 @@ __mods["platform/env"] = function(import)
 	Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 	Env.getcustomasset = fn(getcustomasset, getsynasset)
 	Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
+	Env.setclipboard = fn(setclipboard, toclipboard)
+	Env.getfpscap = fn(getfpscap)
 	if not Env.gethui then Env.gethui = fn(synT.gethui) end
 	do
 		local name = "get" .. "fenv"
@@ -673,10 +675,6 @@ __mods["platform/camerascript"] = function(import)
 		end
 		function cs:removeZoomSpring()
 			snapZoom = true
-			if zoomModTbl and type(zoomModTbl.Update) == "function" then
-				local cam = workspace.CurrentCamera
-				gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
-			end
 		end
 		function cs:setZoom(zoom, static)
 			if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
@@ -1060,15 +1058,19 @@ __mods["kernel/errors"] = function(import)
 	local Errors = {}
 	Errors.__index = Errors
 	local MAX_PRINTED = 25
+	local MAX_LAST = 10
 	function Errors.new(printFn)
-		return setmetatable({ print = printFn or warn, seen = {}, printed = 0, counts = {} }, Errors)
+		return setmetatable({ print = printFn or warn, seen = {}, printed = 0, counts = {}, last = {} }, Errors)
 	end
 	function Errors:report(source, err)
 		source = tostring(source)
 		self.counts[source] = (self.counts[source] or 0) + 1
 		local msg = "[HappaTAS3] " .. source .. ": " .. tostring(err)
-		if self.seen[msg] or self.printed >= MAX_PRINTED then return end
+		if self.seen[msg] then return end
 		self.seen[msg] = true
+		if #self.last >= MAX_LAST then table.remove(self.last, 1) end
+		self.last[#self.last + 1] = msg
+		if self.printed >= MAX_PRINTED then return end
 		self.printed = self.printed + 1
 		pcall(self.print, msg)
 	end
@@ -1402,7 +1404,6 @@ __mods["engine/settings"] = function(import)
 		row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
 		row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 		row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
-		row("speedHackFrameStep", "Speed Hack Frame Step", "Speed hack", 0, { desc = "Below 1x: normal physics on some steps, the world held on the others" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -1417,8 +1418,8 @@ __mods["engine/settings"] = function(import)
 		row("syncLighting", "Sync Lighting", "World sync", 1, { desc = "Records and replays lighting changes" }),
 		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
 		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
-		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
-			desc = "New is HappaTAS 3's interface, Classic is V2's" }),
+		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" }, switch = { "New", "Classic" },
+			desc = "On: V2's classic interface. Off: HappaTAS 3's" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 		row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 		row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -1435,7 +1436,7 @@ __mods["engine/settings"] = function(import)
 		textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-		interface = "Interface",
+		interface = "Classic interface",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -3860,6 +3861,7 @@ __mods["world/character"] = function(import)
 	return Character
 end
 __mods["world/camera"] = function(import)
+	local Env = import("platform/env")
 	local Util = import("engine/util")
 	local CameraScript = import("platform/camerascript")
 	local round = Util.round
@@ -3871,6 +3873,9 @@ __mods["world/camera"] = function(import)
 		tl:addColumn("CamCframe", "f64", 12, { key = "CamCframe", keepOnChange = true })
 		tl:addColumn("Zoom", "f64", 1, { key = "Zoom" })
 		tl:addColumn("ShiftLock", "u8", 1, { key = "ShiftLock" })
+		E.life:connect(Env.svc("UserInputService").InputChanged, function(io)
+			if io.UserInputType == Enum.UserInputType.MouseWheel then self.wheelAt = os.clock() end
+		end)
 		return self
 	end
 	local function cfAt(tl, i)
@@ -3916,6 +3921,40 @@ __mods["world/camera"] = function(import)
 			if isShift ~= shift then E.cs:shiftlockSwitch() end
 		end
 		E.cs:setZoom(tonumber(zoom) or 12.5, true)
+	end
+	local GUARD_FRAMES = 20
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	local function focusOf(E)
+		local m = E.char.model
+		local head = m and m:FindFirstChild("Head")
+		if head then return head.Position end
+		local hrp = E.char.hrp
+		return hrp and (hrp.Position + Vector3.new(0, 1.5, 0))
+	end
+	function Camera:onRestoreUnpause(tl, i)
+		local E = self.E
+		local cam, f = workspace.CurrentCamera, focusOf(E)
+		self.guard = nil
+		if not (cam and f and E.modes:setCam()) then return end
+		local z = self:zoomAt(tl, i)
+		if not z or z < 1 then return end
+		self.guard = { n = GUARD_FRAMES, dist = (cam.CFrame.Position - f).Magnitude, zoom = z, t0 = os.clock() }
+	end
+	function Camera:onFrameEnd()
+		local g = self.guard
+		if not g then return end
+		local E = self.E
+		g.n = g.n - 1
+		if g.n <= 0 or E.mode ~= 2 or E.paused then self.guard = nil return end
+		local cam, f = workspace.CurrentCamera, focusOf(E)
+		if not (cam and f) then return end
+		if self.wheelAt and self.wheelAt >= g.t0 then self.guard = nil return end
+		local off = cam.CFrame.Position - f
+		if off.Magnitude >= g.dist - 0.5 or off.Magnitude < 1e-3 then return end
+		rayParams.FilterDescendantsInstances = { E.char.model }
+		if workspace:Raycast(f, off.Unit * g.dist, rayParams) then return end
+		E.cs:setZoom(g.zoom, true)
 	end
 	function Camera:holdPaused()
 		local E = self.E
@@ -4894,6 +4933,7 @@ __mods["world/animation"] = function(import)
 					JumpTime = math.round(jumpAnimTime * 1000) / 1000,
 					Speed = math.round(currentAnimSpeed * 1000) / 1000,
 					Anims = StartOfTAS and { { AnimToNumber[currentAnim] or 1, 0 } } or useFrameAnims(),
+					Time = math.round(currentAnimTrack.TimePosition * 1000) / 1000,
 				}
 			end
 			return nil
@@ -4911,8 +4951,23 @@ __mods["world/animation"] = function(import)
 			jumpAnimTime = AnimData.JumpTime or 0
 			setAnimationSpeed((AnimData.Speed or 1) * (PlaybackSpeed or 1), true)
 			if TimeDifference and currentAnimTrack then
-				currentAnimTrack.TimePosition = TimeDifference
+				local track = currentAnimTrack
+				track.TimePosition = TimeDifference
+				task.defer(function()
+					if currentAnimTrack == track and track.IsPlaying and track.Speed == 0 then track.TimePosition = TimeDifference end
+				end)
 			end
+		end
+		local followTrack, followLen
+		function self.Follow(want, tolerance)
+			local track = currentAnimTrack
+			if not track then return end
+			if track ~= followTrack then followTrack, followLen = track, track.Length end
+			local len = followLen
+			if not (len > 0) then return end
+			local d = (track.TimePosition - want + len / 2) % len - len / 2
+			if math.abs(d) <= tolerance or not track.Looped then return end
+			track.TimePosition = want % len
 		end
 		function self.Lock(lock) LockAnimations = lock end
 		function self.Running(speed) onRunning(speed) end
@@ -4965,6 +5020,7 @@ __mods["world/animation"] = function(import)
 		tl:addColumn("AnimJump", "f64", 1, { key = "Anim", field = "JumpTime" })
 		tl:addColumn("AnimSpeed", "f64", 1, { key = "Anim", field = "Speed" })
 		tl:addColumn("AnimList", "list", 1, { key = "Anim", field = "Anims", default = {}, keep = function(v) return #v > 0 end })
+		tl:addColumn("AnimTime", "list", 1, { key = "Anim", field = "Time" })
 		E.life:own(function() self:shutdown() end)
 		return self
 	end
@@ -5028,11 +5084,13 @@ __mods["world/animation"] = function(import)
 			tl:set("AnimJump", i, 1, d.JumpTime)
 			tl:set("AnimSpeed", i, 1, d.Speed)
 			tl:setList("AnimList", i, d.Anims)
+			tl:setList("AnimTime", i, d.Time)
 		else
 			tl:set("AnimPose", i, 1, EMPTY.Pose)
 			tl:set("AnimJump", i, 1, EMPTY.JumpTime)
 			tl:set("AnimSpeed", i, 1, EMPTY.Speed)
 			tl:setList("AnimList", i, nil)
+			tl:setList("AnimTime", i, nil)
 		end
 	end
 	local function dataAt(tl, i)
@@ -5040,6 +5098,7 @@ __mods["world/animation"] = function(import)
 	end
 	local NONE = {}
 	local function animsAt(tl, i) return tl:getList("AnimList", i) or NONE end
+	local function timeAt(tl, i) return tl:getList("AnimTime", i) end
 	function Animation:set(data, anims, speed, timeDiff)
 		local e = self.current
 		if e and data then e.Set(data, anims, speed, timeDiff) end
@@ -5048,12 +5107,20 @@ __mods["world/animation"] = function(import)
 		local e = self.current
 		if e then e.Lock(mode) end
 	end
-	function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+	function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
 	function Animation:passFrame(tl, i, speed)
 		local a = animsAt(tl, i)
-		self:set(dataAt(tl, i), { a[#a] }, speed)
+		self:set(dataAt(tl, i), { a[#a] }, speed, (#a > 0) and timeAt(tl, i) or nil)
 	end
-	function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+	function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
+	local FOLLOW_TOLERANCE = 0.03
+	function Animation:follow(tl, i, t)
+		local e = self.current
+		local saved = timeAt(tl, i)
+		if not (e and saved) then return end
+		local want = saved + math.max(0, t - tl:get("TotalTime", i, 1)) * tl:get("AnimSpeed", i, 1)
+		e.Follow(want, FOLLOW_TOLERANCE)
+	end
 	function Animation:loadFrame(tl, i, unpausing, backtrack)
 		local E = self.E
 		local backAnim, backSpeed
@@ -5072,6 +5139,7 @@ __mods["world/animation"] = function(import)
 			end
 		end
 		if not backSpeed then backSpeed = 1 end
+		if backtrack then animTime = timeAt(tl, i) or animTime end
 		self:set(dataAt(tl, i), backAnim, (not unpausing) and 0 or backSpeed, backtrack and animTime or nil)
 	end
 	function Animation:running(speed)
@@ -9603,8 +9671,31 @@ __mods["world/time/control"] = function(import)
 			rescaleAnimations()
 		end
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-			root = nil }
+			root = nil, hum = nil }
+		local MAX_DEBT = 0.25
+		local ST = Enum.HumanoidStateType
+		local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
+		local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
+		local function timedState(h)
+			if not (h and h.Parent) then return false end
+			local st = h:GetState()
+			return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
+		end
 		SH.FS = FS
+		local touchParams = OverlapParams.new()
+		touchParams.FilterType = Enum.RaycastFilterType.Exclude
+		local function touchingHeld()
+			local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+			local set = FS.rootSet
+			if not (ch and set and next(set)) then return false end
+			touchParams.FilterDescendantsInstances = { ch }
+			local cf, size = ch:GetBoundingBox()
+			for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
+				local r = h.AssemblyRootPart or h
+				if set[r] then return true end
+			end
+			return false
+		end
 		local function collectStepParts()
 			local list, done = {}, {}
 			eachWorldPart(function(p)
@@ -9614,7 +9705,7 @@ __mods["world/time/control"] = function(import)
 				done[rootP] = true
 				list[#list + 1] = rootP
 			end)
-			FS.parts = list
+			FS.parts, FS.rootSet = list, done
 		end
 		local function hold(p)
 			local n = FS.n + 1
@@ -9627,9 +9718,18 @@ __mods["world/time/control"] = function(import)
 		function SH.StepBegin(dt)
 			if not FS.on then return true end
 			dt = tonumber(dt) or 0
-			FS.acc = FS.acc + FS.s
-			if FS.acc >= 1 - 1e-6 then
-				FS.acc = FS.acc - 1
+			if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end
+			local run = FS.acc >= dt - 1e-9
+			if not run and FS.acc - dt > -MAX_DEBT then
+				local okT, must = pcall(timedState, FS.hum)
+				if not (okT and must) then
+					if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
+					okT, must = pcall(touchingHeld)
+				end
+				run = okT and must
+			end
+			if run then
+				FS.acc = FS.acc - dt
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9688,8 +9788,9 @@ __mods["world/time/control"] = function(import)
 		end
 		local function stopStep()
 			if not FS.on then return end
+			if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 			SH.StepEnd()
-			FS.on, FS.pending, FS.ranDt, FS.root, FS.parts = false, 0, 0, nil, {}
+			FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 		end
 		local function applyValues(h, s)
 			if h ~= hum then
@@ -9739,13 +9840,16 @@ __mods["world/time/control"] = function(import)
 				if applied or FS.on or SH.anim ~= 1 then SH.Restore(keepMomentum) end
 				return 1
 			end
-			if s < 1 and engine.settings:on("speedHackFrameStep") then
+			if s < 1 then
 				if applied then SH.Restore(keepMomentum) end
 				if not FS.on then
 					FS.on, FS.pending, FS.ranDt, FS.scanIn = true, 0, 0, 0
-					FS.acc = 1 - s
+					FS.acc = nil
+					FS.addConn = workspace.DescendantAdded:Connect(function(d)
+						if d:IsA("BasePart") then FS.scanIn = 0 end
+					end)
 				end
-				FS.s, FS.root = s, part
+				FS.s, FS.root, FS.hum = s, part, h
 				setAnim(s)
 				return 1
 			end
@@ -9925,7 +10029,7 @@ __mods["world/time/control"] = function(import)
 					and math.abs((vy1 - cy.vy0) + gEff * dt) < 0.05 * gEff * dt + 1e-3
 				if hum.FloorMaterial ~= Air and not falling then
 					if cy.off ~= nil then
-						local blocked = cy.disabled
+						local blocked = cy.disabled and SH.scale ~= 1
 						cy.off, cy.jumped, cy.restored = nil, false, false
 						cy.pinN, cy.vt, cy.finish = nil, nil, nil
 						setJumping(hum, true)
@@ -10611,8 +10715,230 @@ __mods["world/kit/clock"] = function(import)
 	function KitClockPlugin:onRewind(tl, n) KC.Rewind(tl, n) end
 	return KitClockPlugin
 end
+__mods["world/kit/vanishers"] = function(import)
+	local Env = import("platform/env")
+	local TweenService = Env.svc("TweenService")
+	local Players = Env.svc("Players")
+	local Vanishers = {}
+	local groups, groupOf = {}, {}
+	local MODES = { Fade = true, Blink = true, Constant = true }
+	local params = OverlapParams.new()
+	local function attr(inst, name, def)
+		if not inst then return def end
+		local v = inst:GetAttribute(name)
+		if v == nil then return def end
+		return v
+	end
+	local kitDefaults = nil
+	function Vanishers.findKitDefaults()
+		kitDefaults = {}
+		if not Env.filtergc then return end
+		local ok, list = pcall(Env.filtergc, "table", { Keys = { "part", "defaults" } })
+		if not ok or type(list) ~= "table" then return end
+		for _, t in ipairs(list) do
+			local p, d = rawget(t, "part"), rawget(t, "defaults")
+			if typeof(p) == "Instance" and type(d) == "table" and rawget(d, "DefaultTransparency") ~= nil then kitDefaults[p] = d end
+		end
+	end
+	function Vanishers.add(cfg, key, id)
+		local obj = cfg.Parent
+		if not obj or groupOf[cfg] then return nil end
+		local mode = attr(cfg, "VanishMode", "Fade")
+		if not MODES[mode] then return nil end
+		local tween = cfg:FindFirstChild("TweenConfiguration")
+		local invert = attr(cfg, "Invert", false) == true
+		local g = { cfg = cfg, key = key, id = id, mode = mode, parts = {},
+			time = math.max(1e-3, tonumber(attr(tween, "Time", 1)) or 1),
+			style = attr(tween, "Style", Enum.EasingStyle.Quad), dir = attr(tween, "Direction", Enum.EasingDirection.Out),
+			respawn = tonumber(attr(cfg, "RespawnTime", 2)) or 2, respawnFade = attr(cfg, "RespawnFade", false) == true,
+			blinks = tonumber(attr(cfg, "BlinkCount", 3)) or 3, noRecovery = attr(cfg, "ConstantNoRecovery", false) == true,
+			outline = attr(cfg, "OutlineColor", Color3.fromRGB(255, 0, 0)), events = nil, last = nil }
+		local list = obj:IsA("BasePart") and { obj } or obj:GetChildren()
+		for _, p in ipairs(list) do
+			if p:IsA("BasePart") then
+				if p:HasTag("ButtonActivated") then return nil end
+				local invisible, ignoreT, ignoreC = p:HasTag("Invisible"), p:HasTag("IgnoreTransparency"), p:HasTag("IgnoreCanCollide")
+				local defC, touchC, defT, touchT
+				if invisible then defC = false elseif ignoreC then defC = p.CanCollide else defC = not invert end
+				if invisible then touchC = false elseif ignoreC then touchC = p.CanCollide else touchC = not defC end
+				if invisible then defT = 1 elseif ignoreT then defT = p.Transparency elseif invert then defT = 1 else defT = p.Transparency end
+				if ignoreT then touchT = p.Transparency elseif invert then touchT = 0 else touchT = 1 end
+				local kd = kitDefaults and kitDefaults[p]
+				if kd then
+					defT, defC = rawget(kd, "DefaultTransparency"), rawget(kd, "DefaultCanCollide")
+					touchT, touchC = rawget(kd, "TouchedTransparency"), rawget(kd, "TouchedCanCollide")
+				elseif not p.CanTouch and not invisible and not ignoreT and not invert then
+					defT, defC, touchC = 0, true, false
+				end
+				local sel = p:FindFirstChild("VanisherSelectionBox")
+				if sel and not sel:IsA("SelectionBox") then sel = nil end
+				g.parts[#g.parts + 1] = { part = p, defT = defT, defC = defC, touchT = touchT, touchC = touchC, sel = sel,
+					selColor = sel and sel.Color3, selThick = sel and sel.LineThickness or 0.1 }
+			end
+		end
+		if #g.parts == 0 then return nil end
+		groupOf[cfg] = g
+		groups[#groups + 1] = g
+		return g
+	end
+	function Vanishers.count() return #groups end
+	function Vanishers.invalidate() for _, g in ipairs(groups) do g.events = nil end end
+	local function ease(g, a)
+		a = math.clamp(a, 0, 1)
+		local ok, v = pcall(TweenService.GetValue, TweenService, a, g.style, g.dir)
+		return ok and v or a
+	end
+	local function eventsOf(g, data)
+		if g.events and g.eventsData == data then return g.events end
+		local ev = {}
+		for i = 1, #data do
+			local fr = data[i]
+			local ke = fr.KE
+			if ke then
+				for _, e in ipairs(ke) do
+					if e[1] == 5 and e[2] == g.id then ev[#ev + 1] = { fr.TotalTime, e[3] } end
+				end
+			end
+		end
+		g.events, g.eventsData = ev, data
+		return ev
+	end
+	local function stateAt(g, data, t)
+		local ev = eventsOf(g, data)
+		if g.mode == "Constant" then
+			local tt, lastT, on, goneAt = 0, 0, false, nil
+			local function advance(to)
+				if goneAt then
+					if to >= goneAt + g.respawn then tt, lastT, goneAt = 0, goneAt + g.respawn, nil else return end
+				end
+				local d = to - lastT
+				if d <= 0 then return end
+				if on then
+					if tt + d >= g.time then goneAt = lastT + (g.time - tt); tt = g.time; lastT = goneAt; return advance(to) end
+					tt = tt + d
+				elseif not g.noRecovery then
+					tt = math.max(0, tt - d * g.time / g.respawn)
+				end
+				lastT = to
+			end
+			for _, e in ipairs(ev) do
+				if e[1] > t then break end
+				advance(e[1])
+				if not goneAt then on = e[2] == 2 end
+			end
+			advance(t)
+			if goneAt then return "gone", 0, goneAt end
+			return (tt > 0) and "fade" or "idle", tt / g.time
+		end
+		local s = nil
+		for _, e in ipairs(ev) do
+			if e[1] > t then break end
+			if e[2] == 1 then s = e[1] end
+		end
+		if not s then return "idle", 0 end
+		local d = t - s
+		local fadeLen = (g.mode == "Blink") and (g.blinks * g.time) or g.time
+		if d < fadeLen then return "fade", d / fadeLen, d end
+		d = d - fadeLen
+		if d < g.respawn then return "gone", 0 end
+		d = d - g.respawn
+		if g.respawnFade and d < g.time then return "back", d / g.time end
+		return "idle", 0
+	end
+	Vanishers.stateAt = stateAt
+	local function setIf(inst, prop, v)
+		if inst[prop] ~= v then inst[prop] = v end
+	end
+	local function write(g, phase, a, blinkT)
+		for _, vp in ipairs(g.parts) do
+			local p = vp.part
+			if p.Parent then
+				local T, C, CT, color, thick = vp.defT, vp.defC, true, vp.selColor, vp.selThick
+				if phase == "fade" then
+					if g.mode == "Constant" then
+						T = vp.defT + (vp.touchT - vp.defT) * a
+					elseif g.mode == "Fade" then
+						T = vp.defT + (vp.touchT - vp.defT) * ease(g, a)
+					elseif vp.sel then
+						local k = (blinkT or 0) % g.time
+						thick = vp.selThick * 3 + (vp.selThick - vp.selThick * 3) * ease(g, k / g.time)
+					else
+						local mid = (vp.defT + vp.touchT) / 2
+						T = vp.defT + (mid - vp.defT) * ease(g, (blinkT or 0) / g.time)
+					end
+				elseif phase == "gone" then
+					T, C, CT, color = vp.touchT, vp.touchC, false, g.outline
+				elseif phase == "back" then
+					T = vp.touchT + (vp.defT - vp.touchT) * ease(g, a)
+				end
+				pcall(setIf, p, "Transparency", T)
+				pcall(setIf, p, "CanCollide", C)
+				pcall(setIf, p, "CanTouch", CT)
+				if vp.sel then
+					if color then pcall(setIf, vp.sel, "Color3", color) end
+					pcall(setIf, vp.sel, "LineThickness", thick)
+				end
+			end
+		end
+		g.last = { phase, a, blinkT }
+	end
+	local function touching(g, ch)
+		if not ch then return false end
+		for _, vp in ipairs(g.parts) do
+			local p = vp.part
+			if p.Parent then
+				local ok, hits = pcall(workspace.GetPartBoundsInBox, workspace, p.CFrame, p.Size + Vector3.one * 0.1, params)
+				if ok then
+					for _, h in ipairs(hits) do if h:IsDescendantOf(ch) then return true end end
+				end
+			end
+		end
+		return false
+	end
+	function Vanishers.frame(data, f, t, rec, addEvent)
+		if #groups == 0 then return end
+		local ch = rec and Players.LocalPlayer and Players.LocalPlayer.Character
+		if rec and ch then params.FilterType = Enum.RaycastFilterType.Include; params.FilterDescendantsInstances = { ch } end
+		for i = #groups, 1, -1 do
+			local g = groups[i]
+			if not g.cfg:IsDescendantOf(workspace) then
+				groupOf[g.cfg] = nil
+				table.remove(groups, i)
+			else
+				if rec and #data > 0 then
+					local phase = stateAt(g, data, t)
+					local hit = touching(g, ch)
+					if g.mode == "Constant" then
+						local ev = eventsOf(g, data)
+						local lastOn = false
+						for _, e in ipairs(ev) do if e[1] <= t then lastOn = e[2] == 2 end end
+						if phase ~= "gone" and hit ~= lastOn then
+							addEvent(data[#data], { 5, g.id, hit and 2 or 3 })
+							g.events = nil
+						end
+					elseif hit and phase == "idle" then
+						addEvent(data[#data], { 5, g.id, 1 })
+						g.events = nil
+					end
+				end
+				local phase, a, extra = stateAt(g, data, t)
+				write(g, phase, a, extra)
+			end
+		end
+	end
+	function Vanishers.reassert()
+		for _, g in ipairs(groups) do
+			if g.last then write(g, g.last[1], g.last[2], g.last[3]) end
+		end
+	end
+	function Vanishers.release()
+		for _, g in ipairs(groups) do g.last = nil end
+	end
+	return Vanishers
+end
 __mods["world/kit/objects"] = function(import)
 	local Env = import("platform/env")
+	local Vanishers = import("world/kit/vanishers")
 	local Players = Env.svc("Players")
 	local engine = nil
 	local KitObjects = {}
@@ -10654,7 +10980,7 @@ __mods["world/kit/objects"] = function(import)
 	end
 	do
 		local KO = KitObjects
-		KO.CURRENT = 1
+		KO.CURRENT = 2
 		local CS = Env.svc("CollectionService")
 		local V3, CF = Vector3.new, CFrame.new
 		local floor = math.floor
@@ -11385,8 +11711,12 @@ __mods["world/kit/objects"] = function(import)
 				if cur.on and cur.mode == 3 then pcall(function() d.Enabled = false end) end
 			end)
 		end
+		local function addVanisher(cfg)
+			local key = cfg.Parent and engine.co:keyOf(cfg.Parent)
+			if key then Vanishers.add(cfg, key, idFor(key)) end
+		end
 		local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner,
-			BouncePadConfiguration = addFx, LauncherConfiguration = addFx }
+			BouncePadConfiguration = addFx, LauncherConfiguration = addFx, VanisherConfiguration = addVanisher }
 		local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
 			["CO_Interactables/PushboxSpawn"] = addSpawner, ["CO_Interactables/BouncePad"] = addFx,
 			["CO_Interactables/JumpLauncher"] = addFx }
@@ -11403,6 +11733,7 @@ __mods["world/kit/objects"] = function(import)
 		end
 		local function scanAll()
 			local kitTables = kitBeatTables()
+			pcall(Vanishers.findKitDefaults)
 			local seen = {}
 			if CS then
 				for tag in pairs(TAGS) do
@@ -11427,12 +11758,14 @@ __mods["world/kit/objects"] = function(import)
 				hideAllBullets()
 				for _, s in ipairs(spawners) do unhideBox(s) end
 				unmuteAll()
+				Vanishers.release()
 			end
 			replayedTo = nil
 		end
 		KO.Release = release
 		function KO.Invalidate()
 			idx.valid = false
+			Vanishers.invalidate()
 		end
 		function KO.Frame(mode, data, f, t, rec)
 			cur.mode, cur.data, cur.f, cur.t, cur.rec = mode, data, f, t, rec
@@ -11457,6 +11790,7 @@ __mods["world/kit/objects"] = function(import)
 			beatStep(t, advancing)
 			showBullets(data, f, t)
 			boxesAt(data, f)
+			if KO.VersionOf(data) >= 2 then Vanishers.frame(data, f, t, rec, addEvent) end
 			if mode == 3 then replayEvents(data, f) end
 		end
 		function KO.AfterPhysics(data, n)
@@ -11464,8 +11798,9 @@ __mods["world/kit/objects"] = function(import)
 			turretHits(data, n)
 		end
 		function KO.Reassert()
-			if not (enabled and cur.on) or #beats == 0 then return end
-			beatStep(cur.t, false)
+			if not (enabled and cur.on) then return end
+			if #beats > 0 then beatStep(cur.t, false) end
+			if cur.data and KO.VersionOf(cur.data) >= 2 then Vanishers.reassert() end
 		end
 		function KO.Unpause(data, f)
 			for d, fr in pairs(forces) do
@@ -11475,6 +11810,7 @@ __mods["world/kit/objects"] = function(import)
 				end
 			end
 			idx.valid = false
+			Vanishers.invalidate()
 		end
 		function KO.Export(frames)
 			local used = {}
@@ -11482,7 +11818,7 @@ __mods["world/kit/objects"] = function(import)
 				local fr = frames[fi]
 				if fr.KE then
 					for _, e in ipairs(fr.KE) do
-						if e[1] == 1 or e[1] == 3 or e[1] == 4 then used[e[2]] = true end
+						if e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5 then used[e[2]] = true end
 					end
 				end
 			end
@@ -11500,7 +11836,7 @@ __mods["world/kit/objects"] = function(import)
 				local fr = frames[fi]
 				if fr.KE then
 					for _, e in ipairs(fr.KE) do
-						if (e[1] == 1 or e[1] == 3 or e[1] == 4) and map[e[2]] then e[2] = map[e[2]] end
+						if (e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5) and map[e[2]] then e[2] = map[e[2]] end
 					end
 				end
 			end
@@ -11525,6 +11861,7 @@ __mods["world/kit/objects"] = function(import)
 			engine.life:connect(workspace.DescendantAdded, function(d)
 				if CONFIGS[d.Name] then
 					task.defer(function()
+						if d.Name == "VanisherConfiguration" then pcall(Vanishers.findKitDefaults) end
 						if d.Parent then pcall(consider, d, (d.Name == "BeatBlockConfiguration") and kitBeatTables() or nil) end
 					end)
 				end
@@ -12278,14 +12615,17 @@ __mods["engine/frame"] = function(import)
 				ch.hum:Move(ch.hrp.AssemblyLinearVelocity)
 			end
 			if E.mode ~= 2 then return end
-			E.time:stepBegin(dt)
-			if not E.paused or E.firstFrame then
+			E.stepHeld = not E.time:stepBegin(dt)
+			if (not E.paused or E.firstFrame) and not E.stepHeld then
 				if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 			end
 		end
 		local function postSimulation(dt)
 			if E.mode ~= 2 then return end
+			local held = E.stepHeld
+			E.stepHeld = false
 			E.time:stepEnd()
+			if held then return end
 			local ch = E.char
 			local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
 			E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
@@ -12325,6 +12665,7 @@ __mods["engine/frame"] = function(import)
 						E.tools:replayFrame(tl, k, ch.model)
 					end
 				end
+				E.anim:follow(tl, f, E.testTime)
 				if tl:getList("Died", f) then ch:changeState(Enum.HumanoidStateType.Dead) end
 				E.tools:step(ch.model, ch.hum)
 			else
@@ -12362,16 +12703,34 @@ __mods["engine/frame"] = function(import)
 					local n = tl:count()
 					if E.paused then
 						E.plugins:call("onPausedTick")
-						if n > 1 and E.back and E.frame > 1 then
-							E.frame = E.frame - 1
+						local rate = (E.back or E.forw) and E.time:wanted() or 1
+						local moves = 1
+						if rate ~= 1 then
+							E.seekBank = (E.seekBank or 0) + dt * rate
+							moves = 0
+							local f = E.frame
+							while true do
+								local nf = E.back and f - 1 or f + 1
+								if nf < 1 or nf > n then break end
+								local ft = tl:get("FrameTime", E.back and f or nf, 1)
+								if ft > E.seekBank then break end
+								E.seekBank = E.seekBank - ft
+								f, moves = nf, moves + 1
+							end
+						else
+							E.seekBank = 0
+						end
+						if n > 1 and E.back and E.frame > 1 and moves > 0 then
+							E.frame = math.max(1, E.frame - moves)
 							M_:loadFrame(E.frame, false, true)
 							M_:publish()
 						end
-						if E.frame < n and E.forw then
-							E.frame = E.frame + 1
+						if E.frame < n and E.forw and moves > 0 then
+							E.frame = math.min(n, E.frame + moves)
 							M_:loadFrame(E.frame, false, true)
 							M_:publish()
 						end
+						if not (E.back or E.forw) then E.seekBank = 0 end
 						E.plugins:call("onStep", M_:totalAt(E.frame))
 					else
 						if E.firstFrame and n == 1 then
@@ -12458,6 +12817,141 @@ __mods["engine/frame"] = function(import)
 		end)
 	end
 	return Frame
+end
+__mods["engine/diagnostics"] = function(import)
+	local CONFIG = import("config")
+	local Env = import("platform/env")
+	local Diag = {}
+	local N = 4096
+	local WINDOW = 10
+	local STEP = 1 / 240
+	local FUNCS = { "writefile", "readfile", "isfile", "isfolder", "makefolder", "listfiles", "delfile", "appendfile",
+		"delfolder", "gethui", "cloneref", "getgc", "filtergc", "getconnections", "hookfunction", "restorefunction",
+		"iscclosure", "getloadedmodules", "setreadonly", "isreadonly", "isactive", "keypress", "keyrelease",
+		"mousemoveabs", "mousemoverel", "mousescroll", "getcustomasset", "identifyexecutor", "envOf", "setclipboard" }
+	local function ring() return { t = table.create(N, 0), v = table.create(N, 0), i = 0, n = 0 } end
+	local function push(r, t, v)
+		local i = r.i % N + 1
+		r.t[i], r.v[i], r.i = t, v, i
+		if r.n < N then r.n = r.n + 1 end
+	end
+	local function recent(r, now)
+		local out = {}
+		for k = r.n - 1, 0, -1 do
+			local i = (r.i - k - 1) % N + 1
+			if now - r.t[i] <= WINDOW then out[#out + 1] = r.v[i] end
+		end
+		return out
+	end
+	function Diag.start(E)
+		local d = { frames = ring(), steps = ring() }
+		E.diag = d
+		E.pipe:add("Heartbeat", 95, "diagnostics.frame", function(dt) push(d.frames, os.clock(), dt) end, "diagnostics")
+		E.pipe:add("PostSimulation", 95, "diagnostics.step", function(dt) push(d.steps, os.clock(), dt) end, "diagnostics")
+	end
+	local function fmt(v)
+		if type(v) == "number" then return string.format("%.6g", v) end
+		return tostring(v)
+	end
+	function Diag.report(E)
+		local d = E.diag
+		local now = os.clock()
+		local L = {}
+		local function add(s) L[#L + 1] = s end
+		add("HappaTAS diagnostics")
+		add("Version: " .. CONFIG.VERSION .. "   Executor: " .. tostring(Env.executor) .. "   Date: " .. os.date("%Y-%m-%d %H:%M:%S"))
+		add("Interface: " .. tostring(E.settings:get("interface")) .. "   Touch: "
+			.. tostring(game:GetService("UserInputService").TouchEnabled) .. "   Place: " .. tostring(game.PlaceId))
+		local have, miss = {}, {}
+		for _, name in ipairs(FUNCS) do
+			if Env[name] then have[#have + 1] = name else miss[#miss + 1] = name end
+		end
+		add("Executor functions present: " .. table.concat(have, ", "))
+		add("Executor functions missing: " .. (#miss > 0 and table.concat(miss, ", ") or "none"))
+		for _, n in ipairs(Env.notes) do add("  note: " .. n) end
+		local ft = d and recent(d.frames, now) or {}
+		local sum, worst = 0, 0
+		for _, v in ipairs(ft) do
+			sum = sum + v
+			if v > worst then worst = v end
+		end
+		if #ft > 0 then
+			add(string.format("Frames (last %d s): %d, FPS %.1f, average %.2f ms, worst %.2f ms", WINDOW, #ft, #ft / math.max(sum, 1e-6),
+				1000 * sum / #ft, 1000 * worst))
+		else
+			add("Frames: no samples")
+		end
+		if Env.getfpscap then
+			local ok, v = pcall(Env.getfpscap)
+			if ok then add("FPS cap: " .. fmt(v)) end
+		end
+		local st = d and recent(d.steps, now) or {}
+		local hist, whole, offMax, steps = {}, 0, 0, 0
+		for _, v in ipairs(st) do
+			local n = v / STEP
+			local r = math.floor(n + 0.5)
+			local off = math.abs(n - r)
+			if off < 1e-3 then whole = whole + 1 end
+			if off > offMax then offMax = off end
+			steps = steps + n
+			local key = off < 1e-3 and tostring(r) or string.format("%.2f", n)
+			hist[key] = (hist[key] or 0) + 1
+		end
+		if #st > 0 then
+			local h = {}
+			for k, c in pairs(hist) do h[#h + 1] = k .. " step(s) x" .. c end
+			table.sort(h)
+			add(string.format("Physics (last %d s): %d PostSimulation events, %.3f steps each on average, %.1f %% whole 1/240 s steps (largest off: %.4f of a step)",
+				WINDOW, #st, steps / #st, 100 * whole / #st, offMax))
+			add("  " .. table.concat(h, ", "))
+		else
+			add("Physics: no samples")
+		end
+		local mode = ({ "Idle", "Create", "Test" })[E.mode or 1] or tostring(E.mode)
+		add("Mode: " .. mode .. "   paused: " .. tostring(E.paused) .. "   frames: " .. tostring(E.tl:count()))
+		local SH = E.time and E.time.SH
+		if SH then
+			local FS = SH.FS or {}
+			add("Speed hack now: wanted " .. fmt(SH.Wanted()) .. ", physics scale " .. fmt(SH.scale) .. ", animation rate " .. fmt(SH.anim)
+				.. ", Frame Step " .. (FS.on and ("on (" .. fmt(FS.s) .. ")") or "off"))
+			local cy = SH.Humanoid and SH.Humanoid.coyote
+			if cy then
+				add("Coyote now: enforcing " .. tostring(cy.enforce == true) .. ", restored " .. tostring(cy.restored)
+					.. ", off floor " .. fmt(cy.off) .. " s, jumped " .. tostring(cy.jumped) .. ", Jumping disabled by it "
+					.. tostring(cy.disabled) .. ", Freefall disabled by it " .. tostring(cy.noFall))
+			end
+		end
+		local hum = E.char and E.char.hum
+		if hum then
+			local ok, s = pcall(function()
+				return string.format("Humanoid: state %s, WalkSpeed %s, JumpPower %s, Jumping enabled %s, Freefall enabled %s, Gravity %s",
+					hum:GetState().Name, fmt(hum.WalkSpeed), fmt(hum.JumpPower), tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Jumping)),
+					tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Freefall)), fmt(workspace.Gravity))
+			end)
+			if ok then add(s) end
+		end
+		add("Settings:")
+		local keys = {}
+		for k in pairs(E.settings.values) do keys[#keys + 1] = k end
+		table.sort(keys)
+		for _, k in ipairs(keys) do add("  " .. k .. " = " .. fmt(E.settings.values[k])) end
+		local errs = E.errs
+		local counts = {}
+		for src, c in pairs(errs.counts) do counts[#counts + 1] = src .. " x" .. c end
+		table.sort(counts)
+		add("Errors per source: " .. (#counts > 0 and table.concat(counts, ", ") or "none"))
+		for _, m in ipairs(errs.last) do add("  " .. m) end
+		return table.concat(L, "\n")
+	end
+	function Diag.share(E)
+		local text = Diag.report(E)
+		if Env.setclipboard and pcall(Env.setclipboard, text) then return "Diagnostics copied to the clipboard" end
+		local path = "HappaTasPort/diagnostics-" .. os.date("%Y%m%d-%H%M%S") .. ".txt"
+		E.files:makeFolder("HappaTasPort")
+		if E.files:write(path, text) then return "Diagnostics saved to " .. path end
+		return "Diagnostics: no clipboard and no file functions"
+	end
+	return Diag
 end
 __mods["ui/write"] = function(import)
 	local W = { version = 0 }
@@ -15580,6 +16074,7 @@ __mods["ui/win/settings"] = function(import)
 	local Row = import("ui/kit/row")
 	local ColorPicker = import("ui/kit/colorpicker")
 	local Bezier = import("ui/kit/bezier")
+	local Diagnostics = import("engine/diagnostics")
 	local SettingsWin = {}
 	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
@@ -15698,6 +16193,12 @@ __mods["ui/win/settings"] = function(import)
 		local ctl, kind
 		if key == "theme" then
 			ctl, kind = themeControl(ctx, s, sw), "theme"
+		elseif def.switch then
+			ctl, kind = Toggle.new(ctx, nil), "toggle"
+			ctl.onChange = function(on) s:set(key, def.switch[on and 2 or 1]) end
+			ctl:set(v == def.switch[2])
+			local set = ctl.set
+			ctl.set = function(c, x) set(c, x == def.switch[2] or x == true) end
 		elseif def.kind == "toggle" then
 			ctl, kind = Toggle.new(ctx, nil), "toggle"
 			ctl.onChange = function(on) s:set(key, on and 1 or 0) end
@@ -15736,7 +16237,7 @@ __mods["ui/win/settings"] = function(import)
 		local sw = { rows = {}, sections = {}, chips = {}, offs = {}, items = {} }
 		local search = Field.new(ctx, body, { search = true, placeholder = "Search settings", w = 300 })
 		search.gui.Position = UDim2.new(0, PAD, 0, 10)
-		search.gui.Size = UDim2.new(1, -PAD * 2, 0, 32)
+		search.gui.Size = UDim2.new(1, -PAD * 3 - 96, 0, 32)
 		sw.search = search
 		local x, y = PAD, 50
 		local width = 420 - PAD * 2
@@ -15862,6 +16363,9 @@ __mods["ui/win/settings"] = function(import)
 				W.bump()
 			end
 		end
+		sw.diag = Button.new(ctx, body, { text = "Diagnostics", kind = "plain", w = 96, h = 32 })
+		sw.diag.gui.Position = UDim2.new(1, -PAD - 96, 0, 10)
+		sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 		filter()
 		ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 		return sw
@@ -16199,7 +16703,7 @@ __mods["ui/win/inspector"] = function(import)
 	local STAT_KEY = { "showStatsIdle", "showStatsCreate", "showStatsTest" }
 	local MODE_NAME = { "Idle", "Create", "Test" }
 	local PERF_EVERY = 1
-	local FAST_EVERY, SLOW_EVERY = 12, 60
+	local FAST_EVERY, SLOW_EVERY = 0.2, 1
 	function Insp.define(ui)
 		ui.wm:define("inspector", { title = "Inspector", w = 320, h = 460, minW = 260, minH = 180, modal = false, corner = "topRight",
 			openByDefault = true, build = function(body, win) ui.inspector = Insp.build(ui, body, win) end })
@@ -16213,7 +16717,7 @@ __mods["ui/win/inspector"] = function(import)
 	function Insp.build(ui, body, win)
 		local E = ui.E
 		local self = setmetatable({ ui = ui, E = E, win = win, ctx = win.ctx, rows = {}, pinned = {}, sections = {},
-			offs = {}, tick = 0, last = {}, memo = {}, values = {}, still = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
+			offs = {}, fastT = 0, slowT = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
 		local ctx = win.ctx
 		self.options = Button.new(ctx, body, { text = "Options", kind = "plain", h = 22 })
 		self.options.gui.AnchorPoint = Vector2.new(1, 0)
@@ -16253,11 +16757,6 @@ __mods["ui/win/inspector"] = function(import)
 			self.offs[#self.offs + 1] = s:changed(key, function() self:restyle(); self:layout(); self:update(true) end)
 		end
 		self.offs[#self.offs + 1] = E.state:watch("mode", function() self:layout(); self:update(true) end)
-		local uis = E.inputs.uis
-		for _, sig in ipairs({ uis.InputBegan, uis.InputEnded }) do
-			local c = ui.life:connect(sig, function() self.keyed = true end)
-			self.offs[#self.offs + 1] = function() ui.life:drop(c) end
-		end
 		self.offs[#self.offs + 1] = ui.theme:changed(function() self:restyle() end)
 		self.offs[#self.offs + 1] = ui.wm:changed(function(id) if id == "inspector" then self:follow() end end)
 		self.offs[#self.offs + 1] = E.bus:on("uiShown", function(active)
@@ -16521,23 +17020,22 @@ __mods["ui/win/inspector"] = function(import)
 			pipe.timeSum, pipe.timeFrames = 0, 0
 			self.perfT, self.perfFrames = 0, 0
 		end
-		local paused = E.mode == 2 and E.paused
-		if paused then
-			self.tick = self.tick + 1
+		self.fastT, self.slowT = self.fastT + (dt or 0), self.slowT + (dt or 0)
+		local changed = false
+		if E.mode == 2 and E.paused then
 			local tl = E.tl
-			local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0) .. ":" .. self.perf.ms
-			if key == self.pausedKey and self.tick % SLOW_EVERY ~= 0 then return end
+			local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0)
+			changed = key ~= self.pausedKey
 			self.pausedKey = key
 		else
 			self.pausedKey = nil
-			self.tick = self.tick + 1
-			if self.tick % FAST_EVERY ~= 0 then return end
-			local slow = self.tick % SLOW_EVERY == 0
-			if not slow and not self:moved() then return end
-			self:update(false, slow)
-			return
 		end
-		self:update(false, true)
+		local every = (E.mode == 2 and E.paused) and SLOW_EVERY or FAST_EVERY
+		if not changed and self.fastT < every then return end
+		self.fastT = 0
+		local slow = changed or self.slowT >= SLOW_EVERY
+		if slow then self.slowT = 0 end
+		self:update(false, slow)
 	end
 	function Insp:makePlan(all, frameToo)
 		local data = saved(self.ui)
@@ -16559,21 +17057,6 @@ __mods["ui/win/inspector"] = function(import)
 			end
 		end
 		return plan
-	end
-	function Insp:moved()
-		local E = self.E
-		local s = self.still
-		local hrp = E.char and E.char.hrp
-		local pos = hrp and hrp.Position
-		local cam = workspace.CurrentCamera
-		local cf = cam and cam.CFrame
-		local m = E.inputs.uis:GetMouseLocation()
-		local n = E.tl:count()
-		local same = not self.keyed and s.pos == pos and s.cf == cf and s.m == m and s.mode == E.mode and s.frame == E.frame
-			and s.n == n
-		s.pos, s.cf, s.m, s.mode, s.frame, s.n = pos, cf, m, E.mode, E.frame, n
-		self.keyed = false
-		return not same
 	end
 	function Insp:update(force, slowToo)
 		if not self.win.open then return end
@@ -17297,7 +17780,7 @@ __mods["ui/win/helptext"] = function(import)
 		version = CONFIG.VERSION,
 		items = {
 			"A new interface: Dock, windows, timeline bar, Inspector",
-			"The classic interface is still there (Settings > Interface)",
+			"Classic interface: a switch in Settings",
 			"Library: folders, search, sort, numbered attempts",
 			"File format v6: smaller files, safe saving",
 			"Old .tas files (v1-v5) and Settings.json carry over",
@@ -17424,9 +17907,9 @@ __mods["ui/win/helptext"] = function(import)
 			.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
 			.. "recording.\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 			.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
-			.. "ziplines, the kit's timers) all change speed.\n\nSpeed Hack Frame Step (below 1x): Roblox's normal "
-			.. "physics runs on some frames only and everything is held in between, so walking, jumping and pushing are "
-			.. "exactly like normal speed." },
+			.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
+			.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
+			.. "like normal speed; it moves in short full-speed bursts. Above 1x the physics is sped up instead." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -18176,12 +18659,18 @@ __mods["ui/classic/settingsrows"] = function(import)
 	local SettingsRows = {}
 	local u, v2 = UDim2.new, Vector2.new
 	local ROW_H, HEADER_H = 30, 28
-	local SWITCH_ON = { Position = u(1, 0, 0.5, 0) }
+	local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) }
+	local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
+		invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
+		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
+		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
+	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
+	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" end
 	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 	local function toggleRow(def, order)
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 			{ "UICorner", "UICorner", 5, {} },
-			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = 16 } },
+			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = LABELS[def.key] or def.name, TextSize = 16 } },
 			{ "TextButton", "Switch", 36, { Position = u(0.9, 0, 0.5, 0), Size = u(0, 30, 0, 15), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13 }, {
 				{ "UICorner", "UICorner", 37, {} },
 				{ "Frame", "Switcher", 38, { Position = u(0, 0, 0.5, 0), Size = u(0, 22, 0, 22), AnchorPoint = v2(0.5, 0.5) }, {
@@ -18192,14 +18681,15 @@ __mods["ui/classic/settingsrows"] = function(import)
 		} }
 	end
 	local function inputRow(def, order)
-		local labelSize = (#def.name > 24) and 13 or 16
+		local label = LABELS[def.key] or def.name
+		local labelSize = (#label > 24) and 13 or 16
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 			{ "UICorner", "UICorner", 5, {} },
 			{ "TextBox", "Input", 40, { Position = u(0.9, 0, 0.5, 0), Size = u(0.15, 0, 0.7, 0), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13, PlaceholderText = "" }, {
 				{ "UICorner", "UICorner", 5, {} },
 				{ "UIStroke", "UIStroke", 41, {} },
 			} },
-			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = labelSize } },
+			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = label, TextSize = labelSize } },
 			{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
 		} }
 	end
@@ -18211,28 +18701,33 @@ __mods["ui/classic/settingsrows"] = function(import)
 		local ts = Env.svc("TweenService")
 		local rows, last, order, height = {}, nil, 0, 0
 		for _, def in ipairs(Settings.SCHEMA) do
-			if def.section ~= last then
+			if not shownHere(def) then
+			elseif def.section ~= last then
 				last = def.section
 				order = order + 1
-				local h = ClassicBuild.node({ "TextLabel", "Section_" .. def.section, 16, { Size = u(1, 0, 0, HEADER_H), Text = def.section,
+				local secName = SECTIONS[def.section] or def.section
+				local h = ClassicBuild.node({ "TextLabel", "Section_" .. secName, 16, { Size = u(1, 0, 0, HEADER_H), Text = secName,
 					TextSize = 14, LayoutOrder = order } }, ClassicTree.STYLES)
 				pcall(function() h.TextColor3 = Color3.fromRGB(140, 205, 255) end)
 				h.Parent = list
 				height = height + HEADER_H
 			end
+			if shownHere(def) then
 			order = order + 1
 			local key = def.key
 			local r
-			if def.kind == "toggle" then
+			if def.kind == "toggle" or def.switch then
 				local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 				f.Parent = list
 				r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+				local sw = def.switch
 				local function show(v, instant)
-					local on = v ~= 0
+					local on
+					if sw then on = v == sw[2] else on = v ~= 0 end
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
-					local bg = on and Color3.fromHex(tostring(s:get("accentColor")):sub(2)) or target.BackgroundColor3
+					local bg = target.BackgroundColor3
 					if instant or not ts then
 						r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 					else
@@ -18241,7 +18736,9 @@ __mods["ui/classic/settingsrows"] = function(import)
 					end
 				end
 				show(s:get(key), true)
-				life:connect(r.switch.MouseButton1Click, function() s:set(key, s:on(key) and 0 or 1) end)
+				life:connect(r.switch.MouseButton1Click, function()
+					if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+				end)
 				classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 			else
 				local f = ClassicBuild.node(inputRow(def, order), ClassicTree.STYLES)
@@ -18264,6 +18761,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 			end
 			rows[key] = r
 			height = height + ROW_H
+			end
 		end
 		list.Size = u(0, 360, 0, height)
 		scroller.CanvasSize = u(0, 0, 0, height + 50)
@@ -18409,7 +18907,6 @@ __mods["ui/classic/saves"] = function(import)
 			local s = { frame = f, name = f.N, save = f.Buttons.Save, load = f.Buttons.Load, merge = f.MoreButtons.Merge,
 				delete = f.MoreButtons.Delete, slotName = name, path = path }
 			sv.slots[#sv.slots + 1] = s
-			if classic.look then classic.look:adoptAll(f) end
 			life:connect(f.N.FocusLost, function()
 				local old = s.slotName
 				local clean = Files.cleanName(f.N.Text)
@@ -18599,7 +19096,7 @@ __mods["ui/classic/stats"] = function(import)
 	local IV = import("ui/win/inspectorvalues")
 	local ClassicStats = {}
 	ClassicStats.__index = ClassicStats
-	local FAST_EVERY, PERF_EVERY = 12, 1
+	local FAST_EVERY, PERF_EVERY = 0.2, 1
 	local SHOW = { "showStatsIdle", "showStatsCreate", "showStatsTest" }
 	local PANEL = { "IdleStats", "CreateStats", "TestStats" }
 	local ROWS = {
@@ -18615,7 +19112,7 @@ __mods["ui/classic/stats"] = function(import)
 	function ClassicStats.new(classic)
 		local E = classic.E
 		local self = setmetatable({ classic = classic, E = E, b = classic.byPath, last = {}, lastVis = {}, memo = {}, values = {},
-			want = {}, perf = { dt = 0, fps = 0, ms = 0 }, tick = 0, still = {}, perfT = 0, perfFrames = 0 }, ClassicStats)
+			want = {}, perf = { dt = 0, fps = 0, ms = 0 }, fastT = 0, perfT = 0, perfFrames = 0 }, ClassicStats)
 		for _, list in pairs(ROWS) do
 			for _, r in ipairs(list) do self.want[r[3]] = true end
 		end
@@ -18626,11 +19123,6 @@ __mods["ui/classic/stats"] = function(import)
 		classic.offs[#classic.offs + 1] = s:changed("statsTextSize", function(v) self:size(v) end)
 		classic.offs[#classic.offs + 1] = E.state:watch("mode", function() self:update(true) end)
 		classic.offs[#classic.offs + 1] = E.bus:on("uiShown", function() self:follow() end)
-		local uis = classic.uis
-		for _, sig in ipairs({ uis.InputBegan, uis.InputEnded }) do
-			local conn = classic.ui.life:connect(sig, function() self.keyed = true end)
-			classic.offs[#classic.offs + 1] = function() classic.ui.life:drop(conn) end
-		end
 		classic.offs[#classic.offs + 1] = function() if self.off then self.off(); self.off = nil end end
 		self:size(s:get("statsTextSize"))
 		self:follow()
@@ -18673,19 +19165,6 @@ __mods["ui/classic/stats"] = function(import)
 			self.off = nil
 		end
 	end
-	function ClassicStats:moved()
-		local E, s = self.E, self.still
-		local hrp = E.char and E.char.hrp
-		local pos = hrp and hrp.Position
-		local cam = workspace.CurrentCamera
-		local cf = cam and cam.CFrame
-		local m = E.inputs.uis:GetMouseLocation()
-		local n = E.tl:count()
-		local same = not self.keyed and s.pos == pos and s.cf == cf and s.m == m and s.mode == E.mode and s.frame == E.frame and s.n == n
-		s.pos, s.cf, s.m, s.mode, s.frame, s.n = pos, cf, m, E.mode, E.frame, n
-		self.keyed = false
-		return not same
-	end
 	function ClassicStats:step(dt)
 		local E = self.E
 		self.perfT = self.perfT + (dt or 0)
@@ -18695,16 +19174,19 @@ __mods["ui/classic/stats"] = function(import)
 			self.perf.fps = self.perfFrames / self.perfT
 			self.perfT, self.perfFrames = 0, 0
 		end
+		self.fastT = self.fastT + (dt or 0)
+		local changed = false
 		if E.mode == 2 and E.paused then
 			local tl = E.tl
 			local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0)
-			if key == self.pausedKey then return end
+			changed = key ~= self.pausedKey
 			self.pausedKey = key
 		else
 			self.pausedKey = nil
-			self.tick = self.tick + 1
-			if self.tick % FAST_EVERY ~= 0 or not self:moved() then return end
 		end
+		local every = (E.mode == 2 and E.paused) and PERF_EVERY or FAST_EVERY
+		if not changed and self.fastT < every then return end
+		self.fastT = 0
 		self:update(false)
 	end
 	function ClassicStats:update(force)
@@ -18712,7 +19194,6 @@ __mods["ui/classic/stats"] = function(import)
 		if self.classic.ui.live ~= "Classic" then return end
 		local mode = E.mode or 1
 		local s = E.settings
-		if self.classic.look then self.classic.look:recording(mode == 2 and not E.paused) end
 		local shown = s:on(SHOW[mode] or "showStatsIdle") or (mode == 3 and s:get("playbackSpeed") ~= 1)
 		for i, name in ipairs(PANEL) do setVisible(self, b[name], shown and i == mode) end
 		if not shown then return end
@@ -18732,124 +19213,6 @@ __mods["ui/classic/stats"] = function(import)
 		end
 	end
 	return ClassicStats
-end
-__mods["ui/classic/look"] = function(import)
-	local ClassicLook = {}
-	ClassicLook.__index = ClassicLook
-	local KEYS = { "accentColor", "textColor", "secondaryTextColor", "recordingColor", "font", "numberFont", "textSize", "interfaceScale" }
-	local BLUES = { "008DED", "004DCD", "00A9F4", "00C4F8" }
-	local WHITE = Color3.new(1, 1, 1)
-	local STATS = { IdleStats = true, CreateStats = true, TestStats = true, MergeStats = true }
-	local SIZED = { MainMenu = true, Merge = true, JoinMessage = true, Status = true }
-	local SCALED = { "MainMenu", "IdleStats", "CreateStats", "TestStats", "Merge", "MergeStats", "JoinMessage", "Status" }
-	local function hex(c3) return c3:ToHex():upper() end
-	local function family(name) return "rbxasset://fonts/families/" .. tostring(name) .. ".json" end
-	local function color(v) return Color3.fromHex(tostring(v):sub(2)) end
-	local function topOf(inst, gui)
-		local x = inst
-		while x and x.Parent ~= gui do x = x.Parent end
-		return x and x.Name
-	end
-	function ClassicLook.new(classic)
-		local E = classic.E
-		local self = setmetatable({ classic = classic, E = E, strokes = {}, fills = {}, whites = {}, seconds = {}, gotham = {}, numbers = {},
-			sizes = {}, scales = {} }, ClassicLook)
-		local isBlue = {}
-		for _, h in ipairs(BLUES) do isBlue[h] = true end
-		self.isBlue = isBlue
-		for _, d in ipairs(classic.gui:GetDescendants()) do self:adopt(d) end
-		for _, name in ipairs(SCALED) do
-			local f = classic.byPath[name]
-			if f then
-				local sc = Instance.new("UIScale")
-				sc.Parent = f
-				self.scales[#self.scales + 1] = sc
-			end
-		end
-		local rec = Instance.new("UIStroke")
-		rec.Name = "RecStroke"
-		rec.Thickness = 2
-		rec.Enabled = false
-		rec.Parent = classic.byPath.CreateStats
-		self.rec = rec
-		for _, key in ipairs(KEYS) do
-			classic.offs[#classic.offs + 1] = E.settings:changed(key, function() self:apply() end)
-		end
-		self:apply()
-		return self
-	end
-	function ClassicLook:adopt(d)
-		local gui = self.classic.gui
-		if d:IsA("UIStroke") then
-			if self.isBlue[hex(d.Color)] then self.strokes[#self.strokes + 1] = d end
-			return
-		end
-		if not d:IsA("GuiObject") then return end
-		if self.isBlue[hex(d.BackgroundColor3)] and d.BackgroundTransparency < 1 then self.fills[#self.fills + 1] = d end
-		if not (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) then return end
-		local top = topOf(d, gui)
-		if d.Name:sub(1, 8) == "Section_" then
-			self.seconds[#self.seconds + 1] = { label = d }
-		elseif d.TextColor3 == WHITE then
-			self.whites[#self.whites + 1] = d
-		end
-		if d:IsA("TextBox") then self.seconds[#self.seconds + 1] = { placeholder = d } end
-		if STATS[top] then
-			self.numbers[#self.numbers + 1] = { d, d.FontFace.Weight, d.FontFace.Style }
-		elseif tostring(d.FontFace.Family):find("GothamSSm", 1, true) then
-			self.gotham[#self.gotham + 1] = { d, d.FontFace.Weight, d.FontFace.Style }
-		end
-		if SIZED[top] then self.sizes[#self.sizes + 1] = { d, d.TextSize } end
-	end
-	function ClassicLook:adoptAll(root)
-		self:adopt(root)
-		for _, d in ipairs(root:GetDescendants()) do self:adopt(d) end
-		self:apply()
-	end
-	function ClassicLook:accent() return color(self.E.settings:get("accentColor")) end
-	function ClassicLook:apply()
-		local s = self.E.settings
-		local acc = color(s:get("accentColor"))
-		local text, second = color(s:get("textColor")), color(s:get("secondaryTextColor"))
-		for _, x in ipairs(self.strokes) do if x.Color ~= acc then x.Color = acc end end
-		for _, x in ipairs(self.fills) do if x.BackgroundColor3 ~= acc then x.BackgroundColor3 = acc end end
-		for _, x in ipairs(self.whites) do if x.TextColor3 ~= text then x.TextColor3 = text end end
-		for _, x in ipairs(self.seconds) do
-			if x.placeholder then
-				if x.placeholder.PlaceholderColor3 ~= second then x.placeholder.PlaceholderColor3 = second end
-			elseif x.label.TextColor3 ~= second then
-				x.label.TextColor3 = second
-			end
-		end
-		local f, nf = family(s:get("font")), family(s:get("numberFont"))
-		for _, x in ipairs(self.gotham) do
-			local face = Font.new(f, x[2], x[3])
-			if x[1].FontFace ~= face then x[1].FontFace = face end
-		end
-		for _, x in ipairs(self.numbers) do
-			local face = Font.new(nf, x[2], x[3])
-			if x[1].FontFace ~= face then x[1].FontFace = face end
-		end
-		local k = s:get("textSize") / 13
-		for _, x in ipairs(self.sizes) do
-			local size = math.floor(x[2] * k + 0.5)
-			if x[1].TextSize ~= size then x[1].TextSize = size end
-		end
-		local scale = s:get("interfaceScale") / 100
-		for _, sc in ipairs(self.scales) do if sc.Scale ~= scale then sc.Scale = scale end end
-		self.rec.Color = color(s:get("recordingColor"))
-		local c = self.classic
-		if c.tabName then c:paintTabs() end
-		if c.settingsRows then
-			for _, r in pairs(c.settingsRows) do
-				if r.knob and r.on then r.knob.BackgroundColor3 = acc end
-			end
-		end
-	end
-	function ClassicLook:recording(on)
-		if self.rec.Enabled ~= on then self.rec.Enabled = on end
-	end
-	return ClassicLook
 end
 __mods["ui/classic/mobile"] = function(import)
 	local Touch = import("ui/touch")
@@ -18932,7 +19295,6 @@ __mods["ui/classic/classic"] = function(import)
 	local ControlsRows = import("ui/classic/controlsrows")
 	local Saves = import("ui/classic/saves")
 	local ClassicStats = import("ui/classic/stats")
-	local ClassicLook = import("ui/classic/look")
 	local ClassicMobile = import("ui/classic/mobile")
 	local HelpText = import("ui/win/helptext")
 	local Classic = {}
@@ -18969,7 +19331,6 @@ __mods["ui/classic/classic"] = function(import)
 		self.saves = Saves.build(self)
 		self.stats = ClassicStats.new(self)
 		self:buildHelp()
-		self.look = ClassicLook.new(self)
 		self:wire()
 		ClassicMobile.wire(self)
 		self:placeMenu()
@@ -19010,13 +19371,9 @@ __mods["ui/classic/classic"] = function(import)
 	end
 	function Classic:paintTabs()
 		local b = self.byPath
-		local black = Color3.new(0, 0, 0)
 		for _, t in ipairs(TABS) do
 			local tb = b["MainMenu." .. t .. "Toggle"]
-			local on = t == self.tabName
-			tb.BackgroundTransparency = on and 0.5 or 0.75
-			local want = (on and self.look) and self.look:accent() or black
-			if tb.BackgroundColor3 ~= want then tb.BackgroundColor3 = want end
+			tb.BackgroundTransparency = (t == self.tabName) and 0.5 or 0.75
 		end
 	end
 	function Classic:wire()
@@ -22263,6 +22620,7 @@ __mods["main"] = function(import)
 	local SettingsFile = import("persist/settingsfile")
 	local UIApp = import("ui/app")
 	local ProfilerApp = import("profiler/app")
+	local Diagnostics = import("engine/diagnostics")
 	local Main = {}
 	local kernel = nil
 	local function share(key, value, errs)
@@ -22304,6 +22662,7 @@ __mods["main"] = function(import)
 		E.persist = Persist.new(E)
 		E.modes = Modes.new(E)
 		k.pipe:keep("engine")
+		Diagnostics.start(E)
 		E.inputs:start()
 		Frame.start(E)
 		E.cs:start()
@@ -22341,6 +22700,11 @@ __mods["main"] = function(import)
 			local E, why = engine()
 			if not E then return false, why end
 			return E.persist:load(path)
+		end
+		handle.Diagnostics = function()
+			local E = k.engine
+			if not E then return nil, "HappaTAS isn't running" end
+			return Diagnostics.report(E)
 		end
 		handle.List = function()
 			local E, why = engine()
