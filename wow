@@ -675,10 +675,6 @@ __mods["platform/camerascript"] = function(import)
 		end
 		function cs:removeZoomSpring()
 			snapZoom = true
-			if zoomModTbl and type(zoomModTbl.Update) == "function" then
-				local cam = workspace.CurrentCamera
-				gameCall(zoomModTbl.Update, 100, cam and cam.Focus or CFrame.new(), 0)
-			end
 		end
 		function cs:setZoom(zoom, static)
 			if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
