@@ -331,14 +331,28 @@ function P.runG(name, opts)
 			if st == ST.Freefall.Value or (hum.FloorMaterial == AIR) then s.tAir = t end
 		end
 		if sc.trap and t >= 0.3 then extra[sc.trap].CanCollide = false end
+		if s.paused then return end
 		local dir, jmp = sc.f(t, s, rnd)
 		drive.dir, drive.jump = dir, jmp
+		-- opts.pauseAt: pause once at that game time for opts.pauseSecs real seconds (the held keys stay held)
+		if opts.pauseAt and not s.pausedOnce and t >= opts.pauseAt then
+			s.pausedOnce, s.paused = true, true
+			task.spawn(function()
+				-- (opts.pauseDefer: pause on the next rendered frame, as a key press does, not inside this physics
+				-- step's PostSimulation)
+				if opts.pauseDefer then RS.RenderStepped:Wait() end
+				api.pause()
+				task.wait(opts.pauseSecs or 1)
+				api.unpause()
+				s.paused = false
+			end)
+		end
 		if t >= sc.len then s.done = true end
 	end)
 	task.wait(0.1)
 	api.unpause()
 	local t0 = os.clock()
-	repeat task.wait() until s.done or os.clock() - t0 > sc.len * 12 + 8
+	repeat task.wait() until s.done or os.clock() - t0 > sc.len * 12 + 8 + (opts.pauseSecs or 0)
 	conn:Disconnect()
 	drive.dir, drive.jump = Vector3.zero, false
 	api.pause(); task.wait(0.1)
@@ -367,6 +381,9 @@ function P.metrics(res, restOff)
 	if a0 then for i = a0 + 1, #fr do if fr[i][9] == LD or fr[i][9] == RUN then L = i break end end end
 	m.jumped = js ~= nil
 	if a0 then
+		-- (heights from the frame before: below 1x the jump can start on a held step, so the first recorded
+		-- Jumping / Freefall frame may already be one push step up, or no frame records Jumping at all)
+		local base = fr[math.max(1, a0 - 1)][3]
 		local maxH, maxW, apex = 0, 0, -math.huge
 		for i = a0, (L or #fr) do
 			local f = fr[i]
@@ -375,7 +392,8 @@ function P.metrics(res, restOff)
 			if math.abs(f[8]) > maxW then maxW = math.abs(f[8]) end
 			if f[3] > apex then apex = f[3] end
 		end
-		m.maxH, m.maxW, m.apex = maxH, maxW, apex - fr[a0][3]
+		m.maxH, m.maxW, m.apex = maxH, maxW, apex - base
+		if m.apex > 1 then m.jumped = true end
 		if L then
 			m.air = fr[L][1] - fr[a0][1]
 			m.dist = math.sqrt((fr[L][2] - fr[a0][2]) ^ 2 + (fr[L][4] - fr[a0][4]) ^ 2)
