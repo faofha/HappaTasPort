@@ -675,6 +675,8 @@ do
 	local COYOTE = 0.13           -- s of game time after the floor is lost
 	local GRACE = 0.125           -- s after the floor is lost before Running turns into Freefall
 	local MAX_GRAVITY = 1000      -- Roblox's limit for workspace.Gravity
+	local LANDED_TIME = 0.05      -- s of game time in Roblox's Landed state at 1x (live: Landed -> Running 0.048 - 0.050 s)
+	local LANDED = Enum.HumanoidStateType.Landed
 	HC.WALK_CAP, HC.AIR_CAP, HC.TURN_A, HC.TURN_B, HC.COYOTE = WALK_CAP, AIR_CAP, TURN_A, TURN_B, COYOTE
 	local Air = Enum.Material.Air
 	local JUMPING = Enum.HumanoidStateType.Jumping
@@ -879,6 +881,20 @@ do
 					setFreefall(hum, true)
 					pcall(function() hum:ChangeState(FREEFALL) end)
 				end
+			end
+			-- fast motion: Roblox's Landed state lasts ~0.05 s of real time whatever the speed (live: 0.1 s of game time
+			-- at 2x, 0.2 s at 4x, so walking or jumping again came that much later): Running after LANDED_TIME of game
+			-- time, as at 1x. (Below 1x Frame Step runs every step of Landed: its game time is right there.)
+			-- (the state the step started in, read by HC.Pre: no read of its own, the bench counts every one; counted from
+			-- the end of the step it landed on)
+			if SH.scale > 1 and pre and pre.state == LANDED then
+				cy.landed = (cy.landed or 0) + dt * SH.scale
+				if cy.landed >= LANDED_TIME - 1e-6 then
+					cy.landed = nil
+					pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+				end
+			else
+				cy.landed = nil
 			end
 		end
 		local p = pre

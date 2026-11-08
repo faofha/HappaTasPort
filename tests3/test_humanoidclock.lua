@@ -894,4 +894,26 @@ do
 	S.Set("Speed Hack Speed", 0.5)
 end
 
+section("fast motion: Landed lasts 0.05 s of game time, as at 1x")
+-- (live: Roblox's Landed state lasts ~0.05 s of real time at every speed, so 0.1 s of game time at 2x and 0.2 s at 4x:
+-- walking or jumping again after a landing came that much later)
+do
+	M.landedTime = 0.05
+	local frames = {}
+	for i = 1, 500 do frames[i] = 1 / 240 end
+	local got = {}
+	for _, s in ipairs({ 1, 2, 4 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		got[s] = stateTimes(record(frames, 1, jumpAt(20)), LANDED, RUNNING)
+	end
+	check(got[1] ~= nil and math.abs(got[1] - 0.05) < 0.005, "1x: Landed 0.05 s (" .. tostring(got[1]) .. ")")
+	for _, s in ipairs({ 2, 4 }) do
+		check(got[s] ~= nil and math.abs(got[s] - got[1]) <= s / 240 + 1e-6, s .. "x: Landed as long in game time as at 1x (" .. tostring(got[s]) .. ")")
+	end
+	M.landedTime = nil
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.5)
+end
+
 finish()
