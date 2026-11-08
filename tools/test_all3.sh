@@ -47,9 +47,10 @@ echo "$tc" | grep -q "^SAME" || { fail=1; echo "$tc"; }
 # the world plugins: buttons, lighting, time control, the kit (tests3/trace/world.lua, against V2.38.17)
 WGROUPS="mode F W.char W.co W.bt W.lt W.time W.kit"
 WFIELDS="FrameTime TotalTime Cframe Velocity State SK CO BT KE"
-# (left out: Frame Step steps where HappaTAS 3 runs a timed state every step and V2 doesn't: mid-jump at 0.25x,
-# walking off an edge at 0.5x (Running on Air) and that run's frame count)
-WSKIP='^(D025[.]rec36|E05[.].*|D[.]end)$'
+# (left out: the Frame Step runs (0.5x, 0.25x), where HappaTAS 3 runs every step of a timed humanoid state and
+# doesn't pay that time back, so its game time runs ahead of V2's from the jump on; walking off an edge at 0.5x
+# (Running on Air) and that run's frame count. tests3/test_humanoidclock.lua checks Frame Step against 1x)
+WSKIP='^(C05[.].*|D05[.].*|D025[.].*|E05[.].*|D[.]end)$'
 tw=$(SCENARIO=world TGROUPS="$WGROUPS" FIELDS="$WFIELDS" SKIPTAGS="$WSKIP" bash tools/trace3.sh 2>&1 | head -12)
 echo "world trace: $(echo "$tw" | head -1)"
 echo "$tw" | grep -q "^SAME" || { fail=1; echo "$tw"; }

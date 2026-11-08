@@ -9729,7 +9729,7 @@ __mods["world/time/control"] = function(import)
 				run = okT and must
 			end
 			if run then
-				FS.acc = FS.acc - dt
+				FS.acc = math.max(0, FS.acc - dt)
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
