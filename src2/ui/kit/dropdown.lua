@@ -2,7 +2,8 @@
 --  DROPDOWN  (HappaTAS 3 ui kit): a pill with the value and ▾; a click opens a plain list in a popover
 --  (closed by a pick, Esc or a press outside). With fontPreview each name is drawn in its own font, and
 --  hovering one shows it on the whole interface (theme:preview); moving away or closing ends the preview,
---  a click keeps it (onChange: the owner stores it).
+--  a click keeps it (onChange: the owner stores it). With multi the value is "A,B" (some of the options, in their
+--  order, "" for none): a click ticks or unticks one and the list stays open; the pill lists them ("None").
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
@@ -16,7 +17,8 @@ local function family(name) return "rbxasset://fonts/families/" .. tostring(name
 function Dropdown.new(ctx, parent, opts)
 	local self = K.new(ctx, Dropdown)
 	self.options, self.fontPreview, self.w = opts.options, opts.fontPreview == true, opts.w or 150
-	self.value = opts.options[1]
+	self.multi = opts.multi == true
+	self.value = self.multi and "" or opts.options[1]
 	local gui = K.frame("Dropdown", parent, Color3.new(1, 1, 1))
 	gui.BackgroundTransparency = 0.88
 	gui.Size = UDim2.new(0, self.w, 0, 24)
@@ -38,12 +40,43 @@ function Dropdown.new(ctx, parent, opts)
 	return self
 end
 
-function Dropdown:show() W.set(self.label, "Text", tostring(self.value)) end
+-- (multi: is option o one of those ticked)
+function Dropdown:picked(o)
+	if not self.multi then return o == self.value end
+	return ("," .. tostring(self.value) .. ","):find("," .. o .. ",", 1, true) ~= nil
+end
+
+function Dropdown:show()
+	local text = tostring(self.value)
+	if self.multi then text = (text == "") and "None" or text:gsub(",", ", ") end
+	W.set(self.label, "Text", text)
+	if self.items then
+		for o, it in pairs(self.items) do
+			W.set(it.item, "BackgroundTransparency", self:picked(o) and 0.84 or 1)
+			if it.dot then W.set(it.dot, "Visible", self:picked(o)) end
+		end
+	end
+end
 
 function Dropdown:set(v)
-	if not table.find(self.options, v) then return end
+	if self.multi then
+		if type(v) ~= "string" then return end
+	elseif not table.find(self.options, v) then
+		return
+	end
 	self.value = v
 	self:show()
+end
+
+-- multi: the value with option o ticked or unticked
+function Dropdown:toggled(o)
+	local out = {}
+	for _, x in ipairs(self.options) do
+		local on = self:picked(x)
+		if x == o then on = not on end
+		if on then out[#out + 1] = x end
+	end
+	return table.concat(out, ",")
 end
 
 function Dropdown:open()
@@ -53,6 +86,7 @@ function Dropdown:open()
 	self.pop = pop
 	self.list = pop.frame
 	local theme = self.ctx.theme
+	self.items = {}
 	pop.catcherRect.onHover = function(on) if on and self.fontPreview then theme:preview(nil) end end
 	for i, o in ipairs(self.options) do
 		local item = K.text("TextLabel", "Item", pop.frame)
@@ -61,7 +95,7 @@ function Dropdown:open()
 		item.Size = UDim2.new(1, -8, 0, rowH)
 		item.TextXAlignment = Enum.TextXAlignment.Left
 		item.BackgroundColor3 = Color3.new(1, 1, 1)
-		item.BackgroundTransparency = (o == self.value) and 0.84 or 1
+		item.BackgroundTransparency = self:picked(o) and 0.84 or 1
 		item.ZIndex = 3
 		local pad = Instance.new("UIPadding")
 		pad.PaddingLeft = UDim.new(0, 10)
@@ -70,13 +104,33 @@ function Dropdown:open()
 		item.FontFace = self.fontPreview and Font.new(family(o)) or theme.font("text")
 		item.TextSize = theme.size(12.5)
 		item.TextColor3 = theme.c.text
+		local dot
+		if self.multi then
+			-- (a ticked one: highlighted, with a dot on the right)
+			dot = K.text("TextLabel", "Dot", item)
+			dot.Text = "•"
+			dot.AnchorPoint = Vector2.new(1, 0.5)
+			dot.Position = UDim2.new(1, -8, 0.5, 0)
+			dot.Size = UDim2.new(0, 12, 1, 0)
+			dot.TextColor3 = theme.c.text
+			dot.TextSize = theme.size(14)
+			dot.Visible = self:picked(o)
+			dot.ZIndex = 4
+		end
+		self.items[o] = { item = item, dot = dot }
 		pop:add({ gui = item,
 			onHover = function(on)
-				W.set(item, "BackgroundTransparency", (on or o == self.value) and 0.84 or 1)
+				W.set(item, "BackgroundTransparency", (on or self:picked(o)) and 0.84 or 1)
 				if self.fontPreview then theme:preview(on and o or nil) end
 			end,
 			onRelease = function(_, clicked)
 				if not clicked then return end
+				if self.multi then
+					self.value = self:toggled(o)
+					self:show()
+					if self.onChange then self.onChange(self.value) end
+					return
+				end
 				self.value = o
 				self:show()
 				self:close()
@@ -85,7 +139,7 @@ function Dropdown:open()
 	end
 	pop.onClose = function()
 		if self.fontPreview then theme:preview(nil) end
-		self.pop, self.list = nil, nil
+		self.pop, self.list, self.items = nil, nil, nil
 	end
 end
 

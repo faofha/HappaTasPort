@@ -55,6 +55,10 @@ function Frame.start(E)
 			end
 			if E.paused then E.cam:holdPaused() end
 			E.cam:updateMouseMode()
+		elseif mode == 1 and E.timeIdle then
+			-- (the speed hack in Idle: nothing is recorded, so the Frame Step time of the steps that ran is dropped)
+			E.time:frameStart()
+			E.time:stepTime()
 		elseif mode == 3 and ch:loaded() and E.frame + 1 <= tl:count() and E.testTime >= 0 then
 			local p = M_:playbackPose()
 			ch:sync(p.root, p.lin, p.ang)
@@ -62,10 +66,15 @@ function Frame.start(E)
 			if M_:setCam() then E.cs:updateGhost(p.Zoom, dt, false) end
 		end
 		-- time control: on while the character records (Create, unpaused or the first frame of an unpause,
-		-- alive), for the physics step that comes next (V2.38.17 p18_core.lua 1107-1130)
+		-- alive), for the physics step that comes next (V2.38.17 p18_core.lua 1107-1130), and in Idle; each only
+		-- when "Speed Hack In" has that mode
 		local hum = ch.hum
-		local recording = mode == 2 and (not E.paused or E.firstFrame) and ch:loaded() and hum.Health > 0
-		E.recScale = E.time:update(recording, hum, ch.hrp, mode ~= 3)
+		local s = E.settings
+		-- (the settings are looked at first: no engine read for a mode the speed hack isn't on in)
+		local recording = mode == 2 and (not E.paused or E.firstFrame) and s:has("speedHackModes", "Create") and ch:loaded()
+			and hum.Health > 0
+		E.timeIdle = mode == 1 and s:on("speedHack") and s:has("speedHackModes", "Idle") and ch:loaded() and hum.Health > 0
+		E.recScale = E.time:update(recording or E.timeIdle, hum, ch.hrp, mode ~= 3)
 		local rate = E.time.anim
 		if rate ~= lastRate then -- (the camera's zoom spring on the TAS clock)
 			lastRate = rate
@@ -88,6 +97,8 @@ function Frame.start(E)
 		elseif kitCur.on then
 			E.kitObjects:frame(1, tl, 0, 0, false)
 		end
+		-- (the speed hack in Idle: the kit's clock at its speed; Frame Step: moved on by each step that runs)
+		if mode == 1 and E.timeIdle then kitRate = E.time:stepping() and 0 or E.recScale end
 		E.kitClock:setRate(kitRate)
 		E.plugins:call("onFrameEnd", dt)
 	end
@@ -109,23 +120,23 @@ function Frame.start(E)
 		-- Frame Step: does this physics step run, or is everything held for it; the humanoid's controllers
 		-- and coyote timer on the TAS clock (the frames time control is on for). (Outside Create there is
 		-- nothing to step or hold: time control is back to normal there, see TimeControl:update)
-		if E.mode ~= 2 then return end
+		if E.mode ~= 2 and not E.timeIdle then return end
 		-- (a held step is no game time: the humanoid's controllers and coyote timer skip it, measured in the mock:
 		-- the off-floor timer ran 4x too fast at 0.25x)
 		E.stepHeld = not E.time:stepBegin(dt)
-		if (not E.paused or E.firstFrame) and not E.stepHeld then
+		if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
 			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end
 	end
 
 	local function postSimulation(dt)
-		if E.mode ~= 2 then return end -- (see preSimulation)
+		if E.mode ~= 2 and not E.timeIdle then return end -- (see preSimulation)
 		local held = E.stepHeld
 		E.stepHeld = false
 		E.time:stepEnd()
 		if held then return end
 		local ch = E.char
-		local recording = E.mode == 2 and (not E.paused or E.firstFrame) and ch:loaded()
+		local recording = (E.mode == 2 and (not E.paused or E.firstFrame) or E.timeIdle) and ch:loaded()
 		E.time:humanoidPost(dt, ch.hum, ch.hrp, recording)
 	end
 

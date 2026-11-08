@@ -174,6 +174,11 @@ local function controlFor(ctx, s, def, sw)
 		end
 		ctl.onChange = function(o) s:set(key, o) end
 		ctl:set(v)
+	elseif def.kind == "multi" then
+		-- (some of the options: a dropdown that ticks several)
+		ctl, kind = Dropdown.new(ctx, nil, { options = def.options, multi = true, w = 150 }), "multi"
+		ctl.onChange = function(o) s:set(key, o) end
+		ctl:set(v)
 	elseif def.min and def.max then
 		ctl, kind = Slider.new(ctx, nil, { min = def.min, max = def.max, step = def.integer and 1 or nil, fmt = fmtFor(key),
 			sanitize = function(t) return Settings.sanitize(def, t) end }), "slider"

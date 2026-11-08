@@ -183,4 +183,29 @@ nr.ctl.onChange(true)
 M.steps(2)
 eq(E.settings:get("interface"), "Classic", "switched on: saved as Classic")
 eq(ui.live, "Classic", "Classic is up again")
+
+section("Speed Hack In: a switch per mode in Classic")
+do
+	local cr = ui.classic.settingsRows
+	local ri, rc = cr["speedHackModes:Idle"], cr["speedHackModes:Create"]
+	check(ri ~= nil and ri.switch ~= nil and rc ~= nil and rc.switch ~= nil, "two switches")
+	eq(ri and ri.label.Text, "Speed Hack in Idle", "named Speed Hack in Idle")
+	eq(rc and rc.label.Text, "Speed Hack in Create", "named Speed Hack in Create")
+	E.settings:set("speedHackModes", "Create")
+	M.steps(1)
+	eq(ri.on, false, "Idle off (Create only)")
+	eq(rc.on, true, "Create on")
+	ri.switch.MouseButton1Click:Fire()
+	M.steps(1)
+	eq(E.settings:get("speedHackModes"), "Idle,Create", "the Idle switch adds Idle")
+	eq(ri.on, true, "and shows on")
+	rc.switch.MouseButton1Click:Fire()
+	M.steps(1)
+	eq(E.settings:get("speedHackModes"), "Idle", "the Create switch takes Create off")
+	E.settings:set("speedHackModes", "Create")
+	M.steps(1)
+	check(ri.on == false and rc.on == true, "a change made elsewhere shows")
+	local list = ui.classic.byPath["MainMenu.SettingsFrame.List"]
+	check(ri.frame.Parent == list and ri.frame.LayoutOrder > cr.speedHackSpeed.frame.LayoutOrder, "in the Speed Hack section, after Speed")
+end
 finish()

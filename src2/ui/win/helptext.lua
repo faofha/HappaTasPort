@@ -143,7 +143,8 @@ local TOPICS = {
 	{ "speed", "Speed Hack (Slow / Fast Motion)",
 		"Turn on Speed Hack to record in slow or fast motion, like a video played slower or faster. Speed Hack Speed "
 		.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
-		.. "recording.\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
+		.. "recording. Speed Hack In picks where it works: Create (recording, the default) and / or Idle (playing "
+		.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 		.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
 		.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "

@@ -943,4 +943,66 @@ do
 	eq(after, 1, "4x: Running once the fall has stopped")
 end
 
+section("Speed Hack In: Idle and / or Create")
+do
+	local function idleFor(n)
+		key(Enum.KeyCode.One) -- Idle
+		steps(2)
+		hrp.CFrame = CFrame.new(0, 3, 0)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		local log = {}
+		local orig = E.time.stepBegin
+		E.time.stepBegin = function(self, dt) local r = orig(self, dt); log[#log + 1] = r; return r end
+		local seen = { count0 = E.tl:count() }
+		for i = 1, n do
+			M.step(1 / 240)
+			if i == math.floor(n / 2) then seen.g, seen.walk = workspace.Gravity, hum.WalkSpeed end
+		end
+		E.time.stepBegin = orig
+		local held = 0
+		for _, r in ipairs(log) do if r == false then held = held + 1 end end
+		seen.held, seen.steps, seen.count1 = held, #log, E.tl:count()
+		return seen
+	end
+	S.Set("Speed Hack", 1)
+	-- Create only (the default): Idle stays normal
+	E.settings:set("speedHackModes", "Create")
+	S.Set("Speed Hack Speed", 2)
+	local a = idleFor(40)
+	near(a.g, G0, 1e-9, "Create only, 2x: gravity normal in Idle")
+	near(a.walk, 16, 1e-9, "Create only, 2x: WalkSpeed normal in Idle")
+	-- Idle ticked: fast motion in Idle, nothing recorded
+	E.settings:set("speedHackModes", "Idle,Create")
+	local b = idleFor(40)
+	near(b.g, G0 * 4, 1e-6, "Idle ticked, 2x: gravity x 4 in Idle")
+	near(b.walk, 32, 1e-9, "Idle ticked, 2x: WalkSpeed x 2 in Idle")
+	eq(b.count1, b.count0, "Idle ticked: nothing recorded in Idle (the run keeps its frames)")
+	-- Idle ticked, 0.5x: Frame Step in Idle (every other step held)
+	S.Set("Speed Hack Speed", 0.5)
+	local c = idleFor(40)
+	check(c.held >= 18 and c.held <= 22, "Idle ticked, 0.5x: Frame Step holds every other step in Idle (" .. c.held .. " of " .. c.steps .. ")")
+	near(c.g, G0, 1e-9, "Idle ticked, 0.5x: gravity normal (Frame Step scales nothing)")
+	-- Idle only: recording is at normal speed
+	E.settings:set("speedHackModes", "Idle")
+	S.Set("Speed Hack Speed", 2)
+	local seenG
+	local evN = { [20] = function() seenG = workspace.Gravity end }
+	local frames = {}
+	for i = 1, 40 do frames[i] = 1 / 240 end
+	local runN = record(frames, 1, evN)
+	near(seenG, G0, 1e-9, "Idle only, 2x: gravity normal while recording in Create")
+	near(runN[#runN].TotalTime, 39 / 240, 1 / 240 + 1e-6, "Idle only: the recording's frames are real time (" .. runN[#runN].TotalTime .. ")")
+	-- back to normal on leaving Idle
+	E.settings:set("speedHackModes", "Idle,Create")
+	idleFor(10)
+	key(Enum.KeyCode.Two) -- Create (paused)
+	steps(3)
+	near(workspace.Gravity, G0, 1e-9, "leaving Idle (Create, paused): gravity back to normal")
+	near(hum.WalkSpeed, 16, 1e-9, "leaving Idle: WalkSpeed back to normal")
+	E.settings:set("speedHackModes", "Create")
+	S.Set("Speed Hack Speed", 0.5)
+	key(Enum.KeyCode.One)
+	steps(2)
+end
+
 finish()
