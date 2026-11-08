@@ -857,4 +857,90 @@ do
 	eq(j3, 1, "2x: the same")
 end
 
+-- (Roblox's Landed state, real-time, as measured live: the mock models it from here on)
+local function stateTimes(run, a, b)
+	-- the game time from the first frame in state a to the first frame after it in state b
+	local ta
+	for _, fr in ipairs(run) do
+		if not ta and fr.State == a.Value then ta = fr.TotalTime end
+		if ta and fr.State == b.Value then return fr.TotalTime - ta end
+	end
+	return nil
+end
+local LANDED, RUNNING = Enum.HumanoidStateType.Landed, Enum.HumanoidStateType.Running
+
+section("Frame Step: no freeze after a jump or a landing (the forced steps aren't paid back)")
+-- (live, 0.1x: every step of the jump's push and of Landed ran, then everything was held until that time was paid
+-- back: 131 ms frozen in the air after a jump, 486 ms after a landing)
+do
+	M.landedTime = 0.05
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.25)
+	local frames = {}
+	for i = 1, 700 do frames[i] = 1 / 240 end
+	local log = {}
+	local orig = E.time.stepBegin
+	E.time.stepBegin = function(self, dt) local r = orig(self, dt); log[#log + 1] = r; return r end
+	local run = record(frames, 1, jumpAt(20))
+	E.time.stepBegin = orig
+	local held, worst = 0, 0
+	for i = 30, #log do
+		if log[i] == false then held = held + 1; if held > worst then worst = held end else held = 0 end
+	end
+	local landed = stateTimes(run, LANDED, RUNNING)
+	check(landed ~= nil and math.abs(landed - 0.05) < 0.005, "0.25x: the landing takes 0.05 s of game time, as at 1x (" .. tostring(landed) .. ")")
+	check(worst <= 3, "0.25x: never more than the slider's 3 held steps in a row after the jump and the landing (" .. worst .. ")")
+	M.landedTime = nil
+	S.Set("Speed Hack Speed", 0.5)
+end
+
+section("fast motion: Landed lasts 0.05 s of game time, as at 1x")
+-- (live: Roblox's Landed state lasts ~0.05 s of real time at every speed, so 0.1 s of game time at 2x and 0.2 s at 4x:
+-- walking or jumping again after a landing came that much later)
+do
+	M.landedTime = 0.05
+	local frames = {}
+	for i = 1, 500 do frames[i] = 1 / 240 end
+	local got = {}
+	for _, s in ipairs({ 1, 2, 4 }) do
+		S.Set("Speed Hack", s == 1 and 0 or 1)
+		S.Set("Speed Hack Speed", s)
+		got[s] = stateTimes(record(frames, 1, jumpAt(20)), LANDED, RUNNING)
+	end
+	check(got[1] ~= nil and math.abs(got[1] - 0.05) < 0.005, "1x: Landed 0.05 s (" .. tostring(got[1]) .. ")")
+	for _, s in ipairs({ 2, 4 }) do
+		check(got[s] ~= nil and math.abs(got[s] - got[1]) <= s / 240 + 1e-6, s .. "x: Landed as long in game time as at 1x (" .. tostring(got[s]) .. ")")
+	end
+	M.landedTime = nil
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.5)
+	-- (live, 4x: Roblox turns Landed while still falling fast above the floor; Running then went back to Freefall and
+	-- Landed again. Running only once the fall has stopped)
+	local HC = E.time.SH.Humanoid
+	local calls = {}
+	local fakeHum = { Jump = false, FloorMaterial = Enum.Material.Plastic, AutoRotate = false, MoveDirection = Vector3.zero, WalkSpeed = 64 }
+	function fakeHum:GetState() return Enum.HumanoidStateType.Landed end
+	function fakeHum:ChangeState(st) calls[#calls + 1] = st end
+	function fakeHum:SetStateEnabled() end
+	local fakeRoot = { Parent = workspace, Anchored = false, AssemblyLinearVelocity = Vector3.new(0, -200, 0),
+		AssemblyAngularVelocity = Vector3.zero, CFrame = CFrame.new(0, 3, 0) }
+	local saved = E.time.SH.scale
+	E.time.SH.scale = 4
+	local function step()
+		HC.Pre(1 / 240, fakeHum, fakeRoot, true)
+		HC.Post(1 / 240, fakeHum, fakeRoot, true)
+	end
+	for _ = 1, 8 do step() end -- (0.13 s of game time, still falling)
+	local early = 0
+	for _, st in ipairs(calls) do if st == RUNNING then early = early + 1 end end
+	fakeRoot.AssemblyLinearVelocity = Vector3.new(0, 2, 0) -- (on the floor: the spring pushes it back up)
+	step()
+	local after = 0
+	for _, st in ipairs(calls) do if st == RUNNING then after = after + 1 end end
+	E.time.SH.scale = saved
+	HC.CoyoteReset(nil)
+	eq(early, 0, "4x: no Running while Landed and still falling")
+	eq(after, 1, "4x: Running once the fall has stopped")
+end
+
 finish()

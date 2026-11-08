@@ -425,8 +425,8 @@ do
 	-- (KitClock.Advance), the client objects' physics clock skips the held steps (ClientObjects.SkipSim).
 	-- Roblox's humanoid keeps its own timers through a held step (live: no coyote jump even 0.05 s after the edge at
 	-- 0.1x, Landed over 6x too soon), so a step in a timed state always runs: the jump's push, Landed, and Running off
-	-- the floor (coyote time and the grace before Freefall). The time is held back afterwards (acc below 0, at most
-	-- MAX_DEBT s of game time), so the game time still follows the slider.
+	-- the floor (coyote time and the grace before Freefall). That time isn't paid back afterwards (holding every step
+	-- until it was froze the character, live), so the game time runs a little ahead of the slider during those steps.
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 		root = nil, hum = nil }
 	local MAX_DEBT = 0.25
@@ -491,7 +491,10 @@ do
 			run = okT and must
 		end
 		if run then
-			FS.acc = FS.acc - dt
+			-- (a forced step isn't paid back: the bank stays at 0 or above, so no step is held for it afterwards.
+			-- Paid back, everything froze after it: live at 0.1x 131 ms after a jump, 486 ms after a landing, 1.1 s after
+			-- walking off an edge. The game time runs a little ahead of the slider during the forced steps instead)
+			FS.acc = math.max(0, FS.acc - dt)
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -672,6 +675,8 @@ do
 	local COYOTE = 0.13           -- s of game time after the floor is lost
 	local GRACE = 0.125           -- s after the floor is lost before Running turns into Freefall
 	local MAX_GRAVITY = 1000      -- Roblox's limit for workspace.Gravity
+	local LANDED_TIME = 0.05      -- s of game time in Roblox's Landed state at 1x (live: Landed -> Running 0.048 - 0.050 s)
+	local LANDED = Enum.HumanoidStateType.Landed
 	HC.WALK_CAP, HC.AIR_CAP, HC.TURN_A, HC.TURN_B, HC.COYOTE = WALK_CAP, AIR_CAP, TURN_A, TURN_B, COYOTE
 	local Air = Enum.Material.Air
 	local JUMPING = Enum.HumanoidStateType.Jumping
@@ -876,6 +881,21 @@ do
 					setFreefall(hum, true)
 					pcall(function() hum:ChangeState(FREEFALL) end)
 				end
+			end
+			-- fast motion: Roblox's Landed state lasts ~0.05 s of real time whatever the speed (live: 0.1 s of game time
+			-- at 2x, 0.2 s at 4x, so walking or jumping again came that much later): Running after LANDED_TIME of game
+			-- time, as at 1x. (Below 1x Frame Step runs every step of Landed: its game time is right there.)
+			-- (the state the step started in, read by HC.Pre: no read of its own, the bench counts every one; counted from
+			-- the end of the step it landed on). Only once the fall has stopped: at 4x Roblox turns Landed while still
+			-- falling at ~200 studs/s above the floor, and Running then went back to Freefall and Landed again (live)
+			if SH.scale > 1 and pre and pre.state == LANDED then
+				cy.landed = (cy.landed or 0) + dt * SH.scale
+				if cy.landed >= LANDED_TIME - 1e-6 and vy1 > -1 then
+					cy.landed = nil
+					pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+				end
+			else
+				cy.landed = nil
 			end
 		end
 		local p = pre

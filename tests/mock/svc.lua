@@ -650,8 +650,21 @@ end
 -- ends with a fraction of one). M.floorEdgeX: no floor at x >= edge.
 M.robloxController = false
 M.floorEdgeX = nil
+-- M.landedTime = s (opt-in): Roblox's Landed state after a landing, for that long in real time (live: ~0.05 s, the
+-- same at 2x / 4x, so in game time x s), then Running; no jump from Landed. nil: landings go straight to Running
+M.landedTime = nil
 local RC = { engOff = 0, jumpedAir = false, applied = false }
-function M.resetRobloxController() RC.engOff, RC.jumpedAir, RC.applied, RC.lastRun, RC.prev, RC.finish = 0, false, true, nil, "reset", false end
+function M.resetRobloxController() RC.engOff, RC.jumpedAir, RC.applied, RC.lastRun, RC.prev, RC.finish, RC.landedLeft = 0, false, true, nil, "reset", false, nil end
+-- (the Landed timer: real time, also through a step the root is anchored for, like the off-floor timer)
+local function landedTick(hum, dt)
+	if not M.landedTime then return end
+	if hum:GetState() ~= Enum.HumanoidStateType.Landed then RC.landedLeft = nil return end
+	RC.landedLeft = (RC.landedLeft or M.landedTime) - dt -- (a Landed left from before a reset: a fresh timer)
+	if RC.landedLeft <= 1e-9 then
+		RC.landedLeft = nil
+		hum:ChangeState(Enum.HumanoidStateType.Running)
+	end
+end
 local function robloxStep(hrp, hum, dt)
 	local JUMPING = Enum.HumanoidStateType.Jumping
 	-- (whole steps up to a few nanoseconds of noise, like the client's dt, are whole steps)
@@ -667,6 +680,7 @@ local function robloxStep(hrp, hum, dt)
 	local onFloor = hasFloor and pos.Y <= y0 + 1e-6 and v.Y <= 1e-9
 	if onFloor then RC.engOff, RC.jumpedAir, RC.applied = 0, false, false end
 	if M.jumpNow then M.jumpNow, hum.Jump = false, true end -- (the jump button: Jump stays set until a jump takes it)
+	landedTick(hum, dt)
 	local st = hum:GetState()
 	if RC.prev == "reset" then
 		RC.prev, RC.finish = st, false
@@ -741,7 +755,13 @@ local function robloxStep(hrp, hum, dt)
 	if hasFloor and ny <= y0 and pos.Y >= y0 - 1e-6 then
 		np = Vector3.new(np.X, y0, np.Z)
 		vy = 0
-		if hum:GetState() ~= Enum.HumanoidStateType.Running then hum:ChangeState(Enum.HumanoidStateType.Running) end
+		local stL = hum:GetState()
+		if M.landedTime and (stL == JUMPING or stL == Enum.HumanoidStateType.Freefall) then
+			hum:ChangeState(Enum.HumanoidStateType.Landed)
+			RC.landedLeft = M.landedTime
+		elseif stL ~= Enum.HumanoidStateType.Running and stL ~= Enum.HumanoidStateType.Landed then
+			hum:ChangeState(Enum.HumanoidStateType.Running)
+		end
 		RC.engOff, RC.jumpedAir, RC.applied = 0, false, false
 	elseif not onFloor or not hasFloor then
 		if not hasFloor and onFloor == false and RC.engOff == 0 then RC.engOff = dt end
@@ -753,7 +773,8 @@ local function robloxStep(hrp, hum, dt)
 	local wants = hum.Jump
 	local grounded = hasFloor and np.Y <= y0 + 1e-6 and vy <= 1e-9
 	local stEnd = hum:GetState()
-	local canJump = stEnd == Enum.HumanoidStateType.Running or stEnd == Enum.HumanoidStateType.RunningNoPhysics or stEnd == Enum.HumanoidStateType.Landed
+	local canJump = stEnd == Enum.HumanoidStateType.Running or stEnd == Enum.HumanoidStateType.RunningNoPhysics
+		or (stEnd == Enum.HumanoidStateType.Landed and not M.landedTime)
 	if wants and canJump and hum:GetStateEnabled(JUMPING) and not RC.jumpedAir and (grounded or RC.engOff <= 0.13) then
 		hum.Jump = false
 		hum:ChangeState(JUMPING)
@@ -792,6 +813,10 @@ function M.physics(dt)
 	-- (Roblox's humanoid keeps its off-floor timer through a step its root is anchored for: measured live,
 	-- Frame Step's held steps used up coyote time)
 	if hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController and RC.engOff > 0 then RC.engOff = RC.engOff + dt end
+	if hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController then
+		local humA = ch:FindFirstChildOfClass("Humanoid")
+		if humA then landedTick(humA, dt) end
+	end
 	if not hrp or hrp.Anchored then return end
 	if M.humanoidPhysics then
 		local hum = ch:FindFirstChildOfClass("Humanoid")

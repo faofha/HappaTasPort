@@ -9729,7 +9729,7 @@ __mods["world/time/control"] = function(import)
 				run = okT and must
 			end
 			if run then
-				FS.acc = FS.acc - dt
+				FS.acc = math.max(0, FS.acc - dt)
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9889,6 +9889,8 @@ __mods["world/time/control"] = function(import)
 		local COYOTE = 0.13
 		local GRACE = 0.125
 		local MAX_GRAVITY = 1000
+		local LANDED_TIME = 0.05
+		local LANDED = Enum.HumanoidStateType.Landed
 		HC.WALK_CAP, HC.AIR_CAP, HC.TURN_A, HC.TURN_B, HC.COYOTE = WALK_CAP, AIR_CAP, TURN_A, TURN_B, COYOTE
 		local Air = Enum.Material.Air
 		local JUMPING = Enum.HumanoidStateType.Jumping
@@ -10056,6 +10058,15 @@ __mods["world/time/control"] = function(import)
 						setFreefall(hum, true)
 						pcall(function() hum:ChangeState(FREEFALL) end)
 					end
+				end
+				if SH.scale > 1 and pre and pre.state == LANDED then
+					cy.landed = (cy.landed or 0) + dt * SH.scale
+					if cy.landed >= LANDED_TIME - 1e-6 and vy1 > -1 then
+						cy.landed = nil
+						pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+					end
+				else
+					cy.landed = nil
 				end
 			end
 			local p = pre
