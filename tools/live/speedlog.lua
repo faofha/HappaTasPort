@@ -79,6 +79,43 @@ end
 -- ------------------------------------------------------------------------------------------------ physics steps
 -- the speed hack's decision for each physics step (Frame Step): run / held and why
 local decision, decisions = "-", {}
+-- held streaks: every step held for longer than Frame Step's own gap (1/s frames + 2), with what forced the steps
+-- before it (the time paid back afterwards); and how long each run of forced steps lasted (game time)
+local streak = { heldSince = nil, lastForced = nil, forcedGame = 0, forcedReason = nil }
+local function streakStep(dec, dt)
+	local t = clock()
+	if dec == "held" then
+		if not streak.heldSince then streak.heldSince = t end
+		if streak.forcedGame > 0 then
+			add("forced steps in a row: " .. streak.forcedReason .. " (game ms)", streak.forcedGame * 1000)
+			streak.forcedGame = 0
+		end
+		return
+	end
+	if streak.heldSince then
+		local s = E and E.time and E.time:wanted() or 1
+		local limit = ((s < 1) and (math.ceil(1 / s) + 2) or 3) / math.max(fps, 20)
+		local dur = t - streak.heldSince
+		if dur > limit and streak.lastForced and t - streak.lastForced.t < 2 then
+			add("held longer than the slider's gap, after " .. streak.lastForced.reason .. " (real ms)", dur * 1000)
+			if dur > 0.15 then event(string.format("HELD %.0f ms after %s steps (limit %.0f ms)", dur * 1000, streak.lastForced.reason, limit * 1000)) end
+		end
+		streak.heldSince = nil
+	end
+	if dec:sub(1, 7) == "forced:" then
+		local reason = dec:sub(8)
+		streak.lastForced = { t = t, reason = reason }
+		if streak.forcedReason ~= reason and streak.forcedGame > 0 then
+			add("forced steps in a row: " .. streak.forcedReason .. " (game ms)", streak.forcedGame * 1000)
+			streak.forcedGame = 0
+		end
+		streak.forcedReason = reason
+		streak.forcedGame = streak.forcedGame + dt
+	elseif streak.forcedGame > 0 then
+		add("forced steps in a row: " .. streak.forcedReason .. " (game ms)", streak.forcedGame * 1000)
+		streak.forcedGame = 0
+	end
+end
 local origStepBegin
 if E and E.time and E.time.stepBegin then
 	origStepBegin = E.time.stepBegin
@@ -110,6 +147,7 @@ if E and E.time and E.time.stepBegin then
 			decision = "normal"
 		end
 		decisions[decision] = (decisions[decision] or 0) + 1
+		streakStep(decision, tonumber(dt) or 0)
 		return r
 	end
 end
@@ -147,7 +185,12 @@ on(RS.PostSimulation, function(dt)
 		md = hum.MoveDirection.Magnitude, j = hum.Jump }
 	pushRow(row)
 	decision = "-"
-	if not recording() then jumpP, moveP, air, land = nil, nil, nil, nil; return end
+	if not recording() then
+		-- (paused / Idle / Test: nothing pending, and a standstill doesn't carry over to the next recording)
+		jumpP, moveP, air, land = nil, nil, nil, nil
+		freeze.still, freeze.since, freeze.lastPos = 0, nil, nil
+		return
+	end
 	-- jump: from the press to the root rising (physics)
 	if jumpP and not jumpP.phys and p.Y > jumpP.y0 + 0.05 and v.Y > 1 then
 		jumpP.phys = { t = t, g = row.g, f = renderFrame }
@@ -341,16 +384,21 @@ end)
 -- ------------------------------------------------------------------------------------------------ input
 local MOVE_KEYS = { [Enum.KeyCode.W] = true, [Enum.KeyCode.A] = true, [Enum.KeyCode.S] = true, [Enum.KeyCode.D] = true }
 local save
-on(UIS.InputBegan, function(input)
-	if input.KeyCode == Enum.KeyCode.F8 then task.defer(function() save() end) return end
+-- a press (a key, or SpeedLog.Press from a test script that moves the character itself)
+local function press(kind)
 	if not (hum and root and recording()) then return end
 	local t = clock()
-	if input.KeyCode == Enum.KeyCode.Space and hum.FloorMaterial ~= AIR and not jumpP then
+	if kind == "jump" and hum.FloorMaterial ~= AIR and not jumpP then
 		jumpP = { t = t, g = gameT(), f = renderFrame, y0 = root.Position.Y, fy0 = cam.Focus.Position.Y }
-	elseif MOVE_KEYS[input.KeyCode] and not moveP and hum.FloorMaterial ~= AIR
+	elseif kind == "move" and not moveP and hum.FloorMaterial ~= AIR
 		and Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude < 0.5 then
 		moveP = { t = t, g = gameT(), f = renderFrame, p = root.Position }
 	end
+end
+on(UIS.InputBegan, function(input)
+	if input.KeyCode == Enum.KeyCode.F8 then task.defer(function() save() end) return end
+	if input.KeyCode == Enum.KeyCode.Space then press("jump")
+	elseif MOVE_KEYS[input.KeyCode] then press("move") end
 end)
 
 -- ------------------------------------------------------------------------------------------------ the file
@@ -407,6 +455,7 @@ end
 genv.SpeedLog = {
 	Save = save,
 	Mark = function(text) event("MARK " .. tostring(text)) end,
+	Press = press,
 	Stop = function()
 		for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
 		conns = {}
