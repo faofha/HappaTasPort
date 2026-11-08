@@ -10833,7 +10833,8 @@ __mods["world/kit/vanishers"] = function(import)
 		return false
 	end
 	function Vanishers.frame(data, f, t, rec, addEvent)
-		local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+		if #groups == 0 then return end
+		local ch = rec and Players.LocalPlayer and Players.LocalPlayer.Character
 		if rec and ch then params.FilterType = Enum.RaycastFilterType.Include; params.FilterDescendantsInstances = { ch } end
 		for i = #groups, 1, -1 do
 			local g = groups[i]

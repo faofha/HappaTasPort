@@ -220,7 +220,8 @@ end
 
 -- every PreRender while Sync Kit Objects drives the run (mode 2 / 3; rec: frame f is being recorded now)
 function Vanishers.frame(data, f, t, rec, addEvent)
-	local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+	if #groups == 0 then return end -- (no reads at all without vanishers: the bench counts every one)
+	local ch = rec and Players.LocalPlayer and Players.LocalPlayer.Character
 	if rec and ch then params.FilterType = Enum.RaycastFilterType.Include; params.FilterDescendantsInstances = { ch } end
 	for i = #groups, 1, -1 do
 		local g = groups[i]
