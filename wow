@@ -10061,7 +10061,7 @@ __mods["world/time/control"] = function(import)
 				end
 				if SH.scale > 1 and pre and pre.state == LANDED then
 					cy.landed = (cy.landed or 0) + dt * SH.scale
-					if cy.landed >= LANDED_TIME - 1e-6 then
+					if cy.landed >= LANDED_TIME - 1e-6 and vy1 > -1 then
 						cy.landed = nil
 						pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
 					end

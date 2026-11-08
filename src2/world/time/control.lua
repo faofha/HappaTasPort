@@ -886,10 +886,11 @@ do
 			-- at 2x, 0.2 s at 4x, so walking or jumping again came that much later): Running after LANDED_TIME of game
 			-- time, as at 1x. (Below 1x Frame Step runs every step of Landed: its game time is right there.)
 			-- (the state the step started in, read by HC.Pre: no read of its own, the bench counts every one; counted from
-			-- the end of the step it landed on)
+			-- the end of the step it landed on). Only once the fall has stopped: at 4x Roblox turns Landed while still
+			-- falling at ~200 studs/s above the floor, and Running then went back to Freefall and Landed again (live)
 			if SH.scale > 1 and pre and pre.state == LANDED then
 				cy.landed = (cy.landed or 0) + dt * SH.scale
-				if cy.landed >= LANDED_TIME - 1e-6 then
+				if cy.landed >= LANDED_TIME - 1e-6 and vy1 > -1 then
 					cy.landed = nil
 					pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
 				end

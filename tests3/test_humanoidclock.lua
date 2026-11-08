@@ -914,6 +914,33 @@ do
 	M.landedTime = nil
 	S.Set("Speed Hack", 1)
 	S.Set("Speed Hack Speed", 0.5)
+	-- (live, 4x: Roblox turns Landed while still falling fast above the floor; Running then went back to Freefall and
+	-- Landed again. Running only once the fall has stopped)
+	local HC = E.time.SH.Humanoid
+	local calls = {}
+	local fakeHum = { Jump = false, FloorMaterial = Enum.Material.Plastic, AutoRotate = false, MoveDirection = Vector3.zero, WalkSpeed = 64 }
+	function fakeHum:GetState() return Enum.HumanoidStateType.Landed end
+	function fakeHum:ChangeState(st) calls[#calls + 1] = st end
+	function fakeHum:SetStateEnabled() end
+	local fakeRoot = { Parent = workspace, Anchored = false, AssemblyLinearVelocity = Vector3.new(0, -200, 0),
+		AssemblyAngularVelocity = Vector3.zero, CFrame = CFrame.new(0, 3, 0) }
+	local saved = E.time.SH.scale
+	E.time.SH.scale = 4
+	local function step()
+		HC.Pre(1 / 240, fakeHum, fakeRoot, true)
+		HC.Post(1 / 240, fakeHum, fakeRoot, true)
+	end
+	for _ = 1, 8 do step() end -- (0.13 s of game time, still falling)
+	local early = 0
+	for _, st in ipairs(calls) do if st == RUNNING then early = early + 1 end end
+	fakeRoot.AssemblyLinearVelocity = Vector3.new(0, 2, 0) -- (on the floor: the spring pushes it back up)
+	step()
+	local after = 0
+	for _, st in ipairs(calls) do if st == RUNNING then after = after + 1 end end
+	E.time.SH.scale = saved
+	HC.CoyoteReset(nil)
+	eq(early, 0, "4x: no Running while Landed and still falling")
+	eq(after, 1, "4x: Running once the fall has stopped")
 end
 
 finish()
