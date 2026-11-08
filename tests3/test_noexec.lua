@@ -55,14 +55,15 @@ end
 section("a run recorded and played (" .. tostring(VARIANT) .. ")")
 E.settings:set("syncClientObjects", 1)
 E.settings:set("speedHack", 1)
-E.settings:set("speedHackSpeed", 0.5)
+-- (fast motion: the world is scaled; below 1x Frame Step runs instead and scales nothing)
+E.settings:set("speedHackSpeed", 2)
 steps(2)
 E.modes:request("create")
 steps(2)
 E.modes:request("unpause")
 steps(30)
 check(E.mode == 2 and not E.paused, "recording")
-near(workspace.Gravity, G0 * 0.25, 1e-6, "time control: gravity x 0.25 at 0.5x")
+near(workspace.Gravity, G0 * 4, 1e-6, "time control: gravity x 4 at 2x")
 local padWhile = padCfg.Power
 E.modes:request("pause")
 steps(2)
@@ -89,7 +90,7 @@ if bare then
 	check(noteWith("filtergc unavailable; beat block"), "Debug note: filtergc unavailable (kit objects' tables)")
 else
 	check(KC.patched >= 1, "Kit Clock: the kit module on the TAS clock (" .. tostring(KC.patched) .. ")")
-	eq(padWhile, 50, "kit config scaling: the pad's Power x 0.5 while slowed")
+	eq(padWhile, 200, "kit config scaling: the pad's Power x 2 in fast motion")
 	check(not noteWith("unavailable"), "no 'unavailable' notes")
 end
 -- (each note once)

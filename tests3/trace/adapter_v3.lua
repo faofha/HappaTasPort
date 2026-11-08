@@ -35,7 +35,11 @@ function A.frames()
 	for i = 1, #all do noTime(all[i]) end
 	return all
 end
-function A.setSetting(name, v) E.settings:set(Settings.byV2[name].key, v) end
+-- (HappaTAS 3 has no Speed Hack Frame Step setting: below 1x it always runs Frame Step)
+function A.setSetting(name, v)
+	if name == "Speed Hack Frame Step" then return end
+	E.settings:set(Settings.byV2[name].key, v)
+end
 function A.char() return E.char.hrp, E.char.hum end
 function A.coReady() return E.co:isReady() end
 function A.coCount() return (E.co:counts()) end
