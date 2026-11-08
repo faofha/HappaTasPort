@@ -137,7 +137,6 @@ function ClassicStats:update(force)
 	if self.classic.ui.live ~= "Classic" then return end
 	local mode = E.mode or 1
 	local s = E.settings
-	if self.classic.look then self.classic.look:recording(mode == 2 and not E.paused) end
 	local shown = s:on(SHOW[mode] or "showStatsIdle") or (mode == 3 and s:get("playbackSpeed") ~= 1)
 	for i, name in ipairs(PANEL) do setVisible(self, b[name], shown and i == mode) end
 	if not shown then return end

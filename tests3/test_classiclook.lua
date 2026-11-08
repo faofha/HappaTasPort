@@ -1,93 +1,113 @@
 -- needs: ui
 -- ================================================================================================
--- HappaTAS 3, phase 5c: Appearance in the classic interface (spec 8.5): the eight values it draws, changed
--- in either interface, shown in the other at once and after a restart; nothing else changes its look
--- (headless mock)
+-- HappaTAS 3: the classic interface is V2.38.17's (Part E2): only the settings V2.38.17 has (with its names
+-- and sections) plus the Classic interface switch, its own fonts and colours (the New interface's Appearance
+-- never reaches it), nothing of the New interface left on screen, and switching back and forth changes
+-- nothing saved (headless mock)
 -- ================================================================================================
 check(boot(30), "boots")
 local T = getgenv().__HappaTAS3_T
 local E = T.engine
 local ui = E.ui
+local Settings = __T3("engine/settings")
 local guard = 0
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
-local ACC = "#00C080"
-local acc = Color3.fromHex("00C080")
 
-section("accent set in New, then Classic uses it at once")
-E.settings:set("accentColor", ACC)
+section("only V2.38.17's settings, with its names and sections")
 E.settings:set("interface", "Classic")
+M.steps(1)
 local c = ui.classic
 local b = c.byPath
+local rows = c.settingsRows
+local shown = 0
+for _, def in ipairs(Settings.SCHEMA) do
+	if def.v2 or def.key == "interface" then
+		check(rows[def.key] ~= nil, def.key .. " shown")
+		shown = shown + 1
+	else
+		eq(rows[def.key], nil, def.key .. " hidden (the New interface's only)")
+	end
+end
+eq(shown, 34, "V2.38.17's 33 settings (Frame Step went with Part B) and the Classic interface switch")
+eq(rows.speedHack.label.Text, "Speed Hack (slow / fast motion)", "V2.38.17's label")
+eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 4, 0.5 = half, 2 = double)", "V2.38.17's label")
+eq(rows.syncKitObjects.label.Text, "Sync Kit Objects (Beat Blocks, Turrets)", "V2.38.17's label")
+eq(rows.allowPlayerGuiInterface.label.Text, "Allow Visible Interface (PlayerGui)", "V2.38.17's label")
+local list = b["MainMenu.SettingsFrame.List"]
+check(list:FindFirstChild("Section_Speed Hack") ~= nil and list:FindFirstChild("Section_World Sync") ~= nil, "V2.38.17's section names")
+eq(list:FindFirstChild("Section_Appearance"), nil, "no Appearance section")
+
+section("V2.38.17's fonts and colours, whatever the New interface's are")
 c:tab("Settings")
-eq(b["MainMenu.SettingsToggle"].BackgroundColor3, acc, "the selected tab")
-local on = c.settingsRows.syncButtonTimers
-eq(on.on, true, "(an on switch)")
-eq(on.knob.BackgroundColor3, acc, "an on switch's knob")
-eq(b["MainMenu.Line"].BackgroundColor3, acc, "V2's blue line under the tabs")
-local stroke = b["MainMenu.SettingsFrame.List"]:FindFirstChildOfClass("UIStroke")
-eq(stroke.Color, acc, "a list's blue stroke")
-
-section("accent set in Classic, then New uses it")
-local GREEN = "#40A0FF"
-local r = c.settingsRows.accentColor
-r.input.Text = GREEN
-r.input.FocusLost:Fire(true, nil)
-E.settings:set("interface", "New")
-ui.wm:open("settings")
 M.steps(1)
-eq(ui.dock.buttons.settings.gui.BackgroundColor3, Color3.fromHex("40A0FF"), "the Dock's lit button")
-
-section("the other seven")
-E.settings:set("interface", "Classic")
-M.steps(1)
+local title = b["MainMenu.Title"]
+local font0, color0, size0 = title.FontFace, title.TextColor3, title.TextSize
+local stats0 = b["IdleStats.2"].FontFace
+local line0 = b["MainMenu.Line"].BackgroundColor3
+local stroke = list:FindFirstChildOfClass("UIStroke")
+local stroke0 = stroke and stroke.Color
+local tab0 = b["MainMenu.SettingsToggle"].BackgroundColor3
+local V2BLUES = { ["008DED"] = true, ["004DCD"] = true, ["00A9F4"] = true, ["00C4F8"] = true }
+check(V2BLUES[line0:ToHex():upper()] == true, "the line under the tabs is one of V2.38.17's blues (" .. line0:ToHex() .. ")")
+check(stroke0 ~= nil and V2BLUES[stroke0:ToHex():upper()] == true, "the list's stroke too")
+local header0 = list:FindFirstChild("Section_Playback").TextColor3
+E.settings:set("accentColor", "#00C080")
 E.settings:set("textColor", "#FFEEDD")
-eq(b["MainMenu.Title"].TextColor3, Color3.fromHex("FFEEDD"), "text colour")
 E.settings:set("secondaryTextColor", "#998877")
-local header = b["MainMenu.SettingsFrame.List"]:FindFirstChild("Section_Playback")
-eq(header.TextColor3, Color3.fromHex("998877"), "secondary text colour (section headers)")
 E.settings:set("font", "Roboto")
-check(b["MainMenu.Title"].FontFace.Family:find("Roboto", 1, true) ~= nil, "font")
-eq(b["MainMenu.Title"].FontFace.Weight, Enum.FontWeight.Bold, "its weight kept")
 E.settings:set("numberFont", "Inconsolata")
-check(b["IdleStats.2"].FontFace.Family:find("Inconsolata", 1, true) ~= nil, "number font (stats)")
 E.settings:set("textSize", 22)
-eq(b["MainMenu.Title"].TextSize, 34, "text size: V2's 20 x 22 / 13")
-eq(b["IdleStats.2"].TextSize, E.settings:get("statsTextSize"), "the stats keep Stats Text Size")
 E.settings:set("interfaceScale", 150)
-local sc = b.MainMenu:FindFirstChildOfClass("UIScale")
-eq(sc and sc.Scale, 1.5, "interface scale")
 E.settings:set("recordingColor", "#FF00FF")
+M.steps(1)
+eq(title.FontFace, font0, "the title keeps its font")
+eq(title.TextColor3, color0, "and its colour")
+eq(title.TextSize, size0, "and its size")
+eq(b["IdleStats.2"].FontFace, stats0, "the stats keep their font")
+eq(b["MainMenu.Line"].BackgroundColor3, line0, "V2's blue line under the tabs")
+eq(stroke and stroke.Color, stroke0, "a list's blue stroke")
+eq(b["MainMenu.SettingsToggle"].BackgroundColor3, tab0, "the selected tab: V2's colour (only its transparency changes)")
+eq(list:FindFirstChild("Section_Playback").TextColor3, header0, "section headers keep their colour")
+eq(b.MainMenu:FindFirstChildOfClass("UIScale"), nil, "no interface scale")
+local on = rows.syncButtonTimers
+eq(on.on, true, "(an on switch)")
+eq(on.knob.BackgroundColor3, Color3.fromRGB(75, 75, 75), "an on switch: V2.38.17's grey knob")
 E.modes:request("create")
 M.steps(3)
 E.modes:request("unpause")
 M.steps(2)
-local rec = b.CreateStats:FindFirstChild("RecStroke")
-check(rec ~= nil and rec.Enabled, "an outline while recording")
-eq(rec and rec.Color, Color3.fromHex("FF00FF"), "in the recording colour")
+eq(b.CreateStats:FindFirstChild("RecStroke"), nil, "no recording outline (V2.38.17 had none)")
 E.modes:request("pause")
 M.steps(2)
-eq(rec.Enabled, false, "gone while paused")
-
-section("nothing else changes Classic's look")
-local menuBg = b.MainMenu.BackgroundColor3
-E.settings:set("glassColor", "#102030")
-E.settings:set("windowCorners", 4)
-E.settings:set("edgeLight", 80)
-eq(b.MainMenu.BackgroundColor3, menuBg, "the glass colour doesn't reach V2's panels")
-
-section("restart: both load it")
-M.steps(60, 1 / 60)
-check(boot(30), "runs again")
-T = getgenv().__HappaTAS3_T
-E = T.engine
-ui = E.ui
+E.modes:request("idle")
 M.steps(2)
-c = ui.classic
-c:tab("Saves")
-eq(c.byPath["MainMenu.SavesToggle"].BackgroundColor3, Color3.fromHex("40A0FF"), "Classic loads the accent")
-eq(c.byPath["MainMenu.Title"].TextSize, 34, "and the text size")
+
+section("nothing of the New interface is left while Classic is up")
 E.settings:set("interface", "New")
+E.settings:set("glass", "Frost")
 ui.wm:open("settings")
-M.steps(1)
-eq(ui.dock.buttons.settings.gui.BackgroundColor3, Color3.fromHex("40A0FF"), "New loads it")
+M.steps(3)
+E.settings:set("interface", "Classic")
+M.steps(3)
+eq(M.services.Lighting:FindFirstChild("HappaTASFrost"), nil, "no Frost blur")
+eq(workspace.CurrentCamera:FindFirstChild("HappaTASFrost"), nil, "no Frost glass")
+
+section("switching back and forth changes nothing saved")
+M.steps(60, 1 / 60) -- (the settings file saved)
+local path = "HappaTasPort/Settings3.json"
+local before = readfile(path)
+for _ = 1, 10 do
+	E.settings:set("interface", "New")
+	M.steps(2)
+	E.settings:set("interface", "Classic")
+	M.steps(2)
+end
+M.steps(60, 1 / 60)
+eq(readfile(path), before, "the settings file is the same after 10 switches")
+eq(E.settings:get("font"), "Roboto", "the New interface's font kept")
+eq(E.settings:get("accentColor"), "#00C080", "its accent kept")
+eq(E.settings:get("interfaceScale"), 150, "its scale kept")
+E.settings:set("interface", "New")
+M.steps(2)
+check(ui.theme ~= nil, "the New interface is back")
 finish()

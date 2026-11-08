@@ -55,6 +55,8 @@ local function newShows(def, v)
 	return ctl.value == v
 end
 local SKIP = { theme = true, interface = true } -- (theme loads saved looks; interface switches)
+-- (the New interface's own settings aren't shown in Classic, Part E2: only V2.38.17's are compared)
+for _, def in ipairs(Settings.SCHEMA) do if not def.v2 then SKIP[def.key] = true end end
 
 section("the store -> both interfaces, in the same frame")
 local bad = {}
@@ -89,11 +91,11 @@ end
 eq(#bad, 0, "every classic row reaches the store and the new window (" .. table.concat(bad, ", ") .. ")")
 
 section("a refused value")
-local r = rows.textSize
-local before = E.settings:get("textSize")
+local r = rows.statsTextSize
+local before = E.settings:get("statsTextSize")
 r.input.Text = "abc"
 r.input.FocusLost:Fire(true, nil)
-eq(E.settings:get("textSize"), before, "the store unchanged")
+eq(E.settings:get("statsTextSize"), before, "the store unchanged")
 eq(r.input.Text, tostring(before), "the row shows the old value again")
 
 section("Classic never writes what it doesn't draw (spec 8.5)")
@@ -163,25 +165,6 @@ ui = E.ui
 M.steps(2)
 eq(ui.live, "Classic", "Classic again after a re-run")
 eq(ui.classic.menu.AbsolutePosition, p0 + Vector2.new(100, 40), "the menu's place kept")
-
-section("the theme row: a saved look by name, never an unknown or empty one (review)")
-local tr = ui.classic.settingsRows.theme.input
-local data = E.settingsFile:getUi()
-data.themes["Mine"] = { accentColor = "#112233" }
-E.settingsFile:setUi(data)
-local theme0 = E.settings:get("theme")
-tr.Text = ""
-tr.FocusLost:Fire(false, nil)
-eq(E.settings:get("theme"), theme0, "an empty box changes nothing")
-eq(tr.Text, tostring(theme0), "the box shows the theme again")
-tr.Text = "Nope"
-tr.FocusLost:Fire(true, nil)
-eq(E.settings:get("theme"), theme0, "an unknown name is refused")
-eq(tr.Text, tostring(theme0), "the box shows the theme again")
-tr.Text = "Mine"
-tr.FocusLost:Fire(true, nil)
-eq(E.settings:get("theme"), "Mine", "a saved look by name")
-eq(E.settings:get("accentColor"), "#112233", "its values loaded")
 
 section("the interface setting is a switch (Classic interface), the saved value still New / Classic")
 local ir = ui.classic.settingsRows.interface

@@ -54,8 +54,10 @@ chat or a text box.
   can be changed far more than V2's: theme, glass (Frost blurs the game behind a window at high graphics
   quality), colours, fonts, text size, scale, corners, shadows and animations (Settings > Appearance).
 - **Classic**: V2.38.17's interface, the menu on `M` with Controls, Settings, Saves, Help and More. Pick it in
-  Settings > Interface > Classic interface (a switch). Both interfaces read one settings store: a value changed in one shows in the other at
-  once. Phones get touch buttons in either.
+  Settings > Interface > Classic interface (a switch). It looks and works like V2.38.17: its settings, fonts
+  and colours; the New interface's Appearance settings aren't shown there and keep their values. Both
+  interfaces read one settings store: a setting changed in one shows in the other at once. Phones get touch
+  buttons in either.
 
 ## What it does
 

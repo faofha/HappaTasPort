@@ -88,7 +88,6 @@ ui/classic/settingsrows
 ui/classic/controlsrows
 ui/classic/saves
 ui/classic/stats
-ui/classic/look
 ui/classic/mobile
 ui/classic/classic
 ui/app

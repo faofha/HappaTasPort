@@ -18660,12 +18660,18 @@ __mods["ui/classic/settingsrows"] = function(import)
 	local SettingsRows = {}
 	local u, v2 = UDim2.new, Vector2.new
 	local ROW_H, HEADER_H = 30, 28
-	local SWITCH_ON = { Position = u(1, 0, 0.5, 0) }
+	local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) }
+	local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
+		invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
+		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
+		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
+	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
+	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" end
 	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 	local function toggleRow(def, order)
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 			{ "UICorner", "UICorner", 5, {} },
-			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = 16 } },
+			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = LABELS[def.key] or def.name, TextSize = 16 } },
 			{ "TextButton", "Switch", 36, { Position = u(0.9, 0, 0.5, 0), Size = u(0, 30, 0, 15), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13 }, {
 				{ "UICorner", "UICorner", 37, {} },
 				{ "Frame", "Switcher", 38, { Position = u(0, 0, 0.5, 0), Size = u(0, 22, 0, 22), AnchorPoint = v2(0.5, 0.5) }, {
@@ -18676,14 +18682,15 @@ __mods["ui/classic/settingsrows"] = function(import)
 		} }
 	end
 	local function inputRow(def, order)
-		local labelSize = (#def.name > 24) and 13 or 16
+		local label = LABELS[def.key] or def.name
+		local labelSize = (#label > 24) and 13 or 16
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 			{ "UICorner", "UICorner", 5, {} },
 			{ "TextBox", "Input", 40, { Position = u(0.9, 0, 0.5, 0), Size = u(0.15, 0, 0.7, 0), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13, PlaceholderText = "" }, {
 				{ "UICorner", "UICorner", 5, {} },
 				{ "UIStroke", "UIStroke", 41, {} },
 			} },
-			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = def.name, TextSize = labelSize } },
+			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = label, TextSize = labelSize } },
 			{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
 		} }
 	end
@@ -18695,15 +18702,18 @@ __mods["ui/classic/settingsrows"] = function(import)
 		local ts = Env.svc("TweenService")
 		local rows, last, order, height = {}, nil, 0, 0
 		for _, def in ipairs(Settings.SCHEMA) do
-			if def.section ~= last then
+			if not shownHere(def) then
+			elseif def.section ~= last then
 				last = def.section
 				order = order + 1
-				local h = ClassicBuild.node({ "TextLabel", "Section_" .. def.section, 16, { Size = u(1, 0, 0, HEADER_H), Text = def.section,
+				local secName = SECTIONS[def.section] or def.section
+				local h = ClassicBuild.node({ "TextLabel", "Section_" .. secName, 16, { Size = u(1, 0, 0, HEADER_H), Text = secName,
 					TextSize = 14, LayoutOrder = order } }, ClassicTree.STYLES)
 				pcall(function() h.TextColor3 = Color3.fromRGB(140, 205, 255) end)
 				h.Parent = list
 				height = height + HEADER_H
 			end
+			if shownHere(def) then
 			order = order + 1
 			local key = def.key
 			local r
@@ -18718,7 +18728,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
-					local bg = on and Color3.fromHex(tostring(s:get("accentColor")):sub(2)) or target.BackgroundColor3
+					local bg = target.BackgroundColor3
 					if instant or not ts then
 						r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 					else
@@ -18752,6 +18762,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 			end
 			rows[key] = r
 			height = height + ROW_H
+			end
 		end
 		list.Size = u(0, 360, 0, height)
 		scroller.CanvasSize = u(0, 0, 0, height + 50)
@@ -18897,7 +18908,6 @@ __mods["ui/classic/saves"] = function(import)
 			local s = { frame = f, name = f.N, save = f.Buttons.Save, load = f.Buttons.Load, merge = f.MoreButtons.Merge,
 				delete = f.MoreButtons.Delete, slotName = name, path = path }
 			sv.slots[#sv.slots + 1] = s
-			if classic.look then classic.look:adoptAll(f) end
 			life:connect(f.N.FocusLost, function()
 				local old = s.slotName
 				local clean = Files.cleanName(f.N.Text)
@@ -19200,7 +19210,6 @@ __mods["ui/classic/stats"] = function(import)
 		if self.classic.ui.live ~= "Classic" then return end
 		local mode = E.mode or 1
 		local s = E.settings
-		if self.classic.look then self.classic.look:recording(mode == 2 and not E.paused) end
 		local shown = s:on(SHOW[mode] or "showStatsIdle") or (mode == 3 and s:get("playbackSpeed") ~= 1)
 		for i, name in ipairs(PANEL) do setVisible(self, b[name], shown and i == mode) end
 		if not shown then return end
@@ -19220,124 +19229,6 @@ __mods["ui/classic/stats"] = function(import)
 		end
 	end
 	return ClassicStats
-end
-__mods["ui/classic/look"] = function(import)
-	local ClassicLook = {}
-	ClassicLook.__index = ClassicLook
-	local KEYS = { "accentColor", "textColor", "secondaryTextColor", "recordingColor", "font", "numberFont", "textSize", "interfaceScale" }
-	local BLUES = { "008DED", "004DCD", "00A9F4", "00C4F8" }
-	local WHITE = Color3.new(1, 1, 1)
-	local STATS = { IdleStats = true, CreateStats = true, TestStats = true, MergeStats = true }
-	local SIZED = { MainMenu = true, Merge = true, JoinMessage = true, Status = true }
-	local SCALED = { "MainMenu", "IdleStats", "CreateStats", "TestStats", "Merge", "MergeStats", "JoinMessage", "Status" }
-	local function hex(c3) return c3:ToHex():upper() end
-	local function family(name) return "rbxasset://fonts/families/" .. tostring(name) .. ".json" end
-	local function color(v) return Color3.fromHex(tostring(v):sub(2)) end
-	local function topOf(inst, gui)
-		local x = inst
-		while x and x.Parent ~= gui do x = x.Parent end
-		return x and x.Name
-	end
-	function ClassicLook.new(classic)
-		local E = classic.E
-		local self = setmetatable({ classic = classic, E = E, strokes = {}, fills = {}, whites = {}, seconds = {}, gotham = {}, numbers = {},
-			sizes = {}, scales = {} }, ClassicLook)
-		local isBlue = {}
-		for _, h in ipairs(BLUES) do isBlue[h] = true end
-		self.isBlue = isBlue
-		for _, d in ipairs(classic.gui:GetDescendants()) do self:adopt(d) end
-		for _, name in ipairs(SCALED) do
-			local f = classic.byPath[name]
-			if f then
-				local sc = Instance.new("UIScale")
-				sc.Parent = f
-				self.scales[#self.scales + 1] = sc
-			end
-		end
-		local rec = Instance.new("UIStroke")
-		rec.Name = "RecStroke"
-		rec.Thickness = 2
-		rec.Enabled = false
-		rec.Parent = classic.byPath.CreateStats
-		self.rec = rec
-		for _, key in ipairs(KEYS) do
-			classic.offs[#classic.offs + 1] = E.settings:changed(key, function() self:apply() end)
-		end
-		self:apply()
-		return self
-	end
-	function ClassicLook:adopt(d)
-		local gui = self.classic.gui
-		if d:IsA("UIStroke") then
-			if self.isBlue[hex(d.Color)] then self.strokes[#self.strokes + 1] = d end
-			return
-		end
-		if not d:IsA("GuiObject") then return end
-		if self.isBlue[hex(d.BackgroundColor3)] and d.BackgroundTransparency < 1 then self.fills[#self.fills + 1] = d end
-		if not (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) then return end
-		local top = topOf(d, gui)
-		if d.Name:sub(1, 8) == "Section_" then
-			self.seconds[#self.seconds + 1] = { label = d }
-		elseif d.TextColor3 == WHITE then
-			self.whites[#self.whites + 1] = d
-		end
-		if d:IsA("TextBox") then self.seconds[#self.seconds + 1] = { placeholder = d } end
-		if STATS[top] then
-			self.numbers[#self.numbers + 1] = { d, d.FontFace.Weight, d.FontFace.Style }
-		elseif tostring(d.FontFace.Family):find("GothamSSm", 1, true) then
-			self.gotham[#self.gotham + 1] = { d, d.FontFace.Weight, d.FontFace.Style }
-		end
-		if SIZED[top] then self.sizes[#self.sizes + 1] = { d, d.TextSize } end
-	end
-	function ClassicLook:adoptAll(root)
-		self:adopt(root)
-		for _, d in ipairs(root:GetDescendants()) do self:adopt(d) end
-		self:apply()
-	end
-	function ClassicLook:accent() return color(self.E.settings:get("accentColor")) end
-	function ClassicLook:apply()
-		local s = self.E.settings
-		local acc = color(s:get("accentColor"))
-		local text, second = color(s:get("textColor")), color(s:get("secondaryTextColor"))
-		for _, x in ipairs(self.strokes) do if x.Color ~= acc then x.Color = acc end end
-		for _, x in ipairs(self.fills) do if x.BackgroundColor3 ~= acc then x.BackgroundColor3 = acc end end
-		for _, x in ipairs(self.whites) do if x.TextColor3 ~= text then x.TextColor3 = text end end
-		for _, x in ipairs(self.seconds) do
-			if x.placeholder then
-				if x.placeholder.PlaceholderColor3 ~= second then x.placeholder.PlaceholderColor3 = second end
-			elseif x.label.TextColor3 ~= second then
-				x.label.TextColor3 = second
-			end
-		end
-		local f, nf = family(s:get("font")), family(s:get("numberFont"))
-		for _, x in ipairs(self.gotham) do
-			local face = Font.new(f, x[2], x[3])
-			if x[1].FontFace ~= face then x[1].FontFace = face end
-		end
-		for _, x in ipairs(self.numbers) do
-			local face = Font.new(nf, x[2], x[3])
-			if x[1].FontFace ~= face then x[1].FontFace = face end
-		end
-		local k = s:get("textSize") / 13
-		for _, x in ipairs(self.sizes) do
-			local size = math.floor(x[2] * k + 0.5)
-			if x[1].TextSize ~= size then x[1].TextSize = size end
-		end
-		local scale = s:get("interfaceScale") / 100
-		for _, sc in ipairs(self.scales) do if sc.Scale ~= scale then sc.Scale = scale end end
-		self.rec.Color = color(s:get("recordingColor"))
-		local c = self.classic
-		if c.tabName then c:paintTabs() end
-		if c.settingsRows then
-			for _, r in pairs(c.settingsRows) do
-				if r.knob and r.on then r.knob.BackgroundColor3 = acc end
-			end
-		end
-	end
-	function ClassicLook:recording(on)
-		if self.rec.Enabled ~= on then self.rec.Enabled = on end
-	end
-	return ClassicLook
 end
 __mods["ui/classic/mobile"] = function(import)
 	local Touch = import("ui/touch")
@@ -19420,7 +19311,6 @@ __mods["ui/classic/classic"] = function(import)
 	local ControlsRows = import("ui/classic/controlsrows")
 	local Saves = import("ui/classic/saves")
 	local ClassicStats = import("ui/classic/stats")
-	local ClassicLook = import("ui/classic/look")
 	local ClassicMobile = import("ui/classic/mobile")
 	local HelpText = import("ui/win/helptext")
 	local Classic = {}
@@ -19457,7 +19347,6 @@ __mods["ui/classic/classic"] = function(import)
 		self.saves = Saves.build(self)
 		self.stats = ClassicStats.new(self)
 		self:buildHelp()
-		self.look = ClassicLook.new(self)
 		self:wire()
 		ClassicMobile.wire(self)
 		self:placeMenu()
@@ -19498,13 +19387,9 @@ __mods["ui/classic/classic"] = function(import)
 	end
 	function Classic:paintTabs()
 		local b = self.byPath
-		local black = Color3.new(0, 0, 0)
 		for _, t in ipairs(TABS) do
 			local tb = b["MainMenu." .. t .. "Toggle"]
-			local on = t == self.tabName
-			tb.BackgroundTransparency = on and 0.5 or 0.75
-			local want = (on and self.look) and self.look:accent() or black
-			if tb.BackgroundColor3 ~= want then tb.BackgroundColor3 = want end
+			tb.BackgroundTransparency = (t == self.tabName) and 0.5 or 0.75
 		end
 	end
 	function Classic:wire()

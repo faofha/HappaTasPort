@@ -65,8 +65,15 @@ local function rows(path)
 end
 local Settings = __T3("engine/settings")
 local sections, seen = 0, {}
-for _, def in ipairs(Settings.SCHEMA) do if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end end
-eq(rows("MainMenu.SettingsFrame.List"), #Settings.SCHEMA + sections, "a row per setting and a header per section")
+-- (V2.38.17's settings and the Classic interface switch: the New interface's own are not shown, Part E2)
+local shownN = 0
+for _, def in ipairs(Settings.SCHEMA) do
+	if def.v2 or def.key == "interface" then
+		shownN = shownN + 1
+		if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end
+	end
+end
+eq(rows("MainMenu.SettingsFrame.List"), shownN + sections, "a row per setting shown and a header per section")
 eq(rows("MainMenu.ControlsFrame.List"), #__T3("engine/controls").LIST, "a row per control (Task 4)")
 local HelpText = __T3("ui/win/helptext")
 eq(rows("MainMenu.HelpFrame.List"), 1 + #HelpText.topics(E), "Help: V2's spacer and a row per topic")
