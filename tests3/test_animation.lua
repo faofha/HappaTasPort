@@ -120,6 +120,43 @@ do
 	E.modes:seek(k)
 	M.steps(1)
 	near(walk.TimePosition, 0.123, 1e-6, "the frame's saved time, not a sum")
+	tl:setList("AnimTime", k, seenAt[k - 1])
+	-- Test (interpolated playback): the playing track stays on the saved time between animation starts (live,
+	-- a 0.5x Frame Step run: the idle track ran on by itself and was 0.185 s off the recording); a track only a
+	-- little off is left alone
+	do
+		local function TTf(f) return tl:get("TotalTime", f, 1) end
+		local function want()
+			local f = E.frame
+			return tl:getList("AnimTime", f) + (E.testTime - TTf(f)) * tl:get("AnimSpeed", f, 1)
+		end
+		local function walkNow()
+			for _, t in ipairs(playing()) do if t.Animation.AnimationId == WALK then return t end end
+		end
+		E.modes:request("test")
+		M.steps(1)
+		local g2 = 0
+		while E.mode == 3 and not (walkNow() and E.frame >= 40) and g2 < 200 do M.step(1 / 60); g2 = g2 + 1 end
+		local w = walkNow()
+		check(E.mode == 3 and w ~= nil, "Test: the walk plays (frame " .. E.frame .. ")")
+		if w then
+			w.TimePosition = (want() + 0.3) % w.Length
+			M.step(1 / 60)
+			local d = math.abs(w.TimePosition - want() % w.Length)
+			check(d < 0.02, "a track 0.3 s off the saved time is put back on it (off " .. d .. ")")
+			local small = (want() + 0.01) % w.Length
+			w.TimePosition = small
+			local before = w.TimePosition
+			-- (the mock's track doesn't move by itself: the frame moves the wanted time on by about 0.018)
+			M.step(1 / 60)
+			eq(w.TimePosition, before, "a track a little off (under 0.03 s) is left as it is")
+		end
+		local g3 = 0
+		while E.mode == 3 and g3 < 300 do M.step(1 / 60); g3 = g3 + 1 end
+		E.modes:request("create")
+		M.steps(2)
+		walk = walkNow() or walk -- (Test loads its own walk track)
+	end
 	-- a frame without a saved time (an older file): worked out as before
 	for i = 1, tl:count() do tl:setList("AnimTime", i, nil) end
 	E.modes:seek(1)

@@ -4958,6 +4958,18 @@ __mods["world/animation"] = function(import)
 				end)
 			end
 		end
+		local followTrack, followLen, followLooped
+		function self.Follow(want, tolerance)
+			local track = currentAnimTrack
+			if not track then return end
+			if track ~= followTrack then followTrack, followLen, followLooped = track, track.Length, track.Looped end
+			local len, looped = followLen, followLooped and followLen > 0
+			local d = track.TimePosition - want
+			if looped then d = (d + len / 2) % len - len / 2 end
+			if math.abs(d) <= tolerance then return end
+			if looped then want = want % len elseif len > 0 then want = math.min(want, len) end
+			track.TimePosition = math.max(0, want)
+		end
 		function self.Lock(lock) LockAnimations = lock end
 		function self.Running(speed) onRunning(speed) end
 		function self.Rescale()
@@ -5102,6 +5114,14 @@ __mods["world/animation"] = function(import)
 		self:set(dataAt(tl, i), { a[#a] }, speed, (#a > 0) and timeAt(tl, i) or nil)
 	end
 	function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
+	local FOLLOW_TOLERANCE = 0.03
+	function Animation:follow(tl, i, t)
+		local e = self.current
+		local saved = timeAt(tl, i)
+		if not (e and saved) then return end
+		local want = saved + math.max(0, t - tl:get("TotalTime", i, 1)) * tl:get("AnimSpeed", i, 1)
+		e.Follow(want, FOLLOW_TOLERANCE)
+	end
 	function Animation:loadFrame(tl, i, unpausing, backtrack)
 		local E = self.E
 		local backAnim, backSpeed
@@ -12646,6 +12666,7 @@ __mods["engine/frame"] = function(import)
 						E.tools:replayFrame(tl, k, ch.model)
 					end
 				end
+				E.anim:follow(tl, f, E.testTime)
 				if tl:getList("Died", f) then ch:changeState(Enum.HumanoidStateType.Dead) end
 				E.tools:step(ch.model, ch.hum)
 			else

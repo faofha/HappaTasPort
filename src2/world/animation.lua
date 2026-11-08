@@ -389,6 +389,22 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 		end
 	end
 
+	-- interpolated playback: the playing track back on the recorded time when it is more than `tolerance` off
+	-- (a looped track wraps); it isn't written otherwise
+	-- (one engine read a frame: Length / Looped are read once per track)
+	local followTrack, followLen, followLooped
+	function self.Follow(want, tolerance)
+		local track = currentAnimTrack
+		if not track then return end
+		if track ~= followTrack then followTrack, followLen, followLooped = track, track.Length, track.Looped end
+		local len, looped = followLen, followLooped and followLen > 0
+		local d = track.TimePosition - want
+		if looped then d = (d + len / 2) % len - len / 2 end
+		if math.abs(d) <= tolerance then return end
+		if looped then want = want % len elseif len > 0 then want = math.min(want, len) end
+		track.TimePosition = math.max(0, want)
+	end
+
 	function self.Lock(lock) LockAnimations = lock end
 
 	-- V2.38.17: the humanoid clock (time control) puts the walking on the TAS clock; the Running event reports
@@ -561,6 +577,17 @@ function Animation:passFrame(tl, i, speed)
 	self:set(dataAt(tl, i), { a[#a] }, speed, (#a > 0) and timeAt(tl, i) or nil)
 end
 function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
+-- interpolated playback at TAS time t on frame i: between animation starts the track runs by itself, and in a
+-- Frame Step run its saved time doesn't grow evenly with the game time (every step runs in a timed state, steps are
+-- held after it): it is put back on the saved time when more than 0.03 s off (live, 0.5x: 0.185 s off without this)
+local FOLLOW_TOLERANCE = 0.03
+function Animation:follow(tl, i, t)
+	local e = self.current
+	local saved = timeAt(tl, i)
+	if not (e and saved) then return end
+	local want = saved + math.max(0, t - tl:get("TotalTime", i, 1)) * tl:get("AnimSpeed", i, 1)
+	e.Follow(want, FOLLOW_TOLERANCE)
+end
 
 -- paused on frame i (or unpausing from it); backtrack = the animation back to where it was then
 function Animation:loadFrame(tl, i, unpausing, backtrack)

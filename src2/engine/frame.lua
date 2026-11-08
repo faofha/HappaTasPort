@@ -167,6 +167,7 @@ function Frame.start(E)
 					E.tools:replayFrame(tl, k, ch.model)
 				end
 			end
+			E.anim:follow(tl, f, E.testTime)
 			if tl:getList("Died", f) then ch:changeState(Enum.HumanoidStateType.Dead) end
 			E.tools:step(ch.model, ch.hum)
 		else
