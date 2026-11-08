@@ -4958,17 +4958,16 @@ __mods["world/animation"] = function(import)
 				end)
 			end
 		end
-		local followTrack, followLen, followLooped
+		local followTrack, followLen
 		function self.Follow(want, tolerance)
 			local track = currentAnimTrack
 			if not track then return end
-			if track ~= followTrack then followTrack, followLen, followLooped = track, track.Length, track.Looped end
-			local len, looped = followLen, followLooped and followLen > 0
-			local d = track.TimePosition - want
-			if looped then d = (d + len / 2) % len - len / 2 end
-			if math.abs(d) <= tolerance then return end
-			if looped then want = want % len elseif len > 0 then want = math.min(want, len) end
-			track.TimePosition = math.max(0, want)
+			if track ~= followTrack then followTrack, followLen = track, track.Length end
+			local len = followLen
+			if not (len > 0) then return end
+			local d = (track.TimePosition - want + len / 2) % len - len / 2
+			if math.abs(d) <= tolerance or not track.Looped then return end
+			track.TimePosition = want % len
 		end
 		function self.Lock(lock) LockAnimations = lock end
 		function self.Running(speed) onRunning(speed) end

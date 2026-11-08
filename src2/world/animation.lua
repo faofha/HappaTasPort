@@ -391,18 +391,19 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 
 	-- interpolated playback: the playing track back on the recorded time when it is more than `tolerance` off
 	-- (a looped track wraps); it isn't written otherwise
-	-- (one engine read a frame: Length / Looped are read once per track)
-	local followTrack, followLen, followLooped
+	-- Only a looped track is put back (idle, walk, climb: the ones that run on for long): a track that doesn't loop
+	-- (the jump) put near its end fires its End keyframe and the engine starts the next animation afresh (live).
+	-- (one engine read a frame: Length is read once per track, Looped only when the track is off)
+	local followTrack, followLen
 	function self.Follow(want, tolerance)
 		local track = currentAnimTrack
 		if not track then return end
-		if track ~= followTrack then followTrack, followLen, followLooped = track, track.Length, track.Looped end
-		local len, looped = followLen, followLooped and followLen > 0
-		local d = track.TimePosition - want
-		if looped then d = (d + len / 2) % len - len / 2 end
-		if math.abs(d) <= tolerance then return end
-		if looped then want = want % len elseif len > 0 then want = math.min(want, len) end
-		track.TimePosition = math.max(0, want)
+		if track ~= followTrack then followTrack, followLen = track, track.Length end
+		local len = followLen
+		if not (len > 0) then return end
+		local d = (track.TimePosition - want + len / 2) % len - len / 2
+		if math.abs(d) <= tolerance or not track.Looped then return end
+		track.TimePosition = want % len
 	end
 
 	function self.Lock(lock) LockAnimations = lock end

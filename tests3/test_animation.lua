@@ -140,6 +140,7 @@ do
 		local w = walkNow()
 		check(E.mode == 3 and w ~= nil, "Test: the walk plays (frame " .. E.frame .. ")")
 		if w then
+			w.Looped = true -- (Roblox's walk loops; the mock's tracks don't by default)
 			w.TimePosition = (want() + 0.3) % w.Length
 			M.step(1 / 60)
 			local d = math.abs(w.TimePosition - want() % w.Length)
@@ -150,6 +151,13 @@ do
 			-- (the mock's track doesn't move by itself: the frame moves the wanted time on by about 0.018)
 			M.step(1 / 60)
 			eq(w.TimePosition, before, "a track a little off (under 0.03 s) is left as it is")
+			-- a track that doesn't loop (the jump) is never written: at its end Roblox fires its End keyframe and the
+			-- engine starts the next animation afresh (live: 0.44 s off after doing so)
+			w.Looped = false
+			w.TimePosition = 0.05
+			M.step(1 / 60)
+			eq(w.TimePosition, 0.05, "a track that doesn't loop is left to play by itself")
+			w.Looped = true
 		end
 		local g3 = 0
 		while E.mode == 3 and g3 < 300 do M.step(1 / 60); g3 = g3 + 1 end
