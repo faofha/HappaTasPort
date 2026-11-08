@@ -9,8 +9,10 @@
 --  frames. Bounce pad / jump launcher effects saved and played again. Forces a kit script puts on the
 --  character: removed after unpausing earlier, off while testing. Only for a run made with the kit rules
 --  (tl.meta.kitVersion >= 1, set at its first recorded frame); ids are saved with their paths (tl.meta.v2kit).
+--  Version 2 (HappaTAS 3): vanishers too (world/kit/vanishers.lua).
 -- ================================================================================================
 local Env = import("platform/env")
+local Vanishers = import("world/kit/vanishers")
 
 local Players = Env.svc("Players")
 local engine = nil -- (the engine, set by KitObjectsPlugin.new)
@@ -61,7 +63,7 @@ end
 
 do
 	local KO = KitObjects
-	KO.CURRENT = 1
+	KO.CURRENT = 2
 	local CS = Env.svc("CollectionService")
 	local V3, CF = Vector3.new, CFrame.new
 	local floor = math.floor
@@ -872,8 +874,12 @@ do
 	end
 
 	-- --------------------------------------------------------------------------------------------- finding objects
+	local function addVanisher(cfg)
+		local key = cfg.Parent and engine.co:keyOf(cfg.Parent)
+		if key then Vanishers.add(cfg, key, idFor(key)) end
+	end
 	local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner,
-		BouncePadConfiguration = addFx, LauncherConfiguration = addFx }
+		BouncePadConfiguration = addFx, LauncherConfiguration = addFx, VanisherConfiguration = addVanisher }
 	local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
 		["CO_Interactables/PushboxSpawn"] = addSpawner, ["CO_Interactables/BouncePad"] = addFx,
 		["CO_Interactables/JumpLauncher"] = addFx }
@@ -892,6 +898,7 @@ do
 
 	local function scanAll()
 		local kitTables = kitBeatTables()
+		pcall(Vanishers.findKitDefaults)
 		local seen = {}
 		if CS then
 			for tag in pairs(TAGS) do
@@ -919,6 +926,7 @@ do
 			hideAllBullets()
 			for _, s in ipairs(spawners) do unhideBox(s) end
 			unmuteAll()
+			Vanishers.release()
 		end
 		replayedTo = nil
 	end
@@ -926,6 +934,7 @@ do
 
 	function KO.Invalidate()
 		idx.valid = false
+		Vanishers.invalidate()
 	end
 
 	-- every PreRender after the frame was recorded. mode: 1 Idle, 2 Create, 3 Test; f / t: the frame shown and
@@ -954,6 +963,7 @@ do
 		beatStep(t, advancing)
 		showBullets(data, f, t)
 		boxesAt(data, f)
+		if KO.VersionOf(data) >= 2 then Vanishers.frame(data, f, t, rec, addEvent) end
 		if mode == 3 then replayEvents(data, f) end
 	end
 
@@ -967,8 +977,9 @@ do
 	-- is undone. Only groups a write touched since are looked at (their change signals mark them dirty; Roblox
 	-- fires those signals a little later, still before the next render step / physics step)
 	function KO.Reassert()
-		if not (enabled and cur.on) or #beats == 0 then return end
-		beatStep(cur.t, false)
+		if not (enabled and cur.on) then return end
+		if #beats > 0 then beatStep(cur.t, false) end
+		if cur.data and KO.VersionOf(cur.data) >= 2 then Vanishers.reassert() end
 	end
 
 	-- unpausing at frame f: forces a kit script put on the character after f belong to the cut frames
@@ -980,6 +991,7 @@ do
 			end
 		end
 		idx.valid = false
+		Vanishers.invalidate()
 	end
 
 	-- ------------------------------------------------------------------------------------- save / load
@@ -989,7 +1001,7 @@ do
 			local fr = frames[fi]
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if e[1] == 1 or e[1] == 3 or e[1] == 4 then used[e[2]] = true end
+					if e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5 then used[e[2]] = true end
 				end
 			end
 		end
@@ -1008,7 +1020,7 @@ do
 			local fr = frames[fi]
 			if fr.KE then
 				for _, e in ipairs(fr.KE) do
-					if (e[1] == 1 or e[1] == 3 or e[1] == 4) and map[e[2]] then e[2] = map[e[2]] end
+					if (e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5) and map[e[2]] then e[2] = map[e[2]] end
 				end
 			end
 		end
@@ -1036,6 +1048,7 @@ do
 		engine.life:connect(workspace.DescendantAdded, function(d)
 			if CONFIGS[d.Name] then
 				task.defer(function()
+					if d.Name == "VanisherConfiguration" then pcall(Vanishers.findKitDefaults) end
 					if d.Parent then pcall(consider, d, (d.Name == "BeatBlockConfiguration") and kitBeatTables() or nil) end
 				end)
 			end

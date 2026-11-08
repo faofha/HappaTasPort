@@ -10630,8 +10630,229 @@ __mods["world/kit/clock"] = function(import)
 	function KitClockPlugin:onRewind(tl, n) KC.Rewind(tl, n) end
 	return KitClockPlugin
 end
+__mods["world/kit/vanishers"] = function(import)
+	local Env = import("platform/env")
+	local TweenService = Env.svc("TweenService")
+	local Players = Env.svc("Players")
+	local Vanishers = {}
+	local groups, groupOf = {}, {}
+	local MODES = { Fade = true, Blink = true, Constant = true }
+	local params = OverlapParams.new()
+	local function attr(inst, name, def)
+		if not inst then return def end
+		local v = inst:GetAttribute(name)
+		if v == nil then return def end
+		return v
+	end
+	local kitDefaults = nil
+	function Vanishers.findKitDefaults()
+		kitDefaults = {}
+		if not Env.filtergc then return end
+		local ok, list = pcall(Env.filtergc, "table", { Keys = { "part", "defaults" } })
+		if not ok or type(list) ~= "table" then return end
+		for _, t in ipairs(list) do
+			local p, d = rawget(t, "part"), rawget(t, "defaults")
+			if typeof(p) == "Instance" and type(d) == "table" and rawget(d, "DefaultTransparency") ~= nil then kitDefaults[p] = d end
+		end
+	end
+	function Vanishers.add(cfg, key, id)
+		local obj = cfg.Parent
+		if not obj or groupOf[cfg] then return nil end
+		local mode = attr(cfg, "VanishMode", "Fade")
+		if not MODES[mode] then return nil end
+		local tween = cfg:FindFirstChild("TweenConfiguration")
+		local invert = attr(cfg, "Invert", false) == true
+		local g = { cfg = cfg, key = key, id = id, mode = mode, parts = {},
+			time = math.max(1e-3, tonumber(attr(tween, "Time", 1)) or 1),
+			style = attr(tween, "Style", Enum.EasingStyle.Quad), dir = attr(tween, "Direction", Enum.EasingDirection.Out),
+			respawn = tonumber(attr(cfg, "RespawnTime", 2)) or 2, respawnFade = attr(cfg, "RespawnFade", false) == true,
+			blinks = tonumber(attr(cfg, "BlinkCount", 3)) or 3, noRecovery = attr(cfg, "ConstantNoRecovery", false) == true,
+			outline = attr(cfg, "OutlineColor", Color3.fromRGB(255, 0, 0)), events = nil, last = nil }
+		local list = obj:IsA("BasePart") and { obj } or obj:GetChildren()
+		for _, p in ipairs(list) do
+			if p:IsA("BasePart") then
+				if p:HasTag("ButtonActivated") then return nil end
+				local invisible, ignoreT, ignoreC = p:HasTag("Invisible"), p:HasTag("IgnoreTransparency"), p:HasTag("IgnoreCanCollide")
+				local defC, touchC, defT, touchT
+				if invisible then defC = false elseif ignoreC then defC = p.CanCollide else defC = not invert end
+				if invisible then touchC = false elseif ignoreC then touchC = p.CanCollide else touchC = not defC end
+				if invisible then defT = 1 elseif ignoreT then defT = p.Transparency elseif invert then defT = 1 else defT = p.Transparency end
+				if ignoreT then touchT = p.Transparency elseif invert then touchT = 0 else touchT = 1 end
+				local kd = kitDefaults and kitDefaults[p]
+				if kd then
+					defT, defC = rawget(kd, "DefaultTransparency"), rawget(kd, "DefaultCanCollide")
+					touchT, touchC = rawget(kd, "TouchedTransparency"), rawget(kd, "TouchedCanCollide")
+				elseif not p.CanTouch and not invisible and not ignoreT and not invert then
+					defT, defC, touchC = 0, true, false
+				end
+				local sel = p:FindFirstChild("VanisherSelectionBox")
+				if sel and not sel:IsA("SelectionBox") then sel = nil end
+				g.parts[#g.parts + 1] = { part = p, defT = defT, defC = defC, touchT = touchT, touchC = touchC, sel = sel,
+					selColor = sel and sel.Color3, selThick = sel and sel.LineThickness or 0.1 }
+			end
+		end
+		if #g.parts == 0 then return nil end
+		groupOf[cfg] = g
+		groups[#groups + 1] = g
+		return g
+	end
+	function Vanishers.count() return #groups end
+	function Vanishers.invalidate() for _, g in ipairs(groups) do g.events = nil end end
+	local function ease(g, a)
+		a = math.clamp(a, 0, 1)
+		local ok, v = pcall(TweenService.GetValue, TweenService, a, g.style, g.dir)
+		return ok and v or a
+	end
+	local function eventsOf(g, data)
+		if g.events and g.eventsData == data then return g.events end
+		local ev = {}
+		for i = 1, #data do
+			local fr = data[i]
+			local ke = fr.KE
+			if ke then
+				for _, e in ipairs(ke) do
+					if e[1] == 5 and e[2] == g.id then ev[#ev + 1] = { fr.TotalTime, e[3] } end
+				end
+			end
+		end
+		g.events, g.eventsData = ev, data
+		return ev
+	end
+	local function stateAt(g, data, t)
+		local ev = eventsOf(g, data)
+		if g.mode == "Constant" then
+			local tt, lastT, on, goneAt = 0, 0, false, nil
+			local function advance(to)
+				if goneAt then
+					if to >= goneAt + g.respawn then tt, lastT, goneAt = 0, goneAt + g.respawn, nil else return end
+				end
+				local d = to - lastT
+				if d <= 0 then return end
+				if on then
+					if tt + d >= g.time then goneAt = lastT + (g.time - tt); tt = g.time; lastT = goneAt; return advance(to) end
+					tt = tt + d
+				elseif not g.noRecovery then
+					tt = math.max(0, tt - d * g.time / g.respawn)
+				end
+				lastT = to
+			end
+			for _, e in ipairs(ev) do
+				if e[1] > t then break end
+				advance(e[1])
+				if not goneAt then on = e[2] == 2 end
+			end
+			advance(t)
+			if goneAt then return "gone", 0, goneAt end
+			return (tt > 0) and "fade" or "idle", tt / g.time
+		end
+		local s = nil
+		for _, e in ipairs(ev) do
+			if e[1] > t then break end
+			if e[2] == 1 then s = e[1] end
+		end
+		if not s then return "idle", 0 end
+		local d = t - s
+		local fadeLen = (g.mode == "Blink") and (g.blinks * g.time) or g.time
+		if d < fadeLen then return "fade", d / fadeLen, d end
+		d = d - fadeLen
+		if d < g.respawn then return "gone", 0 end
+		d = d - g.respawn
+		if g.respawnFade and d < g.time then return "back", d / g.time end
+		return "idle", 0
+	end
+	Vanishers.stateAt = stateAt
+	local function setIf(inst, prop, v)
+		if inst[prop] ~= v then inst[prop] = v end
+	end
+	local function write(g, phase, a, blinkT)
+		for _, vp in ipairs(g.parts) do
+			local p = vp.part
+			if p.Parent then
+				local T, C, CT, color, thick = vp.defT, vp.defC, true, vp.selColor, vp.selThick
+				if phase == "fade" then
+					if g.mode == "Constant" then
+						T = vp.defT + (vp.touchT - vp.defT) * a
+					elseif g.mode == "Fade" then
+						T = vp.defT + (vp.touchT - vp.defT) * ease(g, a)
+					elseif vp.sel then
+						local k = (blinkT or 0) % g.time
+						thick = vp.selThick * 3 + (vp.selThick - vp.selThick * 3) * ease(g, k / g.time)
+					else
+						local mid = (vp.defT + vp.touchT) / 2
+						T = vp.defT + (mid - vp.defT) * ease(g, (blinkT or 0) / g.time)
+					end
+				elseif phase == "gone" then
+					T, C, CT, color = vp.touchT, vp.touchC, false, g.outline
+				elseif phase == "back" then
+					T = vp.touchT + (vp.defT - vp.touchT) * ease(g, a)
+				end
+				pcall(setIf, p, "Transparency", T)
+				pcall(setIf, p, "CanCollide", C)
+				pcall(setIf, p, "CanTouch", CT)
+				if vp.sel then
+					if color then pcall(setIf, vp.sel, "Color3", color) end
+					pcall(setIf, vp.sel, "LineThickness", thick)
+				end
+			end
+		end
+		g.last = { phase, a, blinkT }
+	end
+	local function touching(g, ch)
+		if not ch then return false end
+		for _, vp in ipairs(g.parts) do
+			local p = vp.part
+			if p.Parent then
+				local ok, hits = pcall(workspace.GetPartBoundsInBox, workspace, p.CFrame, p.Size + Vector3.one * 0.1, params)
+				if ok then
+					for _, h in ipairs(hits) do if h:IsDescendantOf(ch) then return true end end
+				end
+			end
+		end
+		return false
+	end
+	function Vanishers.frame(data, f, t, rec, addEvent)
+		local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+		if rec and ch then params.FilterType = Enum.RaycastFilterType.Include; params.FilterDescendantsInstances = { ch } end
+		for i = #groups, 1, -1 do
+			local g = groups[i]
+			if not g.cfg:IsDescendantOf(workspace) then
+				groupOf[g.cfg] = nil
+				table.remove(groups, i)
+			else
+				if rec and #data > 0 then
+					local phase = stateAt(g, data, t)
+					local hit = touching(g, ch)
+					if g.mode == "Constant" then
+						local ev = eventsOf(g, data)
+						local lastOn = false
+						for _, e in ipairs(ev) do if e[1] <= t then lastOn = e[2] == 2 end end
+						if phase ~= "gone" and hit ~= lastOn then
+							addEvent(data[#data], { 5, g.id, hit and 2 or 3 })
+							g.events = nil
+						end
+					elseif hit and phase == "idle" then
+						addEvent(data[#data], { 5, g.id, 1 })
+						g.events = nil
+					end
+				end
+				local phase, a, extra = stateAt(g, data, t)
+				write(g, phase, a, extra)
+			end
+		end
+	end
+	function Vanishers.reassert()
+		for _, g in ipairs(groups) do
+			if g.last then write(g, g.last[1], g.last[2], g.last[3]) end
+		end
+	end
+	function Vanishers.release()
+		for _, g in ipairs(groups) do g.last = nil end
+	end
+	return Vanishers
+end
 __mods["world/kit/objects"] = function(import)
 	local Env = import("platform/env")
+	local Vanishers = import("world/kit/vanishers")
 	local Players = Env.svc("Players")
 	local engine = nil
 	local KitObjects = {}
@@ -10673,7 +10894,7 @@ __mods["world/kit/objects"] = function(import)
 	end
 	do
 		local KO = KitObjects
-		KO.CURRENT = 1
+		KO.CURRENT = 2
 		local CS = Env.svc("CollectionService")
 		local V3, CF = Vector3.new, CFrame.new
 		local floor = math.floor
@@ -11404,8 +11625,12 @@ __mods["world/kit/objects"] = function(import)
 				if cur.on and cur.mode == 3 then pcall(function() d.Enabled = false end) end
 			end)
 		end
+		local function addVanisher(cfg)
+			local key = cfg.Parent and engine.co:keyOf(cfg.Parent)
+			if key then Vanishers.add(cfg, key, idFor(key)) end
+		end
 		local CONFIGS = { BeatBlockConfiguration = addBeat, TurretConfiguration = addTurret, PushboxSpawnConfiguration = addSpawner,
-			BouncePadConfiguration = addFx, LauncherConfiguration = addFx }
+			BouncePadConfiguration = addFx, LauncherConfiguration = addFx, VanisherConfiguration = addVanisher }
 		local TAGS = { ["CO_Visual/BeatBlock"] = addBeat, ["CO_Interactables/Turret"] = addTurret,
 			["CO_Interactables/PushboxSpawn"] = addSpawner, ["CO_Interactables/BouncePad"] = addFx,
 			["CO_Interactables/JumpLauncher"] = addFx }
@@ -11422,6 +11647,7 @@ __mods["world/kit/objects"] = function(import)
 		end
 		local function scanAll()
 			local kitTables = kitBeatTables()
+			pcall(Vanishers.findKitDefaults)
 			local seen = {}
 			if CS then
 				for tag in pairs(TAGS) do
@@ -11446,12 +11672,14 @@ __mods["world/kit/objects"] = function(import)
 				hideAllBullets()
 				for _, s in ipairs(spawners) do unhideBox(s) end
 				unmuteAll()
+				Vanishers.release()
 			end
 			replayedTo = nil
 		end
 		KO.Release = release
 		function KO.Invalidate()
 			idx.valid = false
+			Vanishers.invalidate()
 		end
 		function KO.Frame(mode, data, f, t, rec)
 			cur.mode, cur.data, cur.f, cur.t, cur.rec = mode, data, f, t, rec
@@ -11476,6 +11704,7 @@ __mods["world/kit/objects"] = function(import)
 			beatStep(t, advancing)
 			showBullets(data, f, t)
 			boxesAt(data, f)
+			if KO.VersionOf(data) >= 2 then Vanishers.frame(data, f, t, rec, addEvent) end
 			if mode == 3 then replayEvents(data, f) end
 		end
 		function KO.AfterPhysics(data, n)
@@ -11483,8 +11712,9 @@ __mods["world/kit/objects"] = function(import)
 			turretHits(data, n)
 		end
 		function KO.Reassert()
-			if not (enabled and cur.on) or #beats == 0 then return end
-			beatStep(cur.t, false)
+			if not (enabled and cur.on) then return end
+			if #beats > 0 then beatStep(cur.t, false) end
+			if cur.data and KO.VersionOf(cur.data) >= 2 then Vanishers.reassert() end
 		end
 		function KO.Unpause(data, f)
 			for d, fr in pairs(forces) do
@@ -11494,6 +11724,7 @@ __mods["world/kit/objects"] = function(import)
 				end
 			end
 			idx.valid = false
+			Vanishers.invalidate()
 		end
 		function KO.Export(frames)
 			local used = {}
@@ -11501,7 +11732,7 @@ __mods["world/kit/objects"] = function(import)
 				local fr = frames[fi]
 				if fr.KE then
 					for _, e in ipairs(fr.KE) do
-						if e[1] == 1 or e[1] == 3 or e[1] == 4 then used[e[2]] = true end
+						if e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5 then used[e[2]] = true end
 					end
 				end
 			end
@@ -11519,7 +11750,7 @@ __mods["world/kit/objects"] = function(import)
 				local fr = frames[fi]
 				if fr.KE then
 					for _, e in ipairs(fr.KE) do
-						if (e[1] == 1 or e[1] == 3 or e[1] == 4) and map[e[2]] then e[2] = map[e[2]] end
+						if (e[1] == 1 or e[1] == 3 or e[1] == 4 or e[1] == 5) and map[e[2]] then e[2] = map[e[2]] end
 					end
 				end
 			end
@@ -11544,6 +11775,7 @@ __mods["world/kit/objects"] = function(import)
 			engine.life:connect(workspace.DescendantAdded, function(d)
 				if CONFIGS[d.Name] then
 					task.defer(function()
+						if d.Name == "VanisherConfiguration" then pcall(Vanishers.findKitDefaults) end
 						if d.Parent then pcall(consider, d, (d.Name == "BeatBlockConfiguration") and kitBeatTables() or nil) end
 					end)
 				end

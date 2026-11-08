@@ -302,7 +302,7 @@ check(BeatKit.writes > kitWrites0, "the kit's loop kept writing its own beat mea
 check(dings >= 4 and dings <= 6, "the ding plays on each of HappaTAS's beats (" .. dings .. ")")
 eq(ding.Volume, 0, "the kit's own ding is muted while HappaTAS plays it")
 local recFrames = #C.data
-check(C.data.KitVersion == 1, "the TAS knows it was made with the kit rules (KitVersion 1)")
+check(C.data.KitVersion == 2, "the TAS knows it was made with the kit rules (KitVersion 2: vanishers too)")
 
 section("beat blocks: paused on any frame, testing")
 checkMode = "paused"
@@ -560,7 +560,7 @@ M.resume(coroutine.create(function() local ok, fr = Store.LoadSlot("kit"); loade
 g2 = 0
 while not loaded and g2 < 300 do M.step(1 / 60); g2 = g2 + 1 end
 check(loaded ~= nil, "loaded")
-eq(loaded and loaded.KitVersion, 1, "KitVersion 1 comes back")
+eq(loaded and loaded.KitVersion, 2, "KitVersion 2 comes back")
 local same = loaded ~= nil and #loaded == #C.data
 if same then
 	for i = 1, #loaded do
@@ -735,6 +735,130 @@ g2 = 0
 while C.mode == 3 and g2 < 600 do M.step(1 / 60); g2 = g2 + 1 end
 lv2:Destroy()
 
+end
+-- ------------------------------------------------------------------------------------------------ vanishers
+do
+section("vanishers: the fade, the vanish and the respawn come from the TAS time")
+-- (live: after going back mid-fade and unpausing, the kit's finished tween left the part stuck; in Test the
+-- kit's leftover timer jumped it to vanished. Mock: no kit script at all, so only HappaTAS writes, plus one
+-- write standing in for the kit's)
+local vFolder = folder(CP, "VanisherGroup")
+local vPart = part(vFolder, "Vanisher", Vector3.new(30, 2, 40), Vector3.new(4, 4, 4))
+vPart:SetAttribute("Activated", false) -- (as live: not button activated)
+-- (found while vanished, as live after a run: its normal values come from the kit's own table)
+vPart.Transparency, vPart.CanCollide, vPart.CanTouch = 1, false, false
+M.gcTables[#M.gcTables + 1] = { part = vPart, defaults = { DefaultTransparency = 0, DefaultCanCollide = true,
+	TouchedTransparency = 1, TouchedCanCollide = false, OriginalTransparency = 0 } }
+local vCfg = Instance.new("Configuration"); vCfg.Name = "VanisherConfiguration"
+vCfg:SetAttribute("VanishMode", "Fade"); vCfg:SetAttribute("RespawnTime", 2)
+local vTw = Instance.new("Configuration"); vTw.Name = "TweenConfiguration"; vTw:SetAttribute("Time", 1); vTw.Parent = vCfg
+vCfg.Parent = vFolder
+steps(5)
+newTAS()
+hrp.CFrame = CFrame.new(0, 3, 40)
+steps(2)
+create()
+click()
+steps(20)
+hrp.CFrame = CFrame.new(30, 5, 40) -- (on it)
+steps(1)
+local function tAt(i) return E.tl:get("TotalTime", i, 1) end
+local t0 = tAt(E.tl:count())
+local truth = {}
+local function rec(n)
+	for _ = 1, n do
+		M.step(1 / 60)
+		truth[#truth + 1] = { tAt(E.tl:count()), vPart.Transparency, vPart.CanCollide, vPart.CanTouch }
+	end
+end
+rec(18)
+vPart.Transparency = 1 -- (the kit's own write, early)
+rec(1)
+check(vPart.Transparency < 0.5, "a write of the kit's is undone (" .. vPart.Transparency .. ")")
+hrp.CFrame = CFrame.new(0, 3, 40) -- (off it)
+rec(220)
+click()
+steps(2)
+local function truthAt(t) local b for _, r in ipairs(truth) do if r[1] <= t + 1e-9 then b = r end end return b end
+local half = truthAt(t0 + 0.5)
+check(half and math.abs(half[2] - 0.5) < 0.04 and half[3] == true, "half way through the fade: Transparency 0.5, still solid (" .. tostring(half and half[2]) .. ")")
+local gone = truthAt(t0 + 1.3)
+check(gone and gone[2] == 1 and gone[3] == false and gone[4] == false, "after the 1 s fade: vanished, not solid, no touches")
+local back = truthAt(t0 + 3.3)
+check(back and back[2] == 0 and back[3] == true and back[4] == true, "2 s later: back")
+local ev = 0
+for i = 1, E.tl:count() do for _, e in ipairs(E.tl:getList("v2KE", i) or {}) do if e[1] == 5 then ev = ev + 1 end end end
+eq(ev, 1, "one touch saved (kit event 5)")
+eq(E.tl.meta.kitVersion, 2, "the kit rules version 2")
+
+section("vanishers: paused on any frame, going on from it, Test")
+local fMid
+for i = 1, E.tl:count() do if tAt(i) <= t0 + 0.4 then fMid = i end end
+E.modes:seek(fMid)
+steps(2)
+check(math.abs(vPart.Transparency - 0.4) < 0.04 and vPart.CanCollide, "on a frame 0.4 s into the fade: its Transparency (" .. vPart.Transparency .. ")")
+E.modes:seek(E.tl:count())
+steps(2)
+eq(vPart.Transparency, 0, "on the last frame: back")
+E.modes:seek(fMid)
+steps(2)
+click() -- (unpausing 0.4 s into the fade)
+local after = {}
+for _ = 1, 50 do
+	M.step(1 / 60)
+	after[#after + 1] = { tAt(E.tl:count()), vPart.Transparency, vPart.CanCollide }
+end
+click()
+steps(2)
+local worst, goneT = 0, nil
+for _, a in ipairs(after) do
+	local r = truthAt(a[1])
+	if r then worst = math.max(worst, math.abs(r[2] - a[2])) end
+	if not goneT and a[3] == false then goneT = a[1] end
+end
+check(worst < 0.04, "unpaused mid-fade: the fade goes on as recorded (worst " .. string.format("%.3f", worst) .. ")")
+check(goneT and math.abs(goneT - (t0 + 1)) < 0.04, "and it vanishes at the same TAS time (" .. tostring(goneT) .. ")")
+-- Test: the recording's fade, no jumps
+key(Enum.KeyCode.Three)
+local worstT, n = 0, 0
+local g = 0
+while E.mode == 3 and g < 600 do
+	M.step(1 / 60)
+	g = g + 1
+	local r = truthAt(E.testTime)
+	if r and E.testTime > t0 and E.testTime < t0 + 1.2 then
+		worstT = math.max(worstT, math.abs(r[2] - vPart.Transparency))
+		n = n + 1
+	end
+end
+check(n > 20 and worstT < 0.05, "Test: the fade as recorded (worst " .. string.format("%.3f", worstT) .. " over " .. n .. " frames)")
+
+section("vanishers: save / load, and a run from before keeps the kit's")
+local res
+M.resume(coroutine.create(function() res = table.pack(Store.SaveSlot("vanish", C.data)) end))
+local g3 = 0
+while not res and g3 < 300 do M.step(1 / 60); g3 = g3 + 1 end
+local loaded
+M.resume(coroutine.create(function() local ok, fr = Store.LoadSlot("vanish"); loaded = ok and fr end))
+g3 = 0
+while not loaded and g3 < 300 do M.step(1 / 60); g3 = g3 + 1 end
+local ev2 = 0
+for i = 1, loaded and #loaded or 0 do for _, e in ipairs(loaded[i].KE or {}) do if e[1] == 5 then ev2 = ev2 + 1 end end end
+eq(ev2, 1, "the touch comes back")
+eq(loaded and loaded.KitVersion, 2, "version 2 comes back")
+local old = {}
+for i = 1, 40 do old[i] = { FrameTime = 1 / 60, TotalTime = i / 60, Cframe = { 0, 3, 40, 1, 0, 0, 0, 1, 0, 0, 0, 1 },
+	Velocity = { Linear = { 0, 0, 0 }, Angular = { 0, 0, 0 } }, State = 8 } end
+old.KitVersion = 1
+idle()
+Core.SetTAS(old)
+create()
+vPart.Transparency = 0.7
+steps(3)
+eq(vPart.Transparency, 0.7, "a run made with version 1: the vanisher is the kit's")
+idle()
+vPart.Transparency = 0
+vFolder:Destroy()
 end
 -- ------------------------------------------------------------------------------------------------ the world
 do
