@@ -8,6 +8,8 @@
 #   UPTO="tag"                  compare only the lines before the first one with this step tag
 #   SCENARIO=bench              another session in tests3/trace/ (tools/bench3.sh uses this)
 #   SCENARIO_PRE="lua"          Lua run before the session (tools/savebench3.sh: BENCH_FRAMES = n)
+#   NOANIMTIME=1                W.anim lines compared without the tracks' times (HappaTAS 3 saves a track's own
+#                               time with each frame and puts it back; V2 works it out from the frame times)
 # Prints "SAME (N lines)" or "DIFFERENT:" and the first differing lines (exit 2).
 # Full traces: tests3/trace/out_a.txt, out_b.txt. The reference is src/parts at commit aaa21b6 (V2.38.17),
 # never the working tree's src/parts.
@@ -65,7 +67,8 @@ run_side() { # SIDE NAME
     upto != "" && $3 == upto { exit }
     index(groups, " " $2 " ") == 0 { next }
     $2 == "F" && fields != " all " && index(fields, " " $5 " ") == 0 { next }
-    { print }' "$T/raw_$2.txt" > "$T/out_$2.txt"
+    noanim != "" && $2 == "W.anim" { gsub(/\/-?[0-9]+/, "") }
+    { print }' noanim="$NOANIMTIME" "$T/raw_$2.txt" > "$T/out_$2.txt"
 }
 
 rm -f "$T/v2file.lua"

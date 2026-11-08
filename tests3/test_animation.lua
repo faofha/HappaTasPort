@@ -69,7 +69,7 @@ eq(tr.Speed, 0, "track speed 0 while paused")
 section("backtrack: the track goes back to the time it had on the frame")
 key(Enum.KeyCode.F)
 tr = playing()[1]
-check(tr.TimePosition > 0, "TimePosition set from the frame times (" .. tostring(tr.TimePosition) .. ")")
+near(tr.TimePosition, tl:getList("AnimTime", E.frame) or -1, 1e-6, "TimePosition: the time the track had on the frame (" .. tostring(tr.TimePosition) .. ")")
 
 section("Test plays the recorded animations at playback speed")
 key(Enum.KeyCode.Three)
@@ -79,6 +79,57 @@ check(tr.Speed > 0, "playing")
 local g = 0
 while E.mode == 3 and g < 200 do M.step(1 / 60); g = g + 1 end
 eq(E.mode, 1, "Test ended")
+
+section("the track's own time is saved with each frame and comes back on rewind / in Test")
+-- (live, the user's climb: rewinding gave a time worked out from frame times and speeds, not the one shown
+-- when recording. Here the mock track moves like Roblox's: looped, 0.8 s long, so the frame-time sum, which
+-- doesn't wrap, can't give it)
+do
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	E.modes:setRun({})
+	M.steps(1)
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	click()
+	M.steps(3)
+	E.char.hum.Running:Fire(16)
+	M.steps(1)
+	local walk
+	for _, t in ipairs(playing()) do if t.Animation.AnimationId == WALK then walk = t end end
+	check(walk ~= nil, "walking")
+	walk.Looped, walk.Length = true, 0.8
+	local seenAt = {}
+	for _ = 1, 90 do
+		M.step(1 / 60)
+		if walk.IsPlaying then walk.TimePosition = (walk.TimePosition + walk.Speed / 60) % walk.Length end
+		seenAt[tl:count()] = walk.TimePosition
+	end
+	click()
+	M.steps(2)
+	local k = 70
+	check(tl:getList("AnimTime", k) ~= nil, "frame " .. k .. " has its track time")
+	E.modes:seek(1)
+	M.steps(1)
+	E.modes:seek(k)
+	M.steps(1)
+	near(walk.TimePosition, tl:getList("AnimTime", k), 1e-6, "back on frame " .. k .. ": the saved track time")
+	near(tl:getList("AnimTime", k), seenAt[k - 1] or -1, 0.02, "which is the time the track had then")
+	-- Test from that frame (playback speed 1): the frame's time again
+	tl:setList("AnimTime", k, 0.123)
+	E.modes:seek(k)
+	M.steps(1)
+	near(walk.TimePosition, 0.123, 1e-6, "the frame's saved time, not a sum")
+	-- a frame without a saved time (an older file): worked out as before
+	for i = 1, tl:count() do tl:setList("AnimTime", i, nil) end
+	E.modes:seek(1)
+	M.steps(1)
+	E.modes:seek(k)
+	M.steps(1)
+	check(walk.TimePosition > 0.8, "no saved time: the frame-time sum, as before (" .. walk.TimePosition .. ")")
+	key(Enum.KeyCode.One)
+	M.steps(2)
+end
 
 section("unload gives the game its Animate back")
 getgenv().__HappaTAS3.Unload()

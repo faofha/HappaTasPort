@@ -361,6 +361,7 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 				JumpTime = math.round(jumpAnimTime * 1000) / 1000,
 				Speed = math.round(currentAnimSpeed * 1000) / 1000,
 				Anims = StartOfTAS and { { AnimToNumber[currentAnim] or 1, 0 } } or useFrameAnims(),
+				Time = math.round(currentAnimTrack.TimePosition * 1000) / 1000,
 			}
 		end
 		return nil
@@ -379,7 +380,12 @@ local function newEngine(plugin, Figure, Humanoid, Torso)
 		jumpAnimTime = AnimData.JumpTime or 0
 		setAnimationSpeed((AnimData.Speed or 1) * (PlaybackSpeed or 1), true)
 		if TimeDifference and currentAnimTrack then
-			currentAnimTrack.TimePosition = TimeDifference
+			local track = currentAnimTrack
+			track.TimePosition = TimeDifference
+			-- (a track started just now may not take a time yet: once more after this frame)
+			task.defer(function()
+				if currentAnimTrack == track and track.IsPlaying and track.Speed == 0 then track.TimePosition = TimeDifference end
+			end)
 		end
 	end
 
@@ -446,6 +452,9 @@ function Animation.new(E)
 	tl:addColumn("AnimJump", "f64", 1, { key = "Anim", field = "JumpTime" })
 	tl:addColumn("AnimSpeed", "f64", 1, { key = "Anim", field = "Speed" })
 	tl:addColumn("AnimList", "list", 1, { key = "Anim", field = "Anims", default = {}, keep = function(v) return #v > 0 end })
+	-- (the playing track's own time: a rewind / Test puts it back as it was, it can't be worked out from the frame
+	-- times when the track loops or was stopped. Not in older files: worked out as before there)
+	tl:addColumn("AnimTime", "list", 1, { key = "Anim", field = "Time" })
 	E.life:own(function() self:shutdown() end)
 	return self
 end
@@ -517,11 +526,13 @@ function Animation:fill(tl, i)
 		tl:set("AnimJump", i, 1, d.JumpTime)
 		tl:set("AnimSpeed", i, 1, d.Speed)
 		tl:setList("AnimList", i, d.Anims)
+		tl:setList("AnimTime", i, d.Time)
 	else
 		tl:set("AnimPose", i, 1, EMPTY.Pose)
 		tl:set("AnimJump", i, 1, EMPTY.JumpTime)
 		tl:set("AnimSpeed", i, 1, EMPTY.Speed)
 		tl:setList("AnimList", i, nil)
+		tl:setList("AnimTime", i, nil)
 	end
 end
 
@@ -530,6 +541,7 @@ local function dataAt(tl, i)
 end
 local NONE = {}
 local function animsAt(tl, i) return tl:getList("AnimList", i) or NONE end
+local function timeAt(tl, i) return tl:getList("AnimTime", i) end
 
 function Animation:set(data, anims, speed, timeDiff)
 	local e = self.current
@@ -542,13 +554,13 @@ function Animation:lock(mode)
 end
 
 -- the frame's animation state, and its animations (Test, held frames)
-function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+function Animation:playFrame(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
 -- a frame passed in interpolated playback: only its last started animation
 function Animation:passFrame(tl, i, speed)
 	local a = animsAt(tl, i)
-	self:set(dataAt(tl, i), { a[#a] }, speed)
+	self:set(dataAt(tl, i), { a[#a] }, speed, (#a > 0) and timeAt(tl, i) or nil)
 end
-function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed) end
+function Animation:testBegin(tl, i, speed) self:set(dataAt(tl, i), animsAt(tl, i), speed, timeAt(tl, i)) end
 
 -- paused on frame i (or unpausing from it); backtrack = the animation back to where it was then
 function Animation:loadFrame(tl, i, unpausing, backtrack)
@@ -569,6 +581,7 @@ function Animation:loadFrame(tl, i, unpausing, backtrack)
 		end
 	end
 	if not backSpeed then backSpeed = 1 end
+	if backtrack then animTime = timeAt(tl, i) or animTime end
 	self:set(dataAt(tl, i), backAnim, (not unpausing) and 0 or backSpeed, backtrack and animTime or nil)
 end
 
