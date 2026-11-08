@@ -124,6 +124,8 @@ function Frame.start(E)
 		-- (a held step is no game time: the humanoid's controllers and coyote timer skip it, measured in the mock:
 		-- the off-floor timer ran 4x too fast at 0.25x)
 		E.stepHeld = not E.time:stepBegin(dt)
+		-- (Frame Step, recording: keys from the held frames before this step belong to the frame it starts from)
+		if not E.stepHeld and E.mode == 2 and not E.paused and E.time:stepping() then E.inputs:lateInto(tl, tl:count()) end
 		if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
 			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end
