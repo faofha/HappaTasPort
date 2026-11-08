@@ -439,6 +439,23 @@ do
 		return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
 	end
 	SH.FS = FS
+	-- a free part your character touches (a platform it pushes or stands on) also runs every step: holding both
+	-- broke the contact each held step (live, the kit's Pushing Platform: 0.42 studs pushed by 0.3 s at 0.5x
+	-- against 3.5 - 4.9 at 1x; with every step of the contact run, 2.95)
+	local touchParams = OverlapParams.new()
+	touchParams.FilterType = Enum.RaycastFilterType.Exclude
+	local function touchingHeld()
+		local ch = Players.LocalPlayer and Players.LocalPlayer.Character
+		local set = FS.rootSet
+		if not (ch and set and next(set)) then return false end
+		touchParams.FilterDescendantsInstances = { ch }
+		local cf, size = ch:GetBoundingBox()
+		for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
+			local r = h.AssemblyRootPart or h
+			if set[r] then return true end
+		end
+		return false
+	end
 	local function collectStepParts()
 		local list, done = {}, {}
 		eachWorldPart(function(p)
@@ -448,7 +465,7 @@ do
 			done[rootP] = true
 			list[#list + 1] = rootP
 		end)
-		FS.parts = list
+		FS.parts, FS.rootSet = list, done
 	end
 	local function hold(p)
 		local n = FS.n + 1
@@ -464,8 +481,16 @@ do
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
 		if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end -- (the first step runs)
-		local okT, must = pcall(timedState, FS.hum)
-		if FS.acc >= dt - 1e-9 or (okT and must and FS.acc - dt > -MAX_DEBT) then
+		local run = FS.acc >= dt - 1e-9
+		if not run and FS.acc - dt > -MAX_DEBT then
+			local okT, must = pcall(timedState, FS.hum)
+			if not (okT and must) then
+				if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
+				okT, must = pcall(touchingHeld)
+			end
+			run = okT and must
+		end
+		if run then
 			FS.acc = FS.acc - dt
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
