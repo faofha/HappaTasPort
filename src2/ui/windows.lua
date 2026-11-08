@@ -258,6 +258,7 @@ function Windows:open(id)
 	if not self.defs[id] then return end
 	local win = self.windows[id] or self:build(id)
 	if not win.open then
+		if self.ui.sounds then self.ui.sounds:play("open") end
 		self.openCount = self.openCount + 1
 		if self.defs[id].modal ~= false then self.modalCount = self.modalCount + 1 end
 	end
@@ -272,6 +273,7 @@ end
 function Windows:close(id)
 	local win = self.windows[id]
 	if not win or not win.open then return end
+	if self.ui.sounds then self.ui.sounds:play("close") end
 	win.open = false
 	self.openCount = self.openCount - 1
 	if self.defs[id].modal ~= false then self.modalCount = self.modalCount - 1 end

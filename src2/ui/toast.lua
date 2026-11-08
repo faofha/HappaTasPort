@@ -25,6 +25,7 @@ function Toast.new(ui)
 end
 
 function Toast:add(text, isError)
+	if self.ui.sounds then self.ui.sounds:play("status") end
 	if #self.items >= MAX then self:remove(self.items[1]) end
 	local th = self.ui.theme
 	local gui = K.frame("Toast", self.ui.root.layer)

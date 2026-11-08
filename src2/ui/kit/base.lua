@@ -8,6 +8,13 @@ local W = import("ui/write")
 
 local K = {}
 
+-- the New interface's sound for a control (ui/sounds; nothing without it)
+function K.sound(self, name)
+	local ui = self.ctx and self.ctx.ui
+	local snd = ui and ui.sounds
+	if snd then snd:play(name) end
+end
+
 function K.new(ctx, cls)
 	return setmetatable({ ctx = ctx, rects = {}, offs = {} }, cls)
 end

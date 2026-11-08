@@ -18,6 +18,7 @@ local Windows = import("ui/windows")
 local Layout = import("ui/layout")
 local Dock = import("ui/dock")
 local Toast = import("ui/toast")
+local Sounds = import("ui/sounds")
 local SettingsWin = import("ui/win/settings")
 local ControlsWin = import("ui/win/controls")
 local Frost = import("ui/frost")
@@ -43,6 +44,7 @@ function UI.start(E)
 		return self
 	end
 	self.pointer = Pointer.new(E, self.root, life)
+	self.sounds = Sounds.new(self)
 	Layout.probeParent = self.root.gui
 	self.theme = Theme.new(E, life)
 	self.tween = Tween.new(E, life)

@@ -25,6 +25,7 @@ function Toggle.new(ctx, parent, opts)
 	K.style(self, function() self:show(false) end)
 	K.rect(self, { onRelease = function(_, clicked)
 		if not clicked then return end
+		K.sound(self, "click")
 		self.value = not self.value
 		self:show(true)
 		if self.onChange then self.onChange(self.value) end
