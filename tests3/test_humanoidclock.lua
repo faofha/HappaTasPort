@@ -1005,4 +1005,39 @@ do
 	steps(2)
 end
 
+section("Frame Step: a key let go between steps is in the frame the next step starts from (as at 1x)")
+-- (live, a 0.1x walk: the key-up was written one frame late, into the frame after the step it stopped: the stop slide
+-- looked one step shorter than at 1x, with the same physics)
+do
+	local W = Enum.KeyCode.W
+	local function walkStop(at)
+		local frames = {}
+		for i = 1, 200 do frames[i] = 1 / 240 end
+		local ev = {
+			[2] = function() M.pressKey(W); hum.MoveDirection = Vector3.new(1, 0, 0) end,
+			[at] = function() M.releaseKey(W); hum.MoveDirection = Vector3.zero end,
+		}
+		local run = record(frames, 1, ev)
+		local keyAt, slowAt
+		for i, fr in ipairs(run) do
+			local inp = fr.Input
+			if not keyAt and type(inp) == "table" then
+				for _, e in ipairs(inp) do if e < 0 then keyAt = i end end
+			end
+			if keyAt and not slowAt and i > keyAt - 2 and fr.Velocity.Linear[1] < 15.99 then slowAt = i end
+		end
+		return keyAt, slowAt
+	end
+	S.Set("Speed Hack", 0)
+	local k1, s1 = walkStop(120)
+	check(k1 ~= nil and s1 == k1 + 1, "1x: the frame after the key-up is the first one slowing down (key " .. tostring(k1) .. ", slowing " .. tostring(s1) .. ")")
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.25)
+	for _, at in ipairs({ 120, 121, 122, 123 }) do
+		local k, sl = walkStop(at)
+		check(k ~= nil and sl == k + 1, "0.25x, key-up before real frame " .. at .. ": the same (key " .. tostring(k) .. ", slowing " .. tostring(sl) .. ")")
+	end
+	S.Set("Speed Hack Speed", 0.5)
+end
+
 finish()

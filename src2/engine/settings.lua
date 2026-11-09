@@ -95,6 +95,9 @@ Settings.SCHEMA = {
 	row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 	row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 	row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
+	-- (the New interface's sounds: no V2 name, not in Classic)
+	row("uiSounds", nil, "Interface", 1, { desc = "Clicks, windows opening / closing and status messages make a sound" }),
+	row("uiSoundVolume", nil, "Interface", 50, { kind = NUM, min = 0, max = 100, integer = true, desc = "How loud the interface sounds are" }),
 	row("statsTextSize", "Stats Text Size", "Interface", 11, { kind = NUM, min = 6, max = 30, integer = true, desc = "The size of the stats text" }),
 	row("showMicroProfiler", "Show MicroProfiler", "Interface", 0, { desc = "Shows the MicroProfiler" }),
 	row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4, desc = "The size of the MicroProfiler" }),
@@ -110,7 +113,7 @@ local NAMES = {
 	textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-	interface = "Classic interface", speedHackModes = "Speed Hack In",
+	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do

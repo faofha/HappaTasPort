@@ -46,7 +46,10 @@ function Button.new(ctx, parent, opts)
 		W.set(gui, "Size", UDim2.new(0, w, 0, opts.h or 24))
 	end
 	K.style(self, self.restyle)
-	K.rect(self, { onRelease = function(_, clicked) if clicked and self.onClick then self.onClick() end end,
+	K.rect(self, { onRelease = function(_, clicked)
+		if clicked then K.sound(self, "click") end
+		if clicked and self.onClick then self.onClick() end
+	end,
 		onHover = function(on) if self.kind ~= "reset" then W.set(self.label, "TextTransparency", on and 0 or 0.08) end end }, opts.z)
 	return self
 end

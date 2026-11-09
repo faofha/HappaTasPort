@@ -32,6 +32,7 @@ function Segmented.new(ctx, parent, opts)
 		self.segments[i] = l
 		K.rect(self, { gui = l, onRelease = function(_, clicked)
 			if not clicked or self.value == o then return end
+			K.sound(self, "click")
 			self.value = o
 			self:show(true)
 			if self.onChange then self.onChange(o) end

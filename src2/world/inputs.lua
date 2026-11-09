@@ -202,6 +202,18 @@ function Inputs:clear()
 	if #self.queue > 0 then self.queue = {} end
 end
 
+-- Frame Step: the keys pressed / let go since frame n was made, added to it when the physics step that starts from
+-- it runs (it uses them, like a 1x frame's step; taken at the next frame they were one frame late, live)
+function Inputs:lateInto(tl, n)
+	if #self.queue == 0 or n < 1 or n > tl:count() then return end
+	local ev = tl:getList("Input", n)
+	local all = {}
+	if ev then for k = 1, #ev do all[k] = ev[k] end end
+	for _, e in ipairs(self.queue) do all[#all + 1] = e end
+	self.queue = {}
+	tl:setList("Input", n, all)
+end
+
 -- mouse position in window pixels + the same position normalised to the viewport (0..1)
 function Inputs:mouse()
 	local v = self.uis:GetMouseLocation()

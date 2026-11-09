@@ -125,6 +125,7 @@ function Dropdown:open()
 			end,
 			onRelease = function(_, clicked)
 				if not clicked then return end
+				K.sound(self, "click")
 				if self.multi then
 					self.value = self:toggled(o)
 					self:show()
