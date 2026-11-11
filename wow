@@ -9760,7 +9760,7 @@ __mods["world/time/control"] = function(import)
 			rescaleAnimations()
 		end
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-			root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false, forced = false }
+			root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 		SH.FS = FS
 		local function setFrozen(on)
 			local f = FS.frozen
@@ -9785,20 +9785,6 @@ __mods["world/time/control"] = function(import)
 		function SH.Thaw()
 			if FS.frozen then setFrozen(false) end
 		end
-		local touchParams = OverlapParams.new()
-		touchParams.FilterType = Enum.RaycastFilterType.Exclude
-		local function touchingHeld()
-			local ch = Players.LocalPlayer and Players.LocalPlayer.Character
-			local set = FS.rootSet
-			if not (ch and set and next(set)) then return false end
-			touchParams.FilterDescendantsInstances = { ch }
-			local cf, size = ch:GetBoundingBox()
-			for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
-				local r = h.AssemblyRootPart or h
-				if set[r] then return true end
-			end
-			return false
-		end
 		local function collectStepParts()
 			local list, done = {}, {}
 			eachWorldPart(function(p)
@@ -9808,7 +9794,7 @@ __mods["world/time/control"] = function(import)
 				done[rootP] = true
 				list[#list + 1] = rootP
 			end)
-			FS.parts, FS.rootSet = list, done
+			FS.parts = list
 		end
 		local function hold(p)
 			local n = FS.n + 1
@@ -9821,12 +9807,6 @@ __mods["world/time/control"] = function(import)
 		local function planStep()
 			local est = FS.est or (1 / 240)
 			local run = FS.acc == nil or FS.acc + FS.s * est >= est - 1e-9
-			FS.forced = false
-			if not run then
-				if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
-				local okT, must = pcall(touchingHeld)
-				if okT and must then run, FS.forced = true, true end
-			end
 			FS.plan = run
 			local h = FS.hum
 			if run then
@@ -9843,9 +9823,8 @@ __mods["world/time/control"] = function(import)
 			if dt > 0 then FS.est = dt end
 			if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end
 			if FS.plan ~= false then
-				local left = FS.acc - dt
-				FS.acc = (FS.forced and left < 0) and 0 or left
-				FS.forced, FS.latch = false, false
+				FS.acc = FS.acc - dt
+				FS.latch = false
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9914,7 +9893,7 @@ __mods["world/time/control"] = function(import)
 			SH.StepEnd()
 			setFrozen(false)
 			FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
-			FS.plan, FS.est, FS.latch, FS.forced = nil, nil, false, false
+			FS.plan, FS.est, FS.latch = nil, nil, false
 		end
 		local function applyValues(h, s)
 			if h ~= hum then
@@ -12987,6 +12966,22 @@ __mods["engine/diagnostics"] = function(import)
 		"delfolder", "gethui", "cloneref", "getgc", "filtergc", "getconnections", "hookfunction", "restorefunction",
 		"iscclosure", "getloadedmodules", "setreadonly", "isreadonly", "isactive", "keypress", "keyrelease",
 		"mousemoveabs", "mousemoverel", "mousescroll", "getcustomasset", "identifyexecutor", "envOf", "setclipboard" }
+	function Diag.census()
+		local c = { parts = 0, collide = 0, loose = 0, meshes = 0, constraints = {} }
+		for _, d in ipairs(workspace:GetDescendants()) do
+			if d:IsA("BasePart") then
+				c.parts = c.parts + 1
+				if d.CanCollide then
+					c.collide = c.collide + 1
+					if not d.Anchored then c.loose = c.loose + 1 end
+					if d:IsA("MeshPart") or d:IsA("UnionOperation") then c.meshes = c.meshes + 1 end
+				end
+			elseif d:IsA("Constraint") or d:IsA("BodyMover") then
+				c.constraints[d.ClassName] = (c.constraints[d.ClassName] or 0) + 1
+			end
+		end
+		return c
+	end
 	local function ring() return { t = table.create(N, 0), v = table.create(N, 0), i = 0, n = 0 } end
 	local function push(r, t, v)
 		local i = r.i % N + 1
@@ -13087,6 +13082,15 @@ __mods["engine/diagnostics"] = function(import)
 					tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Freefall)), fmt(workspace.Gravity))
 			end)
 			if ok then add(s) end
+		end
+		local okC, c = pcall(Diag.census)
+		if okC then
+			add("World: " .. c.parts .. " parts, " .. c.collide .. " collide, " .. c.loose .. " of them loose (held with the character in slow motion)")
+			local list = {}
+			for class, n in pairs(c.constraints) do list[#list + 1] = class .. " x" .. n end
+			table.sort(list)
+			add("  Constraints and movers: " .. (#list > 0 and table.concat(list, ", ") or "none"))
+			add("  Meshes and unions that collide: " .. c.meshes)
 		end
 		add("Settings:")
 		local keys = {}
@@ -18296,7 +18300,9 @@ __mods["ui/win/helptext"] = function(import)
 			.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 			.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
 			.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
-			.. "landing and coyote time are exactly like normal speed. Above 1x the physics is sped up instead." },
+			.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
+			.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
+			.. "and record what matters at 1x or below." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -18311,10 +18317,11 @@ __mods["ui/win/helptext"] = function(import)
 			.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
 			.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 		{ "limits", "Known limits",
-			"Some things can't follow the run: other players; in fast motion, Roblox's own timers inside the humanoid; "
-			.. "a loose platform you push or stand on in slow motion (it runs at full speed while you touch it, and the "
-			.. "push can start a little later, or stall); kit listeners whose function the executor can't see. Turn on "
-			.. "Sync Client Objects for platforms you need exactly." },
+			"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
+			.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
+			.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+			.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
+			.. "constraints." },
 		{ "missing", "Missing executor functions", "" },
 		{ "credits", "Credits", CREDITS },
 	}

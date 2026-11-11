@@ -149,7 +149,9 @@ local TOPICS = {
 		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 		.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
 		.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
-		.. "landing and coyote time are exactly like normal speed. Above 1x the physics is sped up instead." },
+		.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
+		.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
+		.. "and record what matters at 1x or below." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -164,10 +166,11 @@ local TOPICS = {
 		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
 		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 	{ "limits", "Known limits",
-		"Some things can't follow the run: other players; in fast motion, Roblox's own timers inside the humanoid; "
-		.. "a loose platform you push or stand on in slow motion (it runs at full speed while you touch it, and the "
-		.. "push can start a little later, or stall); kit listeners whose function the executor can't see. Turn on "
-		.. "Sync Client Objects for platforms you need exactly." },
+		"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
+		.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
+		.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+		.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
+		.. "constraints." },
 	{ "missing", "Missing executor functions", "" },
 	{ "credits", "Credits", CREDITS },
 }

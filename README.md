@@ -84,13 +84,14 @@ chat or a text box.
 - **Speed hack** (Settings > Speed hack): slow or fast motion while recording (0.1x - 4x), like a video played
   slower or faster. The character (walking, turning, jumps, coyote time), gravity, animations, the camera's
   zoom and the world (constraints, conveyors, bounce pads, swings, kit timers) change speed; the run is saved
-  in normal time, so Test plays it at normal speed. A platform you push yourself (the kit's Pushing Platform)
-  moves too fast in smooth slow motion, because Roblox's walking force can't be slowed by a script.
+  in normal time, so Test plays it at normal speed. Fast motion (above 1x) is close, not exact: one real
+  physics step covers several steps of game time. Use it to get through waits.
   - *Frame Step* (below 1x): nothing is scaled. Roblox's normal physics runs on some frames only (one in two
     at 0.5x) and everything that moves is held still for the others, the humanoid itself too (its state
     machine and timers stand still, so a landing, a jump's push and coyote time take the same game time as at
     normal speed and nothing plays at full speed); only the frames whose physics ran are recorded, each made
-    right before its step as at 1x, so walking, jumping, falling and landing come out like normal speed.
+    right before its step as at 1x, so walking, jumping, falling and landing come out like normal speed. A
+    loose platform you push or stand on is held with you, so slow motion stays slow there too.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is

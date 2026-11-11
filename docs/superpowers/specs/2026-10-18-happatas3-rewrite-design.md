@@ -168,9 +168,10 @@ Shared interface: `enter(mode)`, `leave(mode)`, `record(frame)`, `show(frame)` (
 - **Buttons, lighting, tools, death:** same behaviour as V2.38.16, as plugins.
 
 **Known limits (documented, not promised):** other players; Roblox's own humanoid timers in fast motion (put
-back on the game clock by a model; in slow motion the humanoid is frozen with the held steps, nothing to model);
-a loose platform the character pushes or stands on in Frame Step (it runs every step while touched, and the
-push can start later or stall); kit listeners whose function the executor can't see.
+back on the game clock by a model; in slow motion the humanoid is frozen with the held steps, nothing to model)
+and fast motion as a whole (one real step covers several steps of game time); in Frame Step a push against a
+loose platform can start a few hundredths of a second later; kit listeners whose function the executor can't
+see.
 
 ## 8. UI
 
@@ -519,3 +520,12 @@ Each phase has its own implementation plan, tests and PR.
 - **Windows over windows (2026-11-11, live):** with glass at 54 % the Library's text, its buttons and its close dot
   showed through the Settings window in front of it, and a window's title through the Dock. A panel in front of
   another is solid now (4 % see-through); checked by screenshot.
+- **Frame Step: loose platforms held with the character (2026-11-12, live):** until now every step ran while the
+  character touched a loose part, because holding both broke their contact (0.42 studs pushed by 0.3 s at 0.5x
+  against 3.5 - 4.9 at 1x), so slow motion ran at full speed on any loose platform. With the humanoid frozen on the
+  held steps the contact holds. The kit's Pushing Platform, the slider at 0.3 s of game time: 1x 2.21, 0.18
+  (stalled), 5.05, 3.15, 3.49, 0.11 (stalled), 5.03, 5.02; held at 0.25x 5.11, 3.47, 3.76, 3.62, 4.62, 5.04, 5.03,
+  5.03, 3.91, 3.33; held at 0.1x 2.41, 5.04 (no stall in 12 held runs, game time / real time 0.25 and 0.10). The
+  push starts at 0.06 - 0.07 s at 1x and in 6 of the 12 held runs, at 0.10 - 0.14 s in the other 6. Dropped onto
+  the kit's Falling Platform, it sinks at about the same rate (about 7.3 studs/s^2 at 1x, 7.1 - 7.2 at 0.25x). The touch rule
+  is gone. Diagnostics gets a census of the world (parts, loose ones, constraints, meshes that collide).
