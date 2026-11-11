@@ -266,6 +266,7 @@ function Modes:unpause()
 	local tl = E.tl
 	if tl:count() > 1 and E.frame > 1 and E.char:jumpedOffLadder() then E.frame = E.frame - 1 end
 	unpauseFrom(self)
+	E.inputs:putMouseBack(tl, tl:count())
 	self:loadFrame(tl:count(), true)
 	E.char:anchor(false)
 	E.cs:setCameraFreeze(false, false)
@@ -309,6 +310,7 @@ function Modes:unpause1()
 	if tl:count() > 1 and E.frame > 1 and E.char:jumpedOffLadder() then E.frame = E.frame - 1; count = 2 end
 	if tl:count() > 1 and E.frame >= 1 and E.frame <= tl:count() and tl:get("State", E.frame, 1) == Enum.HumanoidStateType.Landed.Value then count = 2 end
 	unpauseFrom(self)
+	E.inputs:putMouseBack(tl, tl:count())
 	E.char:anchor(false)
 	E.cs:setCameraFreeze(false, false)
 	E.cs:lockShiftlock(false)

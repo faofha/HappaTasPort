@@ -8,6 +8,9 @@
 --   * Testing: the real cursor stays hidden for the whole replay, the fake one shows the recorded cursor.
 --     While the recording had the camera locked, the hidden real cursor is moved the way the mouse moved
 --     the camera, so NohBoard shows the mouse movement.
+--   * Paused in Create ("Keep Mouse Position (Paused)", whether NohBoard Cursor is on or not): a see-through
+--     cursor image on the mouse position of the frame shown; it follows Back / Forward. The real cursor stays
+--     visible and free for the menus (unpausing puts it back on that position: Inputs:putMouseBack).
 --  Its overlay is a ScreenGui of its own (CoreGui, else gethui()), owned by the engine's lifecycle.
 -- ================================================================================================
 local Env = import("platform/env")
@@ -20,6 +23,7 @@ Cursor.__index = Cursor
 local ARROW = { "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png", 64 }
 local LOCKED = { "rbxasset://textures/MouseLockedCursor.png", 32 }
 local HIDE_DELAY = 2 -- frames the real and fake cursor overlap before the real one is hidden
+local GHOST = 0.45   -- how see-through the paused frame's cursor image is
 local DISPLAY_ORDER = 2147483000
 
 function Cursor.new(E)
@@ -64,7 +68,16 @@ function Cursor:ensure()
 	img.Parent = self.sg
 	self.img = img
 	self.st.icon = nil
+	self.st.ghost = false
 	return true
+end
+
+-- the paused frame's cursor is see-through, the NohBoard one solid
+function Cursor:setGhost(on)
+	local st = self.st
+	if st.ghost == on then return end
+	st.ghost = on
+	self.img.ImageTransparency = on and GHOST or 0
 end
 
 function Cursor:setIcon(which)
@@ -152,6 +165,7 @@ function Cursor:testStep(tl, f)
 		end
 		if centered then st.anchorX, st.anchorY = cx, cy end
 		self:setIcon(tl:get("ShiftLock", f, 1) == 1 and LOCKED or ARROW)
+		self:setGhost(false)
 		self:showFakeAt(st.anchorX, st.anchorY)
 		-- the hidden real cursor follows the camera like the mouse did (NohBoard)
 		if f ~= st.lastFrame or tl.version ~= st.lastVersion then
@@ -177,6 +191,7 @@ function Cursor:testStep(tl, f)
 		end
 	else
 		self:setIcon(ARROW)
+		self:setGhost(false)
 		if px then self:showFakeAt(px, py) end
 		st.lastYaw = nil
 	end
@@ -188,11 +203,18 @@ end
 function Cursor:update(tl, f)
 	local E, st = self.E, self.st
 	self.frameNo = self.frameNo + 1
-	if not E.settings:on("nohboardCursor") or not self.uis.MouseEnabled then
+	local mode = E.mode
+	local nohboard = E.settings:on("nohboardCursor")
+	-- (paused in Create: the frame shown, for its mouse position)
+	local pf = nil
+	if mode == 2 and E.paused and not E.firstFrame and E.settings:on("pausedMouse") then
+		local n = tl:count()
+		if n > 0 and E.frame >= 1 and E.frame <= n then pf = E.frame end
+	end
+	if not (nohboard or pf) or not self.uis.MouseEnabled then
 		if st.fake or st.realHidden then self:onCursorReset() end
 		return
 	end
-	local mode = E.mode
 	if mode == 3 then
 		if not self:ensure() then return end
 		self:testStep(tl, f)
@@ -204,13 +226,17 @@ function Cursor:update(tl, f)
 		return
 	end
 	local cs = E.cs
-	local isShift = (f and tl:get("ShiftLock", f, 1) == 1) or cs:isShiftlocked()
-	local isFP = (f and tl:get("Zoom", f, 1) <= 0.55) or cs:isFirstPerson()
-	local mb = self.uis.MouseBehavior
-	local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
-	local locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modal == true)
+	local isShift, centered, locked = false, false, false
+	if nohboard then
+		isShift = (f and tl:get("ShiftLock", f, 1) == 1) or cs:isShiftlocked()
+		local isFP = (f and tl:get("Zoom", f, 1) <= 0.55) or cs:isFirstPerson()
+		local mb = self.uis.MouseBehavior
+		centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
+		locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modal == true)
+	end
 	if locked then
 		if not self:ensure() then return end
+		self:setGhost(false)
 		if centered then
 			local cx, cy = viewportCenter()
 			st.anchorX, st.anchorY = cx, cy
@@ -233,7 +259,30 @@ function Cursor:update(tl, f)
 		end
 	else
 		st.wasLocked = false
-		if st.fake or st.realHidden then
+		-- paused: where the mouse was on the frame shown (not a frame the camera had the mouse on: it is in the
+		-- middle of the screen there)
+		local gx, gy = nil, nil
+		if pf then
+			-- (worked out when the frame shown or the run changes, and twice a second for a resized window: no
+			-- read of the window's size every paused frame)
+			if st.ghostFrame ~= pf or st.ghostVersion ~= tl.version or st.ghostEdits ~= tl.edits or self.frameNo >= (st.ghostAt or 0) then
+				st.ghostFrame, st.ghostVersion, st.ghostEdits, st.ghostAt = pf, tl.version, tl.edits, self.frameNo + 30
+				st.ghostX, st.ghostY = nil, nil
+				if tl:get("ShiftLock", pf, 1) ~= 1 and tl:get("Zoom", pf, 1) > 0.55 then
+					st.ghostX, st.ghostY = E.inputs:framePoint(tl, pf)
+				end
+			end
+			gx, gy = st.ghostX, st.ghostY
+		else
+			st.ghostFrame = nil
+		end
+		if gx and (st.fake or self:ensure()) then
+			if st.realHidden then self:showReal() end
+			st.hideAt = nil
+			self:setIcon(ARROW)
+			self:setGhost(true)
+			self:showFakeAt(gx, gy)
+		elseif st.fake or st.realHidden then
 			self:showReal()
 			self:hideFake()
 			st.hideAt = nil
