@@ -13,7 +13,9 @@
 --  keep their motion, conveyors move x s, the kit's bounce pad Power / swing Boost are slowed.
 --  Frame Step (always below 1x; the scaling there made the humanoid's emulation drift: extra velocity, the
 --  floor spring and the Landed timer in real time, measured live): no scaling; Roblox's normal physics runs on
---  some steps and everything is held for the others. The humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
+--  some steps and everything is held for the others, the humanoid itself too (frozen: its state machine and
+--  timers stand still), so every step that runs is Roblox's own physics and nothing runs in real time.
+--  Fast motion: the humanoid's own controllers (walking, turning, coyote time, jumps, gravity above Roblox's
 --  1000 limit) are put back on the game clock (the second block, SH.Humanoid).
 -- ================================================================================================
 local Env = import("platform/env")
@@ -423,22 +425,52 @@ do
 	-- PostSimulation of that frame, then put back with the velocities they had: outside the physics step
 	-- nothing is held, so pausing, testing and Idle never see it. The kit's clock moves on by each step that ran
 	-- (KitClock.Advance), the client objects' physics clock skips the held steps (ClientObjects.SkipSim).
-	-- Roblox's humanoid keeps its own timers through a held step (live: no coyote jump even 0.05 s after the edge at
-	-- 0.1x, Landed over 6x too soon), so a step in a timed state always runs: the jump's push, Landed, and Running off
-	-- the floor (coyote time and the grace before Freefall). That time isn't paid back afterwards (holding every step
-	-- until it was froze the character, live), so the game time runs a little ahead of the slider during those steps.
+	-- The humanoid is frozen with the held steps: Humanoid.EvaluateStateMachine off for them. Anchored alone, it
+	-- kept its own timers running in real time (live: no coyote jump even 0.05 s after the edge at 0.1x, Landed over
+	-- in 49 ms of real time whatever the speed), so every step of a jump's push, of Landed and of the coyote time
+	-- used to be run at full speed: a stall and a snap before each landing. Roblox works the humanoid out (state
+	-- machine, timers, the walking / floor / jump forces) between PreAnimation and PreSimulation (live: switched on
+	-- only from PreRender to PreSimulation the character stands, switched off there it sinks 2 studs; switched off
+	-- only from PreAnimation to PreSimulation of the held frames its timers stand still), so whether the next step
+	-- runs is decided at the start of PreRender (planStep, from SH.FrameStart) with the last step's time as the
+	-- guess for the next one's, the humanoid is frozen at PreAnimation and let go again at PreSimulation. Only that
+	-- long: a frozen humanoid's GetState() says Jumping whatever its state is (live).
+	-- A new frame is made and filled only on a frame whose step runs (SH.StepTime), right before that step, as
+	-- every frame is at 1x: its state and animation are what Roblox worked out for that step (made on the first
+	-- held frame after the step before, they were one frame old: live, Freefall and Landed came a frame late), and
+	-- the keys pressed and let go while the steps were held are in it.
+	-- Live, a jump at 0.1x and 0.25x: Running > Jumping > Freefall > Landed > Running at the same game times as at
+	-- 1x (Landed 50 ms, 7.27 studs high, 0.26 studs of sink), with every held step held. A jump tapped while the
+	-- steps are held is made on the next step that runs (the game's control script writes Humanoid.Jump from the
+	-- key every frame: a short tap was gone again).
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-		root = nil, hum = nil }
-	local MAX_DEBT = 0.25
-	local ST = Enum.HumanoidStateType
-	local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
-	local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
-	local function timedState(h)
-		if not (h and h.Parent) then return false end
-		local st = h:GetState()
-		return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
-	end
+		root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false, forced = false }
 	SH.FS = FS
+	local function setFrozen(on)
+		local f = FS.frozen
+		if on then
+			local h = FS.hum
+			if f == h then return end
+			if f then
+				FS.frozen = nil
+				pcall(function() f.EvaluateStateMachine = true end)
+			end
+			pcall(function()
+				-- (a game that switched it off itself: left alone)
+				if h and h.Parent and h.EvaluateStateMachine ~= false then
+					h.EvaluateStateMachine = false
+					FS.frozen = h
+				end
+			end)
+		elseif f then
+			FS.frozen = nil
+			pcall(function() f.EvaluateStateMachine = true end)
+		end
+	end
+	-- the start of PreSimulation (before the frame is filled) and the end of the step: the humanoid is let go
+	function SH.Thaw()
+		if FS.frozen then setFrozen(false) end
+	end
 	-- a free part your character touches (a platform it pushes or stands on) also runs every step: holding both
 	-- broke the contact each held step (live, the kit's Pushing Platform: 0.42 studs pushed by 0.3 s at 0.5x
 	-- against 3.5 - 4.9 at 1x; with every step of the contact run, 2.95)
@@ -475,26 +507,41 @@ do
 		p.Anchored = true
 		FS.n = n
 	end
+	-- the start of PreRender: does this frame's step run, by the time bank with the last step's time as the guess
+	-- for its own (acc == nil: the first step runs); the humanoid is frozen for a held one at PreAnimation
+	local function planStep()
+		local est = FS.est or (1 / 240)
+		local run = FS.acc == nil or FS.acc + FS.s * est >= est - 1e-9
+		FS.forced = false
+		if not run then
+			if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
+			local okT, must = pcall(touchingHeld)
+			if okT and must then run, FS.forced = true, true end
+		end
+		FS.plan = run
+		local h = FS.hum
+		if run then
+			setFrozen(false)
+			if FS.latch and h then pcall(function() h.Jump = true end) end
+		elseif h and not FS.latch then
+			local okJ, j = pcall(function() return h.Jump end)
+			if okJ and j then FS.latch = true end
+		end
+	end
 	-- PreSimulation (after the frame was filled): true = this physics step runs, false = everything is held for
 	-- it. dt = the time the step simulates
 	function SH.StepBegin(dt)
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
+		if dt > 0 then FS.est = dt end
 		if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end -- (the first step runs)
-		local run = FS.acc >= dt - 1e-9
-		if not run and FS.acc - dt > -MAX_DEBT then
-			local okT, must = pcall(timedState, FS.hum)
-			if not (okT and must) then
-				if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
-				okT, must = pcall(touchingHeld)
-			end
-			run = okT and must
-		end
-		if run then
-			-- (a forced step isn't paid back: the bank stays at 0 or above, so no step is held for it afterwards.
-			-- Paid back, everything froze after it: live at 0.1x 131 ms after a jump, 486 ms after a landing, 1.1 s after
-			-- walking off an edge. The game time runs a little ahead of the slider during the forced steps instead)
-			FS.acc = math.max(0, FS.acc - dt)
+		-- (as planned: the humanoid was frozen or let go for exactly that. No plan yet: it runs)
+		if FS.plan ~= false then
+			-- (a step that took more than the bank held, its time was a guess, is paid back: the game time follows the
+			-- slider. One forced by a touch isn't: everything froze after it, live at 0.1x for up to 1.1 s)
+			local left = FS.acc - dt
+			FS.acc = (FS.forced and left < 0) and 0 or left
+			FS.forced, FS.latch = false, false
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -521,6 +568,7 @@ do
 	end
 	-- PostSimulation: the held parts go on as they were
 	function SH.StepEnd()
+		if FS.frozen then setFrozen(false) end -- (a frame with no physics step: no PreSimulation let it go)
 		if not FS.held then return end
 		FS.held = false
 		for i = 1, FS.n do
@@ -537,9 +585,11 @@ do
 		end
 		FS.n = 0
 	end
-	-- the recording takes the simulated time of the steps that ran since its last frame (nil = not frame stepping)
+	-- the recording takes the simulated time of the step that ran since its last frame, on a frame whose own step
+	-- runs (0 = no new frame now; nil = not frame stepping)
 	function SH.StepTime()
 		if not FS.on then return nil end
+		if FS.plan == false then return 0 end
 		local t = FS.pending
 		FS.pending = 0
 		return t
@@ -548,7 +598,10 @@ do
 	-- the time the physics step of this frame simulated while frame stepping (0 = held, or no step yet: the core
 	-- calls SH.FrameStart in PreRender)
 	function SH.StepDt() return FS.frameDt or 0 end
-	function SH.FrameStart() FS.frameDt = 0 end
+	function SH.FrameStart()
+		FS.frameDt = 0
+		if FS.on then planStep() end
+	end
 	-- the game time the animations move on by this frame (Heartbeat): the real dt x the factor, or with Frame Step
 	-- exactly the time of the physics step that ran (0 when everything was held)
 	function SH.GameDt(dt)
@@ -560,8 +613,11 @@ do
 	local function stopStep()
 		if not FS.on then return end
 		if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
+		if FS.freezeConn then FS.freezeConn:Disconnect(); FS.freezeConn = nil end
 		SH.StepEnd()
+		setFrozen(false)
 		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
+		FS.plan, FS.est, FS.latch, FS.forced = nil, nil, false, false
 	end
 
 	local function applyValues(h, s)
@@ -631,6 +687,9 @@ do
 				-- runs every 30 held steps, and the part moved at full speed until then)
 				FS.addConn = workspace.DescendantAdded:Connect(function(d)
 					if d:IsA("BasePart") then FS.scanIn = 0 end
+				end)
+				FS.freezeConn = Env.svc("RunService").PreAnimation:Connect(function()
+					if FS.on and FS.plan == false then setFrozen(true) end
 				end)
 			end
 			FS.s, FS.root, FS.hum = s, part, h
@@ -1119,6 +1178,7 @@ function TimeControl:gameDt(dt) return SH.GameDt(dt) end
 function TimeControl:frameStart() SH.FrameStart() end
 function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 function TimeControl:stepEnd() SH.StepEnd() end
+function TimeControl:thaw() SH.Thaw() end
 function TimeControl:humanoidPre(dt, hum, root, scaled) SH.Humanoid.Pre(dt, hum, root, scaled) end
 function TimeControl:humanoidPost(dt, hum, root, recording) SH.Humanoid.Post(dt, hum, root, recording) end
 

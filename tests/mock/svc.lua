@@ -410,7 +410,13 @@ C.Camera.Methods.GetRenderCFrame = function(self) return self.CFrame end
 C.Camera.Methods.GetRoll = function() return 0 end
 
 -- Humanoid
-C.Humanoid.Methods.GetState = function(self) return rawget(self, "_d").state end
+-- (live: while Humanoid.EvaluateStateMachine is off, GetState() says Jumping whatever the state is; the state
+-- itself is kept and is back when it is switched on again)
+C.Humanoid.Methods.GetState = function(self)
+	local d = rawget(self, "_d")
+	if d.props.EvaluateStateMachine == false and not M.inPhysics then return Enum.HumanoidStateType.Jumping end
+	return d.state
+end
 C.Humanoid.Methods.ChangeState = function(self, st)
 	-- Roblox converts a number / name argument to the EnumItem
 	if type(st) == "number" then st = Enum.HumanoidStateType:FromValue(st) elseif type(st) == "string" then st = Enum.HumanoidStateType[st] end
@@ -810,15 +816,19 @@ function M.physics(dt)
 	if not ch then return end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	if M.physicsLog and hrp then M.physicsLog[#M.physicsLog + 1] = { hrp, hrp.Anchored } end
+	-- (Humanoid.EvaluateStateMachine off when the humanoid was worked out for this step, see M.step: nothing of the
+	-- humanoid moves on, no timer, no state, no force. M.esmLog gets { anchored, evaluated } for every step)
+	local evaluated = M.esmEval ~= false
+	if M.esmLog and hrp then M.esmLog[#M.esmLog + 1] = { hrp.Anchored, evaluated } end
 	-- (Roblox's humanoid keeps its off-floor timer through a step its root is anchored for: measured live,
 	-- Frame Step's held steps used up coyote time)
-	if hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController and RC.engOff > 0 then RC.engOff = RC.engOff + dt end
-	if hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController then
+	if evaluated and hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController and RC.engOff > 0 then RC.engOff = RC.engOff + dt end
+	if evaluated and hrp and hrp.Anchored and M.humanoidPhysics and M.robloxController then
 		local humA = ch:FindFirstChildOfClass("Humanoid")
 		if humA then landedTick(humA, dt) end
 	end
 	if not hrp or hrp.Anchored then return end
-	if M.humanoidPhysics then
+	if M.humanoidPhysics and evaluated then
 		local hum = ch:FindFirstChildOfClass("Humanoid")
 		M.inPhysics = true
 		if hum and M.robloxController then robloxStep(hrp, hum, dt) elseif hum then humanoidStep(hrp, hum, dt) end
@@ -1027,6 +1037,13 @@ function M.step(dt)
 	RS.PreAnimation:Fire(dt)
 	-- (measured in the Roblox client: a frame without a physics step has no PreSimulation / Stepped)
 	if sdt > 0 then
+		-- (Roblox works the humanoid out - state machine, its timers, the controllers' forces - between PreRender and
+		-- PreSimulation, measured live: Humanoid.EvaluateStateMachine as it is then counts for this step)
+		local reads = M.propReads
+		local chE = player.Character
+		local humE = chE and chE:FindFirstChildOfClass("Humanoid")
+		M.esmEval = not (humE and humE.EvaluateStateMachine == false)
+		M.propReads = reads -- (the mock's own look, not a read of the script under test)
 		RS.PreSimulation:Fire(sdt)
 		RS.Stepped:Fire(M.simNow, sdt)
 		M.physics(sdt)

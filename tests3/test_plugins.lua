@@ -208,6 +208,7 @@ do
 	function stub:update() return self.rate end
 	function stub:stepping() return false end
 	function stub:stepBegin() calls[#calls + 1] = "stepBegin"; return true end -- (true: the step runs)
+	function stub:thaw() calls[#calls + 1] = "thaw" end
 	function stub:humanoidPre() calls[#calls + 1] = "pre" end
 	function stub:stepEnd() calls[#calls + 1] = "stepEnd" end
 	function stub:humanoidPost() calls[#calls + 1] = "post" end
@@ -232,6 +233,8 @@ do
 	M.step(1 / 60)
 	local seq = table.concat(calls, ",")
 	check(seq:find("stepBegin,pre", 1, true) ~= nil, "PreSimulation: stepBegin then humanoidPre (" .. seq .. ")")
+	-- (Frame Step froze the humanoid for a held step: it is let go before anything reads its state)
+	check(seq:find("thaw", 1, true) ~= nil and seq:find("thaw", 1, true) < seq:find("stepBegin", 1, true), "PreSimulation starts with thaw (" .. seq .. ")")
 	check(seq:find("stepEnd,post", 1, true) ~= nil, "PostSimulation: stepEnd then humanoidPost")
 	E.modes:request("pause")
 	M.steps(2)
