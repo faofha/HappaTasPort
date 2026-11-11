@@ -2,13 +2,17 @@
 -- Bench: per-frame cost in each mode, the same session on V2.38.16 and on HappaTAS 3 (through the trace
 -- adapters; tools/bench3.sh runs and compares them). V2's client objects and MicroProfiler are off (HappaTAS 3's
 -- world plugins are measured in "world recording"; its MicroProfiler is phase 6). V2's stats panels stay on, as
--- V2 ships them: HappaTAS 3's timeline bar and Inspector (phase 5b) are their counterpart.
+-- V2 ships them: HappaTAS 3's timeline bar is their counterpart in the gated lines. Its Inspector is closed for
+-- those: it works its values out and writes them every frame (asked for: at 5 a second they stood still between
+-- updates), V2's panels every 2nd frame, so open it writes more by design. "idle, Inspector open" and
+-- "recording, Inspector open" show that cost.
 --   us = Lua time per frame of the whole mock frame (HappaTAS + mock), rd / wr = Instance reads / writes
 -- ================================================================================================
 check(A.boot(), "boots")
 for _, name in ipairs({ "Sync Client Objects", "Show MicroProfiler" }) do
 	A.setSetting(name, 0)
 end
+A.closeInspector()
 M.steps(30)
 local hrp = A.char()
 local function measure(name, n, perFrame)
@@ -34,6 +38,11 @@ end
 local function key(kc) M.pressKey(kc); M.releaseKey(kc) end
 
 measure("idle", 1000)
+A.openInspector()
+M.steps(3)
+measure("idle, Inspector open", 600)
+A.closeInspector()
+M.steps(3)
 hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
 measure("idle moving", 1000)
 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -84,7 +93,7 @@ A.closeMenu()
 A.request("idle")
 M.steps(5)
 
--- (phase 5b) recording with the mouse moving (HappaTAS 3's Inspector is open in every mode here), then Test
+-- (phase 5b) recording with the Inspector open and the mouse moving, then Test
 -- with the timeline bar's lanes open (V2 has neither: its stats panels)
 A.request("create")
 M.steps(5)
@@ -92,10 +101,13 @@ A.request("unpause")
 M.steps(3)
 hrp.AssemblyLinearVelocity = Vector3.new(16, 0, 0)
 local mz = 900
+A.openInspector()
+M.steps(3)
 measure("recording, Inspector open", 300, function()
 	mz = mz + 1
 	M.moveMouse(mz, 600)
 end)
+A.closeInspector()
 A.request("pause")
 M.steps(3)
 hrp.AssemblyLinearVelocity = Vector3.zero

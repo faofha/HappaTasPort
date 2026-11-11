@@ -42,7 +42,9 @@ for name in a:
     # ("recording, menu open" is printed, not gated: HappaTAS 3 measured 10-20 % over V2 there in the mock with
     # the same reads / writes and the same in-frame cost; the live check measures it in the client)
     # (phase 5b: the Inspector with the mouse moving, Test with the lanes, a menu with the mouse still)
-    info = name in ("recording, menu open", "recording, menu open, still", "recording, Inspector open", "Test, lanes open", "world recording, 0.5x")
+    # (the Inspector open: it works its values out and writes them every frame, V2's panels every 2nd)
+    info = name in ("recording, menu open", "recording, menu open, still", "recording, Inspector open", "Test, lanes open", "world recording, 0.5x",
+                    "idle, Inspector open")
     bad = (vb[1] > va[1] or vb[2] > va[2] or ratio > 1.10) and not info
     mark = "info" if info else ("SLOWER" if bad else "ok")
     print("%-18s %8.1f %6.1f %6.1f %8.1f %6.1f %6.1f %7.3f %s" % (name, va[0], va[1], va[2], vb[0], vb[1], vb[2], ratio, mark))
