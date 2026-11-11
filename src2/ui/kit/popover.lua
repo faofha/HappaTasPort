@@ -36,7 +36,7 @@ function Popover.open(ctx, anchor, w, h)
 	holder.Size = UDim2.new(0, w, 0, h)
 	holder.ZIndex = ZINDEX
 	self.holder = holder
-	self.glass = Glass.panel(ui.theme, holder, { cornerKind = "window" })
+	self.glass = Glass.panel(ui.theme, holder, { cornerKind = "window", cover = true }) -- (always over a window)
 	self.frame = self.glass.panel
 	self.ctx = { E = ctx.E, ui = ui, theme = ctx.theme, tween = ctx.tween, typing = ctx.typing,
 		pointer = { add = function(r, z) return self:add(r, z) end, remove = function(r) self:remove(r) end } }
