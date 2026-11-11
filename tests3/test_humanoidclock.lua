@@ -377,8 +377,9 @@ evL[6] = function() lz0 = late.Position.Z end
 evL[36] = function() lz1 = late.Position.Z end
 record(fixed, 1, evL)
 check(lz0 and lz1 and math.abs((lz1 - lz0) - 6 * 15 / 60) < 6 / 60 + 1e-6, "a part added while frame stepping moves on the steps that ran only (" .. tostring(lz1 and lz1 - lz0) .. ")")
--- a free part your character touches (a platform it pushes or stands on) runs every step for a while (live:
--- holding broke the contact, the kit's Pushing Platform started 0.3 s late at 0.5x)
+-- a free part your character touches (a platform it pushes or stands on) is held with it like every other: with
+-- the humanoid frozen on the held steps their contact holds (live: the kit's Pushing Platform pushed as at 1x).
+-- Before, every step ran while they touched: full speed on any loose platform
 M.freeParts = {}
 late:Destroy()
 local touch = Instance.new("Part")
@@ -394,7 +395,7 @@ local evT = {}
 evT[1] = function() tz0 = touch.Position.Z end
 evT[11] = function() tz1 = touch.Position.Z end
 record({ table.unpack(fixed, 1, 12) }, 1, evT)
-check(tz0 and tz1 and math.abs((tz1 - tz0) - 6 * 10 / 60) < 1e-6, "a free part touching the character moves on every step (" .. tostring(tz1 and tz1 - tz0) .. ")")
+check(tz0 and tz1 and math.abs((tz1 - tz0) - 6 * 5 / 60) < 6 / 60 + 1e-6, "a free part touching the character moves on the steps that ran only (" .. tostring(tz1 and tz1 - tz0) .. ")")
 M.freeParts = {}
 touch:Destroy()
 boxF:Destroy()

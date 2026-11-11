@@ -418,9 +418,13 @@ do
 	-- physics steps in turn). Only frames whose physics step ran are recorded, each with the simulated time of that step,
 	-- so walking, jumping and falling are exactly normal-speed physics (checked in the client: same heights,
 	-- states and times), and a platform you push yourself (the kit's Pushing Platform) speeds up at the normal
-	-- rate (~158 stud/s^2), which the scaling above can't do (Roblox's walking force can't be slowed). Not exact:
-	-- the moment the character bumps into it (anchoring breaks the contact each held step: the push starts a
-	-- little later, and now and then stalls - 3 of ~20 live runs).
+	-- rate (~158 stud/s^2), which the scaling above can't do (Roblox's walking force can't be slowed). A loose
+	-- part the character pushes or stands on is held with it like everything else. (Before the humanoid was
+	-- frozen with the held steps that broke their contact, 0.42 studs pushed by 0.3 s at 0.5x against 3.5 - 4.9
+	-- at 1x, so every step ran while they touched: full speed on any loose platform. Frozen, live at 0.25x and
+	-- 0.1x: the kit's Pushing Platform 2.4 - 5.1 studs by 0.3 s in 12 runs, none stalled, against 2.2 - 5.1 and
+	-- 2 stalls in 8 runs at 1x; the push starts at 0.07 s as at 1x, in half of the runs at 0.10 - 0.14 s; standing
+	-- on the kit's Falling Platform it sinks at the same rate.)
 	-- Held = the character's root and every free assembly of the world's parts anchored from PreSimulation to
 	-- PostSimulation of that frame, then put back with the velocities they had: outside the physics step
 	-- nothing is held, so pausing, testing and Idle never see it. The kit's clock moves on by each step that ran
@@ -444,7 +448,7 @@ do
 	-- steps are held is made on the next step that runs (the game's control script writes Humanoid.Jump from the
 	-- key every frame: a short tap was gone again).
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-		root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false, forced = false }
+		root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 	SH.FS = FS
 	local function setFrozen(on)
 		local f = FS.frozen
@@ -471,23 +475,6 @@ do
 	function SH.Thaw()
 		if FS.frozen then setFrozen(false) end
 	end
-	-- a free part your character touches (a platform it pushes or stands on) also runs every step: holding both
-	-- broke the contact each held step (live, the kit's Pushing Platform: 0.42 studs pushed by 0.3 s at 0.5x
-	-- against 3.5 - 4.9 at 1x; with every step of the contact run, 2.95)
-	local touchParams = OverlapParams.new()
-	touchParams.FilterType = Enum.RaycastFilterType.Exclude
-	local function touchingHeld()
-		local ch = Players.LocalPlayer and Players.LocalPlayer.Character
-		local set = FS.rootSet
-		if not (ch and set and next(set)) then return false end
-		touchParams.FilterDescendantsInstances = { ch }
-		local cf, size = ch:GetBoundingBox()
-		for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
-			local r = h.AssemblyRootPart or h
-			if set[r] then return true end
-		end
-		return false
-	end
 	local function collectStepParts()
 		local list, done = {}, {}
 		eachWorldPart(function(p)
@@ -497,7 +484,7 @@ do
 			done[rootP] = true
 			list[#list + 1] = rootP
 		end)
-		FS.parts, FS.rootSet = list, done
+		FS.parts = list
 	end
 	local function hold(p)
 		local n = FS.n + 1
@@ -512,12 +499,6 @@ do
 	local function planStep()
 		local est = FS.est or (1 / 240)
 		local run = FS.acc == nil or FS.acc + FS.s * est >= est - 1e-9
-		FS.forced = false
-		if not run then
-			if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
-			local okT, must = pcall(touchingHeld)
-			if okT and must then run, FS.forced = true, true end
-		end
 		FS.plan = run
 		local h = FS.hum
 		if run then
@@ -538,10 +519,9 @@ do
 		-- (as planned: the humanoid was frozen or let go for exactly that. No plan yet: it runs)
 		if FS.plan ~= false then
 			-- (a step that took more than the bank held, its time was a guess, is paid back: the game time follows the
-			-- slider. One forced by a touch isn't: everything froze after it, live at 0.1x for up to 1.1 s)
-			local left = FS.acc - dt
-			FS.acc = (FS.forced and left < 0) and 0 or left
-			FS.forced, FS.latch = false, false
+			-- slider)
+			FS.acc = FS.acc - dt
+			FS.latch = false
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -617,7 +597,7 @@ do
 		SH.StepEnd()
 		setFrozen(false)
 		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
-		FS.plan, FS.est, FS.latch, FS.forced = nil, nil, false, false
+		FS.plan, FS.est, FS.latch = nil, nil, false
 	end
 
 	local function applyValues(h, s)
