@@ -450,6 +450,255 @@ do
 	local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 		root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 	SH.FS = FS
+
+	-- ---------------------------------------------------------------------------------------- smooth view
+	-- Frame Step shows the same picture on every held frame: at 0.25x the world moves on one frame in four, so
+	-- slow motion looks choppy at any frame rate. The smooth view ("Smooth Slow Motion") draws the frames in
+	-- between, the way a game with fixed physics steps draws its frames: the picture is the world a short, fixed
+	-- game time ago (SV.lag), on the way between the real poses the last steps left. The game time shown moves on
+	-- with the real time x the slider on every frame (it is the time bank: the simulated time + FS.acc), so the
+	-- picture moves on every frame at the game's own speed x the slider, whichever frames ran a step and whether
+	-- a frame's step simulated 1/240 s or 2/240 s. (Live at 165 frames a second both happen in turn. A first
+	-- version that went from one step's pose to the next by the bank alone moved on 74 % of the frames at 0.25x
+	-- and 50 % at 0.1x, in jumps of up to a whole step.)
+	-- What is drawn there: the character's root, the loose parts that moved in the last steps, and the camera (by
+	-- what the root's picture is off its real place).
+	-- Only the picture: the camera goes there in PreRender before the interface's Frost places its panes by it, the
+	-- parts at the very end of PreRender, after everything of HappaTAS read the real poses, and at PreAnimation, the
+	-- first thing after the picture was drawn, everything is back. Roblox works the humanoid out after that and
+	-- the physics step comes after that; nothing was simulated in between, and a frame is recorded from the real
+	-- poses. (A frame without a physics step has no PreAnimation, live: there everything is back at Heartbeat, and
+	-- in any case before the next picture is worked out.) A part somebody else moved while its picture was up (a
+	-- teleport) stays where they put it, and a move too long for one step isn't glided over: the picture is on the
+	-- new place at once.
+	local HIST = 4 -- (real poses kept: the picture's time is never more than 3 steps back)
+	local RING = 16 -- (step times the lag is taken from)
+	-- rp / ht: the root's real poses and their game times, a ring (head = the newest, hn = how many count);
+	-- T: the game time simulated so far; D: the game time shown; ents[part] = { p = part, [1 .. HIST] = its poses in
+	-- the same ring, still = steps since it last moved, at = the push it was last seen in }
+	local SV = { root = nil, rp = {}, ht = {}, head = 1, hn = 0, T = 0, D = nil, stepped = false, pushN = 0,
+		go = false, pose = nil, a = 1, b = 1, f = 0,
+		ents = setmetatable({}, { __mode = "k" }), moving = {}, nMoving = 0, shown = {}, nShown = 0, cam = nil, camT = {},
+		dts = {}, di = 0, lag = 1 / 240 }
+	SH.SV = SV
+	local SAME = 0.01 -- (studs: a part within this of where its picture was put is still on its picture)
+	local JUMP = 1 -- (studs: a move this long that no physics step made is a teleport)
+	-- (a step that took a part further than 600 studs a second would, or 2 studs: a teleport inside the step.
+	-- Live, a 9.7 stud teleport slid across the screen for 14 frames at 0.1x when this said 10 studs)
+	local function tooFar(a, b)
+		return (a.Position - b.Position).Magnitude > math.max(2, 600 * (FS.est or 1 / 240))
+	end
+	local function off(a, b) -- (worth drawing elsewhere: not the same place or facing)
+		return (a.Position - b.Position).Magnitude > 1e-5 or (a.LookVector - b.LookVector).Magnitude > 1e-4
+	end
+	local function smoothReset()
+		SV.root, SV.head, SV.hn, SV.T, SV.D, SV.stepped, SV.go, SV.pose = nil, 1, 0, 0, nil, false, false, nil
+		SV.nMoving, SV.di, SV.lag = 0, 0, 1 / 240
+		table.clear(SV.rp)
+		table.clear(SV.ht)
+		table.clear(SV.dts)
+		table.clear(SV.moving)
+		table.clear(SV.ents)
+	end
+	-- every physics step's time (held or run): the lag is the longest step of the last RING, at most twice the
+	-- shortest (one long frame doesn't hold the picture back). The bank is never more than that ahead of the
+	-- simulated time, so the time shown is never ahead of the newest real pose
+	local function smoothDt(dt)
+		local dts = SV.dts
+		local i = SV.di % RING + 1
+		SV.di = i
+		dts[i] = dt
+		local lo, hi = dt, dt
+		for k = 1, #dts do
+			local v = dts[k]
+			if v < lo then lo = v elseif v > hi then hi = v end
+		end
+		SV.lag = math.min(hi, 2 * lo)
+	end
+	-- everything drawn elsewhere is back on its real pose (PreAnimation, and wherever Frame Step ends)
+	local function smoothRestore()
+		local n = SV.nShown
+		local c = SV.cam
+		if n == 0 and not c then return end
+		SV.nShown, SV.cam = 0, nil
+		local shown = SV.shown
+		for i = 1, n do
+			local e = shown[i]
+			local p, real, at = e[1], e[2], e[3]
+			e[1], e[2], e[3] = nil, nil, nil
+			pcall(function()
+				if p.Parent and (p.Position - at).Magnitude <= SAME then p.CFrame = real end
+			end)
+		end
+		if c then
+			pcall(function()
+				local cam = c[1]
+				if (cam.CFrame.Position - c[4]).Magnitude <= SAME then
+					cam.CFrame = c[2]
+					cam.Focus = c[3]
+				end
+			end)
+			c[1], c[2], c[3], c[4] = nil, nil, nil, nil
+		end
+	end
+	-- a step ran: the loose parts' real poses join the ring; the ones that moved in the last steps are the ones
+	-- to draw
+	local function smoothParts(head, was)
+		local parts, ents, moving, m = FS.parts, SV.ents, SV.moving, 0
+		local push = SV.pushN + 1
+		SV.pushN = push
+		for i = 1, #parts do
+			local p = parts[i]
+			local cf = p.CFrame
+			local e = ents[p]
+			if not e then
+				e = { p = p, still = HIST, at = push }
+				for k = 1, HIST do e[k] = cf end
+				ents[p] = e
+			else
+				local last = e[was]
+				if e.at ~= push - 1 or tooFar(last, cf) then
+					-- (not seen at the step before, or moved too far for one step: nothing to glide from)
+					for k = 1, HIST do e[k] = cf end
+					e.still = HIST
+				else
+					e[head] = cf
+					if cf ~= last then e.still = 0 else e.still = e.still + 1 end
+				end
+				e.at = push
+				if e.still < HIST - 1 then
+					m = m + 1
+					moving[m] = e
+				end
+			end
+		end
+		for i = m + 1, SV.nMoving do moving[i] = nil end
+		SV.nMoving = m
+	end
+	-- PreRender, before the interface's Frost: the real poses are taken (root: every frame; loose parts: after a
+	-- step that ran), the picture's game time and place are worked out and the camera goes there
+	local function smoothPlan()
+		SV.go, SV.pose = false, nil
+		-- (a second look, should a frame ever come without a Heartbeat too: a picture is never taken for the real
+		-- pose. Live, a frame without a physics step left the last one up, the next frame read it as the root's
+		-- place and a jump came out 0.07 - 0.26 studs lower)
+		if SV.nShown > 0 or SV.cam then smoothRestore() end
+		local root = FS.root
+		if not FS.on or FS.acc == nil or not (root and root.Parent) or not engine.settings:on("smoothSlowMotion") then
+			if SV.root then smoothReset() end
+			SV.stepped = false
+			return
+		end
+		local now = root.CFrame
+		local stepped = SV.stepped
+		SV.stepped = false
+		local rp, ht = SV.rp, SV.ht
+		local head = SV.head
+		if root ~= SV.root then
+			local T = SV.T
+			smoothReset()
+			SV.root, SV.T, SV.hn = root, T, 1
+			head = 1
+			rp[1], ht[1] = now, T
+		elseif stepped then
+			local was = head
+			head = head % HIST + 1
+			SV.head = head
+			rp[head], ht[head] = now, SV.T
+			if tooFar(rp[was], now) then
+				SV.hn, SV.D = 1, nil -- (a teleport: nothing to glide from)
+			else
+				SV.hn = math.min(SV.hn + 1, HIST)
+			end
+			smoothParts(head, was)
+		elseif now ~= rp[head] then
+			-- (moved without a step, by the game: a turn or a nudge glides on, a teleport doesn't)
+			local moved = (now.Position - rp[head].Position).Magnitude
+			rp[head] = now
+			if moved > JUMP then SV.hn, SV.D = 1, nil end
+		end
+		local hn = SV.hn
+		local T = ht[head]
+		local D = T + FS.acc - SV.lag
+		if SV.D and D < SV.D then D = SV.D end -- (never back: the lag just grew)
+		if D >= T or hn < 2 then
+			SV.D = math.min(D, T) -- (the picture is the real pose)
+			return
+		end
+		SV.D = D
+		-- the two real poses the time shown lies between (before the oldest one kept: on it)
+		local b = head
+		local a = (b - 2) % HIST + 1
+		local k = 1
+		while D < ht[a] and k < hn - 1 do
+			b = a
+			a = (a - 2) % HIST + 1
+			k = k + 1
+		end
+		local ta, tb = ht[a], ht[b]
+		local f = (tb > ta) and (D - ta) / (tb - ta) or 1
+		if f < 0 then f = 0 end
+		SV.a, SV.b, SV.f, SV.go = a, b, f, true
+		local pa, pb = rp[a], rp[b]
+		local pose = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+		if not off(pose, now) then return end -- (the character stands where its picture is: loose parts may not)
+		SV.pose = pose
+		local d = pose.Position - now.Position
+		local cam = workspace.CurrentCamera
+		if cam and d.Magnitude > 1e-5 then
+			local c0, f0 = cam.CFrame, cam.Focus
+			local to = c0 + d
+			local c = SV.camT
+			c[1], c[2], c[3], c[4] = cam, c0, f0, to.Position
+			SV.cam = c
+			cam.CFrame = to
+			cam.Focus = f0 + d
+		end
+	end
+	-- the end of PreRender: the picture's poses are written
+	local function smoothShow()
+		if not SV.go then return end
+		SV.go = false
+		local shown, n = SV.shown, SV.nShown
+		local head = SV.head
+		local root, pose = SV.root, SV.pose
+		if pose and root and root.Parent then
+			n = n + 1
+			local e = shown[n]
+			if not e then e = {}; shown[n] = e end
+			e[1], e[2], e[3] = root, SV.rp[head], pose.Position
+			SV.nShown = n
+			root.CFrame = pose
+		end
+		local a, b, f = SV.a, SV.b, SV.f
+		local moving = SV.moving
+		for i = 1, SV.nMoving do
+			local m = moving[i]
+			local p = m.p
+			local now = p.CFrame
+			if now ~= m[head] then
+				-- (the game moved it itself since the step: a nudge glides on, a teleport doesn't)
+				if (now.Position - m[head].Position).Magnitude > JUMP then
+					for k = 1, HIST do m[k] = now end
+					m.still = HIST
+				else
+					m[head] = now
+				end
+			elseif p.Parent then
+				local pa, pb = m[a], m[b]
+				local to = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+				if off(to, now) then
+					n = n + 1
+					local e = shown[n]
+					if not e then e = {}; shown[n] = e end
+					e[1], e[2], e[3] = p, now, to.Position
+					SV.nShown = n
+					p.CFrame = to
+				end
+			end
+		end
+	end
+
 	local function setFrozen(on)
 		local f = FS.frozen
 		if on then
@@ -473,6 +722,7 @@ do
 	end
 	-- the start of PreSimulation (before the frame is filled) and the end of the step: the humanoid is let go
 	function SH.Thaw()
+		if SV.nShown > 0 or SV.cam then smoothRestore() end -- (a frame PreAnimation didn't come for)
 		if FS.frozen then setFrozen(false) end
 	end
 	local function collectStepParts()
@@ -514,7 +764,10 @@ do
 	function SH.StepBegin(dt)
 		if not FS.on then return true end
 		dt = tonumber(dt) or 0
-		if dt > 0 then FS.est = dt end
+		if dt > 0 then
+			FS.est = dt
+			smoothDt(dt)
+		end
 		if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end -- (the first step runs)
 		-- (as planned: the humanoid was frozen or let go for exactly that. No plan yet: it runs)
 		if FS.plan ~= false then
@@ -522,6 +775,7 @@ do
 			-- slider)
 			FS.acc = FS.acc - dt
 			FS.latch = false
+			SV.stepped, SV.T = true, SV.T + dt
 			FS.pending = FS.pending + dt
 			FS.ranDt = FS.ranDt + dt
 			FS.frameDt = dt
@@ -548,6 +802,8 @@ do
 	end
 	-- PostSimulation: the held parts go on as they were
 	function SH.StepEnd()
+		-- (a frame with no physics step has no PreAnimation and no PreSimulation, live: 2 frames in 1980 at 165 FPS)
+		if SV.nShown > 0 or SV.cam then smoothRestore() end
 		if FS.frozen then setFrozen(false) end -- (a frame with no physics step: no PreSimulation let it go)
 		if not FS.held then return end
 		FS.held = false
@@ -594,7 +850,12 @@ do
 		if not FS.on then return end
 		if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 		if FS.freezeConn then FS.freezeConn:Disconnect(); FS.freezeConn = nil end
-		SH.StepEnd()
+		if FS.viewOff then
+			for _, off in ipairs(FS.viewOff) do off() end
+			FS.viewOff = nil
+		end
+		SH.StepEnd() -- (the pictures off, the humanoid let go, the held parts on their way)
+		smoothReset()
 		setFrozen(false)
 		FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 		FS.plan, FS.est, FS.latch = nil, nil, false
@@ -669,8 +930,14 @@ do
 					if d:IsA("BasePart") then FS.scanIn = 0 end
 				end)
 				FS.freezeConn = Env.svc("RunService").PreAnimation:Connect(function()
+					smoothRestore() -- (first: the humanoid and the physics get the real poses)
 					if FS.on and FS.plan == false then setFrozen(true) end
 				end)
+				-- (the smooth view's two moments of PreRender, only while Frame Step is on: see "smooth view")
+				FS.viewOff = {
+					engine.pipe:add("PreRender", 205, "time.smoothCamera", smoothPlan, "time.smooth"),
+					engine.pipe:add("PreRender", 1000, "time.smoothView", smoothShow, "time.smooth"),
+				}
 			end
 			FS.s, FS.root, FS.hum = s, part, h
 			setAnim(s)
