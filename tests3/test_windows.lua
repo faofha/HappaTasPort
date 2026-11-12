@@ -172,6 +172,47 @@ check(ha.AbsolutePosition.X >= -0.5, "left edge too")
 E.settings:set("interfaceScale", 100)
 M.steps(2)
 
+section("a window in front covers what is under it (live: the window behind showed through, both unreadable)")
+do
+	local Popover = __T3("ui/kit/popover")
+	setScreen(1920, 1080)
+	E.settings:set("glassTransparency", 54)
+	wm:close("a")
+	wm:close("b")
+	wm:open("a")
+	wm:open("b")
+	wm:place("a", 200, 300)
+	wm:place("b", 900, 300)
+	local function t(win) return win.panel.BackgroundTransparency end
+	near(t(A), 0.54, 1e-6, "apart: a is glass")
+	near(t(B), 0.54, 1e-6, "apart: b is glass")
+	wm:place("b", 350, 350) -- (b, in front, over a's right half)
+	check(t(B) <= 0.1, "b in front of a: b is solid (" .. t(B) .. ")")
+	near(t(A), 0.54, 1e-6, "a, under it, stays glass")
+	wm:focus("a")
+	check(t(A) <= 0.1, "a brought to the front: a is solid now")
+	near(t(B), 0.54, 1e-6, "and b glass")
+	wm:place("a", 1200, 600)
+	near(t(A), 0.54, 1e-6, "dragged apart: glass again")
+	wm:place("a", 350, 350)
+	check(t(A) <= 0.1, "(over b again)")
+	wm:close("b")
+	near(t(A), 0.54, 1e-6, "the window under it closed: glass again")
+	-- the Dock is in front of every window
+	local dock = ui.dock
+	local dt0 = dock.glass.panel.BackgroundTransparency
+	near(dt0, 0.54, 1e-6, "no window under the Dock: glass")
+	local dx = dock.gui.AbsolutePosition.X
+	wm:place("a", dx + 20, 0)
+	check(dock.glass.panel.BackgroundTransparency <= 0.1, "a window under the Dock: the Dock is solid")
+	wm:place("a", 200, 500)
+	near(dock.glass.panel.BackgroundTransparency, 0.54, 1e-6, "moved away: glass again")
+	-- a popover is always over something
+	local pop = Popover.open(A.ctx, A.titleBar, 160, 120)
+	check(pop and pop.glass.panel.BackgroundTransparency <= 0.1, "a popover is solid")
+	if pop then pop:close() end
+end
+
 section("Unload")
 getgenv().__HappaTAS3.Unload()
 M.steps(2)

@@ -117,7 +117,8 @@ local TOPICS = {
 		.. "turn each part off. Normalize Mouse UV (Mouse UV Normalization) stores the cursor as a fraction of the "
 		.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
 		.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
-		.. "hidden cursor moves." },
+		.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
+		.. "frame shown while you are paused, and puts the mouse back there when you unpause." },
 	{ "death", "Death & Respawn Recording",
 		"With Record Death & Respawn on, a run can go through deaths (kill bricks, resets, respawn shortcuts): the "
 		.. "death frame is kept and playback carries on with the new character." },
@@ -147,8 +148,10 @@ local TOPICS = {
 		.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 		.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
-		.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
-		.. "like normal speed; it moves in short full-speed bursts. Above 1x the physics is sped up instead." },
+		.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
+		.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
+		.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
+		.. "and record what matters at 1x or below." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -163,10 +166,11 @@ local TOPICS = {
 		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
 		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 	{ "limits", "Known limits",
-		"Some things can't follow the run: other players; Roblox's own timers inside the humanoid; the moment the "
-		.. "character bumps into a platform it pushes in Frame Step (the push can start a little later, or stall); "
-		.. "kit listeners whose function the executor can't see. Turn on Sync Client Objects for platforms you need "
-		.. "exactly." },
+		"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
+		.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
+		.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+		.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
+		.. "constraints." },
 	{ "missing", "Missing executor functions", "" },
 	{ "credits", "Credits", CREDITS },
 }

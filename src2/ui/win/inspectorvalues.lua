@@ -5,8 +5,9 @@
 --  recorded frame with the live keys and mouse; Test, the playback time and speed, the replayed keys; Idle
 --  (or no frame), the live character. Numbers as V2 wrote them: 3 decimals, rotations in degrees (YXZ).
 --  values(E, perf, want) works out only the rows in want (all when nil): a collapsed section or a hidden row
---  reads nothing. Rows marked slow change rarely; the Inspector asks for them less often. memo (optional)
---  keeps each live row's last raw value and text: a value that didn't change isn't formatted again.
+--  reads nothing. Rows marked slow can't change from one frame to the next (the rig, the settings' rows) or
+--  rarely do: the Inspector asks for them 5 times a second, for the others every frame. memo (optional) keeps
+--  each live row's last raw value and text: a value that didn't change isn't formatted again.
 -- ================================================================================================
 local Util = import("engine/util")
 
@@ -27,7 +28,7 @@ IV.LIST = {
 	{ section = "Character", key = "moveDirection", label = "Move direction" },
 	{ section = "Character", key = "walkJump", label = "Walk / jump", slow = true },
 	{ section = "Character", key = "health", label = "Health", slow = true },
-	{ section = "Character", key = "floor", label = "Floor", slow = true },
+	{ section = "Character", key = "floor", label = "Floor" },
 	{ section = "Camera & input", key = "cameraRotation", label = "Camera rotation" },
 	{ section = "Camera & input", key = "zoom", label = "Zoom", slow = true },
 	{ section = "Camera & input", key = "keys", label = "Keys" },
@@ -63,6 +64,16 @@ local function same(memo, key, raw, make)
 	else
 		memo[key] = { raw = raw, text = text }
 	end
+	return text
+end
+
+-- the same for a row made of two numbers ("a / b")
+local function same2(memo, key, a, b)
+	if not memo then return r3(a) .. " / " .. r3(b) end
+	local m = memo[key]
+	if m and m.a == a and m.b == b then return m.text end
+	local text = r3(a) .. " / " .. r3(b)
+	memo[key] = { a = a, b = b, text = text }
 	return text
 end
 
@@ -127,7 +138,17 @@ function IV.values(E, perf, want, memo, out)
 	end
 	-- Character
 	local okHum = hum ~= nil and char:loaded()
-	if need(want, "rig") then out.rig = okHum and hum.RigType.Name or "-" end
+	if need(want, "rig") then
+		-- (a humanoid's rig type never changes: read once for each)
+		if not okHum then
+			out.rig = "-"
+		elseif memo and memo.rigHum == hum then
+			out.rig = memo.rig
+		else
+			out.rig = hum.RigType.Name
+			if memo then memo.rigHum, memo.rig = hum, out.rig end
+		end
+	end
 	if not need(want, "state", "position", "rotation", "velocity", "angular") then
 		-- (none of them wanted)
 	elseif f then
@@ -149,9 +170,9 @@ function IV.values(E, perf, want, memo, out)
 	if okHum then
 		if need(want, "moveDirection") then out.moveDirection = same(memo, "moveDirection", hum.MoveDirection, vec) end
 		if need(want, "walkJump") then
-			out.walkJump = r3(hum.WalkSpeed) .. " / " .. r3(hum.UseJumpPower and hum.JumpPower or hum.JumpHeight)
+			out.walkJump = same2(memo, "walkJump", hum.WalkSpeed, hum.UseJumpPower and hum.JumpPower or hum.JumpHeight)
 		end
-		if need(want, "health") then out.health = r3(hum.Health) .. " / " .. r3(hum.MaxHealth) end
+		if need(want, "health") then out.health = same2(memo, "health", hum.Health, hum.MaxHealth) end
 		if need(want, "floor") then out.floor = hum.FloorMaterial.Name end
 	else
 		out.moveDirection, out.walkJump, out.health, out.floor = "-", "-", "-", "-"
@@ -168,7 +189,7 @@ function IV.values(E, perf, want, memo, out)
 		end
 		if need(want, "zoom") then
 			local z = E.cs and E.cs:getZoom()
-			out.zoom = r3(z or 12.5)
+			out.zoom = same(memo, "zoom", z or 12.5, r3)
 		end
 		if not need(want, "mouse") then
 			-- (not wanted)

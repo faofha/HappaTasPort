@@ -89,9 +89,21 @@ function Dock:layout()
 		W.set(it.gui, "Position", UDim2.new(0, x, 0, y))
 		x = x + it.w
 	end
-	local _, _, top = self.ui.wm:screen()
+	local sw, _, top = self.ui.wm:screen()
 	W.set(self.gui, "Position", UDim2.new(0.5, 0, 0, top + TOP))
 	W.set(self.gui, "Size", UDim2.new(0, x + PAD, 0, H))
+	-- (in front of every window: solid while one is under it)
+	self.rect = { (sw - (x + PAD)) / 2, top + TOP, x + PAD, H }
+	if not self.surface then
+		self.surface = true
+		self.ui.wm:addSurface(self.glass, function()
+			local r = self.rect
+			if self.dead or not r then return nil end
+			return r[1], r[2], r[3], r[4]
+		end)
+	else
+		self.ui.wm:updateCover()
+	end
 end
 
 function Dock:destroy()

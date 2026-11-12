@@ -2,6 +2,9 @@
 --  GLASS  (HappaTAS 3 ui kit): the soft frosted glass every window is made of (spec 8.1, the mockup's
 --  numbers): translucent fill, a thin white rim, rounded corners, a soft shadow drawn as three dark frames a
 --  little larger each (no image assets). It restyles itself when the theme changes.
+--  A panel in front of another panel is solid (setCover, or opts.cover for one that always is, a popover):
+--  Roblox can't blur a GUI behind a GUI, so the text of a window showed through the window in front of it and
+--  neither could be read (live).
 -- ================================================================================================
 local W = import("ui/write")
 
@@ -9,6 +12,7 @@ local Glass = {}
 Glass.__index = Glass
 
 local SHADOW = { { grow = 4, t = 0.86 }, { grow = 8, t = 0.92 }, { grow = 14, t = 0.96 } }
+local COVER = 0.04 -- (the fill's transparency while the panel covers another)
 
 local function corner(parent)
 	local c = Instance.new("UICorner")
@@ -21,7 +25,7 @@ end
 -- camera's right drag) leaves it alone; opts.passThrough (a toast) lets clicks through to the game.
 function Glass.panel(theme, holder, opts)
 	opts = opts or {}
-	local self = setmetatable({ theme = theme, kind = opts.cornerKind or "window", shadowCorners = {} }, Glass)
+	local self = setmetatable({ theme = theme, kind = opts.cornerKind or "window", shadowCorners = {}, cover = opts.cover == true }, Glass)
 	local shadow = Instance.new("Frame")
 	shadow.Name = "Shadow"
 	shadow.BackgroundTransparency = 1
@@ -66,11 +70,21 @@ function Glass:restyle()
 	W.set(self.panel, "BackgroundColor3", th.c.glass)
 	-- (Clear: barely any fill, only the rim; Tint and Frost: the glass colour at its transparency)
 	local clear = th.E.settings:get("glass") == "Clear"
-	W.set(self.panel, "BackgroundTransparency", clear and math.max(th.t.glass, 0.94) or th.t.glass)
+	local t = clear and math.max(th.t.glass, 0.94) or th.t.glass
+	if self.cover then t = math.min(t, COVER) end
+	W.set(self.panel, "BackgroundTransparency", t)
 	W.set(self.corner, "CornerRadius", UDim.new(0, r))
 	W.set(self.rim, "Transparency", th.t.rim)
 	W.set(self.shadow, "Visible", th.E.settings:on("shadows"))
 	for _, sc in ipairs(self.shadowCorners) do W.set(sc.c, "CornerRadius", UDim.new(0, r + sc.grow)) end
+end
+
+-- on: the panel is in front of another one and hides it
+function Glass:setCover(on)
+	on = on == true
+	if self.cover == on then return end
+	self.cover = on
+	self:restyle()
 end
 
 function Glass:destroy()

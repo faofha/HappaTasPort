@@ -5,10 +5,11 @@
 --  hidden / collapsed are kept in the settings file (ui.inspector). It doesn't free the mouse (modal false)
 --  and opens on the first start. The stats settings: Show Stats (Idle / Create / Test) off = one line instead
 --  of the values (Test at another playback speed still shows Frame, V2's rule); Stats Text Size = the values'
---  size. Updated 5 times a second while the character can move (Idle, recording, Test; the slow rows once a
---  second: V2 wrote 4-12 rows every 2nd frame, the Inspector has 23 and the timeline bar; together they stay
---  within V2's cost), on a change while paused and once a second then too,
---  never while closed or minimised; only the rows that show are worked out;
+--  size. Updated every frame while the character can move (Idle, recording, Test: the frame time and the
+--  other values stood still between updates at 5 a second, which read as a bug; the rows that can't change
+--  every frame, the rig, health, the settings' rows, 5 times a second), on a change while paused and once a
+--  second then too, never while closed or minimised; only the rows that show are worked out, and a value is
+--  written only when its text changed;
 --  the pipeline is timed (HappaTAS ms) only while Performance shows.
 -- ================================================================================================
 local W = import("ui/write")
@@ -26,9 +27,8 @@ local PAD, HEADER_H, ROW_H, TOP = 14, 24, 20, 36
 local STAT_KEY = { "showStatsIdle", "showStatsCreate", "showStatsTest" }
 local MODE_NAME = { "Idle", "Create", "Test" }
 local PERF_EVERY = 1 -- (seconds between FPS / HappaTAS ms readings)
--- (seconds between updates, whether anything moves or not: frame time, FPS and the rest change by themselves;
--- a value is written only when its text changed)
-local FAST_EVERY, SLOW_EVERY = 0.2, 1
+local PAUSED_EVERY = 1 -- (seconds between updates while paused and nothing changes: FPS, HappaTAS ms, settings)
+local SLOW_EVERY = 0.2 -- (seconds between updates of the rows marked slow)
 
 function Insp.define(ui)
 	ui.wm:define("inspector", { title = "Inspector", w = 320, h = 460, minW = 260, minH = 180, modal = false, corner = "topRight",
@@ -46,7 +46,7 @@ end
 function Insp.build(ui, body, win)
 	local E = ui.E
 	local self = setmetatable({ ui = ui, E = E, win = win, ctx = win.ctx, rows = {}, pinned = {}, sections = {},
-		offs = {}, fastT = 0, slowT = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
+		offs = {}, slowT = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
 	local ctx = win.ctx
 	self.options = Button.new(ctx, body, { text = "Options", kind = "plain", h = 22 })
 	self.options.gui.AnchorPoint = Vector2.new(1, 0)
@@ -370,23 +370,20 @@ function Insp:step(dt)
 		pipe.timeSum, pipe.timeFrames = 0, 0
 		self.perfT, self.perfFrames = 0, 0
 	end
-	-- (every FAST_EVERY s the rows, every SLOW_EVERY s the slow ones too; paused, at once when the frame shown
-	-- changes as well)
-	self.fastT, self.slowT = self.fastT + (dt or 0), self.slowT + (dt or 0)
-	local changed = false
+	-- (every frame; paused: when the frame shown changes, and once a second, only FPS / HappaTAS ms and the rows
+	-- from settings change then)
+	self.slowT = self.slowT + (dt or 0)
+	local slow = self.slowT >= SLOW_EVERY
 	if E.mode == 2 and E.paused then
 		local tl = E.tl
 		local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0)
-		changed = key ~= self.pausedKey
+		local changed = key ~= self.pausedKey
 		self.pausedKey = key
+		if not changed and self.slowT < PAUSED_EVERY then return end
+		slow = true
 	else
 		self.pausedKey = nil
 	end
-	-- (paused: only FPS / HappaTAS ms change, measured once a second: a second between updates is enough)
-	local every = (E.mode == 2 and E.paused) and SLOW_EVERY or FAST_EVERY
-	if not changed and self.fastT < every then return end
-	self.fastT = 0
-	local slow = changed or self.slowT >= SLOW_EVERY
 	if slow then self.slowT = 0 end
 	self:update(false, slow)
 end

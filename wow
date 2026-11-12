@@ -1412,6 +1412,7 @@ __mods["engine/settings"] = function(import)
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
 		row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { desc = "Mouse positions follow the screen size" }),
 		row("nohboardCursor", "NohBoard Cursor", "Inputs", 1, { desc = "Shows a cursor where the mouse is, for key overlays" }),
+		row("pausedMouse", nil, "Inputs", 1, { desc = "Paused: a cursor image shows the frame's mouse; unpausing puts the mouse back there" }),
 		row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 100, desc = "How fast the hidden mouse moves when the camera is locked" }),
 		row("windowGuarding", "Window Guarding", "Inputs", 1, { desc = "Stops replayed input when the Roblox window isn't focused" }),
 		row("syncClientObjects", "Sync Client Objects", "World sync", 0, { desc = "Records and replays the parts only you see" }),
@@ -1442,6 +1443,7 @@ __mods["engine/settings"] = function(import)
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 		interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
+		pausedMouse = "Keep Mouse Position (Paused)",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -4189,15 +4191,6 @@ __mods["world/inputs"] = function(import)
 	function Inputs:clear()
 		if #self.queue > 0 then self.queue = {} end
 	end
-	function Inputs:lateInto(tl, n)
-		if #self.queue == 0 or n < 1 or n > tl:count() then return end
-		local ev = tl:getList("Input", n)
-		local all = {}
-		if ev then for k = 1, #ev do all[k] = ev[k] end end
-		for _, e in ipairs(self.queue) do all[#all + 1] = e end
-		self.queue = {}
-		tl:setList("Input", n, all)
-	end
 	function Inputs:mouse()
 		local v = self.uis:GetMouseLocation()
 		local cam = workspace.CurrentCamera
@@ -4210,6 +4203,20 @@ __mods["world/inputs"] = function(import)
 	end
 	function Inputs:begin(tl, i)
 		local mx, my, uvx, uvy, vx, vy = self:mouse()
+		local b = self.back
+		if b then
+			if not b.fixed then
+				b.fixed = true
+				local ex, ey = b.x - mx, b.y - my
+				if (math.abs(ex) > 1 or math.abs(ey) > 1) and math.abs(ex) < 40 and math.abs(ey) < 40 then
+					self.replay.lastMX, self.replay.lastMY = nil, nil
+					self:moveRealMouse(b.x + ex, b.y + ey)
+				end
+			end
+			mx, my, uvx, uvy = b.mx, b.my, b.uvx, b.uvy
+			b.left = b.left - 1
+			if b.left <= 0 then self.back = nil end
+		end
 		tl:setList("Input", i, self:take())
 		tl:setN("Mouse", i, mx, my, uvx, uvy)
 		if i == 1 or vx ~= self.lastVX or vy ~= self.lastVY then
@@ -4337,6 +4344,17 @@ __mods["world/inputs"] = function(import)
 			end
 		end
 	end
+	function Inputs:putMouseBack(tl, i)
+		self.back = nil
+		if not self.E.settings:on("pausedMouse") or i < 1 or i > tl:count() then return end
+		if tl:get("ShiftLock", i, 1) == 1 or tl:get("Zoom", i, 1) <= 0.55 then return end
+		local x, y = self:framePoint(tl, i)
+		if not x or not self.available.move or not self:windowActive() then return end
+		local mx, my, uvx, uvy = tl:getN("Mouse", i)
+		self.back = { x = x, y = y, mx = mx, my = my, uvx = uvx, uvy = uvy, left = 2, fixed = false }
+		self.replay.lastMX, self.replay.lastMY = nil, nil
+		self:moveRealMouse(x, y)
+	end
 	function Inputs:frameLocked(tl, i)
 		if tl:get("ShiftLock", i, 1) == 1 then return true end
 		if tl:get("Zoom", i, 1) <= 0.55 then return true end
@@ -4444,6 +4462,7 @@ __mods["world/cursor"] = function(import)
 	local ARROW = { "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png", 64 }
 	local LOCKED = { "rbxasset://textures/MouseLockedCursor.png", 32 }
 	local HIDE_DELAY = 2
+	local GHOST = 0.45
 	local DISPLAY_ORDER = 2147483000
 	function Cursor.new(E)
 		local self = setmetatable({ E = E, sg = nil, img = nil, frameNo = 0, lastPX = nil, lastPY = nil,
@@ -4486,7 +4505,14 @@ __mods["world/cursor"] = function(import)
 		img.Parent = self.sg
 		self.img = img
 		self.st.icon = nil
+		self.st.ghost = false
 		return true
+	end
+	function Cursor:setGhost(on)
+		local st = self.st
+		if st.ghost == on then return end
+		st.ghost = on
+		self.img.ImageTransparency = on and GHOST or 0
 	end
 	function Cursor:setIcon(which)
 		local st = self.st
@@ -4568,6 +4594,7 @@ __mods["world/cursor"] = function(import)
 			end
 			if centered then st.anchorX, st.anchorY = cx, cy end
 			self:setIcon(tl:get("ShiftLock", f, 1) == 1 and LOCKED or ARROW)
+			self:setGhost(false)
 			self:showFakeAt(st.anchorX, st.anchorY)
 			if f ~= st.lastFrame or tl.version ~= st.lastVersion then
 				local yaw = math.atan2(tl:get("CamCframe", f, 6), tl:get("CamCframe", f, 12))
@@ -4590,6 +4617,7 @@ __mods["world/cursor"] = function(import)
 			end
 		else
 			self:setIcon(ARROW)
+			self:setGhost(false)
 			if px then self:showFakeAt(px, py) end
 			st.lastYaw = nil
 		end
@@ -4599,11 +4627,17 @@ __mods["world/cursor"] = function(import)
 	function Cursor:update(tl, f)
 		local E, st = self.E, self.st
 		self.frameNo = self.frameNo + 1
-		if not E.settings:on("nohboardCursor") or not self.uis.MouseEnabled then
+		local mode = E.mode
+		local nohboard = E.settings:on("nohboardCursor")
+		local pf = nil
+		if mode == 2 and E.paused and not E.firstFrame and E.settings:on("pausedMouse") then
+			local n = tl:count()
+			if n > 0 and E.frame >= 1 and E.frame <= n then pf = E.frame end
+		end
+		if not (nohboard or pf) or not self.uis.MouseEnabled then
 			if st.fake or st.realHidden then self:onCursorReset() end
 			return
 		end
-		local mode = E.mode
 		if mode == 3 then
 			if not self:ensure() then return end
 			self:testStep(tl, f)
@@ -4615,13 +4649,17 @@ __mods["world/cursor"] = function(import)
 			return
 		end
 		local cs = E.cs
-		local isShift = (f and tl:get("ShiftLock", f, 1) == 1) or cs:isShiftlocked()
-		local isFP = (f and tl:get("Zoom", f, 1) <= 0.55) or cs:isFirstPerson()
-		local mb = self.uis.MouseBehavior
-		local centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
-		local locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modal == true)
+		local isShift, centered, locked = false, false, false
+		if nohboard then
+			isShift = (f and tl:get("ShiftLock", f, 1) == 1) or cs:isShiftlocked()
+			local isFP = (f and tl:get("Zoom", f, 1) <= 0.55) or cs:isFirstPerson()
+			local mb = self.uis.MouseBehavior
+			centered = isShift or isFP or mb == Enum.MouseBehavior.LockCenter
+			locked = (centered or mb ~= Enum.MouseBehavior.Default) and not cs:isMouseFree() and not (E.modal == true)
+		end
 		if locked then
 			if not self:ensure() then return end
+			self:setGhost(false)
 			if centered then
 				local cx, cy = viewportCenter()
 				st.anchorX, st.anchorY = cx, cy
@@ -4644,7 +4682,26 @@ __mods["world/cursor"] = function(import)
 			end
 		else
 			st.wasLocked = false
-			if st.fake or st.realHidden then
+			local gx, gy = nil, nil
+			if pf then
+				if st.ghostFrame ~= pf or st.ghostVersion ~= tl.version or st.ghostEdits ~= tl.edits or self.frameNo >= (st.ghostAt or 0) then
+					st.ghostFrame, st.ghostVersion, st.ghostEdits, st.ghostAt = pf, tl.version, tl.edits, self.frameNo + 30
+					st.ghostX, st.ghostY = nil, nil
+					if tl:get("ShiftLock", pf, 1) ~= 1 and tl:get("Zoom", pf, 1) > 0.55 then
+						st.ghostX, st.ghostY = E.inputs:framePoint(tl, pf)
+					end
+				end
+				gx, gy = st.ghostX, st.ghostY
+			else
+				st.ghostFrame = nil
+			end
+			if gx and (st.fake or self:ensure()) then
+				if st.realHidden then self:showReal() end
+				st.hideAt = nil
+				self:setIcon(ARROW)
+				self:setGhost(true)
+				self:showFakeAt(gx, gy)
+			elseif st.fake or st.realHidden then
 				self:showReal()
 				self:hideFake()
 				st.hideAt = nil
@@ -9703,30 +9760,30 @@ __mods["world/time/control"] = function(import)
 			rescaleAnimations()
 		end
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
-			root = nil, hum = nil }
-		local MAX_DEBT = 0.25
-		local ST = Enum.HumanoidStateType
-		local TIMED = { [ST.Jumping] = true, [ST.Landed] = true }
-		local ON_FLOOR = { [ST.Running] = true, [ST.RunningNoPhysics] = true }
-		local function timedState(h)
-			if not (h and h.Parent) then return false end
-			local st = h:GetState()
-			return TIMED[st] == true or (ON_FLOOR[st] == true and h.FloorMaterial == Enum.Material.Air)
-		end
+			root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 		SH.FS = FS
-		local touchParams = OverlapParams.new()
-		touchParams.FilterType = Enum.RaycastFilterType.Exclude
-		local function touchingHeld()
-			local ch = Players.LocalPlayer and Players.LocalPlayer.Character
-			local set = FS.rootSet
-			if not (ch and set and next(set)) then return false end
-			touchParams.FilterDescendantsInstances = { ch }
-			local cf, size = ch:GetBoundingBox()
-			for _, h in ipairs(workspace:GetPartBoundsInBox(cf, size + Vector3.one * 0.6, touchParams)) do
-				local r = h.AssemblyRootPart or h
-				if set[r] then return true end
+		local function setFrozen(on)
+			local f = FS.frozen
+			if on then
+				local h = FS.hum
+				if f == h then return end
+				if f then
+					FS.frozen = nil
+					pcall(function() f.EvaluateStateMachine = true end)
+				end
+				pcall(function()
+					if h and h.Parent and h.EvaluateStateMachine ~= false then
+						h.EvaluateStateMachine = false
+						FS.frozen = h
+					end
+				end)
+			elseif f then
+				FS.frozen = nil
+				pcall(function() f.EvaluateStateMachine = true end)
 			end
-			return false
+		end
+		function SH.Thaw()
+			if FS.frozen then setFrozen(false) end
 		end
 		local function collectStepParts()
 			local list, done = {}, {}
@@ -9737,7 +9794,7 @@ __mods["world/time/control"] = function(import)
 				done[rootP] = true
 				list[#list + 1] = rootP
 			end)
-			FS.parts, FS.rootSet = list, done
+			FS.parts = list
 		end
 		local function hold(p)
 			local n = FS.n + 1
@@ -9747,21 +9804,27 @@ __mods["world/time/control"] = function(import)
 			p.Anchored = true
 			FS.n = n
 		end
+		local function planStep()
+			local est = FS.est or (1 / 240)
+			local run = FS.acc == nil or FS.acc + FS.s * est >= est - 1e-9
+			FS.plan = run
+			local h = FS.hum
+			if run then
+				setFrozen(false)
+				if FS.latch and h then pcall(function() h.Jump = true end) end
+			elseif h and not FS.latch then
+				local okJ, j = pcall(function() return h.Jump end)
+				if okJ and j then FS.latch = true end
+			end
+		end
 		function SH.StepBegin(dt)
 			if not FS.on then return true end
 			dt = tonumber(dt) or 0
+			if dt > 0 then FS.est = dt end
 			if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end
-			local run = FS.acc >= dt - 1e-9
-			if not run and FS.acc - dt > -MAX_DEBT then
-				local okT, must = pcall(timedState, FS.hum)
-				if not (okT and must) then
-					if FS.scanIn <= 0 then pcall(collectStepParts); FS.scanIn = 30 end
-					okT, must = pcall(touchingHeld)
-				end
-				run = okT and must
-			end
-			if run then
-				FS.acc = math.max(0, FS.acc - dt)
+			if FS.plan ~= false then
+				FS.acc = FS.acc - dt
+				FS.latch = false
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9787,6 +9850,7 @@ __mods["world/time/control"] = function(import)
 			return false
 		end
 		function SH.StepEnd()
+			if FS.frozen then setFrozen(false) end
 			if not FS.held then return end
 			FS.held = false
 			for i = 1, FS.n do
@@ -9805,13 +9869,17 @@ __mods["world/time/control"] = function(import)
 		end
 		function SH.StepTime()
 			if not FS.on then return nil end
+			if FS.plan == false then return 0 end
 			local t = FS.pending
 			FS.pending = 0
 			return t
 		end
 		function SH.Stepping() return FS.on end
 		function SH.StepDt() return FS.frameDt or 0 end
-		function SH.FrameStart() FS.frameDt = 0 end
+		function SH.FrameStart()
+			FS.frameDt = 0
+			if FS.on then planStep() end
+		end
 		function SH.GameDt(dt)
 			if not FS.on then return dt * SH.anim end
 			local d = FS.ranDt
@@ -9821,8 +9889,11 @@ __mods["world/time/control"] = function(import)
 		local function stopStep()
 			if not FS.on then return end
 			if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
+			if FS.freezeConn then FS.freezeConn:Disconnect(); FS.freezeConn = nil end
 			SH.StepEnd()
+			setFrozen(false)
 			FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
+			FS.plan, FS.est, FS.latch = nil, nil, false
 		end
 		local function applyValues(h, s)
 			if h ~= hum then
@@ -9879,6 +9950,9 @@ __mods["world/time/control"] = function(import)
 					FS.acc = nil
 					FS.addConn = workspace.DescendantAdded:Connect(function(d)
 						if d:IsA("BasePart") then FS.scanIn = 0 end
+					end)
+					FS.freezeConn = Env.svc("RunService").PreAnimation:Connect(function()
+						if FS.on and FS.plan == false then setFrozen(true) end
 					end)
 				end
 				FS.s, FS.root, FS.hum = s, part, h
@@ -10281,6 +10355,7 @@ __mods["world/time/control"] = function(import)
 	function TimeControl:frameStart() SH.FrameStart() end
 	function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 	function TimeControl:stepEnd() SH.StepEnd() end
+	function TimeControl:thaw() SH.Thaw() end
 	function TimeControl:humanoidPre(dt, hum, root, scaled) SH.Humanoid.Pre(dt, hum, root, scaled) end
 	function TimeControl:humanoidPost(dt, hum, root, recording) SH.Humanoid.Post(dt, hum, root, recording) end
 	function TimeControl:coyoteReset(hum) SH.Humanoid.CoyoteReset(hum) end
@@ -12319,6 +12394,7 @@ __mods["engine/modes"] = function(import)
 		local tl = E.tl
 		if tl:count() > 1 and E.frame > 1 and E.char:jumpedOffLadder() then E.frame = E.frame - 1 end
 		unpauseFrom(self)
+		E.inputs:putMouseBack(tl, tl:count())
 		self:loadFrame(tl:count(), true)
 		E.char:anchor(false)
 		E.cs:setCameraFreeze(false, false)
@@ -12359,6 +12435,7 @@ __mods["engine/modes"] = function(import)
 		if tl:count() > 1 and E.frame > 1 and E.char:jumpedOffLadder() then E.frame = E.frame - 1; count = 2 end
 		if tl:count() > 1 and E.frame >= 1 and E.frame <= tl:count() and tl:get("State", E.frame, 1) == Enum.HumanoidStateType.Landed.Value then count = 2 end
 		unpauseFrom(self)
+		E.inputs:putMouseBack(tl, tl:count())
 		E.char:anchor(false)
 		E.cs:setCameraFreeze(false, false)
 		E.cs:lockShiftlock(false)
@@ -12660,6 +12737,7 @@ __mods["engine/frame"] = function(import)
 			E.plugins:call("onFrameEnd", dt)
 		end
 		local function preSimulation(dt)
+			E.time:thaw()
 			E.plugins:call("onPreSimulation", dt)
 			local ch = E.char
 			if E.mode == 2 and ch:loaded() and not E.paused and not E.firstFrame and ch:notDead() then
@@ -12675,7 +12753,6 @@ __mods["engine/frame"] = function(import)
 			end
 			if E.mode ~= 2 and not E.timeIdle then return end
 			E.stepHeld = not E.time:stepBegin(dt)
-			if not E.stepHeld and E.mode == 2 and not E.paused and E.time:stepping() then E.inputs:lateInto(tl, tl:count()) end
 			if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
 				if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 			end
@@ -12889,6 +12966,22 @@ __mods["engine/diagnostics"] = function(import)
 		"delfolder", "gethui", "cloneref", "getgc", "filtergc", "getconnections", "hookfunction", "restorefunction",
 		"iscclosure", "getloadedmodules", "setreadonly", "isreadonly", "isactive", "keypress", "keyrelease",
 		"mousemoveabs", "mousemoverel", "mousescroll", "getcustomasset", "identifyexecutor", "envOf", "setclipboard" }
+	function Diag.census()
+		local c = { parts = 0, collide = 0, loose = 0, meshes = 0, constraints = {} }
+		for _, d in ipairs(workspace:GetDescendants()) do
+			if d:IsA("BasePart") then
+				c.parts = c.parts + 1
+				if d.CanCollide then
+					c.collide = c.collide + 1
+					if not d.Anchored then c.loose = c.loose + 1 end
+					if d:IsA("MeshPart") or d:IsA("UnionOperation") then c.meshes = c.meshes + 1 end
+				end
+			elseif d:IsA("Constraint") or d:IsA("BodyMover") then
+				c.constraints[d.ClassName] = (c.constraints[d.ClassName] or 0) + 1
+			end
+		end
+		return c
+	end
 	local function ring() return { t = table.create(N, 0), v = table.create(N, 0), i = 0, n = 0 } end
 	local function push(r, t, v)
 		local i = r.i % N + 1
@@ -12989,6 +13082,15 @@ __mods["engine/diagnostics"] = function(import)
 					tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Freefall)), fmt(workspace.Gravity))
 			end)
 			if ok then add(s) end
+		end
+		local okC, c = pcall(Diag.census)
+		if okC then
+			add("World: " .. c.parts .. " parts, " .. c.collide .. " collide, " .. c.loose .. " of them loose (held with the character in slow motion)")
+			local list = {}
+			for class, n in pairs(c.constraints) do list[#list + 1] = class .. " x" .. n end
+			table.sort(list)
+			add("  Constraints and movers: " .. (#list > 0 and table.concat(list, ", ") or "none"))
+			add("  Meshes and unions that collide: " .. c.meshes)
 		end
 		add("Settings:")
 		local keys = {}
@@ -13651,6 +13753,7 @@ __mods["ui/kit/glass"] = function(import)
 	local Glass = {}
 	Glass.__index = Glass
 	local SHADOW = { { grow = 4, t = 0.86 }, { grow = 8, t = 0.92 }, { grow = 14, t = 0.96 } }
+	local COVER = 0.04
 	local function corner(parent)
 		local c = Instance.new("UICorner")
 		c.Parent = parent
@@ -13658,7 +13761,7 @@ __mods["ui/kit/glass"] = function(import)
 	end
 	function Glass.panel(theme, holder, opts)
 		opts = opts or {}
-		local self = setmetatable({ theme = theme, kind = opts.cornerKind or "window", shadowCorners = {} }, Glass)
+		local self = setmetatable({ theme = theme, kind = opts.cornerKind or "window", shadowCorners = {}, cover = opts.cover == true }, Glass)
 		local shadow = Instance.new("Frame")
 		shadow.Name = "Shadow"
 		shadow.BackgroundTransparency = 1
@@ -13701,11 +13804,19 @@ __mods["ui/kit/glass"] = function(import)
 		local r = th.corner(self.kind)
 		W.set(self.panel, "BackgroundColor3", th.c.glass)
 		local clear = th.E.settings:get("glass") == "Clear"
-		W.set(self.panel, "BackgroundTransparency", clear and math.max(th.t.glass, 0.94) or th.t.glass)
+		local t = clear and math.max(th.t.glass, 0.94) or th.t.glass
+		if self.cover then t = math.min(t, COVER) end
+		W.set(self.panel, "BackgroundTransparency", t)
 		W.set(self.corner, "CornerRadius", UDim.new(0, r))
 		W.set(self.rim, "Transparency", th.t.rim)
 		W.set(self.shadow, "Visible", th.E.settings:on("shadows"))
 		for _, sc in ipairs(self.shadowCorners) do W.set(sc.c, "CornerRadius", UDim.new(0, r + sc.grow)) end
+	end
+	function Glass:setCover(on)
+		on = on == true
+		if self.cover == on then return end
+		self.cover = on
+		self:restyle()
 	end
 	function Glass:destroy()
 		if self.off then self.off() end
@@ -14415,7 +14526,7 @@ __mods["ui/kit/popover"] = function(import)
 		holder.Size = UDim2.new(0, w, 0, h)
 		holder.ZIndex = ZINDEX
 		self.holder = holder
-		self.glass = Glass.panel(ui.theme, holder, { cornerKind = "window" })
+		self.glass = Glass.panel(ui.theme, holder, { cornerKind = "window", cover = true })
 		self.frame = self.glass.panel
 		self.ctx = { E = ctx.E, ui = ui, theme = ctx.theme, tween = ctx.tween, typing = ctx.typing,
 			pointer = { add = function(r, z) return self:add(r, z) end, remove = function(r) self:remove(r) end } }
@@ -14989,7 +15100,7 @@ __mods["ui/windows"] = function(import)
 	local CASCADE, EDGE = 24, 16
 	local SHEET_H = 0.6
 	function Windows.new(E, ui)
-		local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0, modalCount = 0,
+		local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, surfaces = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0, modalCount = 0,
 			uis = Env.svc("UserInputService"), guiService = Env.svc("GuiService") }, Windows)
 		self.key = self:screenKey()
 		self:watchCamera()
@@ -15046,6 +15157,45 @@ __mods["ui/windows"] = function(import)
 		win.x, win.y, win.w, win.h = x, y, w, h
 		W.set(win.holder, "Position", UDim2.new(0, x, 0, y))
 		W.set(win.holder, "Size", UDim2.new(0, w, 0, win.min and win.titleH or h))
+		self:updateCover()
+	end
+	local function shown(win) return win.x, win.y, win.w, (win.min and win.titleH or win.h) end
+	local function overlap(ax, ay, aw, ah, bx, by, bw, bh)
+		return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+	end
+	function Windows:updateCover()
+		local open = {}
+		for _, win in pairs(self.windows) do
+			if win.open and win.x then open[#open + 1] = win end
+		end
+		for _, a in ipairs(open) do
+			local ax, ay, aw, ah = shown(a)
+			local cover = false
+			for _, b in ipairs(open) do
+				if b ~= a and b.z < a.z and overlap(ax, ay, aw, ah, shown(b)) then
+					cover = true
+					break
+				end
+			end
+			a.glass:setCover(cover)
+		end
+		for _, s in ipairs(self.surfaces) do
+			local sx, sy, sw, sh = s.rect()
+			local cover = false
+			if sx then
+				for _, b in ipairs(open) do
+					if overlap(sx, sy, sw, sh, shown(b)) then
+						cover = true
+						break
+					end
+				end
+			end
+			s.glass:setCover(cover)
+		end
+	end
+	function Windows:addSurface(glass, rect)
+		self.surfaces[#self.surfaces + 1] = { glass = glass, rect = rect }
+		self:updateCover()
 	end
 	function Windows:defaultRect(id)
 		local def = self.defs[id]
@@ -15191,6 +15341,7 @@ __mods["ui/windows"] = function(import)
 		win.z = self.zTop
 		W.set(win.holder, "ZIndex", self.zTop)
 		for _, r in ipairs(win.rects) do r.z = win.z * 100 + r.lz end
+		self:updateCover()
 	end
 	function Windows:open(id)
 		if not self.defs[id] then return end
@@ -15216,6 +15367,7 @@ __mods["ui/windows"] = function(import)
 		if self.defs[id].modal ~= false then self.modalCount = self.modalCount - 1 end
 		self:rememberOpen(id, false)
 		W.set(win.holder, "Visible", false)
+		self:updateCover()
 		self:save(id)
 		self:fire(id, false)
 	end
@@ -15364,9 +15516,20 @@ __mods["ui/dock"] = function(import)
 			W.set(it.gui, "Position", UDim2.new(0, x, 0, y))
 			x = x + it.w
 		end
-		local _, _, top = self.ui.wm:screen()
+		local sw, _, top = self.ui.wm:screen()
 		W.set(self.gui, "Position", UDim2.new(0.5, 0, 0, top + TOP))
 		W.set(self.gui, "Size", UDim2.new(0, x + PAD, 0, H))
+		self.rect = { (sw - (x + PAD)) / 2, top + TOP, x + PAD, H }
+		if not self.surface then
+			self.surface = true
+			self.ui.wm:addSurface(self.glass, function()
+				local r = self.rect
+				if self.dead or not r then return nil end
+				return r[1], r[2], r[3], r[4]
+			end)
+		else
+			self.ui.wm:updateCover()
+		end
 	end
 	function Dock:destroy()
 		if self.dead then return end
@@ -16736,7 +16899,7 @@ __mods["ui/win/inspectorvalues"] = function(import)
 		{ section = "Character", key = "moveDirection", label = "Move direction" },
 		{ section = "Character", key = "walkJump", label = "Walk / jump", slow = true },
 		{ section = "Character", key = "health", label = "Health", slow = true },
-		{ section = "Character", key = "floor", label = "Floor", slow = true },
+		{ section = "Character", key = "floor", label = "Floor" },
 		{ section = "Camera & input", key = "cameraRotation", label = "Camera rotation" },
 		{ section = "Camera & input", key = "zoom", label = "Zoom", slow = true },
 		{ section = "Camera & input", key = "keys", label = "Keys" },
@@ -16769,6 +16932,14 @@ __mods["ui/win/inspectorvalues"] = function(import)
 		else
 			memo[key] = { raw = raw, text = text }
 		end
+		return text
+	end
+	local function same2(memo, key, a, b)
+		if not memo then return r3(a) .. " / " .. r3(b) end
+		local m = memo[key]
+		if m and m.a == a and m.b == b then return m.text end
+		local text = r3(a) .. " / " .. r3(b)
+		memo[key] = { a = a, b = b, text = text }
 		return text
 	end
 	local stateNames = nil
@@ -16821,7 +16992,16 @@ __mods["ui/win/inspectorvalues"] = function(import)
 			out.speed = "1"
 		end
 		local okHum = hum ~= nil and char:loaded()
-		if need(want, "rig") then out.rig = okHum and hum.RigType.Name or "-" end
+		if need(want, "rig") then
+			if not okHum then
+				out.rig = "-"
+			elseif memo and memo.rigHum == hum then
+				out.rig = memo.rig
+			else
+				out.rig = hum.RigType.Name
+				if memo then memo.rigHum, memo.rig = hum, out.rig end
+			end
+		end
 		if not need(want, "state", "position", "rotation", "velocity", "angular") then
 		elseif f then
 			local cf = { tl:getN("Cframe", f) }
@@ -16842,9 +17022,9 @@ __mods["ui/win/inspectorvalues"] = function(import)
 		if okHum then
 			if need(want, "moveDirection") then out.moveDirection = same(memo, "moveDirection", hum.MoveDirection, vec) end
 			if need(want, "walkJump") then
-				out.walkJump = r3(hum.WalkSpeed) .. " / " .. r3(hum.UseJumpPower and hum.JumpPower or hum.JumpHeight)
+				out.walkJump = same2(memo, "walkJump", hum.WalkSpeed, hum.UseJumpPower and hum.JumpPower or hum.JumpHeight)
 			end
-			if need(want, "health") then out.health = r3(hum.Health) .. " / " .. r3(hum.MaxHealth) end
+			if need(want, "health") then out.health = same2(memo, "health", hum.Health, hum.MaxHealth) end
 			if need(want, "floor") then out.floor = hum.FloorMaterial.Name end
 		else
 			out.moveDirection, out.walkJump, out.health, out.floor = "-", "-", "-", "-"
@@ -16860,7 +17040,7 @@ __mods["ui/win/inspectorvalues"] = function(import)
 			end
 			if need(want, "zoom") then
 				local z = E.cs and E.cs:getZoom()
-				out.zoom = r3(z or 12.5)
+				out.zoom = same(memo, "zoom", z or 12.5, r3)
 			end
 			if not need(want, "mouse") then
 			elseif playFrame then
@@ -16913,7 +17093,8 @@ __mods["ui/win/inspector"] = function(import)
 	local STAT_KEY = { "showStatsIdle", "showStatsCreate", "showStatsTest" }
 	local MODE_NAME = { "Idle", "Create", "Test" }
 	local PERF_EVERY = 1
-	local FAST_EVERY, SLOW_EVERY = 0.2, 1
+	local PAUSED_EVERY = 1
+	local SLOW_EVERY = 0.2
 	function Insp.define(ui)
 		ui.wm:define("inspector", { title = "Inspector", w = 320, h = 460, minW = 260, minH = 180, modal = false, corner = "topRight",
 			openByDefault = true, build = function(body, win) ui.inspector = Insp.build(ui, body, win) end })
@@ -16927,7 +17108,7 @@ __mods["ui/win/inspector"] = function(import)
 	function Insp.build(ui, body, win)
 		local E = ui.E
 		local self = setmetatable({ ui = ui, E = E, win = win, ctx = win.ctx, rows = {}, pinned = {}, sections = {},
-			offs = {}, fastT = 0, slowT = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
+			offs = {}, slowT = 0, last = {}, memo = {}, values = {}, perf = { dt = 0, fps = 0, ms = 0 }, perfT = 0, perfFrames = 0 }, Insp)
 		local ctx = win.ctx
 		self.options = Button.new(ctx, body, { text = "Options", kind = "plain", h = 22 })
 		self.options.gui.AnchorPoint = Vector2.new(1, 0)
@@ -17230,20 +17411,18 @@ __mods["ui/win/inspector"] = function(import)
 			pipe.timeSum, pipe.timeFrames = 0, 0
 			self.perfT, self.perfFrames = 0, 0
 		end
-		self.fastT, self.slowT = self.fastT + (dt or 0), self.slowT + (dt or 0)
-		local changed = false
+		self.slowT = self.slowT + (dt or 0)
+		local slow = self.slowT >= SLOW_EVERY
 		if E.mode == 2 and E.paused then
 			local tl = E.tl
 			local key = E.frame .. ":" .. tl:count() .. ":" .. tl.version .. ":" .. (tl.edits or 0)
-			changed = key ~= self.pausedKey
+			local changed = key ~= self.pausedKey
 			self.pausedKey = key
+			if not changed and self.slowT < PAUSED_EVERY then return end
+			slow = true
 		else
 			self.pausedKey = nil
 		end
-		local every = (E.mode == 2 and E.paused) and SLOW_EVERY or FAST_EVERY
-		if not changed and self.fastT < every then return end
-		self.fastT = 0
-		local slow = changed or self.slowT >= SLOW_EVERY
 		if slow then self.slowT = 0 end
 		self:update(false, slow)
 	end
@@ -18089,7 +18268,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "turn each part off. Normalize Mouse UV (Mouse UV Normalization) stores the cursor as a fraction of the "
 			.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
 			.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
-			.. "hidden cursor moves." },
+			.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
+			.. "frame shown while you are paused, and puts the mouse back there when you unpause." },
 		{ "death", "Death & Respawn Recording",
 			"With Record Death & Respawn on, a run can go through deaths (kill bricks, resets, respawn shortcuts): the "
 			.. "death frame is kept and playback carries on with the new character." },
@@ -18119,8 +18299,10 @@ __mods["ui/win/helptext"] = function(import)
 			.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 			.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
 			.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
-			.. "and everything is held in between (Frame Step), so walking, jumping, landing and coyote time are exactly "
-			.. "like normal speed; it moves in short full-speed bursts. Above 1x the physics is sped up instead." },
+			.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
+			.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
+			.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
+			.. "and record what matters at 1x or below." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -18135,10 +18317,11 @@ __mods["ui/win/helptext"] = function(import)
 			.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
 			.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 		{ "limits", "Known limits",
-			"Some things can't follow the run: other players; Roblox's own timers inside the humanoid; the moment the "
-			.. "character bumps into a platform it pushes in Frame Step (the push can start a little later, or stall); "
-			.. "kit listeners whose function the executor can't see. Turn on Sync Client Objects for platforms you need "
-			.. "exactly." },
+			"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
+			.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
+			.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+			.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
+			.. "constraints." },
 		{ "missing", "Missing executor functions", "" },
 		{ "credits", "Credits", CREDITS },
 	}

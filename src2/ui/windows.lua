@@ -18,7 +18,7 @@ local CASCADE, EDGE = 24, 16
 local SHEET_H = 0.6
 
 function Windows.new(E, ui)
-	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0, modalCount = 0,
+	local self = setmetatable({ E = E, ui = ui, defs = {}, order = {}, windows = {}, surfaces = {}, zTop = 0, conns = {}, listeners = {}, screenFns = {}, openCount = 0, modalCount = 0,
 		uis = Env.svc("UserInputService"), guiService = Env.svc("GuiService") }, Windows)
 	self.key = self:screenKey()
 	self:watchCamera()
@@ -89,6 +89,51 @@ function Windows:apply(win, x, y, w, h)
 	win.x, win.y, win.w, win.h = x, y, w, h
 	W.set(win.holder, "Position", UDim2.new(0, x, 0, y))
 	W.set(win.holder, "Size", UDim2.new(0, w, 0, win.min and win.titleH or h))
+	self:updateCover()
+end
+
+-- ------------------------------------------------------------------------------------------------ cover
+-- A window in front of another open window is solid, so what is under it doesn't show through (see kit/glass);
+-- so is a surface that is in front of every window (the Dock) with a window under it. Worked out when a
+-- window moves, is resized, minimised, opened, closed or brought to the front: never per frame.
+local function shown(win) return win.x, win.y, win.w, (win.min and win.titleH or win.h) end
+local function overlap(ax, ay, aw, ah, bx, by, bw, bh)
+	return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+end
+function Windows:updateCover()
+	local open = {}
+	for _, win in pairs(self.windows) do
+		if win.open and win.x then open[#open + 1] = win end
+	end
+	for _, a in ipairs(open) do
+		local ax, ay, aw, ah = shown(a)
+		local cover = false
+		for _, b in ipairs(open) do
+			if b ~= a and b.z < a.z and overlap(ax, ay, aw, ah, shown(b)) then
+				cover = true
+				break
+			end
+		end
+		a.glass:setCover(cover)
+	end
+	for _, s in ipairs(self.surfaces) do
+		local sx, sy, sw, sh = s.rect()
+		local cover = false
+		if sx then
+			for _, b in ipairs(open) do
+				if overlap(sx, sy, sw, sh, shown(b)) then
+					cover = true
+					break
+				end
+			end
+		end
+		s.glass:setCover(cover)
+	end
+end
+-- a glass surface in front of every window; rect() -> x, y, w, h in the layer's units (nil: not shown)
+function Windows:addSurface(glass, rect)
+	self.surfaces[#self.surfaces + 1] = { glass = glass, rect = rect }
+	self:updateCover()
 end
 
 function Windows:defaultRect(id)
@@ -252,6 +297,7 @@ function Windows:focus(id)
 	win.z = self.zTop
 	W.set(win.holder, "ZIndex", self.zTop)
 	for _, r in ipairs(win.rects) do r.z = win.z * 100 + r.lz end
+	self:updateCover()
 end
 
 function Windows:open(id)
@@ -279,6 +325,7 @@ function Windows:close(id)
 	if self.defs[id].modal ~= false then self.modalCount = self.modalCount - 1 end
 	self:rememberOpen(id, false)
 	W.set(win.holder, "Visible", false)
+	self:updateCover()
 	self:save(id)
 	self:fire(id, false)
 end

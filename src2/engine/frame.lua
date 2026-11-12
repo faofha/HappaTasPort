@@ -39,8 +39,8 @@ function Frame.start(E)
 		local ch = E.char
 		if mode == 2 and ch:loaded() then
 			E.time:frameStart() -- (Frame Step is only ever on in Create)
-			-- (Frame Step: only a frame whose physics step ran is a new frame, its time = the time that step
-			-- simulated)
+			-- (Frame Step: a new frame only when the step before ran and this frame's own step runs, its time = the
+			-- time that step simulated)
 			local stepT = E.time:stepTime()
 			if not E.paused and ch:notDead() and not E.firstFrame and (stepT == nil or stepT > 0) then
 				local n = tl:count()
@@ -104,6 +104,7 @@ function Frame.start(E)
 	end
 
 	local function preSimulation(dt)
+		E.time:thaw() -- (Frame Step: the humanoid was frozen while Roblox worked it out for a held step)
 		E.plugins:call("onPreSimulation", dt)
 		local ch = E.char
 		if E.mode == 2 and ch:loaded() and not E.paused and not E.firstFrame and ch:notDead() then
@@ -124,8 +125,6 @@ function Frame.start(E)
 		-- (a held step is no game time: the humanoid's controllers and coyote timer skip it, measured in the mock:
 		-- the off-floor timer ran 4x too fast at 0.25x)
 		E.stepHeld = not E.time:stepBegin(dt)
-		-- (Frame Step, recording: keys from the held frames before this step belong to the frame it starts from)
-		if not E.stepHeld and E.mode == 2 and not E.paused and E.time:stepping() then E.inputs:lateInto(tl, tl:count()) end
 		if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
 			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
 		end

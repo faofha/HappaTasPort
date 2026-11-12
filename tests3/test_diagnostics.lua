@@ -31,6 +31,40 @@ check(text:find("[HappaTAS3] test source: boom 1", 1, true) ~= nil, "the last er
 local guiN = #getgenv().__HappaTAS3.Diagnostics() > 100
 check(guiN, "the handle's Diagnostics()")
 
+section("the world census: what a recording here can't follow exactly")
+do
+	local folder = Instance.new("Folder")
+	folder.Name = "CensusTest"
+	folder.Parent = workspace
+	local function part(class, name, anchored, collide)
+		local p = Instance.new(class)
+		p.Name, p.Anchored, p.CanCollide = name, anchored, collide
+		p.Parent = folder
+		return p
+	end
+	local before = Diag.census()
+	part("Part", "Fixed", true, true)
+	part("Part", "Loose", false, true)
+	part("Part", "LooseGhost", false, false)
+	part("MeshPart", "Mesh", true, true)
+	part("UnionOperation", "Union", true, true)
+	part("MeshPart", "MeshGhost", true, false)
+	local hinge = Instance.new("HingeConstraint")
+	hinge.Parent = folder
+	local c = Diag.census()
+	eq(c.parts - before.parts, 6, "every part is counted")
+	eq(c.collide - before.collide, 4, "the ones that collide")
+	eq(c.loose - before.loose, 1, "loose ones that collide")
+	eq(c.meshes - before.meshes, 2, "meshes and unions that collide")
+	eq((c.constraints.HingeConstraint or 0) - (before.constraints.HingeConstraint or 0), 1, "constraints by class")
+	text = Diag.report(E)
+	check(text:find("World: " .. c.parts .. " parts, " .. c.collide .. " collide, " .. c.loose .. " of them loose", 1, true) ~= nil,
+		"the report's World line (" .. (text:match("World:[^\n]*") or "none") .. ")")
+	check(text:find("Meshes and unions that collide: " .. c.meshes, 1, true) ~= nil, "the meshes line")
+	check(text:find("HingeConstraint x", 1, true) ~= nil, "the constraints line")
+	folder:Destroy()
+end
+
 section("read-only")
 local hrp = E.char.hrp
 local cf, v = hrp.CFrame, hrp.AssemblyLinearVelocity

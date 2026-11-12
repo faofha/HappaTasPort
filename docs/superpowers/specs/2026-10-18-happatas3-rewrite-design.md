@@ -91,7 +91,7 @@ timeline all request transitions; nothing sets mode flags directly.
 | Event | Recording | Testing |
 |---|---|---|
 | PreRender | start frame n: camera, inputs, mouse, time | pose the character for the screen |
-| PreSimulation | fill frame n: character, humanoid state, animation, every plugin's record; Frame Step decides run or hold | pose for physics |
+| PreSimulation | fill frame n: character, humanoid state, animation, every plugin's record; Frame Step runs or holds the step as decided at the start of PreRender (a held step: the humanoid frozen from PreAnimation to PreSimulation, no new frame) | pose for physics |
 | PostSimulation | release a held step; fill the frame if there was no physics step (240 FPS) | advance the playback clock |
 | End of render | - | re-apply poses the game moved; cursor |
 
@@ -154,8 +154,10 @@ Shared interface: `enter(mode)`, `leave(mode)`, `record(frame)`, `show(frame)` (
   Smooth mode scales gravity (x s^2), WalkSpeed / JumpPower (x s), momentum, the world's constraints and
   body movers, conveyors, free assemblies and kit config velocities (bounce pad Power, swing Boost).
   Frame Step (below 1x) runs normal physics on some steps and holds everything for the others (anchored from
-  PreSimulation to PostSimulation, velocities put back). It feeds the rate to the kit clock, animations, the
-  zoom spring and the kit frame listeners.
+  PreSimulation to PostSimulation, velocities put back; the humanoid frozen for them, Humanoid.EvaluateStateMachine
+  off from PreAnimation to PreSimulation, so its state machine and timers stand still too). A frame is made and
+  filled only on a frame whose step runs, right before it, as at 1x. It feeds the rate to the kit clock,
+  animations, the zoom spring and the kit frame listeners.
 - **Client objects:** same recording model as V2.38.16 (keyframes + screw motion on per-part clocks,
   start states, on-screen only within a 25-stud radius), rewritten around one registry with fewer
   change listeners per part; parts at rest cost nothing.
@@ -165,9 +167,11 @@ Shared interface: `enter(mode)`, `leave(mode)`, `record(frame)`, `show(frame)` (
   bounce pads, jump launchers (`LauncherConfiguration`), morphers.
 - **Buttons, lighting, tools, death:** same behaviour as V2.38.16, as plugins.
 
-**Known limits (documented, not promised):** other players; Roblox's own humanoid timers; the moment the
-character bumps into a platform it pushes in Frame Step (the push can start later or stall); kit listeners whose
-function the executor can't see.
+**Known limits (documented, not promised):** other players; Roblox's own humanoid timers in fast motion (put
+back on the game clock by a model; in slow motion the humanoid is frozen with the held steps, nothing to model)
+and fast motion as a whole (one real step covers several steps of game time); in Frame Step a push against a
+loose platform can start a few hundredths of a second later; kit listeners whose function the executor can't
+see.
 
 ## 8. UI
 
@@ -489,3 +493,39 @@ Each phase has its own implementation plan, tests and PR.
   listener scan while paused (getconnections of Heartbeat and PostSimulation every frame: ~40 us, with the rest of
   the scan ~70-85 us and 7 KB a frame): checking less often while paused would make HappaTAS 3 cheaper than V2
   there, at the price of a new kit listener running a few frames in real time; not done.
+- **Frame Step: the humanoid frozen with the held steps (2026-11-11 / 12, live, EToH kit test place, 165 FPS
+  cap):** anchored alone, Roblox's humanoid kept its timers running in real time through the held steps (Landed
+  over in 49 ms of real time at 0.1x), which is why every step of a timed state used to run at full speed (a stall
+  and a snap before each landing, the game time ahead of the slider). Probes: Roblox works the humanoid out (state
+  machine, timers, forces) between PreAnimation and PreSimulation; with Humanoid.EvaluateStateMachine off only in
+  that window on the held frames its timers stand still (switched off during the physics step instead: no effect;
+  switched on only from PreRender to PreSimulation: the character stands, off there: it sinks 2 studs). While it is
+  off GetState() says Jumping whatever the state is, so it is switched on again at the start of PreSimulation,
+  before the frame is filled. WorldRoot:StepPhysics is refused while the game runs, and does nothing after
+  RunService:Pause() (200 calls in 0.3 ms, no motion): extra steps for fast motion can't be had that way.
+  Results, recorded at 1x / 0.25x / 0.1x: standing and walking jump 7.269 studs at all three, air time 0.527 /
+  0.529 / 0.525 s, sink 0.260 / 0.260 / 0.255, Landed 0.050 / 0.046 / 0.050 s, the same frames around the jump
+  (Running, Jumping at y 0, Jumping at 0.221 with vy 53, Freefall); walking off a ledge, from passing the edge:
+  Freefall +0.141 / +0.137 / +0.137 s, Landed +0.232 / +0.228 / +0.232, Running +0.282 / +0.278 / +0.282; the
+  coyote jump's last working delay within one frame of 1x's on both sides; game time / real time 0.248 and 0.100.
+  Frames are made on the frame whose step runs (made on the first held frame after the step before, Freefall and
+  Landed were recorded a frame late: +12 ms at 0.1x). The speed hack in Idle at 0.25x: the same jump, step for step.
+  An own physics engine (Eternal Obbying's way: about 35,000 lines for its current engine alone) was looked at and
+  not built: every step that runs is already Roblox's own, which a copy can only approximate.
+- **The mouse while paused (2026-11-12, live, window focused):** recorded with the mouse at 697, 444, paused, the
+  real mouse moved to 1494, 790: the cursor image stayed on 697, 444; unpausing put the real mouse back on 697,
+  444 (the fit not measured yet: one correction) and every new frame recorded 697, 444; the same from two frames
+  back. The Inspector's frame time row changed on 49 of 60 frames in Idle (the others the same value), the frame
+  row on 60 of 60 while recording.
+- **Windows over windows (2026-11-11, live):** with glass at 54 % the Library's text, its buttons and its close dot
+  showed through the Settings window in front of it, and a window's title through the Dock. A panel in front of
+  another is solid now (4 % see-through); checked by screenshot.
+- **Frame Step: loose platforms held with the character (2026-11-12, live):** until now every step ran while the
+  character touched a loose part, because holding both broke their contact (0.42 studs pushed by 0.3 s at 0.5x
+  against 3.5 - 4.9 at 1x), so slow motion ran at full speed on any loose platform. With the humanoid frozen on the
+  held steps the contact holds. The kit's Pushing Platform, the slider at 0.3 s of game time: 1x 2.21, 0.18
+  (stalled), 5.05, 3.15, 3.49, 0.11 (stalled), 5.03, 5.02; held at 0.25x 5.11, 3.47, 3.76, 3.62, 4.62, 5.04, 5.03,
+  5.03, 3.91, 3.33; held at 0.1x 2.41, 5.04 (no stall in 12 held runs, game time / real time 0.25 and 0.10). The
+  push starts at 0.06 - 0.07 s at 1x and in 6 of the 12 held runs, at 0.10 - 0.14 s in the other 6. Dropped onto
+  the kit's Falling Platform, it sinks at about the same rate (about 7.3 studs/s^2 at 1x, 7.1 - 7.2 at 0.25x). The touch rule
+  is gone. Diagnostics gets a census of the world (parts, loose ones, constraints, meshes that collide).

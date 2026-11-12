@@ -362,7 +362,8 @@ local boxRec = record(fixed, 1, evB)
 near(z1 - z0, 6 * 20 / 60, 1e-6, "the box moved on the 20 steps that ran only")
 near(boxF.AssemblyLinearVelocity.Z, 6, 1e-9, "the box keeps its velocity")
 eq(boxF.Anchored, false, "the box isn't left anchored")
-near(boxRec[#boxRec].TotalTime, 20 / 60, 1e-5, "TAS time = the time of the steps that ran (" .. boxRec[#boxRec].TotalTime .. ")")
+-- (as at 1x, a frame is the state a step starts from: the 20th step's result would be the frame the 21st starts from)
+near(boxRec[#boxRec].TotalTime, 19 / 60, 1e-5, "TAS time = the time of the steps before the last frame's (" .. boxRec[#boxRec].TotalTime .. ")")
 -- a part the game adds while frame stepping (a pushbox, a bullet) is held from the next held step on
 local late = Instance.new("Part")
 late.Name = "LateBox"
@@ -376,8 +377,9 @@ evL[6] = function() lz0 = late.Position.Z end
 evL[36] = function() lz1 = late.Position.Z end
 record(fixed, 1, evL)
 check(lz0 and lz1 and math.abs((lz1 - lz0) - 6 * 15 / 60) < 6 / 60 + 1e-6, "a part added while frame stepping moves on the steps that ran only (" .. tostring(lz1 and lz1 - lz0) .. ")")
--- a free part your character touches (a platform it pushes or stands on) runs every step for a while (live:
--- holding broke the contact, the kit's Pushing Platform started 0.3 s late at 0.5x)
+-- a free part your character touches (a platform it pushes or stands on) is held with it like every other: with
+-- the humanoid frozen on the held steps their contact holds (live: the kit's Pushing Platform pushed as at 1x).
+-- Before, every step ran while they touched: full speed on any loose platform
 M.freeParts = {}
 late:Destroy()
 local touch = Instance.new("Part")
@@ -393,7 +395,7 @@ local evT = {}
 evT[1] = function() tz0 = touch.Position.Z end
 evT[11] = function() tz1 = touch.Position.Z end
 record({ table.unpack(fixed, 1, 12) }, 1, evT)
-check(tz0 and tz1 and math.abs((tz1 - tz0) - 6 * 10 / 60) < 1e-6, "a free part touching the character moves on every step (" .. tostring(tz1 and tz1 - tz0) .. ")")
+check(tz0 and tz1 and math.abs((tz1 - tz0) - 6 * 5 / 60) < 6 / 60 + 1e-6, "a free part touching the character moves on the steps that ran only (" .. tostring(tz1 and tz1 - tz0) .. ")")
 M.freeParts = {}
 touch:Destroy()
 boxF:Destroy()
@@ -891,6 +893,97 @@ do
 	check(landed ~= nil and math.abs(landed - 0.05) < 0.005, "0.25x: the landing takes 0.05 s of game time, as at 1x (" .. tostring(landed) .. ")")
 	check(worst <= 3, "0.25x: never more than the slider's 3 held steps in a row after the jump and the landing (" .. worst .. ")")
 	M.landedTime = nil
+	S.Set("Speed Hack Speed", 0.5)
+end
+
+section("Frame Step: the humanoid itself is frozen for the held steps, nothing is run at full speed")
+-- (live: with Humanoid.EvaluateStateMachine off for the held steps a jump at 0.1x / 0.25x went Running > Jumping >
+-- Freefall > Landed > Running at the same game times as at 1x, Landed 50 ms, apex 7.49 studs, with every held step
+-- held. Before, the humanoid's timers ran on through the held steps, so every step of a jump's push, of Landed and of
+-- the coyote time was run at full speed: a stall and a snap before each landing)
+do
+	M.landedTime = 0.05
+	S.Set("Speed Hack", 1)
+	S.Set("Speed Hack Speed", 0.25)
+	local frames = {}
+	for i = 1, 1000 do frames[i] = 1 / 240 end
+	local log = {}
+	local orig = E.time.stepBegin
+	E.time.stepBegin = function(self, dt) local r = orig(self, dt); log[#log + 1] = r; return r end
+	-- (frame 21 runs: 1, 5, 9 ... ; the 6th step of the game. The physics steps of the recording only: paused, the
+	-- character is anchored by the pause)
+	local evJ, elog, elogN = jumpAt(21), nil, 0
+	evJ[1] = function() M.esmLog = {}; elog = M.esmLog end
+	evJ[#frames] = function() elogN = #elog end
+	local run = record(frames, 1, evJ)
+	E.time.stepBegin = orig
+	M.esmLog = nil
+	local wrong, heldN = 0, 0
+	for i = 1, elogN do
+		local e = elog[i]
+		if e[1] then heldN = heldN + 1 end
+		if e[1] == e[2] then wrong = wrong + 1 end
+	end
+	check(heldN > 600, "0.25x: most steps are held (" .. heldN .. ")")
+	eq(wrong, 0, "the humanoid is worked out on the steps that run, and frozen on every held one")
+	local runs, total = 0, 0
+	for i = 30, #log do
+		total = total + 1
+		if log[i] then runs = runs + 1 end
+	end
+	check(math.abs(runs / total - 0.25) < 0.005, "0.25x: one step in four runs, through the jump, the fall and the landing too ("
+		.. string.format("%.4f", runs / total) .. ")")
+	local landed = stateTimes(run, LANDED, RUNNING)
+	check(landed ~= nil and math.abs(landed - 0.05) < 1e-4, "0.25x: Landed lasts 0.05 s of game time (" .. tostring(landed) .. ")")
+	eq(hum.EvaluateStateMachine, true, "paused: the humanoid is worked out again")
+	S.Set("Speed Hack", 0)
+	local plainFrames = {}
+	for i = 1, 250 do plainFrames[i] = 1 / 240 end
+	local plain = record(plainFrames, 1, jumpAt(6))
+	S.Set("Speed Hack", 1)
+	local cut = {}
+	for i = 1, #plain do cut[i] = run[i] end
+	sameTAS(plain, cut, "a jump and its landing at 0.25x vs 1x")
+	-- a frame is made and filled on a frame whose own step runs, right before that step, as at 1x (made on the
+	-- first held frame after the step before, its state was a frame old: live, Freefall and Landed came a frame late)
+	do
+		local FS = E.time.SH.FS
+		local made, madeHeld, unfilledHeld = 0, 0, 0
+		local oAppend = E.tl.append
+		E.tl.append = function(self, ...)
+			if FS.on then
+				made = made + 1
+				if FS.plan == false then madeHeld = madeHeld + 1 end
+			end
+			return oAppend(self, ...)
+		end
+		local evF = { [1] = function() hum.MoveDirection = Vector3.new(1, 0, 0) end }
+		for i = 2, 200 do
+			evF[i] = function()
+				local n = E.tl:count()
+				if FS.on and n > 0 and not E.tl:isFilled(n) then unfilledHeld = unfilledHeld + 1 end
+			end
+		end
+		local short = {}
+		for i = 1, 200 do short[i] = 1 / 240 end
+		record(short, 1, evF)
+		E.tl.append = oAppend
+		check(made >= 40, "0.25x: frames were made (" .. made .. ")")
+		eq(madeHeld, 0, "none of them on a frame whose step is held")
+		eq(unfilledHeld, 0, "and no frame waits unfilled through the held steps")
+	end
+	-- a jump tapped while the steps are held (the key down on frame 22, up again on 23; 25 is the next that runs)
+	local tap = { [22] = function() hum.Jump = true end, [23] = function() hum.Jump = false end }
+	local jumped = false
+	for _, fr in ipairs(record(frames, 1, tap)) do
+		if fr.State == Enum.HumanoidStateType.Jumping.Value then jumped = true end
+	end
+	check(jumped, "0.25x: a jump tapped during the held steps is made on the next step that runs")
+	key(Enum.KeyCode.One)
+	steps(2)
+	eq(hum.EvaluateStateMachine, true, "Idle: the humanoid is worked out")
+	M.landedTime = nil
+	hum.Jump = false
 	S.Set("Speed Hack Speed", 0.5)
 end
 

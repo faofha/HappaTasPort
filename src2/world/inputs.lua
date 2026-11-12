@@ -202,18 +202,6 @@ function Inputs:clear()
 	if #self.queue > 0 then self.queue = {} end
 end
 
--- Frame Step: the keys pressed / let go since frame n was made, added to it when the physics step that starts from
--- it runs (it uses them, like a 1x frame's step; taken at the next frame they were one frame late, live)
-function Inputs:lateInto(tl, n)
-	if #self.queue == 0 or n < 1 or n > tl:count() then return end
-	local ev = tl:getList("Input", n)
-	local all = {}
-	if ev then for k = 1, #ev do all[k] = ev[k] end end
-	for _, e in ipairs(self.queue) do all[#all + 1] = e end
-	self.queue = {}
-	tl:setList("Input", n, all)
-end
-
 -- mouse position in window pixels + the same position normalised to the viewport (0..1)
 function Inputs:mouse()
 	local v = self.uis:GetMouseLocation()
@@ -228,6 +216,22 @@ end
 
 function Inputs:begin(tl, i)
 	local mx, my, uvx, uvy, vx, vy = self:mouse()
+	local b = self.back
+	if b then
+		-- (just unpaused: the move back lands a frame late, and a few pixels off before the real mouse's fit is
+		-- measured. Corrected once; the frame's own position is recorded until that has landed)
+		if not b.fixed then
+			b.fixed = true
+			local ex, ey = b.x - mx, b.y - my
+			if (math.abs(ex) > 1 or math.abs(ey) > 1) and math.abs(ex) < 40 and math.abs(ey) < 40 then
+				self.replay.lastMX, self.replay.lastMY = nil, nil
+				self:moveRealMouse(b.x + ex, b.y + ey)
+			end
+		end
+		mx, my, uvx, uvy = b.mx, b.my, b.uvx, b.uvy
+		b.left = b.left - 1
+		if b.left <= 0 then self.back = nil end
+	end
 	tl:setList("Input", i, self:take())
 	tl:setN("Mouse", i, mx, my, uvx, uvy)
 	if i == 1 or vx ~= self.lastVX or vy ~= self.lastVY then
@@ -370,6 +374,21 @@ function Inputs:replayTo(tl, frame)
 			if not rp.injected[id] then self:press(id) end
 		end
 	end
+end
+
+-- "Keep Mouse Position (Paused)", unpausing: the real mouse goes back to where it was on frame i, the frame the
+-- recording goes on from (it was free while paused; the recorded mouse jumped to wherever it was left). Not
+-- when the camera had the mouse on that frame (shift lock, first person): it is in the middle then.
+function Inputs:putMouseBack(tl, i)
+	self.back = nil
+	if not self.E.settings:on("pausedMouse") or i < 1 or i > tl:count() then return end
+	if tl:get("ShiftLock", i, 1) == 1 or tl:get("Zoom", i, 1) <= 0.55 then return end
+	local x, y = self:framePoint(tl, i)
+	if not x or not self.available.move or not self:windowActive() then return end
+	local mx, my, uvx, uvy = tl:getN("Mouse", i)
+	self.back = { x = x, y = y, mx = mx, my = my, uvx = uvx, uvy = uvy, left = 2, fixed = false }
+	self.replay.lastMX, self.replay.lastMY = nil, nil
+	self:moveRealMouse(x, y)
 end
 
 -- true when the camera had the mouse locked on this frame (shift lock, first person, right button held)

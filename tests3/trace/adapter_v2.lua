@@ -10,6 +10,8 @@ function A.boot()
 end
 -- (V2 has no Inspector; its stats panels never took clicks)
 function A.closeInspector() end
+function A.openInspector() end
+function A.v2Parity() end
 function A.openLanes() end
 function A.setInterface() end -- (V2 has only its own interface)
 function A.closeLanes() end

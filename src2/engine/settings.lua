@@ -78,6 +78,7 @@ Settings.SCHEMA = {
 	row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
 	row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { desc = "Mouse positions follow the screen size" }),
 	row("nohboardCursor", "NohBoard Cursor", "Inputs", 1, { desc = "Shows a cursor where the mouse is, for key overlays" }),
+	row("pausedMouse", nil, "Inputs", 1, { desc = "Paused: a cursor image shows the frame's mouse; unpausing puts the mouse back there" }),
 	row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 100, desc = "How fast the hidden mouse moves when the camera is locked" }),
 	row("windowGuarding", "Window Guarding", "Inputs", 1, { desc = "Stops replayed input when the Roblox window isn't focused" }),
 
@@ -114,6 +115,7 @@ local NAMES = {
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
+	pausedMouse = "Keep Mouse Position (Paused)",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do

@@ -178,8 +178,9 @@ do
 	wm:open("inspector")
 	M.steps(2)
 	local open = reads(120)
-	-- (V2's panel: 7 reads and the zoom, about 5 more in the mock, every 2nd frame)
-	check(open - closed <= 6, "Inspector reads per frame in Idle: " .. string.format("%.2f", open - closed))
+	-- (the rows that can change every frame, every frame: the live character's position, rotation, two velocities,
+	-- move direction, floor, the camera; the others 5 times a second. V2's panel read 7 and the zoom every 2nd frame)
+	check(open - closed <= 11, "Inspector reads per frame in Idle: " .. string.format("%.2f", open - closed))
 	insp = ui.inspector
 	-- (standing still: values that didn't change aren't written out again)
 	local hrp = E.char.hrp
@@ -190,15 +191,17 @@ do
 	insp:update(false, false)
 	Util.round = oRound
 	check(rounds <= 1, "standing still: no number formatted again (" .. rounds .. ")")
-	-- (standing still in Idle: the values still update at a steady rate, 5 times a second; the frame time and FPS
-	-- change though nothing moves. Live: frame time and FPS stood still with the character)
+	-- (standing still in Idle: the values are worked out every frame; the frame time changes though nothing moves.
+	-- At 5 times a second the frame time and the other values stood still between updates, which read as a bug)
 	local oValues, calls = IV.values, 0
 	IV.values = function(...) calls = calls + 1; return oValues(...) end
 	M.steps(120, 1 / 60)
-	check(calls >= 9 and calls <= 11, "still: worked out " .. calls .. " times in 2 s (5 a second)")
+	eq(calls, 120, "still: worked out every frame")
 	local ftRow = insp.rows.frameTime
-	for _ = 1, 30 do M.step(1 / 30) end
-	check(ftRow and ftRow.value.Text:find("33", 1, true) ~= nil, "still, frames of 1/30 s: the frame time shows them (" .. tostring(ftRow and ftRow.value.Text) .. ")")
+	for _, case in ipairs({ { 1 / 30, "0.033333" }, { 1 / 60, "0.016667" }, { 1 / 144, "0.006944" }, { 1 / 30, "0.033333" } }) do
+		M.step(case[1])
+		eq(ftRow and ftRow.value.Text, case[2], "the frame time row shows each frame's own time")
+	end
 	calls = 0
 	hrp.AssemblyLinearVelocity = Vector3.new(10, 0, 0)
 	M.steps(120, 1 / 60)
@@ -240,7 +243,7 @@ do
 end
 E.modes:request("pause")
 M.steps(3)
-check(writeFrames >= 4 and writeFrames <= 5, "recording: written 5 times a second (" .. writeFrames .. " of 60 frames)")
+check(writeFrames >= 58, "recording: written every frame (" .. writeFrames .. " of 60 frames)")
 -- (Performance's HappaTAS ms changes by nature: collapsed for the check below)
 clickHeader("Performance")
 M.steps(3)
