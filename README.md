@@ -100,6 +100,16 @@ chat or a text box.
     picture moves on every frame. Only the picture changes: everything is back on its real place before Roblox
     works the humanoid or the physics out, and the run recorded is the same with it on or off. A teleport
     isn't glided over. Parts the kit's scripts move (not the physics) still move in steps.
+- **Glide Manipulation** (Settings > Glide): decides side-edge glides. With shift lock Roblox turns the
+  character toward the camera through physics, so strafing with A / D along a part while falling and turning the
+  camera swings the torso's vertical corner into the part's side. A physics step that starts with the torso 0.10 -
+  0.22 studs inside the part glides now and then (measured live: 14 of 78 steps; 0 of 24 at 0.06 - 0.09): the fall
+  stops or slows, the character is thrown outward and tilts. Which steps start that deep depends on the frame rate
+  and the parts' exact positions, so it is normally luck. Glide Chance 0 % never glides (the torso is kept at most
+  0.05 deep, a glide that happens anyway is undone), 100 % always glides (the torso is put 0.15 deep; when Roblox
+  doesn't glide, HappaTAS makes the glide: the fall cut to 9 %, thrown outward at 17 % of the fall speed,
+  tilted), in between is one roll per part hugged. Exact part shapes (blocks, cylinders, wedges, balls). Idle and
+  recording, R6 only.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
@@ -117,6 +127,7 @@ chat or a text box.
 | Playback | Lock Camera (Test), Interpolate Playback, Playback Speed, Restart When Testing, Show Completion Message |
 | Create | Lock Camera (Paused), Record Death & Respawn, Record Tool Actions, Ignore Game Processed |
 | Speed hack | Speed Hack, Speed Hack Speed (0.1 - 4), Speed Hack In, Smooth Slow Motion |
+| Glide | Glide Manipulation, Glide Chance (%) |
 | Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, Normalize Mouse UV, NohBoard Cursor, Keep Mouse Position (Paused), Invisible Mouse Speed Multiplier, Window Guarding |
 | World sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |
 | Interface | Classic interface, Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale, MicroProfiler Text Offset, Allow PlayerGui Interface |
