@@ -72,6 +72,8 @@ Settings.SCHEMA = {
 	row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
 		classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
 		desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
+	-- (no V2 name: V2's slow motion had no in-between picture)
+	row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
 
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
@@ -115,7 +117,7 @@ local NAMES = {
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-	pausedMouse = "Keep Mouse Position (Paused)",
+	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do

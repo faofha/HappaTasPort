@@ -1407,6 +1407,7 @@ __mods["engine/settings"] = function(import)
 		row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
 			classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
 			desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
+		row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -1443,7 +1444,7 @@ __mods["engine/settings"] = function(import)
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 		interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-		pausedMouse = "Keep Mouse Position (Paused)",
+		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -9762,6 +9763,212 @@ __mods["world/time/control"] = function(import)
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 			root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 		SH.FS = FS
+		local HIST = 4
+		local RING = 16
+		local SV = { root = nil, rp = {}, ht = {}, head = 1, hn = 0, T = 0, D = nil, stepped = false, pushN = 0,
+			go = false, pose = nil, a = 1, b = 1, f = 0,
+			ents = setmetatable({}, { __mode = "k" }), moving = {}, nMoving = 0, shown = {}, nShown = 0, cam = nil, camT = {},
+			dts = {}, di = 0, lag = 1 / 240 }
+		SH.SV = SV
+		local SAME = 0.01
+		local JUMP = 1
+		local function tooFar(a, b)
+			return (a.Position - b.Position).Magnitude > math.max(2, 600 * (FS.est or 1 / 240))
+		end
+		local function off(a, b)
+			return (a.Position - b.Position).Magnitude > 1e-5 or (a.LookVector - b.LookVector).Magnitude > 1e-4
+		end
+		local function smoothReset()
+			SV.root, SV.head, SV.hn, SV.T, SV.D, SV.stepped, SV.go, SV.pose = nil, 1, 0, 0, nil, false, false, nil
+			SV.nMoving, SV.di, SV.lag = 0, 0, 1 / 240
+			table.clear(SV.rp)
+			table.clear(SV.ht)
+			table.clear(SV.dts)
+			table.clear(SV.moving)
+			table.clear(SV.ents)
+		end
+		local function smoothDt(dt)
+			local dts = SV.dts
+			local i = SV.di % RING + 1
+			SV.di = i
+			dts[i] = dt
+			local lo, hi = dt, dt
+			for k = 1, #dts do
+				local v = dts[k]
+				if v < lo then lo = v elseif v > hi then hi = v end
+			end
+			SV.lag = math.min(hi, 2 * lo)
+		end
+		local function smoothRestore()
+			local n = SV.nShown
+			local c = SV.cam
+			if n == 0 and not c then return end
+			SV.nShown, SV.cam = 0, nil
+			local shown = SV.shown
+			for i = 1, n do
+				local e = shown[i]
+				local p, real, at = e[1], e[2], e[3]
+				e[1], e[2], e[3] = nil, nil, nil
+				pcall(function()
+					if p.Parent and (p.Position - at).Magnitude <= SAME then p.CFrame = real end
+				end)
+			end
+			if c then
+				pcall(function()
+					local cam = c[1]
+					if (cam.CFrame.Position - c[4]).Magnitude <= SAME then
+						cam.CFrame = c[2]
+						cam.Focus = c[3]
+					end
+				end)
+				c[1], c[2], c[3], c[4] = nil, nil, nil, nil
+			end
+		end
+		local function smoothParts(head, was)
+			local parts, ents, moving, m = FS.parts, SV.ents, SV.moving, 0
+			local push = SV.pushN + 1
+			SV.pushN = push
+			for i = 1, #parts do
+				local p = parts[i]
+				local cf = p.CFrame
+				local e = ents[p]
+				if not e then
+					e = { p = p, still = HIST, at = push }
+					for k = 1, HIST do e[k] = cf end
+					ents[p] = e
+				else
+					local last = e[was]
+					if e.at ~= push - 1 or tooFar(last, cf) then
+						for k = 1, HIST do e[k] = cf end
+						e.still = HIST
+					else
+						e[head] = cf
+						if cf ~= last then e.still = 0 else e.still = e.still + 1 end
+					end
+					e.at = push
+					if e.still < HIST - 1 then
+						m = m + 1
+						moving[m] = e
+					end
+				end
+			end
+			for i = m + 1, SV.nMoving do moving[i] = nil end
+			SV.nMoving = m
+		end
+		local function smoothPlan()
+			SV.go, SV.pose = false, nil
+			if SV.nShown > 0 or SV.cam then smoothRestore() end
+			local root = FS.root
+			if not FS.on or FS.acc == nil or not (root and root.Parent) or not engine.settings:on("smoothSlowMotion") then
+				if SV.root then smoothReset() end
+				SV.stepped = false
+				return
+			end
+			local now = root.CFrame
+			local stepped = SV.stepped
+			SV.stepped = false
+			local rp, ht = SV.rp, SV.ht
+			local head = SV.head
+			if root ~= SV.root then
+				local T = SV.T
+				smoothReset()
+				SV.root, SV.T, SV.hn = root, T, 1
+				head = 1
+				rp[1], ht[1] = now, T
+			elseif stepped then
+				local was = head
+				head = head % HIST + 1
+				SV.head = head
+				rp[head], ht[head] = now, SV.T
+				if tooFar(rp[was], now) then
+					SV.hn, SV.D = 1, nil
+				else
+					SV.hn = math.min(SV.hn + 1, HIST)
+				end
+				smoothParts(head, was)
+			elseif now ~= rp[head] then
+				local moved = (now.Position - rp[head].Position).Magnitude
+				rp[head] = now
+				if moved > JUMP then SV.hn, SV.D = 1, nil end
+			end
+			local hn = SV.hn
+			local T = ht[head]
+			local D = T + FS.acc - SV.lag
+			if SV.D and D < SV.D then D = SV.D end
+			if D >= T or hn < 2 then
+				SV.D = math.min(D, T)
+				return
+			end
+			SV.D = D
+			local b = head
+			local a = (b - 2) % HIST + 1
+			local k = 1
+			while D < ht[a] and k < hn - 1 do
+				b = a
+				a = (a - 2) % HIST + 1
+				k = k + 1
+			end
+			local ta, tb = ht[a], ht[b]
+			local f = (tb > ta) and (D - ta) / (tb - ta) or 1
+			if f < 0 then f = 0 end
+			SV.a, SV.b, SV.f, SV.go = a, b, f, true
+			local pa, pb = rp[a], rp[b]
+			local pose = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+			if not off(pose, now) then return end
+			SV.pose = pose
+			local d = pose.Position - now.Position
+			local cam = workspace.CurrentCamera
+			if cam and d.Magnitude > 1e-5 then
+				local c0, f0 = cam.CFrame, cam.Focus
+				local to = c0 + d
+				local c = SV.camT
+				c[1], c[2], c[3], c[4] = cam, c0, f0, to.Position
+				SV.cam = c
+				cam.CFrame = to
+				cam.Focus = f0 + d
+			end
+		end
+		local function smoothShow()
+			if not SV.go then return end
+			SV.go = false
+			local shown, n = SV.shown, SV.nShown
+			local head = SV.head
+			local root, pose = SV.root, SV.pose
+			if pose and root and root.Parent then
+				n = n + 1
+				local e = shown[n]
+				if not e then e = {}; shown[n] = e end
+				e[1], e[2], e[3] = root, SV.rp[head], pose.Position
+				SV.nShown = n
+				root.CFrame = pose
+			end
+			local a, b, f = SV.a, SV.b, SV.f
+			local moving = SV.moving
+			for i = 1, SV.nMoving do
+				local m = moving[i]
+				local p = m.p
+				local now = p.CFrame
+				if now ~= m[head] then
+					if (now.Position - m[head].Position).Magnitude > JUMP then
+						for k = 1, HIST do m[k] = now end
+						m.still = HIST
+					else
+						m[head] = now
+					end
+				elseif p.Parent then
+					local pa, pb = m[a], m[b]
+					local to = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+					if off(to, now) then
+						n = n + 1
+						local e = shown[n]
+						if not e then e = {}; shown[n] = e end
+						e[1], e[2], e[3] = p, now, to.Position
+						SV.nShown = n
+						p.CFrame = to
+					end
+				end
+			end
+		end
 		local function setFrozen(on)
 			local f = FS.frozen
 			if on then
@@ -9783,6 +9990,7 @@ __mods["world/time/control"] = function(import)
 			end
 		end
 		function SH.Thaw()
+			if SV.nShown > 0 or SV.cam then smoothRestore() end
 			if FS.frozen then setFrozen(false) end
 		end
 		local function collectStepParts()
@@ -9820,11 +10028,15 @@ __mods["world/time/control"] = function(import)
 		function SH.StepBegin(dt)
 			if not FS.on then return true end
 			dt = tonumber(dt) or 0
-			if dt > 0 then FS.est = dt end
+			if dt > 0 then
+				FS.est = dt
+				smoothDt(dt)
+			end
 			if FS.acc == nil then FS.acc = dt else FS.acc = FS.acc + FS.s * dt end
 			if FS.plan ~= false then
 				FS.acc = FS.acc - dt
 				FS.latch = false
+				SV.stepped, SV.T = true, SV.T + dt
 				FS.pending = FS.pending + dt
 				FS.ranDt = FS.ranDt + dt
 				FS.frameDt = dt
@@ -9850,6 +10062,7 @@ __mods["world/time/control"] = function(import)
 			return false
 		end
 		function SH.StepEnd()
+			if SV.nShown > 0 or SV.cam then smoothRestore() end
 			if FS.frozen then setFrozen(false) end
 			if not FS.held then return end
 			FS.held = false
@@ -9890,7 +10103,12 @@ __mods["world/time/control"] = function(import)
 			if not FS.on then return end
 			if FS.addConn then FS.addConn:Disconnect(); FS.addConn = nil end
 			if FS.freezeConn then FS.freezeConn:Disconnect(); FS.freezeConn = nil end
+			if FS.viewOff then
+				for _, off in ipairs(FS.viewOff) do off() end
+				FS.viewOff = nil
+			end
 			SH.StepEnd()
+			smoothReset()
 			setFrozen(false)
 			FS.on, FS.pending, FS.ranDt, FS.root, FS.hum, FS.parts = false, 0, 0, nil, nil, {}
 			FS.plan, FS.est, FS.latch = nil, nil, false
@@ -9952,8 +10170,13 @@ __mods["world/time/control"] = function(import)
 						if d:IsA("BasePart") then FS.scanIn = 0 end
 					end)
 					FS.freezeConn = Env.svc("RunService").PreAnimation:Connect(function()
+						smoothRestore()
 						if FS.on and FS.plan == false then setFrozen(true) end
 					end)
+					FS.viewOff = {
+						engine.pipe:add("PreRender", 205, "time.smoothCamera", smoothPlan, "time.smooth"),
+						engine.pipe:add("PreRender", 1000, "time.smoothView", smoothShow, "time.smooth"),
+					}
 				end
 				FS.s, FS.root, FS.hum = s, part, h
 				setAnim(s)
@@ -18302,7 +18525,10 @@ __mods["ui/win/helptext"] = function(import)
 			.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
 			.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
 			.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
-			.. "and record what matters at 1x or below." },
+			.. "and record what matters at 1x or below.\n\nSmooth Slow Motion draws the frames in between: your "
+			.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
+			.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
+			.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -18318,8 +18544,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 		{ "limits", "Known limits",
 			"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
-			.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
-			.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+			.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start "
+			.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Turn on Sync Client "
 			.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
 			.. "constraints." },
 		{ "missing", "Missing executor functions", "" },

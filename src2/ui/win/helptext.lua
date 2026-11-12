@@ -151,7 +151,10 @@ local TOPICS = {
 		.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
 		.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
 		.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
-		.. "and record what matters at 1x or below." },
+		.. "and record what matters at 1x or below.\n\nSmooth Slow Motion draws the frames in between: your "
+		.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
+		.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
+		.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -167,8 +170,8 @@ local TOPICS = {
 		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 	{ "limits", "Known limits",
 		"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
-		.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start a few "
-		.. "hundredths of a second later; kit listeners whose function the executor can't see. Turn on Sync Client "
+		.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start "
+		.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Turn on Sync Client "
 		.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
 		.. "constraints." },
 	{ "missing", "Missing executor functions", "" },

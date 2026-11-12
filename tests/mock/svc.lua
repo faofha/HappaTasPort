@@ -1034,7 +1034,14 @@ function M.step(dt)
 	-- time from one PreAnimation to the next is exactly the frame's dt; with M.jobMs the jobs take jobMs
 	M.clockOff = M.jobMs and math.max(0, dt - M.jobMs / 1000) or 0
 	M.clockTicks = 0
-	RS.PreAnimation:Fire(dt)
+	-- (M.preAnimNeedsPhysics: no PreAnimation on a frame without a physics step, as measured in the Roblox client:
+	-- 12 s at 165 FPS, 1978 frames PreRender > PreAnimation > PreSimulation > PostSimulation > Heartbeat and 2 frames
+	-- PreRender > Heartbeat. Off by default: the suites written before that was measured fire it every frame)
+	if sdt > 0 or not M.preAnimNeedsPhysics then
+		RS.PreAnimation:Fire(dt)
+		-- (Roblox works the humanoid out after the PreAnimation handlers: M.afterPreAnimation() = what it gets to see)
+		if M.afterPreAnimation then M.afterPreAnimation() end
+	end
 	-- (measured in the Roblox client: a frame without a physics step has no PreSimulation / Stepped)
 	if sdt > 0 then
 		-- (Roblox works the humanoid out - state machine, its timers, the controllers' forces - between PreRender and

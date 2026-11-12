@@ -170,8 +170,8 @@ Shared interface: `enter(mode)`, `leave(mode)`, `record(frame)`, `show(frame)` (
 **Known limits (documented, not promised):** other players; Roblox's own humanoid timers in fast motion (put
 back on the game clock by a model; in slow motion the humanoid is frozen with the held steps, nothing to model)
 and fast motion as a whole (one real step covers several steps of game time); in Frame Step a push against a
-loose platform can start a few hundredths of a second later; kit listeners whose function the executor can't
-see.
+loose platform can start later (up to about 0.2 s of game time, see section 13, 2026-11-12); kit listeners whose
+function the executor can't see.
 
 ## 8. UI
 
@@ -529,3 +529,33 @@ Each phase has its own implementation plan, tests and PR.
   push starts at 0.06 - 0.07 s at 1x and in 6 of the 12 held runs, at 0.10 - 0.14 s in the other 6. Dropped onto
   the kit's Falling Platform, it sinks at about the same rate (about 7.3 studs/s^2 at 1x, 7.1 - 7.2 at 0.25x). The touch rule
   is gone. Diagnostics gets a census of the world (parts, loose ones, constraints, meshes that collide).
+- **Smooth Slow Motion (2026-11-12, live):** Frame Step shows a new picture only on a frame whose step ran, so slow
+  motion looked laggy at any frame rate: live at 165 FPS the character's place changed on 20 - 22 % of the frames
+  at 0.25x. The setting (Speed hack, on) draws the frames in between like a fixed-step game does: the root, the
+  loose parts that moved in the last steps and the camera are drawn where they were a fixed game time ago (the
+  longest physics step of the last 16, at most twice the shortest: 1/120 s at 165 FPS), between the real poses of
+  the last 4 steps. The game time shown is the simulated time + the time bank - that lag, so it moves on with the
+  real time x the slider on every frame. Written in PreRender (the camera at order 205, before the interface's
+  Frost; the parts at 1000, after everything of HappaTAS read the real poses), back at PreAnimation.
+  Live with it on: the picture moved on 100 % of the frames at 0.25x, 0.5x and 0.75x (165 of 165, 82 of 82, 55 of
+  55), by 1/240 or 2/240 s of walking x the slider each (0.017 - 0.05 studs at 0.25x), never more than 0.19 studs
+  behind the real place; the camera stays exactly on the character. The physics is untouched: 14 jumps at 0.25x
+  and 0.1x all 7.269 studs, 0.525 - 0.529 s in the air, 0.255 - 0.260 studs of sink, Landed 46 - 50 ms; a ledge fall
+  and coyote jumps the same states within one frame of the runs with it off; the kit's Pushing Platform at 0.3 s
+  with it off 0.72, 4.26, 5.06, 0.69 (0.25x) and 4.30, 4.95 (0.1x), with it on 3.36, 5.06, 0.37, 4.18, 2.26, 3.69
+  and 3.83, 4.95, at 1x 5.05, 4.24, 5.07, 3.81 (the push starts at 0.060 - 0.067 s at 1x; in slow motion at 0.063 -
+  0.117 s in 11 of 14 runs and at 0.22 - 0.25 s in 3, two of those with the setting off: the known limit is bigger
+  than the "few hundredths" written above). Cost while it draws: 10.5 us for the plan and the camera, 21 - 23 us
+  for the parts (the root and 0.5 - 1 loose parts), about as much again to put them back; nothing when the speed
+  hack is off (its two pipeline handlers exist only while Frame Step is on).
+  Found live on the way: (1) a frame without a physics step has no PreAnimation either (12 s at 165 FPS: 1978
+  frames PreRender > PreAnimation > PreSimulation > PostSimulation > Heartbeat, 2 frames PreRender > Heartbeat).
+  The picture stayed up through it, the next frame took it for the root's real place, and 4 of 10 slow jumps came
+  out 0.07 - 0.26 studs lower. Everything is put back at Heartbeat too, and before the next picture is worked out.
+  (2) A first version went from one step's pose to the next by the time bank alone: at 165 FPS a frame's step is
+  1/240 or 2/240 s in turn, the bank is counted in the last one, and the picture moved on only 74 % of the frames
+  at 0.25x and 50 % at 0.1x, in jumps of up to a whole step. (3) A move counted as a teleport from 10 studs: a
+  9.7 stud teleport slid across the screen for 14 frames at 0.1x. Now a move of more than 1 stud that no physics
+  step made, or more than 600 studs a second (2 studs at least) inside a step, is shown at once.
+  Not drawn in between: parts the kit's scripts move on the kit clock (tweens), bullets, client objects played
+  back; they still move in steps.

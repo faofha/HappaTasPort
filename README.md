@@ -91,7 +91,15 @@ chat or a text box.
     machine and timers stand still, so a landing, a jump's push and coyote time take the same game time as at
     normal speed and nothing plays at full speed); only the frames whose physics ran are recorded, each made
     right before its step as at 1x, so walking, jumping, falling and landing come out like normal speed. A
-    loose platform you push or stand on is held with you, so slow motion stays slow there too.
+    loose platform you push or stand on is held with you, so slow motion stays slow there too (the push itself
+    can start up to about 0.2 s of game time later than at 1x).
+  - *Smooth Slow Motion* (on by default): with Frame Step alone the world only moves on the frames whose
+    physics ran (41 times a second at 0.25x and 165 FPS), which looks laggy at any frame rate. This draws the
+    frames in between, the way games with fixed physics steps do: the character, the loose parts that move
+    and the camera are shown where they were a step or two ago, on the way between their real places, so the
+    picture moves on every frame. Only the picture changes: everything is back on its real place before Roblox
+    works the humanoid or the physics out, and the run recorded is the same with it on or off. A teleport
+    isn't glided over. Parts the kit's scripts move (not the physics) still move in steps.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
@@ -108,7 +116,7 @@ chat or a text box.
 | --- | --- |
 | Playback | Lock Camera (Test), Interpolate Playback, Playback Speed, Restart When Testing, Show Completion Message |
 | Create | Lock Camera (Paused), Record Death & Respawn, Record Tool Actions, Ignore Game Processed |
-| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 4), Speed Hack Frame Step |
+| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 4), Speed Hack In, Smooth Slow Motion |
 | Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, Normalize Mouse UV, NohBoard Cursor, Keep Mouse Position (Paused), Invisible Mouse Speed Multiplier, Window Guarding |
 | World sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |
 | Interface | Classic interface, Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale, MicroProfiler Text Offset, Allow PlayerGui Interface |
