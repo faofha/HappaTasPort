@@ -559,3 +559,25 @@ Each phase has its own implementation plan, tests and PR.
   step made, or more than 600 studs a second (2 studs at least) inside a step, is shown at once.
   Not drawn in between: parts the kit's scripts move on the kit clock (tweens), bullets, client objects played
   back; they still move in steps.
+- **Glide Manipulation (2026-11-13, live):** settings Glide Manipulation (off) and Glide Chance (%) (0 - 100, 50) in a
+  new Settings section "Glide"; src2/world/glide.lua (plugin order 58). The glide (R6): with shift lock Roblox sets
+  UserGameSettings.RotationType = CameraRelative and the humanoid turns itself toward the camera through physics;
+  strafing with A / D along a part while falling and turning the camera swings the torso's vertical corner into the
+  part's side. Measured from a recorded run in "The ETM Jump" (a 16-stud cylinder; W held, D / A switched, falling
+  120 - 190 stud/s): a physics step that starts with the torso box 0.10 - 0.22 studs inside the part glides now and
+  then (14 of 78 steps), 0.06 - 0.09 never did (0 of 24; 0 of 352 below 0.10 in other runs), 0.23 - 0.24 did not
+  either (0 of 12). A glide stops the fall or slows it (-125 -> +10 down to -125 -> -112), throws the character out
+  1 - 36 stud/s and tilts it 3 - 60 degrees. A replay that set the root's rotation every frame (instead of letting
+  the humanoid turn) never glided; one with RotationType CameraRelative, the recorded camera direction and
+  camera-relative Humanoid:Move did (7 of 45 with starts moved by thousandths of a stud: the "luck").
+  The plugin, at PreSimulation in Idle and while recording (Freefall, falling faster than 20, R6, a step that runs):
+  the torso's parts are found with GetPartsInPart, the depth in each is the least move out along the part's flat
+  outward normal that clears it (bisection with a probe box, exact shapes), one roll per part hugged (a hug ends 0.4 s
+  after the last touch or when a Glide setting changes); no glide wanted: deeper than 0.08 is moved out to 0.05 and a
+  glide Roblox makes anyway is undone at PostSimulation (the fall goes on, upright, the spin from before); a glide
+  wanted: the torso is put 0.15 deep, and when the step doesn't glide HappaTAS makes it (fall x 0.09, out 0.17 x the
+  fall speed, spin 12 rad/s outward). Live, replaying the recorded moves 21 times each: off 15 glides, 0 % 0, 100 %
+  21 (17 made by HappaTAS, 4 by Roblox), 50 % 9. Suite tests3/test_glide.lua (42 checks; the mock got an exact
+  GetPartsInPart for turned boxes against boxes, upright cylinders and balls, and spatial queries now honour Include
+  filters). An earlier attempt at a top-edge glide (the torso landing on a part's top edge by a sliver) was dropped:
+  real in Roblox, but not the glide wanted.

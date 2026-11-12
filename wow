@@ -1402,6 +1402,8 @@ __mods["engine/settings"] = function(import)
 		row("recordDeath", "Record Death & Respawn", "Create", 1, { desc = "Keeps recording through death and respawn" }),
 		row("recordTools", "Record Tool Actions", "Create", 1, { desc = "Records equipping and using tools" }),
 		row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
+		row("glideManipulation", nil, "Glide", 0, { desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
+		row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, desc = "0 = never glides, 100 = always glides" }),
 		row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 		row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
 		row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
@@ -1445,6 +1447,7 @@ __mods["engine/settings"] = function(import)
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 		interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
+		glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -10592,6 +10595,194 @@ __mods["world/time/control"] = function(import)
 	end
 	return TimeControl
 end
+__mods["world/glide"] = function(import)
+	local Glide = { name = "glide", order = 58 }
+	Glide.__index = Glide
+	local H = 1 / 240
+	Glide.SAFE = 0.05
+	Glide.TARGET = 0.15
+	local SAFE_ABOVE = 0.08
+	local MIN_FALL = 20
+	local SAME_HUG = 0.4
+	local REACH = 0.6
+	local FILL_KEEP = 0.09
+	local FILL_OUT = 0.17
+	local FILL_SPIN = 12
+	function Glide.new(E)
+		local self = setmetatable({ E = E, rng = Random.new(), last = nil, pend = nil, hug = nil }, Glide)
+		local find = OverlapParams.new()
+		find.FilterType = Enum.RaycastFilterType.Exclude
+		find.RespectCanCollide = true
+		self.find = find
+		local only = OverlapParams.new()
+		only.FilterType = Enum.RaycastFilterType.Include
+		self.only = only
+		if E.pipe then
+			E.life:own(E.pipe:add("PostSimulation", 60, "glide.check", function(dt) self:check(dt) end, "glide"))
+		end
+		E.life:own(E.settings:changed("glideChance", function() self.hug = nil end))
+		E.life:own(E.settings:changed("glideManipulation", function() self.hug = nil end))
+		E.life:own(function()
+			if self.probe then pcall(function() self.probe:Destroy() end) end
+		end)
+		return self
+	end
+	function Glide:active()
+		local E = self.E
+		if not E.settings:on("glideManipulation") then return false end
+		if E.mode == 1 then return true end
+		return E.mode == 2 and not E.paused
+	end
+	function Glide:stepRuns()
+		local t = self.E.time
+		local fs = t and t.SH and t.SH.FS
+		return not (fs and fs.on and fs.plan == false)
+	end
+	function Glide:box(size)
+		local p = self.probe
+		if not (p and p.Parent) then
+			p = Instance.new("Part")
+			p.Name = "HappaTASGlideProbe"
+			p.Anchored, p.CanCollide, p.CanTouch, p.CanQuery = true, false, false, false
+			p.Transparency = 1
+			p.Parent = workspace.CurrentCamera or workspace
+			self.probe = p
+		end
+		if p.Size ~= size then p.Size = size end
+		return p
+	end
+	local function outward(part, at)
+		local pc = part.CFrame
+		local isRound = part:IsA("Part") and (part.Shape == Enum.PartType.Cylinder or part.Shape == Enum.PartType.Ball)
+		local axis = pc.RightVector
+		if isRound and (part.Shape == Enum.PartType.Ball or math.abs(axis.Y) > 0.9) then
+			local d = Vector3.new(at.X - pc.X, 0, at.Z - pc.Z)
+			return d.Magnitude > 1e-4 and d.Unit or nil, true
+		end
+		local lp = pc:PointToObjectSpace(at)
+		local hs = part.Size / 2
+		local near = Vector3.new(math.clamp(lp.X, -hs.X, hs.X), math.clamp(lp.Y, -hs.Y, hs.Y), math.clamp(lp.Z, -hs.Z, hs.Z))
+		local d = at - pc:PointToWorldSpace(near)
+		d = Vector3.new(d.X, 0, d.Z)
+		if d.Magnitude > 1e-4 then return d.Unit, isRound end
+		local best, bestGap = nil, math.huge
+		for _, f in ipairs({ { pc.RightVector, hs.X, lp.X }, { pc.LookVector, hs.Z, -lp.Z }, { pc.UpVector, hs.Y, lp.Y } }) do
+			local flat = Vector3.new(f[1].X, 0, f[1].Z)
+			if flat.Magnitude > 0.7 then
+				local gap = f[2] - math.abs(f[3])
+				if gap < bestGap then
+					bestGap = gap
+					best = flat.Unit * ((f[3] >= 0) and 1 or -1)
+				end
+			end
+		end
+		return best, isRound
+	end
+	function Glide:depth(part, cf, size, n)
+		local probe = self:box(size)
+		self.only.FilterDescendantsInstances = { part }
+		local function hits(s)
+			probe.CFrame = cf + n * s
+			return #workspace:GetPartsInPart(probe, self.only) > 0
+		end
+		if not hits(0) then return 0 end
+		if hits(REACH) then return REACH end
+		local lo, hi = 0, REACH
+		for _ = 1, 12 do
+			local mid = (lo + hi) / 2
+			if hits(mid) then lo = mid else hi = mid end
+		end
+		return hi
+	end
+	function Glide:decide(part)
+		local now = os.clock()
+		local hug = self.hug
+		if hug and hug.part == part and now - hug.t < SAME_HUG then
+			hug.t = now
+			return hug.want
+		end
+		local chance = math.clamp(tonumber(self.E.settings:get("glideChance")) or 50, 0, 100)
+		local want = chance >= 100 or (chance > 0 and self.rng:NextNumber(0, 100) < chance)
+		self.hug = { part = part, t = now, want = want, done = false }
+		return want
+	end
+	function Glide:onPreSimulation()
+		self.pend = nil
+		if not self:active() or not self:stepRuns() then return end
+		local ch = self.E.char
+		local hum, root, model = ch.hum, ch.hrp, ch.model
+		if not (hum and root and model and root.Parent) or root.Anchored then return end
+		if hum.RigType ~= Enum.HumanoidRigType.R6 or hum:GetState() ~= Enum.HumanoidStateType.Freefall then return end
+		local v = root.AssemblyLinearVelocity
+		if v.Y > -MIN_FALL then return end
+		local size = (ch.torso and ch.torso.Size) or root.Size
+		local cf = root.CFrame
+		local probe = self:box(size + Vector3.new(0.02, 0, 0.02))
+		probe.CFrame = cf
+		self.find.FilterDescendantsInstances = { model, probe }
+		local parts = workspace:GetPartsInPart(probe, self.find)
+		if #parts == 0 then return end
+		local best
+		for _, part in ipairs(parts) do
+			if part.CanCollide then
+				local n, round = outward(part, cf.Position)
+				if n then
+					local d = self:depth(part, cf, size, n)
+					if not best or d > best.d then best = { part = part, n = n, d = d, round = round } end
+				end
+			end
+		end
+		if not best then return end
+		local want = self:decide(best.part)
+		local hug = self.hug
+		if hug.done then return end
+		local shift = 0
+		if want then
+			shift = best.d - Glide.TARGET
+		elseif best.d > SAFE_ABOVE then
+			shift = best.d - Glide.SAFE
+		end
+		if math.abs(shift) > 1e-6 then root.CFrame = cf + best.n * shift end
+		self.last = { part = best.part, want = want, depth = best.d, shift = shift, filled = false, undone = false, glided = nil }
+		self.pend = { want = want, n = best.n, v = v, w = root.AssemblyAngularVelocity, g = workspace.Gravity,
+			last = self.last, hug = hug }
+	end
+	function Glide:check(dt)
+		local p = self.pend
+		self.pend = nil
+		if not p then return end
+		local root = self.E.char.hrp
+		if not (root and root.Parent) then return end
+		dt = tonumber(dt) or H
+		local v = root.AssemblyLinearVelocity
+		local freeVy = p.v.Y - p.g * dt
+		local fall = -freeVy
+		local glided = v.Y > freeVy + 12 and v.Y > freeVy + 0.1 * fall
+		p.last.glided = glided
+		if glided == p.want then
+			if glided then p.hug.done = true end
+			return
+		end
+		local cf = root.CFrame
+		local flatLook = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+		if not p.want then
+			root.AssemblyLinearVelocity = Vector3.new(p.v.X, freeVy, p.v.Z)
+			root.AssemblyAngularVelocity = p.w
+			if flatLook.Magnitude > 1e-4 then root.CFrame = CFrame.lookAt(cf.Position, cf.Position + flatLook) end
+			p.last.undone = true
+			p.last.glided = false
+			return
+		end
+		local into = Vector3.new(v.X, 0, v.Z):Dot(p.n)
+		local horiz = Vector3.new(v.X, 0, v.Z) - p.n * math.min(0, into)
+		root.AssemblyLinearVelocity = horiz + p.n * (FILL_OUT * fall) + Vector3.new(0, freeVy * FILL_KEEP, 0)
+		root.AssemblyAngularVelocity = Vector3.yAxis:Cross(p.n) * FILL_SPIN
+		p.last.filled = true
+		p.last.glided = true
+		p.hug.done = true
+	end
+	return Glide
+end
 __mods["world/kit/clock"] = function(import)
 	local Env = import("platform/env")
 	local RunService = Env.svc("RunService")
@@ -16668,7 +16859,7 @@ __mods["ui/win/settings"] = function(import)
 	local Bezier = import("ui/kit/bezier")
 	local Diagnostics = import("engine/diagnostics")
 	local SettingsWin = {}
-	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Inputs", "World sync", "Interface" }
+	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 	local PERCENT = { glassTransparency = true, blurStrength = true, edgeLight = true, interfaceScale = true }
 	local HEADER_H, PAD = 30, 18
@@ -18529,6 +18720,15 @@ __mods["ui/win/helptext"] = function(import)
 			.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
 			.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
 			.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
+		{ "glide", "Glide Manipulation",
+			"A glide: falling fast along a part with shift lock, strafing with A / D, the camera turns your torso's "
+			.. "vertical corner into the part's side. If a physics step starts with the torso 0.1 - 0.2 studs inside the "
+			.. "part, Roblox may push it out so hard that your fall stops or slows and you are thrown outward, tilted. "
+			.. "Normally that is luck (frame rate, the part's exact position). With Glide Manipulation on, Glide Chance "
+			.. "decides each part you hug: 0 % never glides (the torso is kept shallower, a glide that happens anyway is "
+			.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
+			.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
+			.. "Idle and while recording, for R6 characters." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -23265,6 +23465,7 @@ __mods["main"] = function(import)
 	local Buttons = import("world/buttons")
 	local Lighting = import("world/lighting")
 	local TimeControl = import("world/time/control")
+	local Glide = import("world/glide")
 	local KitClockPlugin = import("world/kit/clock")
 	local KitObjectsPlugin = import("world/kit/objects")
 	local Merge = import("engine/merge")
@@ -23310,6 +23511,7 @@ __mods["main"] = function(import)
 		E.thumbstick = guard(E.plugins:add(Thumbstick.new(E)), "thumbstick")
 		E.mergeRun = guard(E.plugins:add(Merge.new(E)), "merge")
 		E.time = guard(E.plugins:add(TimeControl.new(E)), "time")
+		E.glide = guard(E.plugins:add(Glide.new(E)), "glide")
 		E.kitClock = guard(E.plugins:add(KitClockPlugin.new(E)), "kitClock")
 		E.kitObjects = guard(E.plugins:add(KitObjectsPlugin.new(E)), "kitObjects")
 		Run.registerCarry(E.tl)

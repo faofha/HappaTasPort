@@ -155,6 +155,15 @@ local TOPICS = {
 		.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
 		.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
 		.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
+	{ "glide", "Glide Manipulation",
+		"A glide: falling fast along a part with shift lock, strafing with A / D, the camera turns your torso's "
+		.. "vertical corner into the part's side. If a physics step starts with the torso 0.1 - 0.2 studs inside the "
+		.. "part, Roblox may push it out so hard that your fall stops or slows and you are thrown outward, tilted. "
+		.. "Normally that is luck (frame rate, the part's exact position). With Glide Manipulation on, Glide Chance "
+		.. "decides each part you hug: 0 % never glides (the torso is kept shallower, a glide that happens anyway is "
+		.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
+		.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
+		.. "Idle and while recording, for R6 characters." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "

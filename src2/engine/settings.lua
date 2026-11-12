@@ -65,6 +65,9 @@ Settings.SCHEMA = {
 	row("recordDeath", "Record Death & Respawn", "Create", 1, { desc = "Keeps recording through death and respawn" }),
 	row("recordTools", "Record Tool Actions", "Create", 1, { desc = "Records equipping and using tools" }),
 	row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
+	-- (no V2 name: the torso-edge glide, world/glide.lua)
+	row("glideManipulation", nil, "Glide", 0, { desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
+	row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, desc = "0 = never glides, 100 = always glides" }),
 
 	row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
@@ -118,6 +121,7 @@ local NAMES = {
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
+	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do

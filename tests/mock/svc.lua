@@ -1176,12 +1176,14 @@ end
 -- spatial queries on axis-aligned boxes (rotations ignored): the parts' boxes against a box / a swept box
 do
 	local function excluded(part, params)
-		if params and params.FilterType ~= Enum.RaycastFilterType.Include then
-			for _, x in ipairs(params.FilterDescendantsInstances or {}) do
-				if part == x or part:IsDescendantOf(x) then return true end
-			end
+		if not params then return false end
+		local listed = false
+		for _, x in ipairs(params.FilterDescendantsInstances or {}) do
+			if part == x or part:IsDescendantOf(x) then listed = true break end
 		end
-		return false
+		-- (Include: only the listed parts; Exclude: everything but them)
+		if params.FilterType == Enum.RaycastFilterType.Include then return not listed end
+		return listed
 	end
 	local function candidates(params)
 		local out = {}
@@ -1201,6 +1203,49 @@ do
 		local out, h = {}, size / 2
 		for _, p in ipairs(candidates(params)) do
 			if overlap(cf.Position, h, p.Position, p.Size / 2) then out[#out + 1] = p end
+		end
+		return out
+	end
+	-- the parts a part overlaps: the query part as a box turned about Y (its yaw), each other part as an axis-aligned
+	-- box, a cylinder standing up (Shape Cylinder: radius = min(Size.Y, Size.Z) / 2, height Size.X, its rotation
+	-- taken to be the upright one) or a ball (radius = the smallest size / 2). Heights overlap by intervals
+	M.partQueries = 0
+	C.Workspace.Methods.GetPartsInPart = function(_, q, params)
+		M.partQueries = M.partQueries + 1
+		local cf, hs = q.CFrame, q.Size / 2
+		local o = cf.Position
+		local r, l = cf.RightVector, cf.LookVector
+		local rx, rz = Vector3.new(r.X, 0, r.Z).Unit, Vector3.new(l.X, 0, l.Z).Unit
+		local function closest(px, pz)
+			-- the nearest point of the query's footprint (a turned rectangle) to (px, pz)
+			local dx, dz = px - o.X, pz - o.Z
+			local a = math.clamp(dx * rx.X + dz * rx.Z, -hs.X, hs.X)
+			local b = math.clamp(dx * rz.X + dz * rz.Z, -hs.Z, hs.Z)
+			return o.X + rx.X * a + rz.X * b, o.Z + rx.Z * a + rz.Z * b
+		end
+		local out = {}
+		for _, p in ipairs(candidates(params)) do
+			if p ~= q then
+				local c, ph = p.Position, p.Size / 2
+				local hit
+				if p.Shape == Enum.PartType.Cylinder or p.Shape == Enum.PartType.Ball then
+					local rad = (p.Shape == Enum.PartType.Ball) and math.min(p.Size.X, p.Size.Y, p.Size.Z) / 2 or math.min(p.Size.Y, p.Size.Z) / 2
+					local hh = (p.Shape == Enum.PartType.Ball) and rad or ph.X
+					local nx, nz = closest(c.X, c.Z)
+					hit = (nx - c.X) ^ 2 + (nz - c.Z) ^ 2 < rad * rad and math.abs(o.Y - c.Y) < hs.Y + hh
+				else
+					-- 2D separating axes: the box's X / Z and the query's two turned axes
+					local function sep(ax, az)
+						local qc = o.X * ax + o.Z * az
+						local qr = hs.X * math.abs(rx.X * ax + rx.Z * az) + hs.Z * math.abs(rz.X * ax + rz.Z * az)
+						local pc = c.X * ax + c.Z * az
+						local pr = ph.X * math.abs(ax) + ph.Z * math.abs(az)
+						return math.abs(qc - pc) >= qr + pr
+					end
+					hit = not (sep(1, 0) or sep(0, 1) or sep(rx.X, rx.Z) or sep(rz.X, rz.Z)) and math.abs(o.Y - c.Y) < hs.Y + ph.Y
+				end
+				if hit then out[#out + 1] = p end
+			end
 		end
 		return out
 	end
