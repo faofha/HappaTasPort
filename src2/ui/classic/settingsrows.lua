@@ -11,6 +11,7 @@ local Settings = import("engine/settings")
 local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
 local SettingsWin = import("ui/win/settings")
+local ClassicPicker = import("ui/classic/colorpicker")
 
 local SettingsRows = {}
 
@@ -160,6 +161,30 @@ function SettingsRows.build(classic)
 			r = { frame = f, label = f.N, input = f.Input }
 			local inp = r.input
 			inp.Text = tostring(s:get(key))
+			if def.kind == "color" or def.kind == "autocolor" then
+				-- (Classic Look: a swatch of the colour in use; a click opens the colour picker)
+				local sw = Instance.new("TextButton")
+				sw.Name, sw.Text, sw.BorderSizePixel, sw.AutoButtonColor = "Swatch", "", 0, false
+				sw.AnchorPoint, sw.Position, sw.Size = Vector2.new(0.5, 0.5), u(0.77, 0, 0.5, 0), u(0, 22, 0, 18)
+				sw.ZIndex = inp.ZIndex
+				local sc = Instance.new("UICorner")
+				sc.CornerRadius = UDim.new(0, 4)
+				sc.Parent = sw
+				look:own(sw, "BackgroundColor3")
+				sw.Parent = f
+				r.swatch = sw
+				local function paint()
+					if def.kind == "autocolor" then
+						sw.BackgroundColor3 = look:color(key)
+					else
+						sw.BackgroundColor3 = Color3.fromHex(tostring(s:get(key)):sub(2))
+					end
+				end
+				paint()
+				classic.offs[#classic.offs + 1] = look:changed(paint)
+				classic.offs[#classic.offs + 1] = s:changed(key, paint)
+				life:connect(sw.MouseButton1Click, function() ClassicPicker.open(classic, key) end)
+			end
 			life:connect(inp.FocusLost, function()
 				local text = inp.Text:gsub("^%s+", ""):gsub("%s+$", "")
 				if key == "theme" then
@@ -167,8 +192,8 @@ function SettingsRows.build(classic)
 					if text ~= "" and text ~= s:get(key) and not SettingsWin.applyLook(E, text) then
 						E.bus:emit("status", "No saved look named \"" .. text .. "\"", true)
 					end
-				elseif text ~= "" then
-					s:set(key, inp.Text)
+				elseif text ~= "" or def.kind == "autocolor" then
+					s:set(key, inp.Text) -- (an empty colour box = Auto)
 				end
 				inp.Text = tostring(s:get(key)) -- (the store's own spelling, or the old value when refused)
 			end)

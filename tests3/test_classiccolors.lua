@@ -173,4 +173,107 @@ end
 M.steps(1)
 eq(rgb(menu.BackgroundColor3), "0,35,73", "everything back on the defaults: V2's colours")
 
+section("colour rows and the picker")
+c = ui.classic
+c:tab("Settings")
+local r = c.settingsRows.classicPanel
+eq(r.input.Text, "Auto", "Auto shown")
+check(r.swatch ~= nil, "a swatch")
+r.input.Text = "10, 20, 30"
+r.input.FocusLost:Fire(true, nil)
+eq(E.settings:get("classicPanel"), "#0A141E", "typed r, g, b stored as hex")
+eq(r.input.Text, "#0A141E", "shown as hex")
+eq(rgb(r.swatch.BackgroundColor3), "10,20,30", "the swatch shows it")
+r.input.Text = ""
+r.input.FocusLost:Fire(true, nil)
+eq(E.settings:get("classicPanel"), "Auto", "an empty box = Auto")
+eq(rgb(r.swatch.BackgroundColor3), "0,41,91", "the swatch shows the Auto colour")
+E.settings:set("classicMainColor", "#C80000")
+check(r.swatch.BackgroundColor3.R > r.swatch.BackgroundColor3.B, "a new Main Colour repaints an Auto swatch")
+E.settings:set("classicMainColor", "#003481")
+r.swatch.MouseButton1Click:Fire()
+local p = c.picker
+check(p ~= nil and p.frame.Parent == c.gui, "the swatch opens the picker")
+if p then
+	p:setHue(0)
+	p:setSV(1, 0)
+	eq(Palette.hex(p.newColor), "#FF0000", "hue 0, full saturation and value = red")
+	p:setSV(0, 1)
+	eq(Palette.hex(p.newColor), "#000000", "bottom = black")
+	p:typed("0, 255, 0")
+	eq(Palette.hex(p.newColor), "#00FF00", "typed r, g, b")
+	p:typed("nonsense")
+	eq(Palette.hex(p.newColor), "#00FF00", "a bad value changes nothing")
+	p:typed("128, 128, 128")
+	p:setSV(1, 0)
+	eq(Palette.hex(p.newColor), "#00FF00", "a grey typed keeps the hue shown")
+	p:apply()
+	eq(E.settings:get("classicPanel"), "#00FF00", "Apply stores it")
+	eq(c.picker, nil, "and closes")
+end
+local rm = c.settingsRows.classicMainColor
+eq(rm.input.Text, "#003481", "the Main Colour row shows its colour")
+rm.swatch.MouseButton1Click:Fire()
+check(c.picker ~= nil and c.picker.autoButton == nil, "no Auto for the Main Colour")
+c.picker:typed("#123456")
+c.picker:close()
+eq(E.settings:get("classicMainColor"), "#003481", "closing without Apply changes nothing")
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+local first = c.picker
+c.settingsRows.classicWindow.swatch.MouseButton1Click:Fire()
+check(first.frame.Parent == nil and c.picker ~= first, "one picker at a time")
+c.picker:auto()
+eq(E.settings:get("classicWindow"), "Auto", "Auto button")
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+c.picker:auto()
+eq(E.settings:get("classicPanel"), "Auto", "(Panel back on Auto)")
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+do
+	-- (the mouse: a press on the square picks there, a drag follows, a press outside closes)
+	local pk = c.picker
+	local function at(gui, fx, fy)
+		local a, z = gui.AbsolutePosition, gui.AbsoluteSize
+		M.mouse = Vector2.new(a.X + fx * z.X, a.Y + fy * z.Y + M.inset)
+	end
+	pk:setHue(0)
+	at(pk.square, 0.999, 0.001)
+	M.mouseDown(1)
+	eq(Palette.hex(pk.newColor), "#FF0000", "a press at the square's top right: red")
+	at(pk.square, 0.999, 0.999)
+	M.services.UserInputService.InputChanged:Fire(M.input(Enum.UserInputType.MouseMovement), false)
+	eq(Palette.hex(pk.newColor), "#000000", "dragging to its bottom: black")
+	M.mouseUp(1)
+	at(pk.hueBar, 0.5, 1 / 3)
+	M.mouseDown(1)
+	M.mouseUp(1)
+	at(pk.square, 0.999, 0.001)
+	M.mouseDown(1)
+	M.mouseUp(1)
+	eq(Palette.hex(pk.newColor), "#00FF00", "a third down the hue bar: green")
+	M.mouse = Vector2.new(2, 2 + M.inset)
+	M.mouseDown(1)
+	M.mouseUp(1)
+	eq(c.picker, nil, "a press outside closes it")
+	eq(E.settings:get("classicPanel"), "Auto", "without applying")
+end
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+M.pressKey(Enum.KeyCode.Escape)
+M.releaseKey(Enum.KeyCode.Escape)
+M.steps(1)
+eq(c.picker, nil, "Esc closes it")
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+c:tab("Saves")
+eq(c.picker, nil, "another tab closes it")
+c:tab("Settings")
+c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
+E.settings:set("interface", "New")
+M.steps(1)
+local left = 0
+for _, g in ipairs({ c.gui }) do
+	for _, d in ipairs(g:GetDescendants()) do if d.Name == "HappaTASColorPicker" then left = left + 1 end end
+end
+eq(left, 0, "switching to the New interface closes it")
+E.settings:set("interface", "Classic")
+M.steps(1)
+
 finish()
