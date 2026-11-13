@@ -107,4 +107,70 @@ eq(Palette.keyFor("BackgroundColor3", Color3.fromRGB(0, 196, 248)), "classicDivi
 eq(Palette.keyFor("BackgroundColor3", Color3.fromRGB(50, 50, 50)), nil, "runtime-only colours aren't registered")
 eq(Palette.keyFor("TextColor3", Color3.fromRGB(140, 205, 255)), nil, "(the section title is painted while running)")
 
+section("repainting")
+local look = c.look
+check(look ~= nil, "Classic has a Look")
+local menu = c.byPath.MainMenu
+eq(rgb(menu.BackgroundColor3), "0,35,73", "V2's window colour at the default")
+E.settings:set("classicMainColor", "#C80000")
+M.steps(1)
+check(menu.BackgroundColor3.R > menu.BackgroundColor3.B, "Main Colour red: the window turns red (" .. rgb(menu.BackgroundColor3) .. ")")
+eq(rgb(c.byPath["MainMenu.SavesFrame.YourSlots.Top.AddSlot"].BackgroundColor3), rgb(look:color("classicButton")), "a button follows too")
+E.settings:set("classicWindow", "#00FF00")
+M.steps(1)
+eq(rgb(menu.BackgroundColor3), "0,255,0", "a typed Window colour wins")
+E.settings:set("classicWindow", "Auto")
+M.steps(1)
+check(menu.BackgroundColor3.R > menu.BackgroundColor3.G, "back on Auto: red again")
+-- (Review Focus: a row built later comes up in the current colours)
+c:tab("Saves")
+local before = #c.saves.slots
+c.byPath["MainMenu.SavesFrame.YourSlots.Top.AddSlot"].MouseButton1Click:Fire()
+M.steps(1)
+check(#c.saves.slots > before, "(a new slot row)")
+local newRow = c.saves.slots[#c.saves.slots]
+local frame = newRow and (newRow.frame or newRow.gui or newRow)
+local wrong = 0
+for key, list in pairs(look.entries) do
+	for _, e in ipairs(list) do
+		if typeof(frame) == "Instance" and (e.inst == frame or e.inst:IsDescendantOf(frame)) and rgb(e.inst[e.prop]) ~= rgb(look:color(key)) then wrong = wrong + 1 end
+	end
+end
+eq(wrong, 0, "the new slot row comes up in the current colours")
+check(newRow ~= nil and rgb(newRow.save.Parent.BackgroundColor3) == rgb(look:color("classicButton")) and look:color("classicButton").R > 0.3, "its button bar is in the (red) Button colour")
+-- (Review Focus: colours painted while running follow their setting, and no other key repaints them)
+local before1 = c.byPath["Merge.Options.Before"]
+E.settings:set("classicToggleOff", "#010203")
+E.settings:set("classicButton", "#FFFF00")
+M.steps(1)
+check(look:owns(before1, "BackgroundColor3"), "the merge option buttons are painted by their own code")
+local knobOn, knobOff
+for _, r in pairs(c.settingsRows) do
+	if r.knob and r.on == true and not knobOn then knobOn = r.knob end
+	if r.knob and r.on == false and not knobOff then knobOff = r.knob end
+end
+E.settings:set("classicSwitchOn", "#0A0B0C")
+E.settings:set("classicSwitchOff", "#0D0E0F")
+M.steps(1)
+eq(rgb(knobOn.BackgroundColor3), "10,11,12", "a switch that is on: Switch On")
+eq(rgb(knobOff.BackgroundColor3), "13,14,15", "a switch that is off: Switch Off")
+E.settings:set("classicLight", "#202020")
+M.steps(1)
+eq(rgb(knobOff.BackgroundColor3), "13,14,15", "Light Fill doesn't repaint a knob")
+local title = c.byPath["MainMenu.SettingsFrame.List"]:FindFirstChild("Section_Classic Look")
+E.settings:set("classicSectionTitle", "#112233")
+M.steps(1)
+eq(rgb(title.TextColor3), "17,34,51", "section titles follow Section Title")
+-- (Review Focus: to the New interface and back)
+E.settings:set("interface", "New")
+M.steps(1)
+E.settings:set("interface", "Classic")
+M.steps(1)
+eq(rgb(ui.classic.byPath.MainMenu.BackgroundColor3), rgb(ui.classic.look:color("classicWindow")), "back to Classic: still the set colours")
+for _, k in ipairs({ "classicMainColor", "classicButton", "classicToggleOff", "classicSwitchOn", "classicSwitchOff", "classicLight", "classicSectionTitle" }) do
+	E.settings:set(k, Settings.byKey[k].default)
+end
+M.steps(1)
+eq(rgb(menu.BackgroundColor3), "0,35,73", "everything back on the defaults: V2's colours")
+
 finish()

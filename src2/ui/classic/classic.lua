@@ -12,6 +12,7 @@
 local Env = import("platform/env")
 local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
+local Look = import("ui/classic/look")
 local SettingsRows = import("ui/classic/settingsrows")
 local ControlsRows = import("ui/classic/controlsrows")
 local Saves = import("ui/classic/saves")
@@ -48,6 +49,8 @@ function Classic.new(ui)
 	local _, byPath = ClassicBuild.build(ClassicTree.TREE, ClassicTree.STYLES, gui)
 	self.byPath = byPath
 	self.menu = byPath.MainMenu
+	-- (the Classic Look colours: before the rows, which ask it for their colours)
+	self.look = Look.new(self)
 	self.uis = Env.svc("UserInputService")
 	self.guiService = Env.svc("GuiService")
 	self.ts = Env.svc("TweenService")

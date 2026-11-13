@@ -16,7 +16,8 @@ local SettingsRows = {}
 
 local u, v2 = UDim2.new, Vector2.new
 local ROW_H, HEADER_H = 30, 28
-local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) } -- (V2.38.17's knobs)
+-- (V2.38.17's knobs; their colours are the Classic Look's Switch On / Switch Off)
+local SWITCH_ON = { Position = u(1, 0, 0.5, 0), color = "classicSwitchOn" }
 -- V2.38.17's labels and section names where they differ from its setting names
 local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
 	invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
@@ -26,7 +27,7 @@ local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync",
 -- (and a multi row with Classic labels: a switch per option, keyed "<key>:<option>")
 -- (and Classic Look: the rows only Classic has)
 local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true end
-local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
+local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), color = "classicSwitchOff" }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)
 local function toggleRow(def, order)
@@ -64,7 +65,16 @@ function SettingsRows.build(classic)
 	local list = classic.byPath["MainMenu.SettingsFrame.List"]
 	local scroller = classic.byPath["MainMenu.SettingsFrame"]
 	local ts = Env.svc("TweenService")
+	local look = classic.look
 	local rows, last, order, height = {}, nil, 0, 0
+	local titles = {}
+	-- (knobs and section titles are painted here: repainted when the Classic Look changes)
+	classic.offs[#classic.offs + 1] = look:changed(function()
+		for _, h in ipairs(titles) do h.TextColor3 = look:color("classicSectionTitle") end
+		for _, r in pairs(rows) do
+			if r.knob and r.on ~= nil then r.knob.BackgroundColor3 = look:color(r.on and "classicSwitchOn" or "classicSwitchOff") end
+		end
+	end)
 	for _, def in ipairs(Settings.SCHEMA) do
 		if not shownHere(def) then
 			-- (the New interface's only)
@@ -74,7 +84,9 @@ function SettingsRows.build(classic)
 			local secName = SECTIONS[def.section] or def.section
 			local h = ClassicBuild.node({ "TextLabel", "Section_" .. secName, 16, { Size = u(1, 0, 0, HEADER_H), Text = secName,
 				TextSize = 14, LayoutOrder = order } }, ClassicTree.STYLES)
-			pcall(function() h.TextColor3 = Color3.fromRGB(140, 205, 255) end) -- (V2's section colour)
+			pcall(function() h.TextColor3 = look:color("classicSectionTitle") end) -- (V2's section colour by default)
+			look:own(h, "TextColor3")
+			titles[#titles + 1] = h
 			h.Parent = list
 			height = height + HEADER_H
 		end
@@ -86,15 +98,16 @@ function SettingsRows.build(classic)
 			local f = ClassicBuild.node(toggleRow({ key = key .. ":" .. o, name = def.classic[o] or o }, order), ClassicTree.STYLES)
 			f.Parent = list
 			local r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+			look:own(r.knob, "BackgroundColor3")
 			local function show(instant)
 				local on = s:has(key, o)
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
 				if instant or not ts then
-					r.knob.Position, r.knob.BackgroundColor3 = target.Position, target.BackgroundColor3
+					r.knob.Position, r.knob.BackgroundColor3 = target.Position, look:color(target.color)
 				else
-					r.knob.BackgroundColor3 = target.BackgroundColor3
+					r.knob.BackgroundColor3 = look:color(target.color)
 					ts:Create(r.knob, TweenInfo.new(0.25), { Position = target.Position }):Play()
 				end
 			end
@@ -120,6 +133,7 @@ function SettingsRows.build(classic)
 			local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 			f.Parent = list
 			r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+			look:own(r.knob, "BackgroundColor3")
 			local sw = def.switch -- (a choice of two shown as a switch: off = sw[1], on = sw[2])
 			local function show(v, instant)
 				local on
@@ -127,7 +141,7 @@ function SettingsRows.build(classic)
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
-				local bg = target.BackgroundColor3
+				local bg = look:color(target.color)
 				if instant or not ts then
 					r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 				else

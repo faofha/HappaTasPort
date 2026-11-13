@@ -132,7 +132,7 @@ Settings.SCHEMA = {
 	row("classicCancel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The Cancel button" }),
 	row("classicWarning", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can't be done" }),
 	row("classicMergeOk", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can be done" }),
-	row("classicToggleOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A save slot that is off" }),
+	row("classicToggleOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A merge option that can't be picked" }),
 	row("classicIconButton", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Close and expand icon buttons" }),
 	row("classicSwitchOn", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when on" }),
 	row("classicSwitchOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when off" }),

@@ -69,7 +69,7 @@ local sections, seen = 0, {}
 -- row with Classic labels, Speed Hack In, is a switch per option)
 local shownN = 0
 for _, def in ipairs(Settings.SCHEMA) do
-	if def.v2 or def.key == "interface" then
+	if def.v2 or def.key == "interface" or def.classicOnly then
 		shownN = shownN + 1
 		if not seen[def.section] then seen[def.section] = true; sections = sections + 1 end
 	elseif def.kind == "multi" and def.classic then
