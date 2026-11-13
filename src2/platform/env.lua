@@ -54,6 +54,11 @@ Env.mouse1press, Env.mouse1release = fn(mouse1press, mouse1down), fn(mouse1relea
 Env.mouse2press, Env.mouse2release = fn(mouse2press, mouse2down), fn(mouse2release, mouse2up)
 Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 Env.getcustomasset = fn(getcustomasset, getsynasset)
+-- game:HttpGet(url) -> ok, body (or the error). HappaTAS's only network call: the Classic Look background link
+-- the user typed (ui/classic/background), downloaded once. It yields.
+function Env.httpGet(url)
+	return pcall(function() return game:HttpGet(url) end)
+end
 Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
 Env.setclipboard = fn(setclipboard, toclipboard)
 Env.getfpscap = fn(getfpscap)

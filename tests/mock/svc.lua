@@ -163,6 +163,19 @@ C.DataModel.Methods.GetService = function(self, name)
 end
 C.DataModel.Methods.FindService = function(self, name) return services[name] end
 C.DataModel.Methods.IsLoaded = function() return true end
+-- game:HttpGet (executors): M.http[url] = the body, or { error = "..." } to fail; an unknown url fails;
+-- M.httpLog lists every url asked for; M.noHttpGet makes it fail like a missing function; M.httpDelay = frames
+-- the request takes (it yields)
+M.http, M.httpLog = {}, {}
+C.DataModel.Methods.HttpGet = function(_, url)
+	M.httpLog[#M.httpLog + 1] = url
+	if M.noHttpGet then error("HttpGet is not available (mock)", 2) end
+	if M.httpDelay then for _ = 1, M.httpDelay do task.wait() end end
+	local v = M.http[url]
+	if v == nil then error("HTTP 404 (mock)", 2) end
+	if type(v) == "table" then error(v.error, 2) end
+	return v
+end
 C.DataModel.Methods.BindToClose = function() end
 C.DataModel.Events = { "Loaded" }
 -- settings().Rendering.QualityLevel (Enum.QualityLevel: Automatic 0, Level01..Level21 = 1..21): M.renderQuality
@@ -489,6 +502,9 @@ C.AnimationTrack.Methods.GetMarkerReachedSignal = function() return M.newSignal(
 C.AnimationTrack.Methods.GetTimeOfKeyframe = function() return 0 end
 C.Sound.Methods.Play = function(self) self.Playing = true; self.IsPlaying = true; M.soundPlays = (M.soundPlays or 0) + 1 end
 C.Sound.Methods.Stop = function(self) self.Playing = false; self.IsPlaying = false end
+-- (M.videoFails: a video that never loads)
+C.VideoFrame.Methods.Play = function(self) self.Playing = true; if M.videoFails then self.IsLoaded = false end end
+C.VideoFrame.Methods.Pause = function(self) self.Playing = false end
 -- (M.emits = particles emitted, M.emitLog = { emitter, count })
 C.ParticleEmitter.Methods.Emit = function(self, n)
 	M.emits = (M.emits or 0) + (n or 16)

@@ -232,6 +232,8 @@ class("GuiButton", "GuiObject", { AutoButtonColor = true, Modal = false, Selecte
 class("TextButton", "GuiButton", textDefaults)
 class("ImageLabel", "GuiObject", imageDefaults)
 class("ImageButton", "GuiButton", imageDefaults)
+class("VideoFrame", "GuiObject", { Video = "", Looped = false, Volume = 1, Playing = false, IsLoaded = true, TimePosition = 0,
+	TimeLength = 0, Resolution = Vector2.new(0, 0) }, {}, { "Ended", "Loaded", "Paused", "Played" })
 class("ViewportFrame", "GuiObject", { CurrentCamera = nil, Ambient = Color3.new(), LightColor = Color3.new(), ImageColor3 = Color3.new(1, 1, 1) })
 class("UIComponent", "Instance")
 class("UIBase", "UIComponent")
