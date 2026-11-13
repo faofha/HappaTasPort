@@ -118,7 +118,8 @@ local TOPICS = {
 		.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
 		.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
 		.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
-		.. "frame shown while you are paused, and puts the mouse back there when you unpause." },
+		.. "frame shown while you are paused, and puts the mouse back there when you unpause. Hold right click while "
+		.. "paused and the cursor stays locked, as in the game, so unpausing with it held doesn't turn the camera." },
 	{ "death", "Death & Respawn Recording",
 		"With Record Death & Respawn on, a run can go through deaths (kill bricks, resets, respawn shortcuts): the "
 		.. "death frame is kept and playback carries on with the new character." },
