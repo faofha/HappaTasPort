@@ -19,10 +19,12 @@ local Z = 40
 local u, rgb = UDim2.new, Color3.fromRGB
 local COLOR_DEF = { kind = "color" }
 
-local function frame(name, parent, color, pos, size, z)
+-- (noLook: the part keeps its own colours; marked before it is parented, when the Look first sees it)
+local function frame(name, parent, color, pos, size, z, noLook)
 	local f = Instance.new("Frame")
 	f.Name, f.BorderSizePixel, f.BackgroundColor3 = name, 0, color
 	f.Position, f.Size, f.ZIndex = pos, size, z or Z + 1
+	if noLook then f:SetAttribute("HappaTASNoLook", true) end
 	f.Parent = parent
 	return f
 end
@@ -69,39 +71,34 @@ function ClassicPicker.open(classic, key)
 	-- the square: the hue at full strength, white to the left, black to the bottom
 	local sq = frame("Square", f, Color3.fromHSV(self.h, 1, 1), u(0, 10, 0, 28), u(0, SQ, 0, SQ))
 	sq.Active = true
-	local white = frame("White", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 2)
+	local white = frame("White", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 2, true)
 	local wg = Instance.new("UIGradient")
 	wg.Transparency = NumberSequence.new(0, 1)
 	wg.Parent = white
-	local black = frame("Black", sq, rgb(0, 0, 0), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 3)
+	local black = frame("Black", sq, rgb(0, 0, 0), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 3, true)
 	local bg = Instance.new("UIGradient")
 	bg.Rotation, bg.Transparency = 90, NumberSequence.new(1, 0)
 	bg.Parent = black
-	for _, x in ipairs({ white, black }) do x:SetAttribute("HappaTASNoLook", true) end
-	local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4)
+	local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4, true)
 	mark.AnchorPoint, mark.BackgroundTransparency = Vector2.new(0.5, 0.5), 1
-	mark:SetAttribute("HappaTASNoLook", true)
 	corner(mark, 4)
 	local ms = Instance.new("UIStroke")
 	ms.Color, ms.Thickness = rgb(255, 255, 255), 2
 	ms.Parent = mark
 	-- the hue bar, top to bottom
-	local hue = frame("Hue", f, rgb(255, 255, 255), u(0, 10 + SQ + 8, 0, 28), u(0, BAR, 0, SQ))
+	local hue = frame("Hue", f, rgb(255, 255, 255), u(0, 10 + SQ + 8, 0, 28), u(0, BAR, 0, SQ), nil, true)
 	hue.Active = true
-	hue:SetAttribute("HappaTASNoLook", true)
 	local keys = {}
 	for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((i / 6) % 1, 1, 1)) end
 	local hg = Instance.new("UIGradient")
 	hg.Rotation, hg.Color = 90, ColorSequence.new(keys)
 	hg.Parent = hue
-	local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2)
+	local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2, true)
 	hueMark.AnchorPoint = Vector2.new(0.5, 0.5)
-	hueMark:SetAttribute("HappaTASNoLook", true)
 	-- old / new
 	local x = 10 + SQ + 8 + BAR + 10
-	local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40))
-	local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40))
-	for _, y in ipairs({ old, new }) do y:SetAttribute("HappaTASNoLook", true) end
+	local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40), nil, true)
+	local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40), nil, true)
 	self.square, self.mark, self.hueBar, self.hueMark, self.newHalf = sq, mark, hue, hueMark, new
 	-- the box and the buttons
 	local box = Instance.new("TextBox")

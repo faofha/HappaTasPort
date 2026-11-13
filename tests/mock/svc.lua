@@ -502,8 +502,7 @@ C.AnimationTrack.Methods.GetMarkerReachedSignal = function() return M.newSignal(
 C.AnimationTrack.Methods.GetTimeOfKeyframe = function() return 0 end
 C.Sound.Methods.Play = function(self) self.Playing = true; self.IsPlaying = true; M.soundPlays = (M.soundPlays or 0) + 1 end
 C.Sound.Methods.Stop = function(self) self.Playing = false; self.IsPlaying = false end
--- (M.videoFails: a video that never loads)
-C.VideoFrame.Methods.Play = function(self) self.Playing = true; if M.videoFails then self.IsLoaded = false end end
+C.VideoFrame.Methods.Play = function(self) self.Playing = true end
 C.VideoFrame.Methods.Pause = function(self) self.Playing = false end
 -- (M.emits = particles emitted, M.emitLog = { emitter, count })
 C.ParticleEmitter.Methods.Emit = function(self, n)

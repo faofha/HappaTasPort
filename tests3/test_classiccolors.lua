@@ -256,6 +256,22 @@ do
 	eq(c.picker, nil, "a press outside closes it")
 	eq(E.settings:get("classicPanel"), "Auto", "without applying")
 end
+do
+	-- (review: the picker's square overlays, hue bar and previews keep their own colours whatever the Look's are)
+	E.settings:set("classicShade", "#FF00FF")
+	E.settings:set("classicLight", "#00FF00")
+	E.settings:set("classicPanel", "#123456")
+	c.settingsRows.classicWindow.swatch.MouseButton1Click:Fire()
+	local pk = c.picker
+	eq(rgb(pk.square.White.BackgroundColor3), "255,255,255", "the square's white overlay stays white")
+	eq(rgb(pk.square.Black.BackgroundColor3), "0,0,0", "its black overlay stays black")
+	eq(rgb(pk.hueBar.BackgroundColor3), "255,255,255", "the hue bar stays white under its gradient")
+	eq(rgb(pk.frame.Old.BackgroundColor3), rgb(look:color("classicWindow")), "the old colour preview shows the colour")
+	pk:close()
+	E.settings:set("classicShade", "Auto")
+	E.settings:set("classicLight", "Auto")
+	E.settings:set("classicPanel", "Auto")
+end
 c.settingsRows.classicPanel.swatch.MouseButton1Click:Fire()
 M.pressKey(Enum.KeyCode.Escape)
 M.releaseKey(Enum.KeyCode.Escape)

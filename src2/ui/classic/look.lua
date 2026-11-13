@@ -67,7 +67,7 @@ function Look:register(inst)
 			end
 			list[#list + 1] = { inst = inst, prop = prop }
 			local want = self.colors[key]
-			if col ~= want then pcall(function() inst[prop] = want end) end
+			if col ~= want and not self:owns(inst, prop) then pcall(function() inst[prop] = want end) end
 		end
 	end
 end

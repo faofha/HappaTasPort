@@ -11,9 +11,19 @@ local s = E.settings
 local guard = 0
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
 M.http, M.httpLog = M.http or {}, M.httpLog or {}
+-- (review: set before Classic is built: a part Classic's code paints keeps that code's colour)
+s:set("classicSectionTitle", "#FFFFFF")
+s:set("classicText", "#FFFF00")
 s:set("interface", "Classic")
 M.steps(1)
 local c = ui.classic
+do
+	local t = c.byPath["MainMenu.SettingsFrame.List"]:FindFirstChild("Section_Classic Look")
+	eq(t and t.TextColor3, Color3.fromRGB(255, 255, 255), "a section title is built in Section Title, not Text")
+	s:set("classicSectionTitle", "Auto")
+	s:set("classicText", "Auto")
+	M.steps(1)
+end
 local bg = c.background
 local menu = c.menu
 local statuses = {}
@@ -125,6 +135,8 @@ end
 bad("https://example.com/page", "<!DOCTYPE html><html>nope</html>", "didn't give a picture", "an HTML page")
 bad("https://example.com/empty", "", "didn't give a picture", "an empty body")
 bad("https://example.com/missing.png", "<html><body>404 Not Found</body></html>", "didn't give a picture", "a .png link giving an error page")
+bad("https://example.com/pic.png", "404: Not Found - the file you asked for is gone", "didn't give a picture", "a .png link giving a text error (review)")
+bad("https://example.com/json.jpg", '{"error":"not found","code":404}', "didn't give a picture", "a .jpg link giving JSON (review)")
 bad("https://example.com/gone.png", { error = "HTTP 404 (Not Found)" }, "download", "a failed download")
 local n0 = #M.httpLog
 bad("https://example.com/clip.mp4", "whatever", "video id", "a video link")
@@ -136,6 +148,53 @@ s:set("classicBackground", "hello there")
 wait()
 eq(bg.kind, nil, "not a link or an id: nothing")
 check(lastStatus():find("not a link or an id", 1, true) ~= nil, "says so")
+
+section("the box clears it (review)")
+s:set("classicBackground", "123")
+wait()
+eq(bg.kind, "image", "(an id shown)")
+local row = c.settingsRows.classicBackground
+row.input.Text = ""
+row.input.FocusLost:Fire(true, nil)
+wait()
+eq(s:get("classicBackground"), "", "an empty box clears the Background")
+eq(bg.kind, nil, "and removes it")
+
+section("a picture that never loads: its saved file goes (review)")
+local NEVER = "https://example.com/never.png"
+M.http[NEVER] = "\137PNG\r\n\26\n" .. string.rep("z", 64)
+M.imagesFail = true
+local nFiles = files()
+statuses = {}
+s:set("classicBackground", NEVER)
+wait(60 * 11)
+M.imagesFail = nil
+eq(bg.kind, nil, "given up")
+eq(files(), nFiles, "its saved file is deleted (the next try downloads again)")
+
+section("hidden: the wait for loading pauses, a video doesn't play (review)")
+M.videoFails = true
+menu.Visible = false
+s:set("classicBackground", "video:555")
+wait(60 * 12)
+eq(bg.kind, "video", "the menu closed: still waiting after 12 s")
+eq(bg.view.Playing, false, "and not playing while hidden")
+menu.Visible = true
+wait(2)
+eq(bg.view.Playing, true, "playing once the menu shows")
+wait(60 * 11)
+eq(bg.kind, nil, "shown for 10 s without loading: given up")
+M.videoFails = nil
+s:set("classicBackground", "video:556")
+wait()
+s:set("interface", "New")
+M.steps(2)
+eq(bg.view.Playing, false, "the New interface: paused")
+s:set("interface", "Classic")
+M.steps(2)
+eq(bg.view.Playing, true, "Classic again: playing")
+s:set("classicBackground", "")
+wait()
 
 section("a newer value wins over an older download")
 local SLOW = "https://example.com/slow.png"

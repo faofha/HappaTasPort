@@ -89,6 +89,7 @@ __mods["platform/env"] = function(import)
 	Env.mouse2press, Env.mouse2release = fn(mouse2press, mouse2down), fn(mouse2release, mouse2up)
 	Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 	Env.getcustomasset = fn(getcustomasset, getsynasset)
+	Env.delfile = fn(delfile)
 	function Env.httpGet(url)
 		return pcall(function() return game:HttpGet(url) end)
 	end
@@ -19684,7 +19685,7 @@ __mods["ui/classic/look"] = function(import)
 				end
 				list[#list + 1] = { inst = inst, prop = prop }
 				local want = self.colors[key]
-				if col ~= want then pcall(function() inst[prop] = want end) end
+				if col ~= want and not self:owns(inst, prop) then pcall(function() inst[prop] = want end) end
 			end
 		end
 	end
@@ -19745,10 +19746,11 @@ __mods["ui/classic/colorpicker"] = function(import)
 	local Z = 40
 	local u, rgb = UDim2.new, Color3.fromRGB
 	local COLOR_DEF = { kind = "color" }
-	local function frame(name, parent, color, pos, size, z)
+	local function frame(name, parent, color, pos, size, z, noLook)
 		local f = Instance.new("Frame")
 		f.Name, f.BorderSizePixel, f.BackgroundColor3 = name, 0, color
 		f.Position, f.Size, f.ZIndex = pos, size, z or Z + 1
+		if noLook then f:SetAttribute("HappaTASNoLook", true) end
 		f.Parent = parent
 		return f
 	end
@@ -19791,37 +19793,32 @@ __mods["ui/classic/colorpicker"] = function(import)
 		title.Parent = f
 		local sq = frame("Square", f, Color3.fromHSV(self.h, 1, 1), u(0, 10, 0, 28), u(0, SQ, 0, SQ))
 		sq.Active = true
-		local white = frame("White", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 2)
+		local white = frame("White", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 2, true)
 		local wg = Instance.new("UIGradient")
 		wg.Transparency = NumberSequence.new(0, 1)
 		wg.Parent = white
-		local black = frame("Black", sq, rgb(0, 0, 0), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 3)
+		local black = frame("Black", sq, rgb(0, 0, 0), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 3, true)
 		local bg = Instance.new("UIGradient")
 		bg.Rotation, bg.Transparency = 90, NumberSequence.new(1, 0)
 		bg.Parent = black
-		for _, x in ipairs({ white, black }) do x:SetAttribute("HappaTASNoLook", true) end
-		local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4)
+		local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4, true)
 		mark.AnchorPoint, mark.BackgroundTransparency = Vector2.new(0.5, 0.5), 1
-		mark:SetAttribute("HappaTASNoLook", true)
 		corner(mark, 4)
 		local ms = Instance.new("UIStroke")
 		ms.Color, ms.Thickness = rgb(255, 255, 255), 2
 		ms.Parent = mark
-		local hue = frame("Hue", f, rgb(255, 255, 255), u(0, 10 + SQ + 8, 0, 28), u(0, BAR, 0, SQ))
+		local hue = frame("Hue", f, rgb(255, 255, 255), u(0, 10 + SQ + 8, 0, 28), u(0, BAR, 0, SQ), nil, true)
 		hue.Active = true
-		hue:SetAttribute("HappaTASNoLook", true)
 		local keys = {}
 		for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((i / 6) % 1, 1, 1)) end
 		local hg = Instance.new("UIGradient")
 		hg.Rotation, hg.Color = 90, ColorSequence.new(keys)
 		hg.Parent = hue
-		local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2)
+		local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2, true)
 		hueMark.AnchorPoint = Vector2.new(0.5, 0.5)
-		hueMark:SetAttribute("HappaTASNoLook", true)
 		local x = 10 + SQ + 8 + BAR + 10
-		local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40))
-		local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40))
-		for _, y in ipairs({ old, new }) do y:SetAttribute("HappaTASNoLook", true) end
+		local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40), nil, true)
+		local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40), nil, true)
 		self.square, self.mark, self.hueBar, self.hueMark, self.newHalf = sq, mark, hue, hueMark, new
 		local box = Instance.new("TextBox")
 		box.Name, box.ClearTextOnFocus, box.BorderSizePixel = "Value", false, 0
@@ -19972,6 +19969,8 @@ __mods["ui/classic/background"] = function(import)
 			local c = self.menu:GetPropertyChangedSignal(prop):Connect(function() self:follow() end)
 			offs[#offs + 1] = function() c:Disconnect() end
 		end
+		local ce = classic.gui:GetPropertyChangedSignal("Enabled"):Connect(function() self:follow() end)
+		offs[#offs + 1] = function() ce:Disconnect() end
 		offs[#offs + 1] = function() self.gen = self.gen + 1 end
 		self:load()
 		return self
@@ -19982,10 +19981,17 @@ __mods["ui/classic/background"] = function(import)
 		self.view, self.kind = nil, nil
 		self:style()
 	end
+	function Background:seen()
+		return self.menu.Visible == true and self.classic.gui.Enabled == true
+	end
 	function Background:follow()
 		local v, m = self.view, self.menu
 		if not v then return end
 		v.AnchorPoint, v.Position, v.Size, v.Visible = m.AnchorPoint, m.Position, m.Size, m.Visible
+		if self.kind == "video" then
+			local on = self:seen()
+			if v.Playing ~= on then pcall(function() if on then v:Play() else v:Pause() end end) end
+		end
 	end
 	function Background:style()
 		local s, m = self.E.settings, self.menu
@@ -19996,7 +20002,7 @@ __mods["ui/classic/background"] = function(import)
 		m.BackgroundTransparency = 1 - s:get("classicBackgroundTransparency") / 100
 		if self.kind == "image" then self.view.ScaleType = FIT[s:get("classicBackgroundFit")] or Enum.ScaleType.Crop end
 	end
-	function Background:show(kind, content, gen)
+	function Background:show(kind, content, gen, path)
 		self:clear()
 		local v = Instance.new(kind == "video" and "VideoFrame" or "ImageLabel")
 		v.Name, v.BorderSizePixel, v.BackgroundTransparency = NAME, 0, 1
@@ -20015,20 +20021,20 @@ __mods["ui/classic/background"] = function(import)
 		end
 		v.Parent = self.classic.gui
 		self.view, self.kind = v, kind
-		self:follow()
 		self:style()
-		if kind == "video" then pcall(function() v:Play() end) end
+		self:follow()
 		task.spawn(function()
 			local t = 0
 			while t < LOAD_TIME do
 				local ok, loaded = pcall(function() return v.IsLoaded end)
 				if not ok or loaded ~= false then return end
 				task.wait(0.5)
-				t = t + 0.5
+				if self:seen() then t = t + 0.5 end
 				if self.gen ~= gen or self.view ~= v then return end
 			end
 			self:status("Background didn't load")
 			self:clear()
+			if path and Env.delfile then pcall(Env.delfile, path) end
 		end)
 	end
 	function Background:load()
@@ -20054,7 +20060,7 @@ __mods["ui/classic/background"] = function(import)
 		for _, e in ipairs(ext and { ext } or { "png", "jpg", "bmp", "tga" }) do
 			if Env.isfile(base .. e) then
 				local ok, asset = pcall(Env.getcustomasset, base .. e)
-				if ok and asset and self.gen == gen then return self:show("image", asset, gen) end
+				if ok and asset and self.gen == gen then return self:show("image", asset, gen, base .. e) end
 			end
 		end
 		local ok, body = Env.httpGet(url)
@@ -20063,8 +20069,11 @@ __mods["ui/classic/background"] = function(import)
 		if type(body) ~= "string" or #body < 16 or body:sub(1, 1) == "<" then return self:status(NOT_PICTURE) end
 		local kind = sniff(body)
 		if kind == "video" then return self:status(VIDEO_REFUSED) end
-		ext = ext or kind
-		if not ext then return self:status(NOT_PICTURE) end
+		if kind then
+			ext = kind
+		elseif ext ~= "tga" then
+			return self:status(NOT_PICTURE)
+		end
 		local wrote = pcall(function()
 			if Env.makefolder and not (Env.isfolder and Env.isfolder(FOLDER)) then Env.makefolder(FOLDER) end
 			Env.writefile(base .. ext, body)
@@ -20072,7 +20081,7 @@ __mods["ui/classic/background"] = function(import)
 		if not wrote then return self:status("Background: couldn't save the picture") end
 		local okA, asset = pcall(Env.getcustomasset, base .. ext)
 		if not okA or not asset then return self:status("Background: couldn't load the saved picture") end
-		self:show("image", asset, gen)
+		self:show("image", asset, gen, base .. ext)
 	end
 	return Background
 end
@@ -20247,7 +20256,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 						if text ~= "" and text ~= s:get(key) and not SettingsWin.applyLook(E, text) then
 							E.bus:emit("status", "No saved look named \"" .. text .. "\"", true)
 						end
-					elseif text ~= "" or def.kind == "autocolor" then
+					elseif text ~= "" or def.kind == "autocolor" or def.default == "" then
 						s:set(key, inp.Text)
 					end
 					inp.Text = tostring(s:get(key))

@@ -192,8 +192,8 @@ function SettingsRows.build(classic)
 					if text ~= "" and text ~= s:get(key) and not SettingsWin.applyLook(E, text) then
 						E.bus:emit("status", "No saved look named \"" .. text .. "\"", true)
 					end
-				elseif text ~= "" or def.kind == "autocolor" then
-					s:set(key, inp.Text) -- (an empty colour box = Auto)
+				elseif text ~= "" or def.kind == "autocolor" or def.default == "" then
+					s:set(key, inp.Text) -- (an empty colour box = Auto; an empty Background = none)
 				end
 				inp.Text = tostring(s:get(key)) -- (the store's own spelling, or the old value when refused)
 			end)

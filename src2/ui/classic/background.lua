@@ -63,6 +63,9 @@ function Background.new(classic)
 		local c = self.menu:GetPropertyChangedSignal(prop):Connect(function() self:follow() end)
 		offs[#offs + 1] = function() c:Disconnect() end
 	end
+	-- (Classic hidden: the New interface is up or the interface is hidden)
+	local ce = classic.gui:GetPropertyChangedSignal("Enabled"):Connect(function() self:follow() end)
+	offs[#offs + 1] = function() ce:Disconnect() end
 	offs[#offs + 1] = function() self.gen = self.gen + 1 end -- (a download still running finds itself stale)
 	self:load()
 	return self
@@ -76,11 +79,20 @@ function Background:clear()
 	self:style()
 end
 
--- the view on the menu's place
+-- can the background be seen now (the menu open, Classic the live interface)
+function Background:seen()
+	return self.menu.Visible == true and self.classic.gui.Enabled == true
+end
+
+-- the view on the menu's place; a video plays only while it can be seen (no decoding behind a closed menu)
 function Background:follow()
 	local v, m = self.view, self.menu
 	if not v then return end
 	v.AnchorPoint, v.Position, v.Size, v.Visible = m.AnchorPoint, m.Position, m.Size, m.Visible
+	if self.kind == "video" then
+		local on = self:seen()
+		if v.Playing ~= on then pcall(function() if on then v:Play() else v:Pause() end end) end
+	end
 end
 
 -- transparency and fit (the menu back to V2's transparency without a background)
@@ -94,8 +106,9 @@ function Background:style()
 	if self.kind == "image" then self.view.ScaleType = FIT[s:get("classicBackgroundFit")] or Enum.ScaleType.Crop end
 end
 
--- shows `content` (an image or video address); gives up after LOAD_TIME without loading
-function Background:show(kind, content, gen)
+-- shows `content` (an image or video address); gives up after LOAD_TIME seen without loading (hidden, Roblox
+-- may not load it), deleting the saved file a link gave (`path`: the next try downloads it again)
+function Background:show(kind, content, gen, path)
 	self:clear()
 	local v = Instance.new(kind == "video" and "VideoFrame" or "ImageLabel")
 	v.Name, v.BorderSizePixel, v.BackgroundTransparency = NAME, 0, 1
@@ -114,20 +127,20 @@ function Background:show(kind, content, gen)
 	end
 	v.Parent = self.classic.gui
 	self.view, self.kind = v, kind
-	self:follow()
 	self:style()
-	if kind == "video" then pcall(function() v:Play() end) end
+	self:follow()
 	task.spawn(function()
 		local t = 0
 		while t < LOAD_TIME do
 			local ok, loaded = pcall(function() return v.IsLoaded end)
 			if not ok or loaded ~= false then return end -- (loaded, or no way to tell)
 			task.wait(0.5)
-			t = t + 0.5
+			if self:seen() then t = t + 0.5 end
 			if self.gen ~= gen or self.view ~= v then return end
 		end
 		self:status("Background didn't load")
 		self:clear()
+		if path and Env.delfile then pcall(Env.delfile, path) end
 	end)
 end
 
@@ -157,7 +170,7 @@ function Background:fetch(url, ext, gen)
 	for _, e in ipairs(ext and { ext } or { "png", "jpg", "bmp", "tga" }) do
 		if Env.isfile(base .. e) then
 			local ok, asset = pcall(Env.getcustomasset, base .. e)
-			if ok and asset and self.gen == gen then return self:show("image", asset, gen) end
+			if ok and asset and self.gen == gen then return self:show("image", asset, gen, base .. e) end
 		end
 	end
 	local ok, body = Env.httpGet(url)
@@ -166,8 +179,11 @@ function Background:fetch(url, ext, gen)
 	if type(body) ~= "string" or #body < 16 or body:sub(1, 1) == "<" then return self:status(NOT_PICTURE) end
 	local kind = sniff(body)
 	if kind == "video" then return self:status(VIDEO_REFUSED) end
-	ext = ext or kind
-	if not ext then return self:status(NOT_PICTURE) end
+	if kind then
+		ext = kind
+	elseif ext ~= "tga" then
+		return self:status(NOT_PICTURE)
+	end
 	local wrote = pcall(function()
 		if Env.makefolder and not (Env.isfolder and Env.isfolder(FOLDER)) then Env.makefolder(FOLDER) end
 		Env.writefile(base .. ext, body)
@@ -175,7 +191,7 @@ function Background:fetch(url, ext, gen)
 	if not wrote then return self:status("Background: couldn't save the picture") end
 	local okA, asset = pcall(Env.getcustomasset, base .. ext)
 	if not okA or not asset then return self:status("Background: couldn't load the saved picture") end
-	self:show("image", asset, gen)
+	self:show("image", asset, gen, base .. ext)
 end
 
 return Background
