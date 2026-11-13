@@ -115,7 +115,8 @@ chat or a text box.
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
   locked, mobile thumbstick replay. Paused in Create, a see-through cursor shows where the mouse was on the
   frame shown (it follows Back / Forward) and unpausing puts the real mouse back there, so the recorded mouse
-  doesn't jump (Keep Mouse Position (Paused)).
+  doesn't jump (Keep Mouse Position (Paused)). Holding right (or middle) click while paused keeps the cursor
+  locked, as in the game, so unpausing with it held doesn't turn the camera.
 - **Unload** (Help > Unload HappaTAS, below the topics; Classic: More > Unload HappaTAS) undoes everything: no
   interface, connection, hook or changed property is left. Running the script again unloads the copy already
   running, V2 too, and running V2 (from the history) unloads HappaTAS 3.

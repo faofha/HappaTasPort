@@ -145,13 +145,16 @@ function Camera:updateMouseMode()
 	end
 	local forceLock = camFreeze and lockedView
 	cs:setCameraFreeze(camFreeze, forceLock, camFreeze)
+	-- (paused, right / middle button held: the cursor stays locked, see cs:setHoldCursor)
+	local hold = camFreeze and not lockedView and E.inputs:camButtonHeld()
+	cs:setHoldCursor(hold)
 	local free = false
 	if modal then
 		free = true
 	elseif E.mode == 3 and E.settings:on("lockCameraTest") then
 		free = true
 	elseif camFreeze and not lockedView then
-		free = true
+		free = not hold
 	end
 	cs:setFreeMouse(free)
 	if not free and E.mode ~= 3 then

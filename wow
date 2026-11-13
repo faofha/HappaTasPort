@@ -333,11 +333,13 @@ __mods["platform/camerascript"] = function(import)
 		pcall(function() UserGameSettings = UserSettings():GetService("UserGameSettings") end)
 		local Default = Enum.MouseBehavior.Default
 		local LockCenter = Enum.MouseBehavior.LockCenter
+		local LockPos = Enum.MouseBehavior.LockCurrentPosition
 		local Scriptable = Enum.CameraType.Scriptable
 		local cameras, activeCamCtrl, zoomModTbl, transparencyCtrl, patchedModule, mouseLockCtrl = nil, nil, nil, nil, nil, nil
 		local originals = {}
 		local rotate, shiftlockBlocked, freeMouse, camFreeze, camFreezeZoom, forceLockCenter, snapZoom = true, false, false, false, false, false, false
 		local pendingRestore = nil
+		local holdCursor = false
 		local zoomControllers = {}
 		local gcDone = false
 		local lastResolveTry = 0
@@ -454,7 +456,7 @@ __mods["platform/camerascript"] = function(import)
 								return
 							end
 							if camFreeze then
-								setMouseBehavior(Default)
+								setMouseBehavior(holdCursor and LockPos or Default)
 								return
 							end
 							local res = orig(self, ...)
@@ -888,6 +890,14 @@ __mods["platform/camerascript"] = function(import)
 			if ctrl and type(ctrl.inFirstPerson) == "boolean" then return ctrl.inFirstPerson end
 			return cs:getZoom() < FIRST_PERSON
 		end
+		function cs:setHoldCursor(on)
+			on = on and true or false
+			if holdCursor and not on and UIS.MouseBehavior == LockPos
+				and not (UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)) then
+				setMouseBehavior(Default)
+			end
+			holdCursor = on
+		end
 		function cs:setCameraFreeze(freeze, forceLock, freezeZoom)
 			camFreeze = freeze and true or false
 			camFreezeZoom = freezeZoom and true or false
@@ -921,7 +931,8 @@ __mods["platform/camerascript"] = function(import)
 			else
 				rotationFor(false)
 				if camFreeze then
-					if UIS.MouseBehavior ~= Default then setMouseBehavior(Default) end
+					local want = holdCursor and LockPos or Default
+					if UIS.MouseBehavior ~= want then setMouseBehavior(want) end
 				elseif UIS.MouseBehavior == LockCenter then
 					setMouseBehavior(Default)
 				end
@@ -950,6 +961,7 @@ __mods["platform/camerascript"] = function(import)
 			freeMouse = false
 			camFreeze = false
 			forceLockCenter = false
+			holdCursor = false
 			for i = #originals, 1, -1 do
 				local o = originals[i]
 				pcall(function()
@@ -4006,13 +4018,15 @@ __mods["world/camera"] = function(import)
 		end
 		local forceLock = camFreeze and lockedView
 		cs:setCameraFreeze(camFreeze, forceLock, camFreeze)
+		local hold = camFreeze and not lockedView and E.inputs:camButtonHeld()
+		cs:setHoldCursor(hold)
 		local free = false
 		if modal then
 			free = true
 		elseif E.mode == 3 and E.settings:on("lockCameraTest") then
 			free = true
 		elseif camFreeze and not lockedView then
-			free = true
+			free = not hold
 		end
 		cs:setFreeMouse(free)
 		if not free and E.mode ~= 3 then
@@ -4079,6 +4093,7 @@ __mods["world/inputs"] = function(import)
 	local MOUSE_BUTTON = { [Enum.UserInputType.MouseButton1] = true, [Enum.UserInputType.MouseButton2] = true,
 		[Enum.UserInputType.MouseButton3] = true }
 	local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
+	local CAM_BUTTON = { [Enum.UserInputType.MouseButton2] = true, [Enum.UserInputType.MouseButton3] = true }
 	function Inputs.idOf(inp)
 		local t = inp.UserInputType
 		if t == Enum.UserInputType.Keyboard then return KEY_BY_ENUM[inp.KeyCode]
@@ -4089,7 +4104,7 @@ __mods["world/inputs"] = function(import)
 	local function newAxis() return { n = 0, st = 0, sr = 0, stt = 0, str = 0, lo = math.huge, hi = -math.huge, a = 1, b = 0, ok = false } end
 	local CAL_SPREAD = 150
 	function Inputs.new(E)
-		local self = setmetatable({ E = E, held = {}, queue = {}, ownWindows = {}, mouseOverOwn = nil,
+		local self = setmetatable({ E = E, held = {}, camButtons = {}, queue = {}, ownWindows = {}, mouseOverOwn = nil,
 			controlIds = nil, controlKey = nil, lastVX = nil, lastVY = nil,
 			replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil },
 			cal = { x = newAxis(), y = newAxis(), vx = 0, vy = 0, pend = nil },
@@ -4158,6 +4173,7 @@ __mods["world/inputs"] = function(import)
 	function Inputs:start()
 		local E, uis = self.E, self.uis
 		E.life:connect(uis.InputBegan, function(inp, proc)
+			if CAM_BUTTON[inp.UserInputType] then self.camButtons[inp.UserInputType] = true end
 			if proc and not E.settings:on("ignoreGameProcessed") then return end
 			local id = Inputs.idOf(inp)
 			if not id or self:getControlIds()[id] or E.typing:active(inp) then return end
@@ -4167,6 +4183,7 @@ __mods["world/inputs"] = function(import)
 			self:pushEvent(id)
 		end)
 		E.life:connect(uis.InputEnded, function(inp)
+			if CAM_BUTTON[inp.UserInputType] then self.camButtons[inp.UserInputType] = nil end
 			local id = Inputs.idOf(inp)
 			if id and self.held[id] then
 				self.held[id] = nil
@@ -4182,6 +4199,7 @@ __mods["world/inputs"] = function(import)
 			E.life:connect(uis.WindowFocusReleased, function()
 				for id in pairs(self.held) do self:pushEvent(-id) end
 				self.held = {}
+				self.camButtons = {}
 			end)
 		end)
 		E.life:own(function() self:replayEnd() end)
@@ -4352,12 +4370,16 @@ __mods["world/inputs"] = function(import)
 		self.back = nil
 		if not self.E.settings:on("pausedMouse") or i < 1 or i > tl:count() then return end
 		if tl:get("ShiftLock", i, 1) == 1 or tl:get("Zoom", i, 1) <= 0.55 then return end
+		if self:camButtonHeld() then return end
 		local x, y = self:framePoint(tl, i)
 		if not x or not self.available.move or not self:windowActive() then return end
 		local mx, my, uvx, uvy = tl:getN("Mouse", i)
 		self.back = { x = x, y = y, mx = mx, my = my, uvx = uvx, uvy = uvy, left = 2, fixed = false }
 		self.replay.lastMX, self.replay.lastMY = nil, nil
 		self:moveRealMouse(x, y)
+	end
+	function Inputs:camButtonHeld()
+		return next(self.camButtons) ~= nil
 	end
 	function Inputs:frameLocked(tl, i)
 		if tl:get("ShiftLock", i, 1) == 1 then return true end
@@ -18683,7 +18705,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
 			.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
 			.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
-			.. "frame shown while you are paused, and puts the mouse back there when you unpause." },
+			.. "frame shown while you are paused, and puts the mouse back there when you unpause. Hold right click while "
+			.. "paused and the cursor stays locked, as in the game, so unpausing with it held doesn't turn the camera." },
 		{ "death", "Death & Respawn Recording",
 			"With Record Death & Respawn on, a run can go through deaths (kill bricks, resets, respawn shortcuts): the "
 			.. "death frame is kept and playback carries on with the new character." },

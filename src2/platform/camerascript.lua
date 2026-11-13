@@ -42,12 +42,15 @@ function CameraScript.new(life, errs, hooks)
 
 	local Default = Enum.MouseBehavior.Default
 	local LockCenter = Enum.MouseBehavior.LockCenter
+	local LockPos = Enum.MouseBehavior.LockCurrentPosition
 	local Scriptable = Enum.CameraType.Scriptable
 
 	local cameras, activeCamCtrl, zoomModTbl, transparencyCtrl, patchedModule, mouseLockCtrl = nil, nil, nil, nil, nil, nil
 	local originals = {}
 	local rotate, shiftlockBlocked, freeMouse, camFreeze, camFreezeZoom, forceLockCenter, snapZoom = true, false, false, false, false, false, false
 	local pendingRestore = nil
+	-- the camera is held (paused) and the right / middle button is down: the cursor stays locked (see cs:setHoldCursor)
+	local holdCursor = false
 	local zoomControllers = {}
 	local gcDone = false
 	local lastResolveTry = 0
@@ -169,7 +172,7 @@ function CameraScript.new(life, errs, hooks)
 							return
 						end
 						if camFreeze then
-							setMouseBehavior(Default)
+							setMouseBehavior(holdCursor and LockPos or Default)
 							return
 						end
 						local res = orig(self, ...)
@@ -636,6 +639,20 @@ function CameraScript.new(life, errs, hooks)
 		return cs:getZoom() < FIRST_PERSON
 	end
 
+	-- Paused with the camera held and the right (or middle) button down: the cursor stays locked where it is, as
+	-- Roblox does while the button is held. Freed (Default), the cursor drifts with the mouse; on unpause the camera
+	-- script locks it again, Roblox pulls it back to where the button was pressed, and that pull arrives as a mouse
+	-- move: the camera turned by it on the first frame (live, old camera script: 0 - 165 degrees, as far as the
+	-- cursor had drifted). Locked, there is nothing to pull back and every real mouse move after the unpause counts.
+	function cs:setHoldCursor(on)
+		on = on and true or false
+		if holdCursor and not on and UIS.MouseBehavior == LockPos
+			and not (UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton3)) then
+			setMouseBehavior(Default) -- (our lock, nothing holds it any more: still held, the camera script keeps it)
+		end
+		holdCursor = on
+	end
+
 	function cs:setCameraFreeze(freeze, forceLock, freezeZoom)
 		camFreeze = freeze and true or false
 		camFreezeZoom = freezeZoom and true or false
@@ -674,7 +691,8 @@ function CameraScript.new(life, errs, hooks)
 		else
 			rotationFor(false)
 			if camFreeze then
-				if UIS.MouseBehavior ~= Default then setMouseBehavior(Default) end
+				local want = holdCursor and LockPos or Default
+				if UIS.MouseBehavior ~= want then setMouseBehavior(want) end
 			elseif UIS.MouseBehavior == LockCenter then
 				setMouseBehavior(Default)
 			end
@@ -708,6 +726,7 @@ function CameraScript.new(life, errs, hooks)
 		freeMouse = false
 		camFreeze = false
 		forceLockCenter = false
+		holdCursor = false
 		for i = #originals, 1, -1 do
 			local o = originals[i]
 			pcall(function()
