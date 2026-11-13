@@ -165,6 +165,15 @@ local TOPICS = {
 		.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
 		.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
 		.. "Idle and while recording, for R6 characters." },
+	{ "classiclook", "Classic Look",
+		"The Classic interface's own colours and background (Classic's Settings tab, Classic Look; the New interface "
+		.. "has its Appearance instead). Main Colour: every colour set to Auto follows it, darker parts staying darker. "
+		.. "Each of the 23 colours Classic draws has its own row: type #RRGGBB or r, g, b, clear the box for Auto, or "
+		.. "click the swatch for the picker (drag the square and the hue bar, Apply).\n\nBackground: a picture link "
+		.. "(downloaded once into HappaTasPort/Backgrounds, then loaded from there: the only time HappaTAS uses the "
+		.. "internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files from links, "
+		.. "only Roblox videos. Background Transparency is how much the window colour shows over it; Background Fit "
+		.. "is Crop, Fit or Stretch." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "

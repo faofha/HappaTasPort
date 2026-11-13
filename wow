@@ -89,6 +89,9 @@ __mods["platform/env"] = function(import)
 	Env.mouse2press, Env.mouse2release = fn(mouse2press, mouse2down), fn(mouse2release, mouse2up)
 	Env.mousemoveabs, Env.mousemoverel, Env.mousescroll = fn(mousemoveabs), fn(mousemoverel), fn(mousescroll)
 	Env.getcustomasset = fn(getcustomasset, getsynasset)
+	function Env.httpGet(url)
+		return pcall(function() return game:HttpGet(url) end)
+	end
 	Env.identifyexecutor = fn(identifyexecutor, getexecutorname)
 	Env.setclipboard = fn(setclipboard, toclipboard)
 	Env.getfpscap = fn(getfpscap)
@@ -1449,6 +1452,33 @@ __mods["engine/settings"] = function(import)
 		row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4, desc = "The size of the MicroProfiler" }),
 		row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, desc = "Moves the MicroProfiler's text up or down" }),
 		row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { desc = "Lets the interface sit where game scripts can see it" }),
+		row("classicMainColor", nil, "Classic look", "#003481", { kind = "color", classicOnly = true, desc = "The colour every Auto colour follows (darker parts stay darker)" }),
+		row("classicWindow", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The main menu, stats panels, merge dialog and join message" }),
+		row("classicPanel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Lists, the slot list and a slot's expansion" }),
+		row("classicButton", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Buttons, key buttons, text boxes and a save slot that is on" }),
+		row("classicShade", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Tab buttons, list rows, credits and update log backs" }),
+		row("classicScrollBar", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Scroll bars" }),
+		row("classicLight", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Switch tracks and other light fills" }),
+		row("classicText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "All ordinary text" }),
+		row("classicDarkText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats text and other dark labels" }),
+		row("classicLabelText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Black text: expand arrows" }),
+		row("classicPlaceholder", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The hint in an empty text box" }),
+		row("classicSectionTitle", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Settings section titles" }),
+		row("classicOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Window outlines" }),
+		row("classicFieldOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Text box and list outlines" }),
+		row("classicDivider", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Row dividers and highlight outlines" }),
+		row("classicLine", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The title line and default outlines" }),
+		row("classicLightOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "White outlines and borders" }),
+		row("classicCancel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The Cancel button" }),
+		row("classicWarning", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can't be done" }),
+		row("classicMergeOk", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can be done" }),
+		row("classicToggleOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A merge option that can't be picked" }),
+		row("classicIconButton", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Close and expand icon buttons" }),
+		row("classicSwitchOn", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when on" }),
+		row("classicSwitchOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when off" }),
+		row("classicBackground", nil, "Classic look", "", { kind = "text", maxLength = 500, classicOnly = true, desc = "A picture link, a Roblox image id, or video:<Roblox video id>; empty = none" }),
+		row("classicBackgroundTransparency", nil, "Classic look", 40, { kind = NUM, min = 0, max = 100, integer = true, classicOnly = true, desc = "How much the window colour shows over the background (%)" }),
+		row("classicBackgroundFit", nil, "Classic look", "Crop", { kind = "choice", options = { "Crop", "Fit", "Stretch" }, classicOnly = true, desc = "How the background fills the menu" }),
 	}
 	local NAMES = {
 		theme = "Theme", glass = "Glass", glassColor = "Glass colour", glassTransparency = "Glass transparency",
@@ -1460,6 +1490,7 @@ __mods["engine/settings"] = function(import)
 		interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 		glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
+		classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 	}
 	Settings.byKey, Settings.byV2 = {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
@@ -1470,6 +1501,12 @@ __mods["engine/settings"] = function(import)
 	end
 	local function hexColor(v)
 		if type(v) ~= "string" then return nil end
+		local r, g, b = v:match("^%s*(%d+)%s*,%s*(%d+)%s*,%s*(%d+)%s*$")
+		if r then
+			r, g, b = tonumber(r), tonumber(g), tonumber(b)
+			if r > 255 or g > 255 or b > 255 then return nil end
+			return string.format("#%02X%02X%02X", r, g, b)
+		end
 		local h = v:match("^#?(%x+)$")
 		if not h then return nil end
 		if #h == 3 then h = h:sub(1, 1):rep(2) .. h:sub(2, 2):rep(2) .. h:sub(3, 3):rep(2) end
@@ -1486,8 +1523,14 @@ __mods["engine/settings"] = function(import)
 			return nil
 		elseif def.kind == "color" then
 			return hexColor(v)
+		elseif def.kind == "autocolor" then
+			if type(v) == "string" then
+				local t = v:gsub("^%s+", ""):gsub("%s+$", "")
+				if t == "" or t:lower() == "auto" then return "Auto" end
+			end
+			return hexColor(v)
 		elseif def.kind == "text" then
-			if type(v) ~= "string" or #v > 40 then return nil end
+			if type(v) ~= "string" or #v > (def.maxLength or 40) then return nil end
 			return v
 		elseif def.kind == "multi" then
 			if type(v) == "table" then v = table.concat(v, ",") end
@@ -18752,6 +18795,15 @@ __mods["ui/win/helptext"] = function(import)
 			.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
 			.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
 			.. "Idle and while recording, for R6 characters." },
+		{ "classiclook", "Classic Look",
+			"The Classic interface's own colours and background (Classic's Settings tab, Classic Look; the New interface "
+			.. "has its Appearance instead). Main Colour: every colour set to Auto follows it, darker parts staying darker. "
+			.. "Each of the 23 colours Classic draws has its own row: type #RRGGBB or r, g, b, clear the box for Auto, or "
+			.. "click the swatch for the picker (drag the square and the hue bar, Apply).\n\nBackground: a picture link "
+			.. "(downloaded once into HappaTasPort/Backgrounds, then loaded from there: the only time HappaTAS uses the "
+			.. "internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files from links, "
+			.. "only Roblox videos. Background Transparency is how much the window colour shows over it; Background Fit "
+			.. "is Crop, Fit or Stretch." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
 			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
@@ -19493,23 +19545,555 @@ __mods["ui/classic/build"] = function(import)
 	end
 	return ClassicBuild
 end
+__mods["ui/classic/palette"] = function(import)
+	local Palette = {}
+	local rgb = Color3.fromRGB
+	Palette.BASE = rgb(0, 52, 129)
+	local B, T, P, S, D, I = "BackgroundColor3", "TextColor3", "PlaceholderColor3", "Color", "BorderColor3", "ScrollBarImageColor3"
+	local function c(key, col, tinted, props, runtime)
+		local set = {}
+		for _, p in ipairs(props) do set[p] = true end
+		return { key = key, color = col, tinted = tinted, props = set, runtime = runtime == true }
+	end
+	Palette.LIST = {
+		c("classicWindow", rgb(0, 35, 73), true, { B }),
+		c("classicPanel", rgb(0, 41, 91), true, { B }),
+		c("classicButton", rgb(0, 52, 129), true, { B }),
+		c("classicShade", rgb(0, 0, 0), false, { B }),
+		c("classicScrollBar", rgb(0, 0, 0), false, { I }),
+		c("classicLight", rgb(255, 255, 255), false, { B }),
+		c("classicText", rgb(255, 255, 255), false, { T }),
+		c("classicDarkText", rgb(27, 42, 53), false, { T }),
+		c("classicLabelText", rgb(0, 0, 0), false, { T }),
+		c("classicPlaceholder", rgb(178, 178, 178), false, { P }),
+		c("classicSectionTitle", rgb(140, 205, 255), true, { T }, true),
+		c("classicOutline", rgb(0, 141, 237), true, { S }),
+		c("classicFieldOutline", rgb(0, 169, 244), true, { S }),
+		c("classicDivider", rgb(0, 196, 248), true, { B, S }),
+		c("classicLine", rgb(0, 77, 205), true, { B, S }),
+		c("classicLightOutline", rgb(255, 255, 255), false, { S, D }),
+		c("classicCancel", rgb(142, 11, 0), false, { B }),
+		c("classicWarning", rgb(100, 0, 0), false, { B }),
+		c("classicMergeOk", rgb(0, 80, 0), false, { B }, true),
+		c("classicToggleOff", rgb(50, 50, 50), false, { B }, true),
+		c("classicIconButton", rgb(163, 162, 165), false, { B }),
+		c("classicSwitchOn", rgb(75, 75, 75), false, { B }, true),
+		c("classicSwitchOff", rgb(255, 255, 255), false, { B }, true),
+	}
+	Palette.byKey = {}
+	for _, p in ipairs(Palette.LIST) do Palette.byKey[p.key] = p end
+	local function byte(x) return math.floor(x * 255 + 0.5) end
+	local function code(col) return byte(col.R) * 65536 + byte(col.G) * 256 + byte(col.B) end
+	local OWNER = {}
+	for _, p in ipairs(Palette.LIST) do
+		if not p.runtime then
+			for prop in pairs(p.props) do
+				OWNER[prop] = OWNER[prop] or {}
+				if OWNER[prop][code(p.color)] == nil then OWNER[prop][code(p.color)] = p.key end
+			end
+		end
+	end
+	function Palette.keyFor(prop, col)
+		local t = OWNER[prop]
+		return t and t[code(col)] or nil
+	end
+	function Palette.hex(col)
+		return string.format("#%02X%02X%02X", byte(col.R), byte(col.G), byte(col.B))
+	end
+	function Palette.derive(main, v2)
+		local bh, bs, bv = Palette.BASE:ToHSV()
+		local mh, ms, mv = main:ToHSV()
+		local h, s, v = v2:ToHSV()
+		local nh = (mh + (h - bh)) % 1
+		local ns = (bs > 0) and math.min(1, ms * s / bs) or 0
+		local nv = (bv > 0) and (mv * v / bv) or v
+		if nv > 1 then
+			ns = ns / nv
+			nv = 1
+		end
+		local out = Color3.fromHSV(nh, ns, nv)
+		return rgb(byte(out.R), byte(out.G), byte(out.B))
+	end
+	local function fromHex(h) return Color3.fromHex(h:sub(2)) end
+	function Palette.resolve(settings)
+		local main = fromHex(settings:get("classicMainColor"))
+		local out = {}
+		for _, p in ipairs(Palette.LIST) do
+			local v = settings:get(p.key)
+			if type(v) == "string" and v:sub(1, 1) == "#" then
+				out[p.key] = fromHex(v)
+			elseif p.tinted then
+				out[p.key] = Palette.derive(main, p.color)
+			else
+				out[p.key] = p.color
+			end
+		end
+		return out
+	end
+	return Palette
+end
+__mods["ui/classic/look"] = function(import)
+	local Palette = import("ui/classic/palette")
+	local Look = {}
+	Look.__index = Look
+	local function propsOf(inst)
+		if inst:IsA("UIStroke") then return { "Color" } end
+		if not inst:IsA("GuiObject") then return nil end
+		local out = { "BackgroundColor3", "BorderColor3" }
+		if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then out[#out + 1] = "TextColor3" end
+		if inst:IsA("TextBox") then out[#out + 1] = "PlaceholderColor3" end
+		if inst:IsA("ScrollingFrame") then out[#out + 1] = "ScrollBarImageColor3" end
+		return out
+	end
+	local function skipped(inst, root)
+		local p = inst
+		while p and p ~= root do
+			if p:GetAttribute("HappaTASNoLook") then return true end
+			p = p.Parent
+		end
+		return false
+	end
+	function Look.new(classic)
+		local s = classic.E.settings
+		local self = setmetatable({ classic = classic, settings = s, colors = Palette.resolve(s), entries = {},
+			owned = setmetatable({}, { __mode = "k" }), seen = setmetatable({}, { __mode = "k" }), listeners = {} }, Look)
+		local root = classic.gui
+		for _, d in ipairs(root:GetDescendants()) do self:register(d) end
+		local conn = root.DescendantAdded:Connect(function(d) self:register(d) end)
+		classic.offs[#classic.offs + 1] = function() conn:Disconnect() end
+		local function changed() self:repaint() end
+		classic.offs[#classic.offs + 1] = s:changed("classicMainColor", changed)
+		for _, p in ipairs(Palette.LIST) do
+			classic.offs[#classic.offs + 1] = s:changed(p.key, changed)
+		end
+		return self
+	end
+	function Look:register(inst)
+		if self.seen[inst] then return end
+		self.seen[inst] = true
+		local props = propsOf(inst)
+		if not props or skipped(inst, self.classic.gui) then return end
+		for _, prop in ipairs(props) do
+			local ok, col = pcall(function() return inst[prop] end)
+			local key = ok and typeof(col) == "Color3" and Palette.keyFor(prop, col) or nil
+			if key then
+				local list = self.entries[key]
+				if not list then
+					list = {}
+					self.entries[key] = list
+				end
+				list[#list + 1] = { inst = inst, prop = prop }
+				local want = self.colors[key]
+				if col ~= want then pcall(function() inst[prop] = want end) end
+			end
+		end
+	end
+	function Look:color(key)
+		return self.colors[key] or (Palette.byKey[key] and Palette.byKey[key].color)
+	end
+	function Look:own(inst, prop)
+		local t = self.owned[inst]
+		if not t then
+			t = {}
+			self.owned[inst] = t
+		end
+		t[prop] = true
+	end
+	function Look:owns(inst, prop)
+		local t = self.owned[inst]
+		return t ~= nil and t[prop] == true
+	end
+	function Look:changed(f)
+		local list = self.listeners
+		list[#list + 1] = f
+		return function()
+			local i = table.find(list, f)
+			if i then table.remove(list, i) end
+		end
+	end
+	function Look:repaint()
+		local new = Palette.resolve(self.settings)
+		local old = self.colors
+		self.colors = new
+		for key, col in pairs(new) do
+			if old[key] ~= col then
+				local list = self.entries[key]
+				if list then
+					local keep = {}
+					for _, e in ipairs(list) do
+						if e.inst.Parent ~= nil then
+							keep[#keep + 1] = e
+							if not self:owns(e.inst, e.prop) then pcall(function() e.inst[e.prop] = col end) end
+						end
+					end
+					self.entries[key] = keep
+				end
+			end
+		end
+		for _, f in ipairs(table.clone(self.listeners)) do pcall(f) end
+	end
+	return Look
+end
+__mods["ui/classic/colorpicker"] = function(import)
+	local Env = import("platform/env")
+	local Settings = import("engine/settings")
+	local Palette = import("ui/classic/palette")
+	local ClassicPicker = {}
+	ClassicPicker.__index = ClassicPicker
+	local NAME = "HappaTASColorPicker"
+	local W, H, SQ, BAR = 260, 250, 150, 16
+	local Z = 40
+	local u, rgb = UDim2.new, Color3.fromRGB
+	local COLOR_DEF = { kind = "color" }
+	local function frame(name, parent, color, pos, size, z)
+		local f = Instance.new("Frame")
+		f.Name, f.BorderSizePixel, f.BackgroundColor3 = name, 0, color
+		f.Position, f.Size, f.ZIndex = pos, size, z or Z + 1
+		f.Parent = parent
+		return f
+	end
+	local function corner(p, r)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, r)
+		c.Parent = p
+	end
+	local function button(name, parent, text, pos, size, color)
+		local b = Instance.new("TextButton")
+		b.Name, b.Text, b.BorderSizePixel = name, text, 0
+		b.BackgroundColor3, b.TextColor3, b.TextSize = color, rgb(255, 255, 255), 14
+		b.Position, b.Size, b.ZIndex = pos, size, Z + 1
+		b.Parent = parent
+		corner(b, 5)
+		return b
+	end
+	local function inside(gui, p)
+		local a, s = gui.AbsolutePosition, gui.AbsoluteSize
+		return p.X >= a.X and p.X <= a.X + s.X and p.Y >= a.Y and p.Y <= a.Y + s.Y
+	end
+	function ClassicPicker.open(classic, key)
+		if classic.picker then classic.picker:close() end
+		local s = classic.E.settings
+		local def = Settings.byKey[key]
+		local start = (key == "classicMainColor") and Color3.fromHex(s:get(key):sub(2)) or classic.look:color(key)
+		local self = setmetatable({ classic = classic, key = key, offs = {} }, ClassicPicker)
+		self.h, self.s, self.v = start:ToHSV()
+		local f = frame(NAME, classic.gui, rgb(0, 35, 73), u(0.5, 0, 0.5, 0), u(0, W, 0, H), Z)
+		f.AnchorPoint, f.Active = Vector2.new(0.5, 0.5), true
+		corner(f, 8)
+		local stroke = Instance.new("UIStroke")
+		stroke.Color, stroke.Thickness = rgb(0, 141, 237), 1
+		stroke.Parent = f
+		self.frame = f
+		local title = Instance.new("TextLabel")
+		title.Name, title.BackgroundTransparency, title.Text = "Title", 1, def and def.name or key
+		title.TextColor3, title.TextSize, title.ZIndex = rgb(255, 255, 255), 14, Z + 1
+		title.Position, title.Size = u(0, 10, 0, 4), u(1, -20, 0, 20)
+		title.Parent = f
+		local sq = frame("Square", f, Color3.fromHSV(self.h, 1, 1), u(0, 10, 0, 28), u(0, SQ, 0, SQ))
+		sq.Active = true
+		local white = frame("White", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 2)
+		local wg = Instance.new("UIGradient")
+		wg.Transparency = NumberSequence.new(0, 1)
+		wg.Parent = white
+		local black = frame("Black", sq, rgb(0, 0, 0), u(0, 0, 0, 0), u(1, 0, 1, 0), Z + 3)
+		local bg = Instance.new("UIGradient")
+		bg.Rotation, bg.Transparency = 90, NumberSequence.new(1, 0)
+		bg.Parent = black
+		for _, x in ipairs({ white, black }) do x:SetAttribute("HappaTASNoLook", true) end
+		local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4)
+		mark.AnchorPoint, mark.BackgroundTransparency = Vector2.new(0.5, 0.5), 1
+		mark:SetAttribute("HappaTASNoLook", true)
+		corner(mark, 4)
+		local ms = Instance.new("UIStroke")
+		ms.Color, ms.Thickness = rgb(255, 255, 255), 2
+		ms.Parent = mark
+		local hue = frame("Hue", f, rgb(255, 255, 255), u(0, 10 + SQ + 8, 0, 28), u(0, BAR, 0, SQ))
+		hue.Active = true
+		hue:SetAttribute("HappaTASNoLook", true)
+		local keys = {}
+		for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((i / 6) % 1, 1, 1)) end
+		local hg = Instance.new("UIGradient")
+		hg.Rotation, hg.Color = 90, ColorSequence.new(keys)
+		hg.Parent = hue
+		local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2)
+		hueMark.AnchorPoint = Vector2.new(0.5, 0.5)
+		hueMark:SetAttribute("HappaTASNoLook", true)
+		local x = 10 + SQ + 8 + BAR + 10
+		local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40))
+		local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40))
+		for _, y in ipairs({ old, new }) do y:SetAttribute("HappaTASNoLook", true) end
+		self.square, self.mark, self.hueBar, self.hueMark, self.newHalf = sq, mark, hue, hueMark, new
+		local box = Instance.new("TextBox")
+		box.Name, box.ClearTextOnFocus, box.BorderSizePixel = "Value", false, 0
+		box.BackgroundColor3, box.TextColor3, box.TextSize = rgb(0, 52, 129), rgb(255, 255, 255), 13
+		box.PlaceholderText, box.PlaceholderColor3 = "#RRGGBB or r, g, b", rgb(178, 178, 178)
+		box.Position, box.Size, box.ZIndex = u(0, 10, 0, 28 + SQ + 8), u(1, -20, 0, 22), Z + 1
+		box.Parent = f
+		corner(box, 5)
+		self.box = box
+		local by = 28 + SQ + 8 + 22 + 8
+		local auto = def and def.kind == "autocolor"
+		local bw = auto and (W - 40) / 3 or (W - 30) / 2
+		self.applyButton = button("Apply", f, "Apply", u(0, 10, 0, by), u(0, bw, 0, 24), rgb(0, 52, 129))
+		self.cancelButton = button("Cancel", f, "Cancel", u(0, 10 + bw + 10, 0, by), u(0, bw, 0, 24), rgb(142, 11, 0))
+		if auto then self.autoButton = button("Auto", f, "Auto", u(0, 10 + 2 * (bw + 10), 0, by), u(0, bw, 0, 24), rgb(0, 52, 129)) end
+		local function conn(sig, fn)
+			local c = sig:Connect(fn)
+			self.offs[#self.offs + 1] = function() c:Disconnect() end
+		end
+		conn(self.applyButton.MouseButton1Click, function() self:apply() end)
+		conn(self.cancelButton.MouseButton1Click, function() self:close() end)
+		if self.autoButton then conn(self.autoButton.MouseButton1Click, function() self:auto() end) end
+		conn(box.FocusLost, function() self:typed(box.Text) end)
+		local uis = Env.svc("UserInputService")
+		local function point(inp) return Vector2.new(inp.Position.X, inp.Position.Y) end
+		local function drag(p)
+			if self.dragging == "square" then
+				local a, z = sq.AbsolutePosition, sq.AbsoluteSize
+				if z.X > 0 and z.Y > 0 then self:setSV((p.X - a.X) / z.X, (p.Y - a.Y) / z.Y) end
+			elseif self.dragging == "hue" then
+				local a, z = hue.AbsolutePosition, hue.AbsoluteSize
+				if z.Y > 0 then self:setHue((p.Y - a.Y) / z.Y) end
+			end
+		end
+		local PRESS = { [Enum.UserInputType.MouseButton1] = true, [Enum.UserInputType.Touch] = true }
+		conn(uis.InputBegan, function(inp)
+			if inp.KeyCode == Enum.KeyCode.Escape then
+				self:close()
+			elseif PRESS[inp.UserInputType] then
+				local p = point(inp)
+				if inside(sq, p) then
+					self.dragging = "square"
+					drag(p)
+				elseif inside(hue, p) then
+					self.dragging = "hue"
+					drag(p)
+				elseif not inside(f, p) then
+					self:close()
+				end
+			end
+		end)
+		conn(uis.InputChanged, function(inp)
+			if self.dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+				drag(point(inp))
+			end
+		end)
+		conn(uis.InputEnded, function(inp)
+			if PRESS[inp.UserInputType] then self.dragging = nil end
+		end)
+		self:show()
+		classic.picker = self
+		return self
+	end
+	function ClassicPicker:setSV(sx, sy)
+		self.s = math.clamp(sx, 0, 1)
+		self.v = 1 - math.clamp(sy, 0, 1)
+		self:show()
+	end
+	function ClassicPicker:setHue(y)
+		self.h = math.clamp(y, 0, 1)
+		if self.h >= 1 then self.h = 0.999999 end
+		self:show()
+	end
+	function ClassicPicker:typed(text)
+		local hex = Settings.sanitize(COLOR_DEF, text)
+		if hex then
+			local h, s, v = Color3.fromHex(hex:sub(2)):ToHSV()
+			if s > 0 then self.h = h end
+			self.s, self.v = s, v
+		end
+		self:show()
+	end
+	function ClassicPicker:show()
+		local col = Color3.fromHSV(self.h, self.s, self.v)
+		col = rgb(math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
+		self.newColor = col
+		if not self.frame or not self.frame.Parent then return end
+		self.square.BackgroundColor3 = Color3.fromHSV(self.h, 1, 1)
+		self.mark.Position = u(self.s, 0, 1 - self.v, 0)
+		self.hueMark.Position = u(0.5, 0, self.h, 0)
+		self.newHalf.BackgroundColor3 = col
+		self.box.Text = Palette.hex(col)
+	end
+	function ClassicPicker:apply()
+		self.classic.E.settings:set(self.key, Palette.hex(self.newColor))
+		self:close()
+	end
+	function ClassicPicker:auto()
+		if self.autoButton then self.classic.E.settings:set(self.key, "Auto") end
+		self:close()
+	end
+	function ClassicPicker:close()
+		for _, off in ipairs(self.offs) do pcall(off) end
+		self.offs = {}
+		if self.frame then pcall(function() self.frame:Destroy() end) end
+		if self.classic.picker == self then self.classic.picker = nil end
+	end
+	return ClassicPicker
+end
+__mods["ui/classic/background"] = function(import)
+	local Env = import("platform/env")
+	local Background = {}
+	Background.__index = Background
+	local FOLDER = "HappaTasPort/Backgrounds"
+	local NAME = "HappaTASBackground"
+	local LOAD_TIME = 10
+	local VIDEO_EXT = { mp4 = true, webm = true, mov = true, mkv = true, ogv = true, avi = true, m4v = true }
+	local IMAGE_EXT = { png = "png", jpg = "jpg", jpeg = "jpg", bmp = "bmp", tga = "tga" }
+	local FIT = { Crop = Enum.ScaleType.Crop, Fit = Enum.ScaleType.Fit, Stretch = Enum.ScaleType.Stretch }
+	local VIDEO_REFUSED = "Roblox can't play video files from links: use a Roblox video id (video:123)"
+	local NOT_PICTURE = "Background: the link didn't give a picture"
+	local function trim(t) return (t:gsub("^%s+", ""):gsub("%s+$", "")) end
+	local function hash(t)
+		local h = 5381
+		for i = 1, #t do h = (h * 33 + t:byte(i)) % 4294967296 end
+		return string.format("%08x", h)
+	end
+	local function extOf(url)
+		local p = url:gsub("[?#].*$", "")
+		local e = p:match("%.(%w+)$")
+		return e and e:lower() or nil
+	end
+	local function sniff(body)
+		if body:sub(1, 4) == "\137PNG" then return "png" end
+		if body:sub(1, 2) == "\255\216" then return "jpg" end
+		if body:sub(1, 2) == "BM" then return "bmp" end
+		if body:sub(5, 8) == "ftyp" or body:sub(1, 4) == "\26\69\223\163" then return "video" end
+		return nil
+	end
+	function Background.new(classic)
+		local self = setmetatable({ classic = classic, E = classic.E, menu = classic.menu, view = nil, kind = nil, gen = 0,
+			menuTransparency = classic.menu.BackgroundTransparency }, Background)
+		local s, offs = self.E.settings, classic.offs
+		offs[#offs + 1] = s:changed("classicBackground", function() self:load() end)
+		offs[#offs + 1] = s:changed("classicBackgroundTransparency", function() self:style() end)
+		offs[#offs + 1] = s:changed("classicBackgroundFit", function() self:style() end)
+		for _, prop in ipairs({ "Position", "Size", "AnchorPoint", "Visible" }) do
+			local c = self.menu:GetPropertyChangedSignal(prop):Connect(function() self:follow() end)
+			offs[#offs + 1] = function() c:Disconnect() end
+		end
+		offs[#offs + 1] = function() self.gen = self.gen + 1 end
+		self:load()
+		return self
+	end
+	function Background:status(text) self.classic:status(text) end
+	function Background:clear()
+		if self.view then pcall(function() self.view:Destroy() end) end
+		self.view, self.kind = nil, nil
+		self:style()
+	end
+	function Background:follow()
+		local v, m = self.view, self.menu
+		if not v then return end
+		v.AnchorPoint, v.Position, v.Size, v.Visible = m.AnchorPoint, m.Position, m.Size, m.Visible
+	end
+	function Background:style()
+		local s, m = self.E.settings, self.menu
+		if not self.view then
+			m.BackgroundTransparency = self.menuTransparency
+			return
+		end
+		m.BackgroundTransparency = 1 - s:get("classicBackgroundTransparency") / 100
+		if self.kind == "image" then self.view.ScaleType = FIT[s:get("classicBackgroundFit")] or Enum.ScaleType.Crop end
+	end
+	function Background:show(kind, content, gen)
+		self:clear()
+		local v = Instance.new(kind == "video" and "VideoFrame" or "ImageLabel")
+		v.Name, v.BorderSizePixel, v.BackgroundTransparency = NAME, 0, 1
+		v:SetAttribute("HappaTASNoLook", true)
+		v.ZIndex = self.menu.ZIndex - 1
+		local mc = self.menu:FindFirstChildWhichIsA("UICorner")
+		if mc then
+			local cr = Instance.new("UICorner")
+			cr.CornerRadius = mc.CornerRadius
+			cr.Parent = v
+		end
+		if kind == "video" then
+			v.Video, v.Looped, v.Volume = content, true, 0
+		else
+			v.Image = content
+		end
+		v.Parent = self.classic.gui
+		self.view, self.kind = v, kind
+		self:follow()
+		self:style()
+		if kind == "video" then pcall(function() v:Play() end) end
+		task.spawn(function()
+			local t = 0
+			while t < LOAD_TIME do
+				local ok, loaded = pcall(function() return v.IsLoaded end)
+				if not ok or loaded ~= false then return end
+				task.wait(0.5)
+				t = t + 0.5
+				if self.gen ~= gen or self.view ~= v then return end
+			end
+			self:status("Background didn't load")
+			self:clear()
+		end)
+	end
+	function Background:load()
+		self.gen = self.gen + 1
+		local gen = self.gen
+		self:clear()
+		local v = trim(tostring(self.E.settings:get("classicBackground")))
+		if v == "" then return end
+		local vid = v:match("^video:%s*rbxassetid://(%d+)$") or v:match("^video:%s*(%d+)$")
+		if vid then return self:show("video", "rbxassetid://" .. vid, gen) end
+		local img = v:match("^rbxassetid://(%d+)$") or v:match("^(%d+)$")
+		if img then return self:show("image", "rbxassetid://" .. img, gen) end
+		if not v:lower():match("^https?://") then return self:status("Background: not a link or an id") end
+		local ext = extOf(v)
+		if ext and VIDEO_EXT[ext] then return self:status(VIDEO_REFUSED) end
+		task.spawn(function() self:fetch(v, IMAGE_EXT[ext or ""], gen) end)
+	end
+	function Background:fetch(url, ext, gen)
+		if not (Env.getcustomasset and Env.writefile and Env.isfile) then
+			return self:status("Background links need getcustomasset and the file functions")
+		end
+		local base = FOLDER .. "/" .. hash(url) .. "."
+		for _, e in ipairs(ext and { ext } or { "png", "jpg", "bmp", "tga" }) do
+			if Env.isfile(base .. e) then
+				local ok, asset = pcall(Env.getcustomasset, base .. e)
+				if ok and asset and self.gen == gen then return self:show("image", asset, gen) end
+			end
+		end
+		local ok, body = Env.httpGet(url)
+		if self.gen ~= gen then return end
+		if not ok then return self:status("Background: the download failed (" .. tostring(body):sub(1, 60) .. ")") end
+		if type(body) ~= "string" or #body < 16 or body:sub(1, 1) == "<" then return self:status(NOT_PICTURE) end
+		local kind = sniff(body)
+		if kind == "video" then return self:status(VIDEO_REFUSED) end
+		ext = ext or kind
+		if not ext then return self:status(NOT_PICTURE) end
+		local wrote = pcall(function()
+			if Env.makefolder and not (Env.isfolder and Env.isfolder(FOLDER)) then Env.makefolder(FOLDER) end
+			Env.writefile(base .. ext, body)
+		end)
+		if not wrote then return self:status("Background: couldn't save the picture") end
+		local okA, asset = pcall(Env.getcustomasset, base .. ext)
+		if not okA or not asset then return self:status("Background: couldn't load the saved picture") end
+		self:show("image", asset, gen)
+	end
+	return Background
+end
 __mods["ui/classic/settingsrows"] = function(import)
 	local Env = import("platform/env")
 	local Settings = import("engine/settings")
 	local ClassicTree = import("ui/classic/tree")
 	local ClassicBuild = import("ui/classic/build")
 	local SettingsWin = import("ui/win/settings")
+	local ClassicPicker = import("ui/classic/colorpicker")
 	local SettingsRows = {}
 	local u, v2 = UDim2.new, Vector2.new
 	local ROW_H, HEADER_H = 30, 28
-	local SWITCH_ON = { Position = u(1, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(75, 75, 75) }
+	local SWITCH_ON = { Position = u(1, 0, 0.5, 0), color = "classicSwitchOn" }
 	local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
 		invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
 		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
-	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
-	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) end
-	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
+	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
+	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true end
+	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), color = "classicSwitchOff" }
 	local function toggleRow(def, order)
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
 			{ "UICorner", "UICorner", 5, {} },
@@ -19542,7 +20126,15 @@ __mods["ui/classic/settingsrows"] = function(import)
 		local list = classic.byPath["MainMenu.SettingsFrame.List"]
 		local scroller = classic.byPath["MainMenu.SettingsFrame"]
 		local ts = Env.svc("TweenService")
+		local look = classic.look
 		local rows, last, order, height = {}, nil, 0, 0
+		local titles = {}
+		classic.offs[#classic.offs + 1] = look:changed(function()
+			for _, h in ipairs(titles) do h.TextColor3 = look:color("classicSectionTitle") end
+			for _, r in pairs(rows) do
+				if r.knob and r.on ~= nil then r.knob.BackgroundColor3 = look:color(r.on and "classicSwitchOn" or "classicSwitchOff") end
+			end
+		end)
 		for _, def in ipairs(Settings.SCHEMA) do
 			if not shownHere(def) then
 			elseif def.section ~= last then
@@ -19551,7 +20143,9 @@ __mods["ui/classic/settingsrows"] = function(import)
 				local secName = SECTIONS[def.section] or def.section
 				local h = ClassicBuild.node({ "TextLabel", "Section_" .. secName, 16, { Size = u(1, 0, 0, HEADER_H), Text = secName,
 					TextSize = 14, LayoutOrder = order } }, ClassicTree.STYLES)
-				pcall(function() h.TextColor3 = Color3.fromRGB(140, 205, 255) end)
+				pcall(function() h.TextColor3 = look:color("classicSectionTitle") end)
+				look:own(h, "TextColor3")
+				titles[#titles + 1] = h
 				h.Parent = list
 				height = height + HEADER_H
 			end
@@ -19562,15 +20156,16 @@ __mods["ui/classic/settingsrows"] = function(import)
 				local f = ClassicBuild.node(toggleRow({ key = key .. ":" .. o, name = def.classic[o] or o }, order), ClassicTree.STYLES)
 				f.Parent = list
 				local r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+				look:own(r.knob, "BackgroundColor3")
 				local function show(instant)
 					local on = s:has(key, o)
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
 					if instant or not ts then
-						r.knob.Position, r.knob.BackgroundColor3 = target.Position, target.BackgroundColor3
+						r.knob.Position, r.knob.BackgroundColor3 = target.Position, look:color(target.color)
 					else
-						r.knob.BackgroundColor3 = target.BackgroundColor3
+						r.knob.BackgroundColor3 = look:color(target.color)
 						ts:Create(r.knob, TweenInfo.new(0.25), { Position = target.Position }):Play()
 					end
 				end
@@ -19596,6 +20191,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 				local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 				f.Parent = list
 				r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
+				look:own(r.knob, "BackgroundColor3")
 				local sw = def.switch
 				local function show(v, instant)
 					local on
@@ -19603,7 +20199,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
-					local bg = target.BackgroundColor3
+					local bg = look:color(target.color)
 					if instant or not ts then
 						r.knob.Position, r.knob.BackgroundColor3 = target.Position, bg
 					else
@@ -19622,13 +20218,36 @@ __mods["ui/classic/settingsrows"] = function(import)
 				r = { frame = f, label = f.N, input = f.Input }
 				local inp = r.input
 				inp.Text = tostring(s:get(key))
+				if def.kind == "color" or def.kind == "autocolor" then
+					local sw = Instance.new("TextButton")
+					sw.Name, sw.Text, sw.BorderSizePixel, sw.AutoButtonColor = "Swatch", "", 0, false
+					sw.AnchorPoint, sw.Position, sw.Size = Vector2.new(0.5, 0.5), u(0.77, 0, 0.5, 0), u(0, 22, 0, 18)
+					sw.ZIndex = inp.ZIndex
+					local sc = Instance.new("UICorner")
+					sc.CornerRadius = UDim.new(0, 4)
+					sc.Parent = sw
+					look:own(sw, "BackgroundColor3")
+					sw.Parent = f
+					r.swatch = sw
+					local function paint()
+						if def.kind == "autocolor" then
+							sw.BackgroundColor3 = look:color(key)
+						else
+							sw.BackgroundColor3 = Color3.fromHex(tostring(s:get(key)):sub(2))
+						end
+					end
+					paint()
+					classic.offs[#classic.offs + 1] = look:changed(paint)
+					classic.offs[#classic.offs + 1] = s:changed(key, paint)
+					life:connect(sw.MouseButton1Click, function() ClassicPicker.open(classic, key) end)
+				end
 				life:connect(inp.FocusLost, function()
 					local text = inp.Text:gsub("^%s+", ""):gsub("%s+$", "")
 					if key == "theme" then
 						if text ~= "" and text ~= s:get(key) and not SettingsWin.applyLook(E, text) then
 							E.bus:emit("status", "No saved look named \"" .. text .. "\"", true)
 						end
-					elseif text ~= "" then
+					elseif text ~= "" or def.kind == "autocolor" then
 						s:set(key, inp.Text)
 					end
 					inp.Text = tostring(s:get(key))
@@ -19724,8 +20343,6 @@ __mods["ui/classic/saves"] = function(import)
 	local CONFIRM = 3
 	local GAP = 5
 	local u = UDim2.new
-	local GREEN, RED = Color3.fromRGB(0, 80, 0), Color3.fromRGB(100, 0, 0)
-	local ON, OFF = Color3.fromRGB(0, 52, 129), Color3.fromRGB(50, 50, 50)
 	local function lower(s) return string.lower(s) end
 	function Saves.build(classic)
 		local E, ui = classic.E, classic.ui
@@ -19881,10 +20498,22 @@ __mods["ui/classic/saves"] = function(import)
 		local merge = b.Merge
 		local stats = b.MergeStats
 		local running = Enum.HumanoidStateType.Running.Value
+		local look = classic.look
+		local optionOn = {}
+		local function paintOption(btn)
+			btn.BackgroundColor3 = look:color(optionOn[btn] and "classicButton" or "classicToggleOff")
+		end
 		local function setOption(btn, on)
 			btn.Interactable = on
-			btn.BackgroundColor3 = on and ON or OFF
+			optionOn[btn] = on
+			paintOption(btn)
 		end
+		for _, name in ipairs({ "Merge.Options.Before", "Merge.Options.After" }) do look:own(b[name], "BackgroundColor3") end
+		look:own(stats, "BackgroundColor3")
+		classic.offs[#classic.offs + 1] = look:changed(function()
+			for btn in pairs(optionOn) do paintOption(btn) end
+			if E.merge then stats.BackgroundColor3 = look:color(E.mergeCanComplete == true and "classicMergeOk" or "classicWarning") end
+		end)
 		local function follow()
 			if E.merge and ui.live == "Classic" and not sv.off then
 				sv.off = E.pipe:add("PreRender", 250, "ui.classic.merge", function() sv.step() end, "ui")
@@ -19904,7 +20533,7 @@ __mods["ui/classic/saves"] = function(import)
 			b["MergeStats.2"].Text = " Distance Required: " .. (req and tostring(Util.round(req, 1000)) or "-")
 			local can = E.mergeCanComplete == true
 			b["MergeStats.3"].Text = can and " Click here to complete merge" or " Click here to cancel merge"
-			stats.BackgroundColor3 = can and GREEN or RED
+			stats.BackgroundColor3 = look:color(can and "classicMergeOk" or "classicWarning")
 		end
 		function sv.showMerge()
 			if not E.merge then return end
@@ -20167,6 +20796,8 @@ __mods["ui/classic/classic"] = function(import)
 	local Env = import("platform/env")
 	local ClassicTree = import("ui/classic/tree")
 	local ClassicBuild = import("ui/classic/build")
+	local Look = import("ui/classic/look")
+	local Background = import("ui/classic/background")
 	local SettingsRows = import("ui/classic/settingsrows")
 	local ControlsRows = import("ui/classic/controlsrows")
 	local Saves = import("ui/classic/saves")
@@ -20199,6 +20830,7 @@ __mods["ui/classic/classic"] = function(import)
 		local _, byPath = ClassicBuild.build(ClassicTree.TREE, ClassicTree.STYLES, gui)
 		self.byPath = byPath
 		self.menu = byPath.MainMenu
+		self.look = Look.new(self)
 		self.uis = Env.svc("UserInputService")
 		self.guiService = Env.svc("GuiService")
 		self.ts = Env.svc("TweenService")
@@ -20208,6 +20840,7 @@ __mods["ui/classic/classic"] = function(import)
 		self.stats = ClassicStats.new(self)
 		self:buildHelp()
 		self:wire()
+		self.background = Background.new(self)
 		ClassicMobile.wire(self)
 		self:placeMenu()
 		pcall(function() gui.Parent = parent end)
@@ -20232,6 +20865,7 @@ __mods["ui/classic/classic"] = function(import)
 	function Classic:show(on)
 		self.shown = on == true
 		self.gui.Enabled = self.shown and self.ui.live == "Classic"
+		if not self.gui.Enabled and self.picker then self.picker:close() end
 		self.ui:updateModal()
 	end
 	function Classic:modal()
@@ -20239,6 +20873,7 @@ __mods["ui/classic/classic"] = function(import)
 	end
 	function Classic:tab(name)
 		local b = self.byPath
+		if self.picker then self.picker:close() end
 		for _, t in ipairs(TABS) do b["MainMenu." .. t .. "Frame"].Visible = false end
 		b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
 		self.tabName = name
@@ -20405,6 +21040,7 @@ __mods["ui/classic/classic"] = function(import)
 	function Classic:destroy()
 		if self.dead then return end
 		self.dead = true
+		if self.picker then self.picker:close() end
 		for _, off in ipairs(self.offs) do off() end
 		self.offs = {}
 		pcall(function() self.gui:Destroy() end)
@@ -20516,6 +21152,7 @@ __mods["ui/app"] = function(import)
 		self.live = name
 		self:applyShown()
 		if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
+		if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
 		if self.E.merge then
 			if name == "Classic" then self.classic.saves.showMerge() elseif self.startMerge then self.startMerge(nil) end
 		end

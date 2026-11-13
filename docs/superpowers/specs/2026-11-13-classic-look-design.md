@@ -95,6 +95,11 @@ Picker (dzr: "make it choose any color"):
 | Switch on | 75, 75, 75 | A switch's knob when on |
 | Switch off | 255, 255, 255 | A switch's knob when off |
 
+Built (2026-11-13): the keys are `classicWindow` ... `classicSwitchOff` in the order of the README's settings
+table; Toggle Off turned out to be the merge window's Before / After options that can't be picked (not a save
+slot), Merge OK / Warning are the merge stats box. The background value for a video is `video:123` or
+`video:rbxassetid://123`.
+
 Found while planning (2026-11-13), also "every colour": Light Fill (255, 255, 255 backgrounds: switch tracks,
 light fills), Label Text (0, 0, 0 text: expand arrows), Merge OK (0, 80, 0) and Toggle Off (50, 50, 50), the last
 two painted by the Saves tab while running. That makes 23 colours; the plan's Task 2 has the final list and keys.
