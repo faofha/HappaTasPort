@@ -22,9 +22,10 @@ local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed =
 	invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
 	microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 	allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
-local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync" }
+local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
 -- (and a multi row with Classic labels: a switch per option, keyed "<key>:<option>")
-local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) end
+-- (and Classic Look: the rows only Classic has)
+local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true end
 local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255) }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)

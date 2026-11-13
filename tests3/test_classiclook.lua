@@ -21,14 +21,14 @@ local b = c.byPath
 local rows = c.settingsRows
 local shown = 0
 for _, def in ipairs(Settings.SCHEMA) do
-	if def.v2 or def.key == "interface" then
+	if def.v2 or def.key == "interface" or def.classicOnly then
 		check(rows[def.key] ~= nil, def.key .. " shown")
 		shown = shown + 1
 	else
 		eq(rows[def.key], nil, def.key .. " hidden (the New interface's only)")
 	end
 end
-eq(shown, 34, "V2.38.17's 33 settings (Frame Step went with Part B) and the Classic interface switch")
+eq(shown, 61, "V2.38.17's 33 settings (Frame Step went with Part B), the Classic interface switch and Classic Look's 27")
 eq(rows.speedHack.label.Text, "Speed Hack (slow / fast motion)", "V2.38.17's label")
 eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 4, 0.5 = half, 2 = double)", "V2.38.17's label")
 eq(rows.syncKitObjects.label.Text, "Sync Kit Objects (Beat Blocks, Turrets)", "V2.38.17's label")

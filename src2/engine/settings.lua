@@ -3,7 +3,8 @@
 --  listeners. Each row keeps its V2.38.16 name (`v2`) so Settings.json from V2 can be converted (phase 3).
 --  kind "toggle" = 0 / 1, "number" = clamped to min / max (integer: rounded; nonzero: 0 refused),
 --  "choice" = one of `options` (matched without case, stored as written there), "color" = "#RRGGBB",
---  "text" = a string of at most 40 characters, "multi" = some of `options`, stored "A,B" in their order ("" for
+--  "autocolor" = "Auto" or "#RRGGBB" (colours also typed as "r, g, b"),
+--  "text" = a string of at most 40 characters (or the row's maxLength), "multi" = some of `options`, stored "A,B" in their order ("" for
 --  none; Settings:has(key, option) reads one). Every row has a `desc` (the line under its name in the
 --  Settings window). Defaults are V2.38.16's; the Appearance rows (phase 5a, no V2 name) come from the mockup.
 -- ================================================================================================
@@ -109,6 +110,35 @@ Settings.SCHEMA = {
 	row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4, desc = "The size of the MicroProfiler" }),
 	row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, desc = "Moves the MicroProfiler's text up or down" }),
 	row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { desc = "Lets the interface sit where game scripts can see it" }),
+	-- (Classic Look: the Classic interface's own colours and background; only Classic's Settings tab shows them.
+	-- A colour row is "Auto" (follows the Main Colour, ui/classic/palette) or a colour typed / picked)
+	row("classicMainColor", nil, "Classic look", "#003481", { kind = "color", classicOnly = true, desc = "The colour every Auto colour follows (darker parts stay darker)" }),
+	row("classicWindow", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The main menu, stats panels, merge dialog and join message" }),
+	row("classicPanel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Lists, the slot list and a slot's expansion" }),
+	row("classicButton", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Buttons, key buttons, text boxes and a save slot that is on" }),
+	row("classicShade", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Tab buttons, list rows, credits and update log backs" }),
+	row("classicScrollBar", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Scroll bars" }),
+	row("classicLight", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Switch tracks and other light fills" }),
+	row("classicText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "All ordinary text" }),
+	row("classicDarkText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats text and other dark labels" }),
+	row("classicLabelText", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Black text: expand arrows" }),
+	row("classicPlaceholder", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The hint in an empty text box" }),
+	row("classicSectionTitle", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Settings section titles" }),
+	row("classicOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Window outlines" }),
+	row("classicFieldOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Text box and list outlines" }),
+	row("classicDivider", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Row dividers and highlight outlines" }),
+	row("classicLine", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The title line and default outlines" }),
+	row("classicLightOutline", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "White outlines and borders" }),
+	row("classicCancel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The Cancel button" }),
+	row("classicWarning", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can't be done" }),
+	row("classicMergeOk", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Merge stats when a merge can be done" }),
+	row("classicToggleOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A save slot that is off" }),
+	row("classicIconButton", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Close and expand icon buttons" }),
+	row("classicSwitchOn", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when on" }),
+	row("classicSwitchOff", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "A switch's knob when off" }),
+	row("classicBackground", nil, "Classic look", "", { kind = "text", maxLength = 500, classicOnly = true, desc = "A picture link, a Roblox image id, or video:<Roblox video id>; empty = none" }),
+	row("classicBackgroundTransparency", nil, "Classic look", 40, { kind = NUM, min = 0, max = 100, integer = true, classicOnly = true, desc = "How much the window colour shows over the background (%)" }),
+	row("classicBackgroundFit", nil, "Classic look", "Crop", { kind = "choice", options = { "Crop", "Fit", "Stretch" }, classicOnly = true, desc = "How the background fills the menu" }),
 	-- (V2.38.16's 5 sound settings went with V2.38.17: a V2 Settings.json that has them converts without them)
 }
 -- the names the Settings window shows (a V2 row shows its V2 name)
@@ -122,6 +152,7 @@ local NAMES = {
 	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
+	classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 }
 Settings.byKey, Settings.byV2 = {}, {}
 for i, r in ipairs(Settings.SCHEMA) do
@@ -134,6 +165,13 @@ end
 -- nil when the value isn't allowed (V2 Settings.Sanitize)
 local function hexColor(v)
 	if type(v) ~= "string" then return nil end
+	-- ("r, g, b": three whole numbers 0 - 255)
+	local r, g, b = v:match("^%s*(%d+)%s*,%s*(%d+)%s*,%s*(%d+)%s*$")
+	if r then
+		r, g, b = tonumber(r), tonumber(g), tonumber(b)
+		if r > 255 or g > 255 or b > 255 then return nil end
+		return string.format("#%02X%02X%02X", r, g, b)
+	end
 	local h = v:match("^#?(%x+)$")
 	if not h then return nil end
 	if #h == 3 then h = h:sub(1, 1):rep(2) .. h:sub(2, 2):rep(2) .. h:sub(3, 3):rep(2) end
@@ -151,8 +189,15 @@ function Settings.sanitize(def, v)
 		return nil
 	elseif def.kind == "color" then
 		return hexColor(v)
+	elseif def.kind == "autocolor" then
+		-- ("Auto": follows the Main Colour; "" or any case of "auto" too)
+		if type(v) == "string" then
+			local t = v:gsub("^%s+", ""):gsub("%s+$", "")
+			if t == "" or t:lower() == "auto" then return "Auto" end
+		end
+		return hexColor(v)
 	elseif def.kind == "text" then
-		if type(v) ~= "string" or #v > 40 then return nil end
+		if type(v) ~= "string" or #v > (def.maxLength or 40) then return nil end
 		return v
 	elseif def.kind == "multi" then
 		-- (several of `options`: stored as "A,B" in the options' order, "" for none; a list works too)
