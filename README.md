@@ -55,7 +55,11 @@ chat or a text box.
   quality), colours, fonts, text size, scale, corners, shadows and animations (Settings > Appearance).
 - **Classic**: V2.38.17's interface, the menu on `M` with Controls, Settings, Saves, Help and More. Pick it in
   Settings > Interface > Classic interface (a switch). It looks and works like V2.38.17: its settings, fonts
-  and colours; the New interface's Appearance settings aren't shown there and keep their values. Both
+  and colours; the New interface's Appearance settings aren't shown there and keep their values. Classic has
+  its own **Classic Look** instead (only in Classic's Settings tab): a Main Colour that every colour on Auto
+  follows, a row (and a colour picker) for each of the 23 colours it draws, and a background: a picture link
+  (downloaded once into `HappaTasPort/Backgrounds`, HappaTAS's only network use), a Roblox image id or a Roblox
+  video id (`video:123`; video files from links don't play in Roblox). Both
   interfaces read one settings store: a setting changed in one shows in the other at once. Phones get touch
   buttons in either.
 
@@ -133,6 +137,7 @@ chat or a text box.
 | World sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |
 | Interface | Classic interface, Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale, MicroProfiler Text Offset, Allow PlayerGui Interface |
 | Appearance | Theme, Glass, colours, fonts, text size, interface scale, corners, button shape, shadows, animations |
+| Classic look (Classic only) | Main Colour, 23 colours (Window, Panel, Button, Shade, Scroll Bar, Light Fill, Text, Dark Text, Label Text, Placeholder Text, Section Title, Outline, Field Outline, Divider, Line, Light Outline, Cancel, Warning, Merge OK, Toggle Off, Icon Button, Switch On, Switch Off), Background, Background Transparency, Background Fit |
 
 Files, in `<executor workspace>/HappaTasPort/`:
 

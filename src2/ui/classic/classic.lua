@@ -12,6 +12,8 @@
 local Env = import("platform/env")
 local ClassicTree = import("ui/classic/tree")
 local ClassicBuild = import("ui/classic/build")
+local Look = import("ui/classic/look")
+local Background = import("ui/classic/background")
 local SettingsRows = import("ui/classic/settingsrows")
 local ControlsRows = import("ui/classic/controlsrows")
 local Saves = import("ui/classic/saves")
@@ -48,6 +50,8 @@ function Classic.new(ui)
 	local _, byPath = ClassicBuild.build(ClassicTree.TREE, ClassicTree.STYLES, gui)
 	self.byPath = byPath
 	self.menu = byPath.MainMenu
+	-- (the Classic Look colours: before the rows, which ask it for their colours)
+	self.look = Look.new(self)
 	self.uis = Env.svc("UserInputService")
 	self.guiService = Env.svc("GuiService")
 	self.ts = Env.svc("TweenService")
@@ -57,6 +61,7 @@ function Classic.new(ui)
 	self.stats = ClassicStats.new(self)
 	self:buildHelp()
 	self:wire()
+	self.background = Background.new(self)
 	ClassicMobile.wire(self)
 	self:placeMenu()
 	pcall(function() gui.Parent = parent end)
@@ -87,6 +92,7 @@ end
 function Classic:show(on)
 	self.shown = on == true
 	self.gui.Enabled = self.shown and self.ui.live == "Classic"
+	if not self.gui.Enabled and self.picker then self.picker:close() end
 	self.ui:updateModal()
 end
 
@@ -98,6 +104,7 @@ end
 -- V2's tab(): the chosen tab's button lighter, its frame shown
 function Classic:tab(name)
 	local b = self.byPath
+	if self.picker then self.picker:close() end
 	for _, t in ipairs(TABS) do b["MainMenu." .. t .. "Frame"].Visible = false end
 	b["MainMenu." .. name .. "Frame"].Visible = not (self.touch and name == "Controls")
 	self.tabName = name
@@ -289,6 +296,7 @@ end
 function Classic:destroy()
 	if self.dead then return end
 	self.dead = true
+	if self.picker then self.picker:close() end
 	for _, off in ipairs(self.offs) do off() end
 	self.offs = {}
 	pcall(function() self.gui:Destroy() end)

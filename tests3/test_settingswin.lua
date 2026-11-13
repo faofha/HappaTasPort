@@ -32,10 +32,14 @@ end
 
 section("every setting has a control of its kind")
 local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
+local CLASSIC_ONLY = 0 -- (Classic Look's rows: only Classic's Settings tab has them)
+for _, def in ipairs(Settings.SCHEMA) do if def.classicOnly then CLASSIC_ONLY = CLASSIC_ONLY + 1 end end
 local n = 0
 for _, def in ipairs(Settings.SCHEMA) do
 	local r = sw.rows[def.key]
-	if BEZIER[def.key] then
+	if def.classicOnly then
+		eq(r, nil, def.key .. ": Classic Look is Classic's only")
+	elseif BEZIER[def.key] then
 		eq(r, nil, def.key .. ": shown by the curve editor, not a row")
 	else
 		check(r ~= nil, "a row for " .. def.key)
@@ -49,7 +53,7 @@ for _, def in ipairs(Settings.SCHEMA) do
 		end
 	end
 end
-eq(n, #Settings.SCHEMA - 4, "a row each")
+eq(n, #Settings.SCHEMA - 4 - CLASSIC_ONLY, "a row each")
 check(sw.bezier ~= nil, "the curve editor")
 eq(sw.rows.font.ctl.fontPreview, true, "the font list previews fonts")
 eq(sw.rows.glassTransparency.ctl.label.Text, "54%", "a percentage")
@@ -120,7 +124,7 @@ check(m >= 5, "case-insensitive, names and explanations (" .. m .. " rows)")
 box.Text = ""
 local all = 0
 for _, r in pairs(sw.rows) do if r.row.gui.Visible then all = all + 1 end end
-eq(all, #Settings.SCHEMA - 4, "empty: every row again")
+eq(all, #Settings.SCHEMA - 4 - CLASSIC_ONLY, "empty: every row again")
 box:ReleaseFocus()
 
 section("a row scrolled out of the list takes no click (it isn't shown there)")

@@ -86,6 +86,10 @@ ui/win/help
 ui/touch
 ui/classic/tree
 ui/classic/build
+ui/classic/palette
+ui/classic/look
+ui/classic/colorpicker
+ui/classic/background
 ui/classic/settingsrows
 ui/classic/controlsrows
 ui/classic/saves

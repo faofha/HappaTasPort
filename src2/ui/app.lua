@@ -125,6 +125,7 @@ function UI:setInterface(name)
 	self.live = name
 	self:applyShown()
 	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
+	if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
 	-- (a merge goes on across the switch: the live interface shows its own way to finish it)
 	if self.E.merge then
 		if name == "Classic" then self.classic.saves.showMerge() elseif self.startMerge then self.startMerge(nil) end

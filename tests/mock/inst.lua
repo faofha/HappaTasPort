@@ -232,6 +232,8 @@ class("GuiButton", "GuiObject", { AutoButtonColor = true, Modal = false, Selecte
 class("TextButton", "GuiButton", textDefaults)
 class("ImageLabel", "GuiObject", imageDefaults)
 class("ImageButton", "GuiButton", imageDefaults)
+class("VideoFrame", "GuiObject", { Video = "", Looped = false, Volume = 1, Playing = false, IsLoaded = true, TimePosition = 0,
+	TimeLength = 0, Resolution = Vector2.new(0, 0) }, {}, { "Ended", "Loaded", "Paused", "Played" })
 class("ViewportFrame", "GuiObject", { CurrentCamera = nil, Ambient = Color3.new(), LightColor = Color3.new(), ImageColor3 = Color3.new(1, 1, 1) })
 class("UIComponent", "Instance")
 class("UIBase", "UIComponent")
@@ -394,6 +396,9 @@ instMt.__index = function(self, k)
 	if k == "ClassName" then return d.class.Name end
 	if k == "Parent" then return d.parent end
 	if k == "Name" then return d.props.Name end
+	-- (M.imagesFail: ImageLabels never load; M.videoFails: VideoFrames never load)
+	if k == "IsLoaded" and M.imagesFail and d.class.Name == "ImageLabel" then return false end
+	if k == "IsLoaded" and M.videoFails and d.class.Name == "VideoFrame" then return false end
 	local v = d.props[k]
 	if v ~= nil then return v end
 	if k == "AbsolutePosition" or k == "AbsoluteSize" then return abs(self, k) end

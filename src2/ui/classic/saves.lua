@@ -20,8 +20,8 @@ local Saves = {}
 local CONFIRM = 3
 local GAP = 5
 local u = UDim2.new
-local GREEN, RED = Color3.fromRGB(0, 80, 0), Color3.fromRGB(100, 0, 0)
-local ON, OFF = Color3.fromRGB(0, 52, 129), Color3.fromRGB(50, 50, 50)
+-- (merge stats green / red and the merge options on / off: the Classic Look's Merge OK, Warning, Button and
+-- Toggle Off, painted here)
 
 local function lower(s) return string.lower(s) end
 
@@ -191,10 +191,22 @@ function Saves.build(classic)
 	local merge = b.Merge
 	local stats = b.MergeStats
 	local running = Enum.HumanoidStateType.Running.Value
+	local look = classic.look
+	local optionOn = {}
+	local function paintOption(btn)
+		btn.BackgroundColor3 = look:color(optionOn[btn] and "classicButton" or "classicToggleOff")
+	end
 	local function setOption(btn, on)
 		btn.Interactable = on
-		btn.BackgroundColor3 = on and ON or OFF
+		optionOn[btn] = on
+		paintOption(btn)
 	end
+	for _, name in ipairs({ "Merge.Options.Before", "Merge.Options.After" }) do look:own(b[name], "BackgroundColor3") end
+	look:own(stats, "BackgroundColor3")
+	classic.offs[#classic.offs + 1] = look:changed(function()
+		for btn in pairs(optionOn) do paintOption(btn) end
+		if E.merge then stats.BackgroundColor3 = look:color(E.mergeCanComplete == true and "classicMergeOk" or "classicWarning") end
+	end)
 	local function follow()
 		if E.merge and ui.live == "Classic" and not sv.off then
 			sv.off = E.pipe:add("PreRender", 250, "ui.classic.merge", function() sv.step() end, "ui")
@@ -214,7 +226,7 @@ function Saves.build(classic)
 		b["MergeStats.2"].Text = " Distance Required: " .. (req and tostring(Util.round(req, 1000)) or "-")
 		local can = E.mergeCanComplete == true
 		b["MergeStats.3"].Text = can and " Click here to complete merge" or " Click here to cancel merge"
-		stats.BackgroundColor3 = can and GREEN or RED
+		stats.BackgroundColor3 = look:color(can and "classicMergeOk" or "classicWarning")
 	end
 	-- a merge running now, started in the new interface too: Merge Stats show and follow it (the switch calls this)
 	function sv.showMerge()
