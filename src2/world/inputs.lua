@@ -69,6 +69,7 @@ end
 local MOUSE_BUTTON = { [Enum.UserInputType.MouseButton1] = true, [Enum.UserInputType.MouseButton2] = true,
 	[Enum.UserInputType.MouseButton3] = true }
 local function isMouseId(id) return id == ID_M1 or id == ID_M2 end
+local CAM_BUTTON = { [Enum.UserInputType.MouseButton2] = true, [Enum.UserInputType.MouseButton3] = true }
 
 function Inputs.idOf(inp)
 	local t = inp.UserInputType
@@ -82,7 +83,7 @@ local function newAxis() return { n = 0, st = 0, sr = 0, stt = 0, str = 0, lo = 
 local CAL_SPREAD = 150 -- px between the lowest and highest sample before the fit is used
 
 function Inputs.new(E)
-	local self = setmetatable({ E = E, held = {}, queue = {}, ownWindows = {}, mouseOverOwn = nil,
+	local self = setmetatable({ E = E, held = {}, camButtons = {}, queue = {}, ownWindows = {}, mouseOverOwn = nil,
 		controlIds = nil, controlKey = nil, lastVX = nil, lastVY = nil,
 		replay = { active = false, applied = 0, injected = {}, state = {}, lastMX = nil, lastMY = nil },
 		cal = { x = newAxis(), y = newAxis(), vx = 0, vy = 0, pend = nil },
@@ -161,6 +162,7 @@ end
 function Inputs:start()
 	local E, uis = self.E, self.uis
 	E.life:connect(uis.InputBegan, function(inp, proc)
+		if CAM_BUTTON[inp.UserInputType] then self.camButtons[inp.UserInputType] = true end
 		if proc and not E.settings:on("ignoreGameProcessed") then return end
 		local id = Inputs.idOf(inp)
 		if not id or self:getControlIds()[id] or E.typing:active(inp) then return end
@@ -170,6 +172,7 @@ function Inputs:start()
 		self:pushEvent(id)
 	end)
 	E.life:connect(uis.InputEnded, function(inp)
+		if CAM_BUTTON[inp.UserInputType] then self.camButtons[inp.UserInputType] = nil end
 		local id = Inputs.idOf(inp)
 		if id and self.held[id] then
 			self.held[id] = nil
@@ -185,6 +188,7 @@ function Inputs:start()
 		E.life:connect(uis.WindowFocusReleased, function()
 			for id in pairs(self.held) do self:pushEvent(-id) end
 			self.held = {}
+			self.camButtons = {}
 		end)
 	end)
 	E.life:own(function() self:replayEnd() end)
@@ -383,12 +387,19 @@ function Inputs:putMouseBack(tl, i)
 	self.back = nil
 	if not self.E.settings:on("pausedMouse") or i < 1 or i > tl:count() then return end
 	if tl:get("ShiftLock", i, 1) == 1 or tl:get("Zoom", i, 1) <= 0.55 then return end
+	if self:camButtonHeld() then return end -- (the cursor is locked: moving it would turn the camera)
 	local x, y = self:framePoint(tl, i)
 	if not x or not self.available.move or not self:windowActive() then return end
 	local mx, my, uvx, uvy = tl:getN("Mouse", i)
 	self.back = { x = x, y = y, mx = mx, my = my, uvx = uvx, uvy = uvy, left = 2, fixed = false }
 	self.replay.lastMX, self.replay.lastMY = nil, nil
 	self:moveRealMouse(x, y)
+end
+
+-- the right or middle mouse button is down (the ones the camera script turns the camera with); kept from the
+-- input events, whatever they were for, so asking costs no engine read
+function Inputs:camButtonHeld()
+	return next(self.camButtons) ~= nil
 end
 
 -- true when the camera had the mouse locked on this frame (shift lock, first person, right button held)
