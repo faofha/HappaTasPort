@@ -58,4 +58,53 @@ end
 eq(missing, 0, "every one in Classic's Settings tab")
 check(c.byPath["MainMenu.SettingsFrame.List"]:FindFirstChild("Section_Classic Look") ~= nil, "under a Classic Look title")
 
+section("Auto colours")
+local Palette = __T3("ui/classic/palette")
+local function rgb(col) return math.floor(col.R * 255 + 0.5) .. "," .. math.floor(col.G * 255 + 0.5) .. "," .. math.floor(col.B * 255 + 0.5) end
+eq(#Palette.LIST, 23, "23 colours")
+for i, p in ipairs(Palette.LIST) do
+	eq(p.key, ({ "classicWindow", "classicPanel", "classicButton", "classicShade", "classicScrollBar", "classicLight", "classicText",
+		"classicDarkText", "classicLabelText", "classicPlaceholder", "classicSectionTitle", "classicOutline", "classicFieldOutline",
+		"classicDivider", "classicLine", "classicLightOutline", "classicCancel", "classicWarning", "classicMergeOk", "classicToggleOff",
+		"classicIconButton", "classicSwitchOn", "classicSwitchOff" })[i], "palette order " .. i)
+	eq(rgb(Palette.derive(Palette.BASE, p.color)), rgb(p.color), p.key .. ": the default Main Colour gives V2's colour")
+end
+local function value(col) return select(3, col:ToHSV()) end
+local red = Color3.fromRGB(200, 0, 0)
+local w, b, o = Palette.derive(red, Palette.LIST[1].color), Palette.derive(red, Palette.LIST[3].color), Palette.derive(red, Palette.LIST[12].color)
+check(value(w) < value(b) and value(b) <= value(o), "red: window darker than buttons, outline lightest")
+check(w.R > w.G and w.R > w.B, "red: the window is red")
+-- (Review Focus: grey / white / black Main Colours)
+for _, m in ipairs({ Color3.new(1, 1, 1), Color3.new(0, 0, 0), Color3.fromRGB(128, 128, 128) }) do
+	local okAll = true
+	for _, p in ipairs(Palette.LIST) do
+		local col = Palette.derive(m, p.color)
+		for _, x in ipairs({ col.R, col.G, col.B }) do
+			if x ~= x or x < 0 or x > 1 then okAll = false end
+		end
+	end
+	check(okAll, "a real colour for every part with the Main Colour " .. rgb(m))
+end
+local white = Palette.derive(Color3.new(1, 1, 1), Palette.LIST[11].color)
+eq(rgb(white), "255,255,255", "a white Main Colour: the section title (lighter than buttons) is white")
+local paler = Palette.derive(Color3.fromRGB(255, 0, 0), Palette.LIST[12].color)
+check(paler.R > 0.99 and paler.G > 0.3 and paler.B > 0.3, "pure red: the outline (brighter than buttons) turns paler, not clipped (" .. rgb(paler) .. ")")
+local resolved = Palette.resolve(E.settings)
+eq(rgb(resolved.classicWindow), "0,35,73", "resolve: Auto at the default")
+E.settings:set("classicShade", "#123456")
+eq(rgb(Palette.resolve(E.settings).classicShade), "18,52,86", "resolve: a typed colour wins")
+E.settings:set("classicMainColor", "#C80000")
+eq(rgb(Palette.resolve(E.settings).classicText), "255,255,255", "neutral Auto stays V2's")
+check(Palette.resolve(E.settings).classicPanel.R > 0.1, "tinted Auto follows the Main Colour")
+E.settings:set("classicShade", "Auto")
+E.settings:set("classicMainColor", "#003481")
+eq(Palette.hex(Color3.fromRGB(0, 52, 129)), "#003481", "hex")
+eq(Palette.keyFor("ScrollBarImageColor3", Color3.new(0, 0, 0)), "classicScrollBar", "black scroll bar")
+eq(Palette.keyFor("BackgroundColor3", Color3.new(0, 0, 0)), "classicShade", "black background")
+eq(Palette.keyFor("TextColor3", Color3.new(0, 0, 0)), "classicLabelText", "black text")
+eq(Palette.keyFor("Color", Color3.fromRGB(0, 196, 248)), "classicDivider", "a divider stroke")
+eq(Palette.keyFor("BackgroundColor3", Color3.fromRGB(0, 196, 248)), "classicDivider", "a divider frame")
+eq(Palette.keyFor("BackgroundColor3", Color3.fromRGB(50, 50, 50)), nil, "runtime-only colours aren't registered")
+eq(Palette.keyFor("TextColor3", Color3.fromRGB(140, 205, 255)), nil, "(the section title is painted while running)")
+
 finish()
