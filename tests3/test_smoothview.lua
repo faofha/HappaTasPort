@@ -490,6 +490,87 @@ do
 	eq(st.pic[72].root, st.real[72].root, "and nothing is drawn elsewhere on the next frame")
 end
 
+section("shift lock: Roblox's turn to the camera is kept, the picture faces where the real body does")
+do
+	-- (found in a recording: with the picture up, the turn Roblox gives a shift locked character after each frame
+	-- is drawn went to the picture and was thrown away with it: the body turned only slowly, as without shift lock)
+	local UGS = UserSettings():GetService("UserGameSettings")
+	local was = UGS.RotationType
+	-- (shift lock as HappaTAS sees it without a mouse lock controller: the locked cursor's icon; it then keeps the
+	-- rotation type CameraRelative itself, as the game's camera script does)
+	M.mouseIcon = "rbxasset://textures/MouseLockedCursor.png"
+	M.shiftLockSnap = true
+	S.Set("Speed Hack Speed", 0.25)
+	local function yawOf(cf) local _, y = cf:ToOrientation(); return y end
+	local function wrap(a) return (a + math.pi) % (2 * math.pi) - math.pi end
+	-- the camera turns 3 degrees a frame from frame 40 to frame 100; the walk goes where the camera looks
+	local camYaw = {}
+	local function turning()
+		local ev = {}
+		for i = 1, 140 do
+			ev[i] = function()
+				local a = math.rad(3) * math.max(0, math.min(60, i - 40))
+				camYaw[i] = a
+				cam.CFrame = CFrame.new(0, 10, 20) * CFrame.fromOrientation(0, a, 0)
+				hum.MoveDirection = CFrame.fromOrientation(0, a, 0).LookVector
+			end
+		end
+		return ev
+	end
+	local tasOn2, on2 = record(even(140), turning())
+	E.settings:set("smoothSlowMotion", 0)
+	local tasOff2, off2 = record(even(140), turning())
+	E.settings:set("smoothSlowMotion", 1)
+	local shownElsewhere, worstOn, worstOff, worstPic = 0, 0, 0, 0
+	for i = 2, 140 do
+		if on2.pic[i].root.Position ~= on2.real[i - 1].root.Position then shownElsewhere = shownElsewhere + 1 end
+		-- (what the physics step starts from: the body faces the camera of this frame)
+		worstOn = math.max(worstOn, math.abs(wrap(yawOf(on2.real[i].root) - camYaw[i])))
+		worstOff = math.max(worstOff, math.abs(wrap(yawOf(off2.real[i].root) - camYaw[i])))
+	end
+	check(shownElsewhere > 60, "(the picture was off the real pose on " .. shownElsewhere .. " frames)")
+	check(worstOff < 1e-4, "(off: the body faces the camera on every frame, worst " .. math.deg(worstOff) .. " degrees)")
+	check(worstOn < 1e-4, "on: the body faces the camera on every frame too (worst " .. math.deg(worstOn) .. " degrees)")
+	-- the same run with the setting on and off
+	eq(#tasOn2, #tasOff2, "the same number of frames is recorded")
+	local worstPos, worstRot = 0, 0
+	for i = 1, math.min(#tasOn2, #tasOff2) do
+		local a, b = tasOn2[i].Cframe, tasOff2[i].Cframe
+		for k = 1, 3 do worstPos = math.max(worstPos, math.abs(a[k] - b[k])) end
+		for k = 4, 12 do worstRot = math.max(worstRot, math.abs(a[k] - b[k])) end
+	end
+	check(worstPos < 1e-6 and worstRot < 1e-6, "the same run is recorded with the setting on and off (position " .. worstPos .. ", rotation " .. worstRot .. ")")
+	-- the picture: wherever it is drawn, it faces where the real body faced when the frame was drawn (the pose the
+	-- frame before ended on: turned to that frame's camera), not where older steps left it
+	local behind = 0
+	for i = 3, 140 do
+		worstPic = math.max(worstPic, math.abs(wrap(yawOf(on2.pic[i].root) - yawOf(on2.hb[i - 1].root))))
+		behind = math.max(behind, math.abs(wrap(yawOf(on2.pic[i].root) - camYaw[i - 1])))
+	end
+	check(worstPic < 1e-4, "the picture's body faces where the real one does (worst " .. math.deg(worstPic) .. " degrees)")
+	check(behind < math.rad(6), "never more than a frame or two of turning behind the camera (" .. math.deg(behind) .. " degrees)")
+	-- a tilted character keeps its tilt through the turn
+	do
+		local ev = turning()
+		local base = ev[70]
+		local tilted
+		ev[70] = function()
+			base()
+			local _, y = hrp.CFrame:ToOrientation()
+			hrp.CFrame = CFrame.new(hrp.Position) * CFrame.fromOrientation(math.rad(20), y, math.rad(10))
+			tilted = true
+		end
+		local _, t2 = record(even(80), ev)
+		local x, y, z = t2.eval[70].root:ToOrientation()
+		check(tilted and math.abs(x - math.rad(20)) < 1e-4 and math.abs(z - math.rad(10)) < 1e-4, "a tilt is kept when the turn is carried over (" .. math.deg(x) .. ", " .. math.deg(z) .. ")")
+		check(math.abs(wrap(y - camYaw[70])) < 1e-4, "and it faces the camera")
+	end
+	M.shiftLockSnap = nil
+	M.mouseIcon = nil
+	steps(3)
+	UGS.RotationType = was
+end
+
 section("above 1x and at 1x nothing is drawn elsewhere")
 do
 	S.Set("Speed Hack Speed", 2)

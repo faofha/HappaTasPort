@@ -471,6 +471,22 @@ do
 	-- in any case before the next picture is worked out.) A part somebody else moved while its picture was up (a
 	-- teleport) stays where they put it, and a move too long for one step isn't glided over: the picture is on the
 	-- new place at once.
+	-- Shift lock: Roblox turns a shift locked character to the camera after each frame is drawn, before
+	-- PreAnimation, outside the physics step (live: with UserGameSettings.RotationType CameraRelative the Y angle of
+	-- the root's orientation becomes the camera's there, a tilt - its X and Z angles - is kept). That turn lands on
+	-- the picture. Put back with the picture it was lost on every frame, and the body followed the camera only by
+	-- the slow turn of a character that isn't shift locked (found in a recording: up to 95 degrees behind; live,
+	-- walking at 0.1x: off the camera on 183 of 216 frames, none with the smooth view off). So a part turned while
+	-- its picture was up keeps the turn on its real pose (the Y angle when only that changed, else the whole
+	-- rotation), and while the rotation type is CameraRelative the root's picture has the real pose's Y angle: the
+	-- picture's body faces the camera on every frame as it does at 1x, and a turn of the picture is exactly the
+	-- turn the real pose would have got.
+	local UserGameSettings = nil
+	pcall(function() UserGameSettings = UserSettings():GetService("UserGameSettings") end)
+	local TURNED = 1e-4 -- (the look or up vector moved by more than this: the part was turned)
+	local function turned(a, b)
+		return (a.LookVector - b.LookVector).Magnitude > TURNED or (a.UpVector - b.UpVector).Magnitude > TURNED
+	end
 	local HIST = 4 -- (real poses kept: the picture's time is never more than 3 steps back)
 	local RING = 16 -- (step times the lag is taken from)
 	-- rp / ht: the root's real poses and their game times, a ring (head = the newest, hn = how many count);
@@ -524,10 +540,24 @@ do
 		local shown = SV.shown
 		for i = 1, n do
 			local e = shown[i]
-			local p, real, at = e[1], e[2], e[3]
+			local p, real, pic = e[1], e[2], e[3]
 			e[1], e[2], e[3] = nil, nil, nil
 			pcall(function()
-				if p.Parent and (p.Position - at).Magnitude <= SAME then p.CFrame = real end
+				if not p.Parent then return end
+				local cur = p.CFrame
+				if (cur.Position - pic.Position).Magnitude > SAME then return end -- (moved by somebody else: theirs)
+				if turned(cur, pic) then
+					-- (turned while its picture was up: the real pose gets the turn, see "Shift lock" above)
+					local cx, cy, cz = cur:ToOrientation()
+					local px, _, pz = pic:ToOrientation()
+					if math.abs(cx - px) < TURNED and math.abs(cz - pz) < TURNED then
+						local rx, _, rz = real:ToOrientation()
+						real = CFrame.new(real.Position) * CFrame.fromOrientation(rx, cy, rz)
+					else
+						real = CFrame.new(real.Position) * cur.Rotation
+					end
+				end
+				p.CFrame = real
 			end)
 		end
 		if c then
@@ -641,6 +671,12 @@ do
 		SV.a, SV.b, SV.f, SV.go = a, b, f, true
 		local pa, pb = rp[a], rp[b]
 		local pose = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+		-- (shift locked: the body faces where the real one does, see "Shift lock" above)
+		if UserGameSettings and UserGameSettings.RotationType == Enum.RotationType.CameraRelative then
+			local x, _, z = pose:ToOrientation()
+			local _, y = now:ToOrientation()
+			pose = CFrame.new(pose.Position) * CFrame.fromOrientation(x, y, z)
+		end
 		if not off(pose, now) then return end -- (the character stands where its picture is: loose parts may not)
 		SV.pose = pose
 		local d = pose.Position - now.Position
@@ -666,7 +702,7 @@ do
 			n = n + 1
 			local e = shown[n]
 			if not e then e = {}; shown[n] = e end
-			e[1], e[2], e[3] = root, SV.rp[head], pose.Position
+			e[1], e[2], e[3] = root, SV.rp[head], pose
 			SV.nShown = n
 			root.CFrame = pose
 		end
@@ -691,7 +727,7 @@ do
 					n = n + 1
 					local e = shown[n]
 					if not e then e = {}; shown[n] = e end
-					e[1], e[2], e[3] = p, now, to.Position
+					e[1], e[2], e[3] = p, now, to
 					SV.nShown = n
 					p.CFrame = to
 				end
