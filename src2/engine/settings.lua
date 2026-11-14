@@ -66,9 +66,6 @@ Settings.SCHEMA = {
 	row("recordDeath", "Record Death & Respawn", "Create", 1, { desc = "Keeps recording through death and respawn" }),
 	row("recordTools", "Record Tool Actions", "Create", 1, { desc = "Records equipping and using tools" }),
 	row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
-	-- (no V2 name: the torso-edge glide, world/glide.lua)
-	row("glideManipulation", nil, "Glide", 0, { desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
-	row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, desc = "0 = never glides, 100 = always glides" }),
 
 	row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
@@ -78,6 +75,10 @@ Settings.SCHEMA = {
 		desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
 	-- (no V2 name: V2's slow motion had no in-between picture)
 	row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
+	-- (no V2 name: the torso-edge glide, world/glide.lua)
+	-- (classicToo: no V2 name, but Classic's Settings tab shows it as well)
+	row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
+	row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, classicToo = true, desc = "0 = never glides, 100 = always glides" }),
 
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
@@ -96,9 +97,10 @@ Settings.SCHEMA = {
 	row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
 	row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
 
-	-- (a switch in both interfaces: off = "New", on = "Classic"; the saved value stays the name)
-	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" }, switch = { "New", "Classic" },
-		desc = "On: V2's classic interface. Off: HappaTAS 3's" }),
+	-- (a choice of two: a pill in the New interface's Settings window, in Classic a box that goes to the next
+	-- choice when it is clicked)
+	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
+		desc = "New: HappaTAS 3's interface. Classic: V2's" }),
 	row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 	row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 	row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -149,7 +151,7 @@ local NAMES = {
 	textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-	interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
+	interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 	classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
