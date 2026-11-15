@@ -212,7 +212,8 @@ there stay on your own computer and are never pushed to GitHub.
 
 `.tas` files start with `HTAS` and a version byte. Version 6 (HappaTAS 3) has a small uncompressed header
 (frame count, length, created / saved time, script version, PlaceId, kit and speed hack use) so the library
-never unpacks a whole file, then the frames column by column, LZ4 compressed: numbers are stored as changes of
+never unpacks a whole file, then the frames column by column, deflate compressed (pure Luau: about a
+third smaller than LZ4; LZ4 files from older versions still load): numbers are stored as changes of
 their 1/1000 value (times 1/1000000), an unchanged value in one byte. A 10-minute run at 240 FPS is about 80 %
 of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor, v4: client object clocks).
 

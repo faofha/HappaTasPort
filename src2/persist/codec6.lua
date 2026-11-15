@@ -1,10 +1,11 @@
 -- ================================================================================================
 --  CODEC6  (HappaTAS 3 persist): file format v6, the timeline's columns written directly.
 --
---  "HTAS"  u8 6  u8 flags (bit 0: the body is LZ4)
+--  "HTAS"  u8 6  u8 packing (0: the body as it is, 1: LZ4, 2: deflate, persist/deflate: what is saved now,
+--      about a third smaller than LZ4; LZ4 and unpacked files still load)
 --  varint headerLen, header (Value table: frames, length, created, saved, script, place, kit,
 --      speedHack, name): readable without unpacking the body (the library only reads this)
---  varint rawLen, body (an LZ4 block of rawLen bytes, or the rawLen bytes as they are)
+--  varint rawLen, body (rawLen bytes, packed as the packing byte says)
 --  body = varint columnCount, per column: str name, u8 kind (1 f64, 2 u8, 3 list), u8 width,
 --      varint byteLen, payload; then Value meta (the timeline's meta)
 --    f64: per component, varint length + its values, lossless: a recorded value is rounded to 1/1000
@@ -21,6 +22,7 @@ local CONFIG = import("config")
 local Bytes = import("persist/bytes")
 local Value = import("persist/value")
 local Lz4 = import("persist/lz4")
+local Deflate = import("persist/deflate")
 
 local Codec6 = {}
 
@@ -223,7 +225,16 @@ function Codec6.encode(tl, header, progress)
 	end
 	Value.write(body, tl.meta or {})
 	local raw = body:tostring()
-	local packed = Lz4.compress(raw)
+	-- (deflate, pure Luau; LZ4 only if it failed; as it is when packing doesn't make it smaller)
+	local packed, packing = nil, 0
+	local ok, c = pcall(Deflate.compress, raw)
+	if ok and type(c) == "string" then
+		packed, packing = c, 2
+	else
+		packed = Lz4.compress(raw)
+		if packed then packing = 1 end
+	end
+	if packed and #packed >= #raw then packed, packing = nil, 0 end
 	local hdr = table.clone(header or {})
 	hdr.frames = n
 	local hw = Bytes.writer()
@@ -231,7 +242,7 @@ function Codec6.encode(tl, header, progress)
 	local out = Bytes.writer(#(packed or raw) + hw:len() + 32)
 	out:raw("HTAS")
 	out:u8(VERSION)
-	out:u8(packed and 1 or 0)
+	out:u8(packing)
 	out:varint(hw:len())
 	out:raw(hw:tostring())
 	out:varint(#raw)
@@ -274,11 +285,15 @@ function Codec6.decode(data, tl, progress)
 	if rawLen > CONFIG.MaxFileBytes then error("the file is too big", 0) end
 	local rest = string.sub(data, r:pos())
 	local raw
-	if flags % 2 == 1 then
+	if flags == 2 then
+		raw = Deflate.decompress(rest, rawLen)
+	elseif flags == 1 then
 		raw = Lz4.decompress(rest, rawLen)
-	else
+	elseif flags == 0 then
 		if #rest ~= rawLen then damaged("size") end
 		raw = rest
+	else
+		damaged("packing " .. tostring(flags))
 	end
 	local br = Bytes.reader(raw)
 	local count = br:varint()
