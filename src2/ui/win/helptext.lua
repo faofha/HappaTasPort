@@ -163,7 +163,8 @@ local TOPICS = {
 		.. "Normally that is luck (frame rate, the part's exact position). With Glide Manipulation on, Glide Chance "
 		.. "decides each part you hug: 0 % never glides (the torso is kept shallower, a glide that happens anyway is "
 		.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
-		.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
+		.. "glide), in between is one roll per part. After a glide, sinking into the wall again (falling fast again, "
+		.. "or off the wall and back) glides again. HappaTAS moves you by at most a few tenths of a stud. Works in "
 		.. "Idle and while recording, for R6 characters." },
 	{ "classiclook", "Classic Look",
 		"The Classic interface's own colours and background (Classic's Settings tab, Classic Look; the New interface "

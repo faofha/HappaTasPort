@@ -111,8 +111,9 @@ chat or a text box.
   and the parts' exact positions, so it is normally luck. Glide Chance 0 % never glides (the torso is kept at most
   0.05 deep, a glide that happens anyway is undone), 100 % always glides (the torso is put 0.15 deep; when Roblox
   doesn't glide, HappaTAS makes the glide: the fall cut to 9 %, thrown outward at 17 % of the fall speed,
-  tilted), in between is one roll per part hugged. Exact part shapes (blocks, cylinders, wedges, balls). Idle and
-  recording, R6 only.
+  tilted), in between is one roll per part hugged. After a glide, sinking into the wall again (the fall fast
+  again, or off the wall and back) is a new glide or roll, in the same hug too. Exact part shapes (blocks,
+  cylinders, wedges, balls). Idle and recording, R6 only.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is

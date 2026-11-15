@@ -183,6 +183,56 @@ do
 	eq(GL.last and GL.last.filled, false, "not filled in")
 end
 
+section("100 %: a new glide every time the torso sinks in again, in the same hug")
+setChance(100)
+do
+	-- (a glide stops the fall; falling fast into the same wall again - still touching it, well within one hug -
+	-- glides again. It used to glide once per hug: only a pause, which ended the hug, gave another)
+	local ang = math.rad(30)
+	local radial = Vector3.new(math.cos(ang), 0, math.sin(ang))
+	local function pressIn(d)
+		local look = CFrame.Angles(0, math.rad(12), 0):VectorToWorldSpace(-radial)
+		local y = hrp.Position.Y
+		local lo, hi = 8, 10
+		for _ = 1, 40 do
+			local mid = (lo + hi) / 2
+			local p = radial * mid + Vector3.new(0, y, 0)
+			hrp.CFrame = CFrame.lookAt(p, p + look)
+			if depthCyl() > d then lo = mid else hi = mid end
+		end
+		hrp.AssemblyLinearVelocity = Vector3.new(0, -100, 0)
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	end
+	M.resetRobloxController()
+	hrp.CFrame = CFrame.new(radial * 9 + Vector3.new(0, 50, 0))
+	local glides = 0
+	for k = 1, 3 do
+		pressIn(0.15)
+		M.step(H)
+		if hrp.AssemblyLinearVelocity.Y > -20 then glides = glides + 1 end
+		-- (the stopped fall goes on for a few steps before the next press)
+		for _ = 1, 3 do M.step(H) end
+	end
+	eq(glides, 3, "three presses into the wall, three glides")
+	-- (a glide that leaves the fall fast - live -125 -> -112 - but throws the character off the wall: off the wall
+	-- and back in is a new glide too)
+	pressIn(0.15)
+	M.step(H)
+	local first = hrp.AssemblyLinearVelocity.Y > -20
+	local p = hrp.Position
+	hrp.CFrame = CFrame.new(radial * 12 + Vector3.new(0, p.Y, 0)) -- (clear of the wall)
+	hrp.AssemblyLinearVelocity = Vector3.new(0, -100, 0)
+	hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	M.step(H)
+	pressIn(0.15)
+	M.step(H)
+	check(first and hrp.AssemblyLinearVelocity.Y > -20, "off the wall and back in while still falling fast: another glide")
+	hrp.CFrame = CFrame.new(60, 50, 60)
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	M.steps(30, 1 / 60)
+end
+
 section("50 %: a roll per part")
 setChance(50)
 do
