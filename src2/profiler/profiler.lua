@@ -154,18 +154,20 @@ local function profilerModule()
 			if ok and typeof(v) == "Vector2" then return v end
 			return nil
 		end
-		-- keep the exact 6 px grid: Roboto Mono advances 0.6 em, so the em has to be 10 px
-		local v = measure(string.rep("M", 20), 10)
-		if v and v.X > 60 and v.X < 240 then TEXT_SIZE = 10 * CW / (v.X / 20) end
+		-- keep the exact 6 px grid: Roboto Mono advances 0.6 em, so the em has to be 10 px. Measured at
+		-- size 100: Roblox rounds each character's width to whole pixels (live: 5 px at size 10, 46 at
+		-- 100, so 12 instead of 13.04, letters 1 px short: the top row of d / F / H was missing, "Moce")
+		local v = measure(string.rep("M", 20), 100)
+		if v and v.X > 600 and v.X < 2400 then TEXT_SIZE = 100 * CW / (v.X / 20) end
 		-- TextLabel.TextSize is the height of one text line. When that line holds the font's whole
-		-- ascender..descender (Roboto Mono: 2146 / 555 per 2048 em) the baseline is 2146 / 2048 em
-		-- under its top; when the line is one em tall, the ascender..descender box is centred on it.
+		-- ascender..descender (Roboto Mono: 2146 / 555 per 2048 em) the baseline is 2146 / 2701 of the
+		-- line under its top; when the line is one em tall, the ascender..descender box is centred on it.
 		-- Roblox's MicroProfiler has its baseline 7.5 px under the row top (capitals on rows 0-7).
 		local em = CW / 0.6
 		local line = v and measure("M", TEXT_SIZE)
 		local lineH = line and line.Y or TEXT_SIZE
 		local base
-		if lineH > em * 1.15 then base = em * 2146 / 2048 else base = em * (2048 + 2146 - 555) / 4096 end
+		if lineH > em * 1.15 then base = lineH * 2146 / (2146 + 555) else base = em * (2048 + 2146 - 555) / 4096 end
 		TXT.auto = floor(7.5 - base + 0.5)
 		TXT.dy = TXT.auto
 		log(sfmt("MicroProfiler text: TextSize %.2f, line %.2f px, baseline %.2f px, moved %d px", TEXT_SIZE, lineH, base, TXT.auto))
@@ -1170,6 +1172,11 @@ local function profilerModule()
 	end
 
 	local function graphVisible() return cfg.mode == "Frame" or cfg.mode == "Detailed" end
+	-- the detailed view is up: Detailed mode, or Frame mode while paused (Roblox shows the paused frames
+	-- in detail under the graph, seen live 2026-11-15)
+	local function detailedNow()
+		return (cfg.mode == "Detailed" or (cfg.mode == "Frame" and paused)) and not cfg.custom
+	end
 	local function graphW() return W - CLOSE_W end
 	local function liveSeq(k)
 		local i = hi(k)
@@ -2495,7 +2502,7 @@ local function profilerModule()
 	-- fills the screen)
 	local function flamePlace()
 		if not U.built then return end
-		local y = (cfg.mode == "Detailed" and not cfg.custom) and floor(H - 3 * BAR_H) or DET_Y
+		local y = detailedNow() and floor(H - 3 * BAR_H) or DET_Y
 		U.flm.y = y
 		if U.flm.py ~= y then
 			U.flm.py = y
@@ -2509,7 +2516,7 @@ local function profilerModule()
 	local function applyMode()
 		if not U.built then return end
 		local gv = graphVisible()
-		local dv = cfg.mode == "Detailed" and gv and not cfg.custom
+		local dv = detailedNow()
 		show(U.graph, gv)
 		show(U.close, gv)
 		show(U.cGraph, gv)
@@ -2549,6 +2556,10 @@ local function profilerModule()
 	end
 	function P.TogglePause()
 		paused = not paused
+		if cfg.mode == "Frame" then
+			applyMode()
+			flamePlace()
+		end
 	end
 	function P.IsPaused() return paused end
 
@@ -2614,7 +2625,7 @@ local function profilerModule()
 		if not P.active then return end -- a menu line closed the profiler (Mode > Off)
 		local gv = graphVisible()
 		local overTip = false
-		local detailed = cfg.mode == "Detailed" and gv and not cfg.custom
+		local detailed = detailedNow()
 		local inDet = detailed and activeMenu == nil and mx >= 0 and mx < W and my >= DET_Y and my < H
 		-- the graph strip and the close box under the mouse (no menu open)
 		local overGraph = gv and activeMenu == nil and mx >= 0 and mx < W and my >= MENU_H and my < MENU_H + HIST_H

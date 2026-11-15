@@ -1,0 +1,2 @@
+VARIANT="em"
+VARIANT="live"; local g0 = M.Classes.TextService.Methods.GetTextSize; M.Classes.TextService.Methods.GetTextSize = function(s, text, size, font, frame) if font == Enum.Font.RobotoMono then return Vector2.new(#tostring(text) * math.floor(size * 0.46 + 0.5), size) end return g0(s, text, size, font, frame) end
