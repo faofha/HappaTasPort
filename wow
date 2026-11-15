@@ -2308,11 +2308,516 @@ __mods["persist/lz4"] = function(import)
 	end
 	return Lz4
 end
+__mods["persist/deflate"] = function(import)
+	local Deflate = {}
+	local band, bor, bxor, lshift, rshift = bit32.band, bit32.bor, bit32.bxor, bit32.lshift, bit32.rshift
+	local readu8, writeu8 = buffer.readu8, buffer.writeu8
+	local readi32, writei32 = buffer.readi32, buffer.writei32
+	local MAX_CHAIN = 24
+	local NICE = 64
+	local BLOCK = 32768
+	local YIELD = 65536
+	local LEN_BASE = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 }
+	local LEN_EXTRA = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 }
+	local DIST_BASE = { 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073,
+		4097, 6145, 8193, 12289, 16385, 24577 }
+	local DIST_EXTRA = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 }
+	local CL_ORDER = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 }
+	local function damaged(what) error("file is damaged: " .. what, 0) end
+	local function pace()
+		if coroutine.isyieldable() then task.wait() end
+	end
+	local lenIdx, distIdx = nil, nil
+	local function lookups()
+		if lenIdx then return end
+		lenIdx, distIdx = {}, buffer.create(32769)
+		for i = 1, 29 do
+			local hi = (i < 29) and (LEN_BASE[i + 1] - 1) or 258
+			for l = LEN_BASE[i], hi do lenIdx[l] = i end
+		end
+		for i = 1, 30 do
+			local hi = (i < 30) and (DIST_BASE[i + 1] - 1) or 32768
+			for d = DIST_BASE[i], hi do writeu8(distIdx, d, i) end
+		end
+	end
+	local function reverse(c, l)
+		local r = 0
+		for _ = 1, l do
+			r = r * 2 + c % 2
+			c = c // 2
+		end
+		return r
+	end
+	local function buildLengths(freq, nsym, limit)
+		local lens = table.create(nsym, 0)
+		local syms = {}
+		for s = 1, nsym do
+			if freq[s] > 0 then syms[#syms + 1] = s end
+		end
+		local m = #syms
+		if m == 0 then return lens end
+		if m == 1 then
+			lens[syms[1]] = 1
+			lens[(syms[1] == 1) and 2 or 1] = 1
+			return lens
+		end
+		table.sort(syms, function(a, b)
+			if freq[a] ~= freq[b] then return freq[a] < freq[b] end
+			return a < b
+		end)
+		local wt, parent = {}, {}
+		for i = 1, m do wt[i] = freq[syms[i]] end
+		local li, ii, nextNode = 1, m + 1, m + 1
+		local function pick()
+			if li <= m and (ii >= nextNode or wt[li] <= wt[ii]) then
+				li = li + 1
+				return li - 1
+			end
+			ii = ii + 1
+			return ii - 1
+		end
+		for _ = 1, m - 1 do
+			local a = pick()
+			local b = pick()
+			wt[nextNode] = wt[a] + wt[b]
+			parent[a], parent[b] = nextNode, nextNode
+			nextNode = nextNode + 1
+		end
+		local root = nextNode - 1
+		local depth = { [root] = 0 }
+		for k = root - 1, m + 1, -1 do depth[k] = depth[parent[k]] + 1 end
+		local maxl = 0
+		for i = 1, m do
+			local d = depth[parent[i]] + 1
+			lens[syms[i]] = d
+			if d > maxl then maxl = d end
+		end
+		if maxl <= limit then return lens end
+		local cap = 2 ^ limit
+		local K = 0
+		for i = 1, m do
+			local s = syms[i]
+			if lens[s] > limit then lens[s] = limit end
+			K = K + 2 ^ (limit - lens[s])
+		end
+		while K > cap do
+			local best = nil
+			for i = 1, m do
+				local s = syms[i]
+				if lens[s] < limit and (best == nil or lens[s] > lens[best]) then best = s end
+			end
+			K = K - 2 ^ (limit - lens[best] - 1)
+			lens[best] = lens[best] + 1
+		end
+		while K < cap do
+			local best = nil
+			for i = m, 1, -1 do
+				local s = syms[i]
+				if lens[s] > 1 and K + 2 ^ (limit - lens[s]) <= cap and (best == nil or lens[s] > lens[best]) then best = s end
+			end
+			if not best then break end
+			K = K + 2 ^ (limit - lens[best])
+			lens[best] = lens[best] - 1
+		end
+		return lens
+	end
+	local function buildCodes(lens, nsym)
+		local count = table.create(16, 0)
+		for s = 1, nsym do
+			local l = lens[s]
+			if l > 0 then count[l] = count[l] + 1 end
+		end
+		local nextCode, code, prev = {}, 0, 0
+		for bits = 1, 15 do
+			code = (code + prev) * 2
+			nextCode[bits] = code
+			prev = count[bits]
+		end
+		local out = table.create(nsym, 0)
+		for s = 1, nsym do
+			local l = lens[s]
+			if l > 0 then
+				out[s] = reverse(nextCode[l], l)
+				nextCode[l] = nextCode[l] + 1
+			end
+		end
+		return out
+	end
+	function Deflate.compress(s)
+		lookups()
+		local n = #s
+		local b = buffer.fromstring(s)
+		local cap = math.max(64, n // 2)
+		local ob, on, acc, nb = buffer.create(cap), 0, 0, 0
+		local function putbits(v, k)
+			acc = bor(acc, lshift(v, nb))
+			nb = nb + k
+			while nb >= 8 do
+				if on >= cap then
+					cap = cap * 2
+					local nb2 = buffer.create(cap)
+					buffer.copy(nb2, 0, ob, 0, on)
+					ob = nb2
+				end
+				writeu8(ob, on, band(acc, 255))
+				on = on + 1
+				acc = rshift(acc, 8)
+				nb = nb - 8
+			end
+		end
+		local tl, tv = table.create(BLOCK, 0), table.create(BLOCK, 0)
+		local ntok = 0
+		local function writeBlock(final)
+			local lf, df = table.create(286, 0), table.create(30, 0)
+			for i = 1, ntok do
+				local L = tl[i]
+				if L == 0 then
+					local x = tv[i] + 1
+					lf[x] = lf[x] + 1
+				else
+					local x = 257 + lenIdx[L]
+					lf[x] = lf[x] + 1
+					local d = readu8(distIdx, tv[i])
+					df[d] = df[d] + 1
+				end
+			end
+			lf[257] = 1
+			local llen = buildLengths(lf, 286, 15)
+			local dlen = buildLengths(df, 30, 15)
+			local nlit, ndist = 257, 1
+			for s = 286, 258, -1 do
+				if llen[s] > 0 then
+					nlit = s
+					break
+				end
+			end
+			local anyDist = false
+			for s = 30, 1, -1 do
+				if dlen[s] > 0 then
+					ndist = s
+					anyDist = true
+					break
+				end
+			end
+			if not anyDist then
+				dlen[1], dlen[2], ndist = 1, 1, 2
+			end
+			local all = {}
+			for s = 1, nlit do all[#all + 1] = llen[s] end
+			for s = 1, ndist do all[#all + 1] = dlen[s] end
+			local seq, sx = {}, {}
+			local function emit(sym, extra)
+				seq[#seq + 1] = sym
+				sx[#sx + 1] = extra or 0
+			end
+			local i, total = 1, #all
+			while i <= total do
+				local l = all[i]
+				local run = 1
+				while i + run <= total and all[i + run] == l do run = run + 1 end
+				local r = run
+				if l == 0 then
+					while r >= 11 do
+						local k = math.min(r, 138)
+						emit(18, k - 11)
+						r = r - k
+					end
+					if r >= 3 then
+						emit(17, r - 3)
+						r = 0
+					end
+					for _ = 1, r do emit(0) end
+				else
+					emit(l)
+					r = r - 1
+					while r >= 3 do
+						local k = math.min(r, 6)
+						emit(16, k - 3)
+						r = r - k
+					end
+					for _ = 1, r do emit(l) end
+				end
+				i = i + run
+			end
+			local cf = table.create(19, 0)
+			for k = 1, #seq do cf[seq[k] + 1] = cf[seq[k] + 1] + 1 end
+			local clen = buildLengths(cf, 19, 7)
+			local ccode = buildCodes(clen, 19)
+			local nclen = 4
+			for k = 19, 4, -1 do
+				if clen[CL_ORDER[k] + 1] > 0 then
+					nclen = k
+					break
+				end
+			end
+			putbits(final and 1 or 0, 1)
+			putbits(2, 2)
+			putbits(nlit - 257, 5)
+			putbits(ndist - 1, 5)
+			putbits(nclen - 4, 4)
+			for k = 1, nclen do putbits(clen[CL_ORDER[k] + 1], 3) end
+			for k = 1, #seq do
+				local sym = seq[k] + 1
+				putbits(ccode[sym], clen[sym])
+				if sym == 17 then
+					putbits(sx[k], 2)
+				elseif sym == 18 then
+					putbits(sx[k], 3)
+				elseif sym == 19 then
+					putbits(sx[k], 7)
+				end
+			end
+			local lcode, dcode = buildCodes(llen, 286), buildCodes(dlen, 30)
+			for t = 1, ntok do
+				local L = tl[t]
+				if L == 0 then
+					local x = tv[t] + 1
+					putbits(lcode[x], llen[x])
+				else
+					local li = lenIdx[L]
+					local x = 257 + li
+					putbits(lcode[x], llen[x])
+					local e = LEN_EXTRA[li]
+					if e > 0 then putbits(L - LEN_BASE[li], e) end
+					local d = tv[t]
+					local di = readu8(distIdx, d)
+					putbits(dcode[di], dlen[di])
+					e = DIST_EXTRA[di]
+					if e > 0 then putbits(d - DIST_BASE[di], e) end
+				end
+			end
+			putbits(lcode[257], llen[257])
+			ntok = 0
+		end
+		local head, prev = buffer.create(65536 * 4), buffer.create(32768 * 4)
+		local function insert(p)
+			local k = readu8(b, p) * 65536 + readu8(b, p + 1) * 256 + readu8(b, p + 2)
+			local h = band(k * 40503 // 64, 0xFFFF) * 4
+			writei32(prev, band(p, 32767) * 4, readi32(head, h))
+			writei32(head, h, p + 1)
+		end
+		local pos, nextYield = 0, YIELD
+		while pos < n do
+			local bestLen, bestDist = 0, 0
+			if pos + 2 < n then
+				local k = readu8(b, pos) * 65536 + readu8(b, pos + 1) * 256 + readu8(b, pos + 2)
+				local h = band(k * 40503 // 64, 0xFFFF) * 4
+				local cand = readi32(head, h)
+				writei32(prev, band(pos, 32767) * 4, cand)
+				writei32(head, h, pos + 1)
+				local maxLen = n - pos
+				if maxLen > 258 then maxLen = 258 end
+				local chain = MAX_CHAIN
+				while cand > 0 and chain > 0 do
+					local c = cand - 1
+					local dist = pos - c
+					if dist > 32768 then break end
+					if readu8(b, c + bestLen) == readu8(b, pos + bestLen) then
+						local l = 0
+						while l < maxLen and readu8(b, c + l) == readu8(b, pos + l) do l = l + 1 end
+						if l > bestLen then
+							bestLen, bestDist = l, dist
+							if l >= NICE or l >= maxLen then break end
+						end
+					end
+					cand = readi32(prev, band(c, 32767) * 4)
+					chain = chain - 1
+				end
+			end
+			ntok = ntok + 1
+			if bestLen >= 3 then
+				tl[ntok], tv[ntok] = bestLen, bestDist
+				local stop = pos + bestLen
+				local last = math.min(stop, n - 2) - 1
+				for p = pos + 1, last do insert(p) end
+				pos = stop
+			else
+				tl[ntok], tv[ntok] = 0, readu8(b, pos)
+				pos = pos + 1
+			end
+			if ntok >= BLOCK then writeBlock(false) end
+			if pos >= nextYield then
+				nextYield = pos + YIELD
+				pace()
+			end
+		end
+		writeBlock(true)
+		if nb > 0 then putbits(0, 8 - nb) end
+		return buffer.readstring(ob, 0, on)
+	end
+	local function decodeTable(lens, nsym)
+		local maxl = 0
+		for s = 1, nsym do
+			if lens[s] > maxl then maxl = lens[s] end
+		end
+		if maxl == 0 then return nil, 0 end
+		local codes = buildCodes(lens, nsym)
+		local size = 2 ^ maxl
+		local tbl = table.create(size, 0)
+		for s = 1, nsym do
+			local l = lens[s]
+			if l > 0 then
+				local entry = (s - 1) * 16 + l
+				for i = codes[s], size - 1, 2 ^ l do tbl[i + 1] = entry end
+			end
+		end
+		return tbl, maxl
+	end
+	local fixedL, fixedLMax, fixedD, fixedDMax = nil, 0, nil, 0
+	function Deflate.decompress(s, size)
+		local src = buffer.fromstring(s)
+		local n = #s
+		local out = buffer.create(size)
+		local on, pos, acc, nb = 0, 0, 0, 0
+		local nextYield = YIELD
+		local function bits(k)
+			while nb < k do
+				if pos >= n then damaged("deflate stream ends early") end
+				acc = bor(acc, lshift(readu8(src, pos), nb))
+				pos = pos + 1
+				nb = nb + 8
+			end
+			local v = band(acc, lshift(1, k) - 1)
+			acc = rshift(acc, k)
+			nb = nb - k
+			return v
+		end
+		local function decodeSym(tbl, maxl)
+			while nb < maxl and pos < n do
+				acc = bor(acc, lshift(readu8(src, pos), nb))
+				pos = pos + 1
+				nb = nb + 8
+			end
+			local e = tbl[band(acc, lshift(1, maxl) - 1) + 1]
+			local l = e % 16
+			if l == 0 or l > nb then damaged("bad deflate code") end
+			acc = rshift(acc, l)
+			nb = nb - l
+			return e // 16
+		end
+		repeat
+			local final = bits(1)
+			local typ = bits(2)
+			if typ == 0 then
+				local drop = nb % 8
+				acc = rshift(acc, drop)
+				nb = nb - drop
+				local len = bits(16)
+				local nlen = bits(16)
+				if band(bxor(len, nlen), 0xFFFF) ~= 0xFFFF then damaged("stored block length") end
+				if on + len > size then damaged("output too big") end
+				while len > 0 and nb >= 8 do
+					writeu8(out, on, bits(8))
+					on = on + 1
+					len = len - 1
+				end
+				if pos + len > n then damaged("deflate stream ends early") end
+				buffer.copy(out, on, src, pos, len)
+				on = on + len
+				pos = pos + len
+			elseif typ == 1 or typ == 2 then
+				local ltbl, lmax, dtbl, dmax
+				if typ == 1 then
+					if not fixedL then
+						local ll = table.create(288, 0)
+						for sym = 1, 288 do
+							ll[sym] = (sym <= 144) and 8 or (sym <= 256) and 9 or (sym <= 280) and 7 or 8
+						end
+						fixedL, fixedLMax = decodeTable(ll, 288)
+						fixedD, fixedDMax = decodeTable(table.create(30, 5), 30)
+					end
+					ltbl, lmax, dtbl, dmax = fixedL, fixedLMax, fixedD, fixedDMax
+				else
+					local nlit = bits(5) + 257
+					local ndist = bits(5) + 1
+					local nclen = bits(4) + 4
+					if nlit > 286 or ndist > 30 then damaged("deflate code counts") end
+					local clen = table.create(19, 0)
+					for k = 1, nclen do clen[CL_ORDER[k] + 1] = bits(3) end
+					local ctbl, cmax = decodeTable(clen, 19)
+					if not ctbl then damaged("no code length codes") end
+					local all = table.create(nlit + ndist, 0)
+					local i = 1
+					while i <= nlit + ndist do
+						local sym = decodeSym(ctbl, cmax)
+						if sym < 16 then
+							all[i] = sym
+							i = i + 1
+						else
+							local val, rep = 0, 0
+							if sym == 16 then
+								if i == 1 then damaged("repeat with nothing before") end
+								val, rep = all[i - 1], 3 + bits(2)
+							elseif sym == 17 then
+								rep = 3 + bits(3)
+							else
+								rep = 11 + bits(7)
+							end
+							if i + rep - 1 > nlit + ndist then damaged("code lengths overflow") end
+							for _ = 1, rep do
+								all[i] = val
+								i = i + 1
+							end
+						end
+					end
+					local ll, dl = table.create(nlit, 0), table.create(ndist, 0)
+					for k = 1, nlit do ll[k] = all[k] end
+					for k = 1, ndist do dl[k] = all[nlit + k] end
+					if ll[257] == 0 then damaged("no end of block code") end
+					ltbl, lmax = decodeTable(ll, nlit)
+					dtbl, dmax = decodeTable(dl, ndist)
+				end
+				while true do
+					local sym = decodeSym(ltbl, lmax)
+					if sym < 256 then
+						if on >= size then damaged("output too big") end
+						writeu8(out, on, sym)
+						on = on + 1
+					elseif sym == 256 then
+						break
+					else
+						local li = sym - 256
+						if li > 29 then damaged("bad length code") end
+						local L = LEN_BASE[li]
+						local e = LEN_EXTRA[li]
+						if e > 0 then L = L + bits(e) end
+						if not dtbl then damaged("no distance codes") end
+						local di = decodeSym(dtbl, dmax) + 1
+						if di > 30 then damaged("bad distance code") end
+						local d = DIST_BASE[di]
+						e = DIST_EXTRA[di]
+						if e > 0 then d = d + bits(e) end
+						if d > on then damaged("distance too far back") end
+						if on + L > size then damaged("output too big") end
+						local start = on - d
+						if d >= L then
+							buffer.copy(out, on, out, start, L)
+						else
+							for k = 0, L - 1 do writeu8(out, on + k, readu8(out, start + k)) end
+						end
+						on = on + L
+					end
+					if on >= nextYield then
+						nextYield = on + YIELD
+						pace()
+					end
+				end
+			else
+				damaged("deflate block type")
+			end
+		until final == 1
+		if on ~= size then damaged("size") end
+		if pos - nb // 8 ~= n then damaged("bytes after the end") end
+		return buffer.tostring(out)
+	end
+	return Deflate
+end
 __mods["persist/codec6"] = function(import)
 	local CONFIG = import("config")
 	local Bytes = import("persist/bytes")
 	local Value = import("persist/value")
 	local Lz4 = import("persist/lz4")
+	local Deflate = import("persist/deflate")
 	local Codec6 = {}
 	local VERSION = 6
 	local CHUNK = 2000
@@ -2500,7 +3005,15 @@ __mods["persist/codec6"] = function(import)
 		end
 		Value.write(body, tl.meta or {})
 		local raw = body:tostring()
-		local packed = Lz4.compress(raw)
+		local packed, packing = nil, 0
+		local ok, c = pcall(Deflate.compress, raw)
+		if ok and type(c) == "string" then
+			packed, packing = c, 2
+		else
+			packed = Lz4.compress(raw)
+			if packed then packing = 1 end
+		end
+		if packed and #packed >= #raw then packed, packing = nil, 0 end
 		local hdr = table.clone(header or {})
 		hdr.frames = n
 		local hw = Bytes.writer()
@@ -2508,7 +3021,7 @@ __mods["persist/codec6"] = function(import)
 		local out = Bytes.writer(#(packed or raw) + hw:len() + 32)
 		out:raw("HTAS")
 		out:u8(VERSION)
-		out:u8(packed and 1 or 0)
+		out:u8(packing)
 		out:varint(hw:len())
 		out:raw(hw:tostring())
 		out:varint(#raw)
@@ -2544,11 +3057,15 @@ __mods["persist/codec6"] = function(import)
 		if rawLen > CONFIG.MaxFileBytes then error("the file is too big", 0) end
 		local rest = string.sub(data, r:pos())
 		local raw
-		if flags % 2 == 1 then
+		if flags == 2 then
+			raw = Deflate.decompress(rest, rawLen)
+		elseif flags == 1 then
 			raw = Lz4.decompress(rest, rawLen)
-		else
+		elseif flags == 0 then
 			if #rest ~= rawLen then damaged("size") end
 			raw = rest
+		else
+			damaged("packing " .. tostring(flags))
 		end
 		local br = Bytes.reader(raw)
 		local count = br:varint()
@@ -9549,7 +10066,7 @@ __mods["world/time/control"] = function(import)
 		end
 		local function smoothReset()
 			SV.root, SV.head, SV.hn, SV.T, SV.D, SV.stepped, SV.go, SV.pose = nil, 1, 0, 0, nil, false, false, nil
-			SV.nMoving, SV.di, SV.lag = 0, 0, 1 / 240
+			SV.nMoving, SV.di, SV.lag, SV.clock = 0, 0, 1 / 240, nil
 			table.clear(SV.rp)
 			table.clear(SV.ht)
 			table.clear(SV.dts)
@@ -9675,7 +10192,21 @@ __mods["world/time/control"] = function(import)
 			end
 			local hn = SV.hn
 			local T = ht[head]
-			local D = T + FS.acc - SV.lag
+			local nowC = os.clock()
+			local rdt = SV.clock and math.max(0, nowC - SV.clock) or 0
+			SV.clock = nowC
+			local target = T + FS.acc - 1.5 * SV.lag
+			local D = target
+			if SV.D then
+				local err = target - SV.D
+				if err > 6 * SV.lag or err < -6 * SV.lag then
+					D = target
+				else
+					local c = err / (4 * SV.lag)
+					if c > 0.5 then c = 0.5 elseif c < -0.5 then c = -0.5 end
+					D = SV.D + rdt * FS.s * (1 + c)
+				end
+			end
 			if SV.D and D < SV.D then D = SV.D end
 			if D >= T or hn < 2 then
 				SV.D = math.min(D, T)
@@ -10197,13 +10728,13 @@ __mods["world/glide"] = function(import)
 	function Glide:decide(part)
 		local now = os.clock()
 		local hug = self.hug
-		if hug and hug.part == part and now - hug.t < SAME_HUG then
+		if hug and hug.part == part and now - hug.t < SAME_HUG and not (hug.done and hug.rearm) then
 			hug.t = now
 			return hug.want
 		end
 		local chance = math.clamp(tonumber(self.E.settings:get("glideChance")) or 50, 0, 100)
 		local want = chance >= 100 or (chance > 0 and self.rng:NextNumber(0, 100) < chance)
-		self.hug = { part = part, t = now, want = want, done = false }
+		self.hug = { part = part, t = now, want = want, done = false, rearm = false }
 		return want
 	end
 	function Glide:onPreSimulation()
@@ -10214,14 +10745,21 @@ __mods["world/glide"] = function(import)
 		if not (hum and root and model and root.Parent) or root.Anchored then return end
 		if hum.RigType ~= Enum.HumanoidRigType.R6 or hum:GetState() ~= Enum.HumanoidStateType.Freefall then return end
 		local v = root.AssemblyLinearVelocity
-		if v.Y > -MIN_FALL then return end
+		local hug0 = self.hug
+		if v.Y > -MIN_FALL then
+			if hug0 and hug0.done then hug0.rearm = true end
+			return
+		end
 		local size = (ch.torso and ch.torso.Size) or root.Size
 		local cf = root.CFrame
 		local probe = self:box(size + Vector3.new(0.02, 0, 0.02))
 		probe.CFrame = cf
 		self.find.FilterDescendantsInstances = { model, probe }
 		local parts = workspace:GetPartsInPart(probe, self.find)
-		if #parts == 0 then return end
+		if #parts == 0 then
+			if hug0 and hug0.done then hug0.rearm = true end
+			return
+		end
 		local best
 		for _, part in ipairs(parts) do
 			if part.CanCollide then
@@ -18222,7 +18760,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "Normally that is luck (frame rate, the part's exact position). With Glide Manipulation on, Glide Chance "
 			.. "decides each part you hug: 0 % never glides (the torso is kept shallower, a glide that happens anyway is "
 			.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
-			.. "glide), in between is one roll per part. HappaTAS moves you by at most a few tenths of a stud. Works in "
+			.. "glide), in between is one roll per part. After a glide, sinking into the wall again (falling fast again, "
+			.. "or off the wall and back) glides again. HappaTAS moves you by at most a few tenths of a stud. Works in "
 			.. "Idle and while recording, for R6 characters." },
 		{ "classiclook", "Classic Look",
 			"The Classic interface's own colours and background (Classic's Settings tab, Classic Look; the New interface "
@@ -19586,8 +20125,9 @@ __mods["ui/classic/settingsrows"] = function(import)
 				if r.knob and r.on ~= nil then r.knob.BackgroundColor3 = look:color(r.on and "classicSwitchOn" or "classicSwitchOff") end
 			end
 		end)
+		local function here(def) return shownHere(def) and not (def.key == "interface" and classic.ui.classicOnly) end
 		for _, def in ipairs(Settings.SCHEMA) do
-			if not shownHere(def) then
+			if not here(def) then
 			elseif def.section ~= last then
 				last = def.section
 				order = order + 1
@@ -19600,7 +20140,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 				h.Parent = list
 				height = height + HEADER_H
 			end
-			if shownHere(def) and def.kind == "multi" then
+			if here(def) and def.kind == "multi" then
 			local key = def.key
 			for _, o in ipairs(def.options) do
 				order = order + 1
@@ -19634,7 +20174,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 				rows[key .. ":" .. o] = r
 				height = height + ROW_H
 			end
-			elseif shownHere(def) then
+			elseif here(def) then
 			order = order + 1
 			local key = def.key
 			local r
@@ -20550,7 +21090,8 @@ __mods["ui/app"] = function(import)
 		self.toast = Toast.new(self)
 		self.frost = Frost.new(self)
 		self.bar = Bar.new(self)
-		if Touch.wanted(Env.svc("UserInputService")) then self.touch = Touch.new(self) end
+		self.classicOnly = Touch.wanted(Env.svc("UserInputService"))
+		if self.classicOnly then self.touch = Touch.new(self) end
 		SettingsWin.define(self)
 		ControlsWin.define(self)
 		InspectorWin.define(self)
@@ -20600,6 +21141,7 @@ __mods["ui/app"] = function(import)
 	end
 	function UI:setInterface(name)
 		if name ~= "Classic" then name = "New" end
+		if self.classicOnly then name = "Classic" end
 		if name == self.live and (name == "New" or self.classic) then return end
 		self:endTyping()
 		if name == "Classic" and not self.classic then
@@ -20733,13 +21275,13 @@ __mods["profiler/profiler"] = function(import)
 				if ok and typeof(v) == "Vector2" then return v end
 				return nil
 			end
-			local v = measure(string.rep("M", 20), 10)
-			if v and v.X > 60 and v.X < 240 then TEXT_SIZE = 10 * CW / (v.X / 20) end
+			local v = measure(string.rep("M", 20), 100)
+			if v and v.X > 600 and v.X < 2400 then TEXT_SIZE = 100 * CW / (v.X / 20) end
 			local em = CW / 0.6
 			local line = v and measure("M", TEXT_SIZE)
 			local lineH = line and line.Y or TEXT_SIZE
 			local base
-			if lineH > em * 1.15 then base = em * 2146 / 2048 else base = em * (2048 + 2146 - 555) / 4096 end
+			if lineH > em * 1.15 then base = lineH * 2146 / (2146 + 555) else base = em * (2048 + 2146 - 555) / 4096 end
 			TXT.auto = floor(7.5 - base + 0.5)
 			TXT.dy = TXT.auto
 			log(sfmt("MicroProfiler text: TextSize %.2f, line %.2f px, baseline %.2f px, moved %d px", TEXT_SIZE, lineH, base, TXT.auto))
@@ -21625,6 +22167,9 @@ __mods["profiler/profiler"] = function(import)
 			GI.write(0, w2, full)
 		end
 		local function graphVisible() return cfg.mode == "Frame" or cfg.mode == "Detailed" end
+		local function detailedNow()
+			return (cfg.mode == "Detailed" or (cfg.mode == "Frame" and paused)) and not cfg.custom
+		end
 		local function graphW() return W - CLOSE_W end
 		local function liveSeq(k)
 			local i = hi(k)
@@ -22845,7 +23390,7 @@ __mods["profiler/profiler"] = function(import)
 		end
 		local function flamePlace()
 			if not U.built then return end
-			local y = (cfg.mode == "Detailed" and not cfg.custom) and floor(H - 3 * BAR_H) or DET_Y
+			local y = detailedNow() and floor(H - 3 * BAR_H) or DET_Y
 			U.flm.y = y
 			if U.flm.py ~= y then
 				U.flm.py = y
@@ -22859,7 +23404,7 @@ __mods["profiler/profiler"] = function(import)
 		local function applyMode()
 			if not U.built then return end
 			local gv = graphVisible()
-			local dv = cfg.mode == "Detailed" and gv and not cfg.custom
+			local dv = detailedNow()
 			show(U.graph, gv)
 			show(U.close, gv)
 			show(U.cGraph, gv)
@@ -22899,6 +23444,10 @@ __mods["profiler/profiler"] = function(import)
 		end
 		function P.TogglePause()
 			paused = not paused
+			if cfg.mode == "Frame" then
+				applyMode()
+				flamePlace()
+			end
 		end
 		function P.IsPaused() return paused end
 		local tick = 0
@@ -22957,7 +23506,7 @@ __mods["profiler/profiler"] = function(import)
 			if not P.active then return end
 			local gv = graphVisible()
 			local overTip = false
-			local detailed = cfg.mode == "Detailed" and gv and not cfg.custom
+			local detailed = detailedNow()
 			local inDet = detailed and activeMenu == nil and mx >= 0 and mx < W and my >= DET_Y and my < H
 			local overGraph = gv and activeMenu == nil and mx >= 0 and mx < W and my >= MENU_H and my < MENU_H + HIST_H
 			local overClose = overGraph and mx >= W - CLOSE_W

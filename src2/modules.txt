@@ -17,6 +17,7 @@ engine/timeline
 persist/bytes
 persist/value
 persist/lz4
+persist/deflate
 persist/codec6
 persist/v2reader
 persist/library

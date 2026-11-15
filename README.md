@@ -60,8 +60,8 @@ chat or a text box.
   follows, a row (and a colour picker) for each of the 23 colours it draws, and a background: a picture link
   (downloaded once into `HappaTasPort/Backgrounds`, HappaTAS's only network use), a Roblox image id or a Roblox
   video id (`video:123`; video files from links don't play in Roblox). Both
-  interfaces read one settings store: a setting changed in one shows in the other at once. Phones get touch
-  buttons in either.
+  interfaces read one settings store: a setting changed in one shows in the other at once. Phones (a touch
+  screen without a keyboard) always get Classic, with V2's mobile buttons.
 
 ## What it does
 
@@ -111,8 +111,9 @@ chat or a text box.
   and the parts' exact positions, so it is normally luck. Glide Chance 0 % never glides (the torso is kept at most
   0.05 deep, a glide that happens anyway is undone), 100 % always glides (the torso is put 0.15 deep; when Roblox
   doesn't glide, HappaTAS makes the glide: the fall cut to 9 %, thrown outward at 17 % of the fall speed,
-  tilted), in between is one roll per part hugged. Exact part shapes (blocks, cylinders, wedges, balls). Idle and
-  recording, R6 only.
+  tilted), in between is one roll per part hugged. After a glide, sinking into the wall again (the fall fast
+  again, or off the wall and back) is a new glide or roll, in the same hug too. Exact part shapes (blocks,
+  cylinders, wedges, balls). Idle and recording, R6 only.
 - **MicroProfiler** (F6): a copy of Roblox's MicroProfiler (modes, timers, counters, dumps), plus a TAS
   timeline (Custom > TAS Timeline: click a frame to go there).
 - **Inputs**: mouse positions replay on any screen size, a fake cursor for NohBoard while the camera is
@@ -212,7 +213,8 @@ there stay on your own computer and are never pushed to GitHub.
 
 `.tas` files start with `HTAS` and a version byte. Version 6 (HappaTAS 3) has a small uncompressed header
 (frame count, length, created / saved time, script version, PlaceId, kit and speed hack use) so the library
-never unpacks a whole file, then the frames column by column, LZ4 compressed: numbers are stored as changes of
+never unpacks a whole file, then the frames column by column, deflate compressed (pure Luau: about a
+third smaller than LZ4; LZ4 files from older versions still load): numbers are stored as changes of
 their 1/1000 value (times 1/1000000), an unchanged value in one byte. A 10-minute run at 240 FPS is about 80 %
 of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor, v4: client object clocks).
 

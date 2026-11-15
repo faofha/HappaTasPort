@@ -94,9 +94,11 @@ function SettingsRows.build(classic)
 			if r.knob and r.on ~= nil then r.knob.BackgroundColor3 = look:color(r.on and "classicSwitchOn" or "classicSwitchOff") end
 		end
 	end)
+	-- (on a phone there is no choice of interface: Classic only)
+	local function here(def) return shownHere(def) and not (def.key == "interface" and classic.ui.classicOnly) end
 	for _, def in ipairs(Settings.SCHEMA) do
-		if not shownHere(def) then
-			-- (the New interface's only)
+		if not here(def) then
+			-- (the New interface's only; on a phone there is no choice of interface)
 		elseif def.section ~= last then
 			last = def.section
 			order = order + 1
@@ -109,7 +111,7 @@ function SettingsRows.build(classic)
 			h.Parent = list
 			height = height + HEADER_H
 		end
-		if shownHere(def) and def.kind == "multi" then
+		if here(def) and def.kind == "multi" then
 		-- a switch per option ("Speed Hack in Idle"): each one ticks or unticks its option in the one setting
 		local key = def.key
 		for _, o in ipairs(def.options) do
@@ -144,7 +146,7 @@ function SettingsRows.build(classic)
 			rows[key .. ":" .. o] = r
 			height = height + ROW_H
 		end
-		elseif shownHere(def) then
+		elseif here(def) then
 		order = order + 1
 		local key = def.key
 		local r

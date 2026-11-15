@@ -114,20 +114,56 @@ local hdr = { frames = N, length = 20.8, created = 1, saved = 2, script = "3.0.0
 section("round trip [" .. VARIANT .. "]")
 local data = encode(tl, hdr)
 eq(data:sub(1, 5), "HTAS\6", "magic and version 6")
-local compressed = string.byte(data, 6) % 2 == 1
-if VARIANT == "nocompress" then
-	check(not compressed, "without lz4compress the body is stored as it is")
-else
-	check(compressed, "the body is LZ4")
-end
+eq(string.byte(data, 6), 2, "the body is deflate (pure Luau: with or without the executor's LZ4)")
 local back = Timeline.newLike(tl)
 local h2 = decode(data, back)
 local same, why = sameBits(tl, back)
 check(same, "every column bit for bit (NaN, -0, inf too) " .. tostring(why))
 check(deepEqual(back.meta, tl.meta), "meta")
 check(deepEqual(h2, hdr), "decode returns the header")
-if VARIANT ~= "nocompress" then
-	check(#data < 0.25 * N * rawBytesPerFrame(tl), "smaller than a quarter of the raw columns (" .. #data .. " bytes, raw " .. N * rawBytesPerFrame(tl) .. ")")
+check(#data < 0.25 * N * rawBytesPerFrame(tl), "smaller than a quarter of the raw columns (" .. #data .. " bytes, raw " .. N * rawBytesPerFrame(tl) .. ")")
+
+section("older files: an LZ4 body (3.0.0) and an unpacked one still load [" .. VARIANT .. "]")
+do
+	local Bytes = __T3("persist/bytes")
+	local Deflate = __T3("persist/deflate")
+	-- the same file with its body packed another way
+	local function repack(packing)
+		local r = Bytes.reader(data)
+		r:raw(5)
+		r:u8()
+		local hl = r:varint()
+		local header = r:raw(hl)
+		local rawLen = r:varint()
+		local okD, raw = inThread(Deflate.decompress, string.sub(data, r:pos()), rawLen)
+		assert(okD, raw)
+		local body = raw
+		if packing == 1 then body = Lz4.compress(raw) end
+		if not body then return nil end
+		local w = Bytes.writer()
+		w:raw("HTAS")
+		w:u8(6)
+		w:u8(packing)
+		w:varint(hl)
+		w:raw(header)
+		w:varint(rawLen)
+		w:raw(body)
+		return w:tostring()
+	end
+	local plainFile = repack(0)
+	local b0 = Timeline.newLike(tl)
+	decode(plainFile, b0)
+	check((sameBits(tl, b0)), "an unpacked body")
+	local lz = repack(1)
+	if lz then
+		local b1 = Timeline.newLike(tl)
+		decode(lz, b1)
+		check((sameBits(tl, b1)), "an LZ4 body")
+		check(#data < #lz * 0.85, "deflate is smaller than LZ4 (" .. #data .. " vs " .. #lz .. ")")
+	end
+	local bad = "HTAS\6\3" .. data:sub(7)
+	local okB, errB = tryDecode(bad, Timeline.newLike(tl))
+	check(not okB and tostring(errB):find("packing") ~= nil, "an unknown packing errors: " .. tostring(errB))
 end
 
 section("rounded values that change every frame take about 2 bytes [" .. VARIANT .. "]")

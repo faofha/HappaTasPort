@@ -12,7 +12,8 @@
 --  depends on the frame rate and on the parts' exact positions: the "luck".
 --  So, on a frame whose physics runs, in Idle or while recording, falling in Freefall, R6: the depth of the
 --  torso box in the parts it overlaps is measured (exact shapes, GetPartsInPart, along the part's outward
---  horizontal normal), the chance is rolled once per part the character hugs, and:
+--  horizontal normal), the chance is rolled once per part the character hugs (and again each time the torso sinks
+--  in after a glide: the fall picked up again, or off the wall and back), and:
 --    * no glide wanted: a torso deeper than SAFE_ABOVE is moved out to SAFE; a glide Roblox makes anyway (live it
 --      also came from outside the band) is undone after the step: the fall goes on, the tilt and spin are taken back
 --    * a glide wanted: the torso is put TARGET deep; if the step doesn't glide, HappaTAS makes the glide: the fall
@@ -134,17 +135,18 @@ function Glide:depth(part, cf, size, n)
 	return hi
 end
 
--- the roll for a part, kept for the whole hug
+-- the roll for a part, kept for the whole hug; after a glide, the next time the torso sinks in (the fall picked
+-- up again, see onPreSimulation) is a new roll in the same hug
 function Glide:decide(part)
 	local now = os.clock()
 	local hug = self.hug
-	if hug and hug.part == part and now - hug.t < SAME_HUG then
+	if hug and hug.part == part and now - hug.t < SAME_HUG and not (hug.done and hug.rearm) then
 		hug.t = now
 		return hug.want
 	end
 	local chance = math.clamp(tonumber(self.E.settings:get("glideChance")) or 50, 0, 100)
 	local want = chance >= 100 or (chance > 0 and self.rng:NextNumber(0, 100) < chance)
-	self.hug = { part = part, t = now, want = want, done = false }
+	self.hug = { part = part, t = now, want = want, done = false, rearm = false }
 	return want
 end
 
@@ -157,7 +159,13 @@ function Glide:onPreSimulation()
 	if not (hum and root and model and root.Parent) or root.Anchored then return end
 	if hum.RigType ~= Enum.HumanoidRigType.R6 or hum:GetState() ~= Enum.HumanoidStateType.Freefall then return end
 	local v = root.AssemblyLinearVelocity
-	if v.Y > -MIN_FALL then return end
+	-- (a glide stopped or cut the fall: once it is fast again, sinking into the wall is a new glide, even in the
+	-- same hug. It used to be one glide per hug, and hugging the wall kept the hug going: only a pause gave another)
+	local hug0 = self.hug
+	if v.Y > -MIN_FALL then
+		if hug0 and hug0.done then hug0.rearm = true end
+		return
+	end
 	local size = (ch.torso and ch.torso.Size) or root.Size
 	local cf = root.CFrame
 	-- the parts the torso touches (a hair wider: touching counts)
@@ -165,7 +173,11 @@ function Glide:onPreSimulation()
 	probe.CFrame = cf
 	self.find.FilterDescendantsInstances = { model, probe }
 	local parts = workspace:GetPartsInPart(probe, self.find)
-	if #parts == 0 then return end
+	if #parts == 0 then
+		-- (off the wall after a glide: back in is a new glide, whatever the fall speed did)
+		if hug0 and hug0.done then hug0.rearm = true end
+		return
+	end
 	-- the part it is deepest in
 	local best
 	for _, part in ipairs(parts) do
