@@ -245,8 +245,9 @@ A.setSetting("Sync Kit Objects", 1)
 local gr = 0
 while not A.coReady() and gr < 600 do M.step(1 / 60); gr = gr + 1 end
 local loops = { task.spawn(BeatKit.Loop, groups, 4), task.spawn(TurretKit.Loop, turModel, turPart) }
--- (2x: both scripts scale the world there; below 1x HappaTAS 3 frame steps instead, shown as info below)
-A.setSetting("Speed Hack Speed", 2)
+-- (normal speed: the world plugins alone; below 1x HappaTAS 3 frame steps, shown as info below. HappaTAS 3
+-- has no fast motion any more, so the world is measured at 1x)
+A.setSetting("Speed Hack Speed", 1)
 A.setSetting("Speed Hack", 1)
 key(Enum.KeyCode.Backspace); M.steps(2); key(Enum.KeyCode.Backspace); M.steps(2)
 key(Enum.KeyCode.Two)

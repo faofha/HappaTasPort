@@ -68,7 +68,7 @@ Settings.SCHEMA = {
 	row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
 
 	row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
-	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
+	row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 1, desc = "The speed hack's speed (0.1x to 1x, slow motion)" }),
 	-- (no V2 name: the Classic interface shows it as a switch per mode, `classic` = their labels)
 	row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
 		classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },

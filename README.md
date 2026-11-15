@@ -85,11 +85,10 @@ chat or a text box.
   - *Sync Kit Objects*: beat blocks follow the TAS time, turret bullets are saved in the run (with their hits
     and damage), pushboxes are hidden on frames before they were spawned, and the effects of bounce pads and
     jump launchers are saved and shown again when testing.
-- **Speed hack** (Settings > Speed hack): slow or fast motion while recording (0.1x - 4x), like a video played
-  slower or faster. The character (walking, turning, jumps, coyote time), gravity, animations, the camera's
+- **Speed hack** (Settings > Speed hack): slow motion while recording (0.1x - 1x), like a video played
+  slower. The character (walking, turning, jumps, coyote time), gravity, animations, the camera's
   zoom and the world (constraints, conveyors, bounce pads, swings, kit timers) change speed; the run is saved
-  in normal time, so Test plays it at normal speed. Fast motion (above 1x) is close, not exact: one real
-  physics step covers several steps of game time. Use it to get through waits.
+  in normal time, so Test plays it at normal speed.
   - *Frame Step* (below 1x): nothing is scaled. Roblox's normal physics runs on some frames only (one in two
     at 0.5x) and everything that moves is held still for the others, the humanoid itself too (its state
     machine and timers stand still, so a landing, a jump's push and coyote time take the same game time as at
@@ -131,7 +130,7 @@ chat or a text box.
 | --- | --- |
 | Playback | Lock Camera (Test), Interpolate Playback, Playback Speed, Restart When Testing, Show Completion Message |
 | Create | Lock Camera (Paused), Record Death & Respawn, Record Tool Actions, Ignore Game Processed |
-| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 4), Speed Hack In, Smooth Slow Motion |
+| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 1), Speed Hack In, Smooth Slow Motion |
 | Glide | Glide Manipulation, Glide Chance (%) (in Classic's Settings tab too) |
 | Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, Normalize Mouse UV, NohBoard Cursor, Keep Mouse Position (Paused), Invisible Mouse Speed Multiplier, Window Guarding |
 | World sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |

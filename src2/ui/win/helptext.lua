@@ -142,9 +142,9 @@ local TOPICS = {
 		.. "cooldowns keep the same timing whether you pause or not.\n\nSync Kit Objects: beat blocks follow the run's "
 		.. "time, turret bullets are saved with their hits and damage, pushboxes are hidden before they were spawned, "
 		.. "and bounce pad and launcher effects play again in Test." },
-	{ "speed", "Speed Hack (Slow / Fast Motion)",
-		"Turn on Speed Hack to record in slow or fast motion, like a video played slower or faster. Speed Hack Speed "
-		.. "goes from 0.1 to 4. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
+	{ "speed", "Speed Hack (Slow Motion)",
+		"Turn on Speed Hack to record in slow motion, like a video played slower. Speed Hack Speed "
+		.. "goes from 0.1 to 1. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
 		.. "recording. Speed Hack In picks where it works: Create (recording, the default) and / or Idle (playing "
 		.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
 		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
@@ -188,8 +188,7 @@ local TOPICS = {
 		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
 		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
 	{ "limits", "Known limits",
-		"Some things can't follow the run: other players; fast motion (one real physics step covers several steps "
-		.. "of game time, so it is close, not exact); in slow motion a push against a loose platform can start "
+		"Some things can't follow the run: other players; in slow motion a push against a loose platform can start "
 		.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Turn on Sync Client "
 		.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
 		.. "constraints." },

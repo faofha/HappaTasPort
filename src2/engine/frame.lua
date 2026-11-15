@@ -74,7 +74,7 @@ function Frame.start(E)
 		local recording = mode == 2 and (not E.paused or E.firstFrame) and s:has("speedHackModes", "Create") and ch:loaded()
 			and hum.Health > 0
 		E.timeIdle = mode == 1 and s:on("speedHack") and s:has("speedHackModes", "Idle") and ch:loaded() and hum.Health > 0
-		E.recScale = E.time:update(recording or E.timeIdle, hum, ch.hrp, mode ~= 3)
+		E.recScale = E.time:update(recording or E.timeIdle, hum, ch.hrp)
 		local rate = E.time.anim
 		if rate ~= lastRate then -- (the camera's zoom spring on the TAS clock)
 			lastRate = rate
@@ -126,7 +126,7 @@ function Frame.start(E)
 		-- the off-floor timer ran 4x too fast at 0.25x)
 		E.stepHeld = not E.time:stepBegin(dt)
 		if (E.timeIdle or not E.paused or E.firstFrame) and not E.stepHeld then
-			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp, E.time.scale ~= 1) end
+			if ch:loaded() then E.time:humanoidPre(dt, ch.hum, ch.hrp) end
 		end
 	end
 
