@@ -7,6 +7,8 @@
 --  the player types (V2.37.1).
 --  Interface: New / Classic (spec 8.5): only one interface is live; the other is hidden and does no
 --  per-frame work (bus "uiShown" with newActive()), and the engine's hooks answer for the live one.
+--  A touch screen without a keyboard always gets Classic (the new interface was too buggy on phones; Classic
+--  goes with V2's mobile buttons): the setting is kept as saved but has no effect there.
 -- ================================================================================================
 local Env = import("platform/env")
 local W = import("ui/write")
@@ -53,7 +55,9 @@ function UI.start(E)
 	self.toast = Toast.new(self)
 	self.frost = Frost.new(self)
 	self.bar = Bar.new(self)
-	if Touch.wanted(Env.svc("UserInputService")) then self.touch = Touch.new(self) end
+	-- (a phone: Classic only. ui/touch still runs there for Test's double-tap quit; its pad belongs to New)
+	self.classicOnly = Touch.wanted(Env.svc("UserInputService"))
+	if self.classicOnly then self.touch = Touch.new(self) end
 	SettingsWin.define(self)
 	ControlsWin.define(self)
 	InspectorWin.define(self)
@@ -114,6 +118,7 @@ end
 -- "New" or "Classic" (anything else is New): the other one hidden, in the same frame
 function UI:setInterface(name)
 	if name ~= "Classic" then name = "New" end
+	if self.classicOnly then name = "Classic" end
 	if name == self.live and (name == "New" or self.classic) then return end
 	self:endTyping()
 	if name == "Classic" and not self.classic then

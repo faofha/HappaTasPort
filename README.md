@@ -60,8 +60,8 @@ chat or a text box.
   follows, a row (and a colour picker) for each of the 23 colours it draws, and a background: a picture link
   (downloaded once into `HappaTasPort/Backgrounds`, HappaTAS's only network use), a Roblox image id or a Roblox
   video id (`video:123`; video files from links don't play in Roblox). Both
-  interfaces read one settings store: a setting changed in one shows in the other at once. Phones get touch
-  buttons in either.
+  interfaces read one settings store: a setting changed in one shows in the other at once. Phones (a touch
+  screen without a keyboard) always get Classic, with V2's mobile buttons.
 
 ## What it does
 
