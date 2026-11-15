@@ -1418,14 +1418,14 @@ __mods["engine/settings"] = function(import)
 		row("recordDeath", "Record Death & Respawn", "Create", 1, { desc = "Keeps recording through death and respawn" }),
 		row("recordTools", "Record Tool Actions", "Create", 1, { desc = "Records equipping and using tools" }),
 		row("ignoreGameProcessed", "Ignore Game Processed", "Create", 0, { desc = "Controls work even when the game took the key" }),
-		row("glideManipulation", nil, "Glide", 0, { desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
-		row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, desc = "0 = never glides, 100 = always glides" }),
 		row("speedHack", "Speed Hack", "Speed hack", 0, { desc = "Records in slow or fast motion" }),
 		row("speedHackSpeed", "Speed Hack Speed", "Speed hack", 0.5, { kind = NUM, min = 0.1, max = 4, desc = "The speed hack's speed (0.1x to 4x)" }),
 		row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
 			classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
 			desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
 		row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
+		row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
+		row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, classicToo = true, desc = "0 = never glides, 100 = always glides" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -1441,8 +1441,8 @@ __mods["engine/settings"] = function(import)
 		row("syncLighting", "Sync Lighting", "World sync", 1, { desc = "Records and replays lighting changes" }),
 		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
 		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
-		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" }, switch = { "New", "Classic" },
-			desc = "On: V2's classic interface. Off: HappaTAS 3's" }),
+		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
+			desc = "New: HappaTAS 3's interface. Classic: V2's" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 		row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 		row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -1488,7 +1488,7 @@ __mods["engine/settings"] = function(import)
 		textSize = "Text size", interfaceScale = "Interface scale", windowCorners = "Window corners", buttonShape = "Button shape",
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
-		interface = "Classic interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
+		interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
 		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
 		glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 		classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
@@ -9832,6 +9832,12 @@ __mods["world/time/control"] = function(import)
 		local FS = { on = false, s = 1, acc = 0, pending = 0, ranDt = 0, held = false, n = 0, saved = {}, parts = {}, scanIn = 0,
 			root = nil, hum = nil, plan = nil, est = nil, frozen = nil, latch = false }
 		SH.FS = FS
+		local UserGameSettings = nil
+		pcall(function() UserGameSettings = UserSettings():GetService("UserGameSettings") end)
+		local TURNED = 1e-4
+		local function turned(a, b)
+			return (a.LookVector - b.LookVector).Magnitude > TURNED or (a.UpVector - b.UpVector).Magnitude > TURNED
+		end
 		local HIST = 4
 		local RING = 16
 		local SV = { root = nil, rp = {}, ht = {}, head = 1, hn = 0, T = 0, D = nil, stepped = false, pushN = 0,
@@ -9876,10 +9882,23 @@ __mods["world/time/control"] = function(import)
 			local shown = SV.shown
 			for i = 1, n do
 				local e = shown[i]
-				local p, real, at = e[1], e[2], e[3]
+				local p, real, pic = e[1], e[2], e[3]
 				e[1], e[2], e[3] = nil, nil, nil
 				pcall(function()
-					if p.Parent and (p.Position - at).Magnitude <= SAME then p.CFrame = real end
+					if not p.Parent then return end
+					local cur = p.CFrame
+					if (cur.Position - pic.Position).Magnitude > SAME then return end
+					if turned(cur, pic) then
+						local cx, cy, cz = cur:ToOrientation()
+						local px, _, pz = pic:ToOrientation()
+						if math.abs(cx - px) < TURNED and math.abs(cz - pz) < TURNED then
+							local rx, _, rz = real:ToOrientation()
+							real = CFrame.new(real.Position) * CFrame.fromOrientation(rx, cy, rz)
+						else
+							real = CFrame.new(real.Position) * cur.Rotation
+						end
+					end
+					p.CFrame = real
 				end)
 			end
 			if c then
@@ -9983,6 +10002,11 @@ __mods["world/time/control"] = function(import)
 			SV.a, SV.b, SV.f, SV.go = a, b, f, true
 			local pa, pb = rp[a], rp[b]
 			local pose = (pa == pb or f <= 0) and pa or pa:Lerp(pb, f)
+			if UserGameSettings and UserGameSettings.RotationType == Enum.RotationType.CameraRelative then
+				local x, _, z = pose:ToOrientation()
+				local _, y = now:ToOrientation()
+				pose = CFrame.new(pose.Position) * CFrame.fromOrientation(x, y, z)
+			end
 			if not off(pose, now) then return end
 			SV.pose = pose
 			local d = pose.Position - now.Position
@@ -10007,7 +10031,7 @@ __mods["world/time/control"] = function(import)
 				n = n + 1
 				local e = shown[n]
 				if not e then e = {}; shown[n] = e end
-				e[1], e[2], e[3] = root, SV.rp[head], pose.Position
+				e[1], e[2], e[3] = root, SV.rp[head], pose
 				SV.nShown = n
 				root.CFrame = pose
 			end
@@ -10031,7 +10055,7 @@ __mods["world/time/control"] = function(import)
 						n = n + 1
 						local e = shown[n]
 						if not e then e = {}; shown[n] = e end
-						e[1], e[2], e[3] = p, now, to.Position
+						e[1], e[2], e[3] = p, now, to
 						SV.nShown = n
 						p.CFrame = to
 					end
@@ -17042,12 +17066,6 @@ __mods["ui/win/settings"] = function(import)
 		local ctl, kind
 		if key == "theme" then
 			ctl, kind = themeControl(ctx, s, sw), "theme"
-		elseif def.switch then
-			ctl, kind = Toggle.new(ctx, nil), "toggle"
-			ctl.onChange = function(on) s:set(key, def.switch[on and 2 or 1]) end
-			ctl:set(v == def.switch[2])
-			local set = ctl.set
-			ctl.set = function(c, x) set(c, x == def.switch[2] or x == true) end
 		elseif def.kind == "toggle" then
 			ctl, kind = Toggle.new(ctx, nil), "toggle"
 			ctl.onChange = function(on) s:set(key, on and 1 or 0) end
@@ -18649,7 +18667,7 @@ __mods["ui/win/helptext"] = function(import)
 		version = CONFIG.VERSION,
 		items = {
 			"A new interface: Dock, windows, timeline bar, Inspector",
-			"Classic interface: a switch in Settings",
+			"Classic interface: Settings > Interface",
 			"Library: folders, search, sort, numbered attempts",
 			"File format v6: smaller files, safe saving",
 			"Old .tas files (v1-v5) and Settings.json carry over",
@@ -20101,7 +20119,10 @@ __mods["ui/classic/settingsrows"] = function(import)
 		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
 	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
-	local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true end
+	local function shownHere(def)
+		return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true
+			or def.classicToo == true
+	end
 	local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), color = "classicSwitchOff" }
 	local function toggleRow(def, order)
 		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
@@ -20126,6 +20147,18 @@ __mods["ui/classic/settingsrows"] = function(import)
 				{ "UIStroke", "UIStroke", 41, {} },
 			} },
 			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.75, 0, 1, 0), Text = label, TextSize = labelSize } },
+			{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
+		} }
+	end
+	local function cycleRow(def, order)
+		local label = LABELS[def.key] or def.name
+		return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
+			{ "UICorner", "UICorner", 5, {} },
+			{ "TextButton", "Cycle", 20, { Position = u(0.86, 0, 0.5, 0), Size = u(0.23, 0, 0.7, 0), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13 }, {
+				{ "UICorner", "UICorner", 5, {} },
+				{ "UIStroke", "UIStroke", 41, {} },
+			} },
+			{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.7, 0, 1, 0), Text = label, TextSize = (#label > 24) and 13 or 16 } },
 			{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
 		} }
 	end
@@ -20196,15 +20229,23 @@ __mods["ui/classic/settingsrows"] = function(import)
 			order = order + 1
 			local key = def.key
 			local r
-			if def.kind == "toggle" or def.switch then
+			if def.kind == "choice" then
+				local f = ClassicBuild.node(cycleRow(def, order), ClassicTree.STYLES)
+				f.Parent = list
+				r = { frame = f, label = f.N, cycle = f.Cycle }
+				r.cycle.Text = tostring(s:get(key))
+				life:connect(r.cycle.MouseButton1Click, function()
+					local i = table.find(def.options, s:get(key)) or 0
+					s:set(key, def.options[i % #def.options + 1])
+				end)
+				classic.offs[#classic.offs + 1] = s:changed(key, function(v) r.cycle.Text = tostring(v) end)
+			elseif def.kind == "toggle" then
 				local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 				f.Parent = list
 				r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
 				look:own(r.knob, "BackgroundColor3")
-				local sw = def.switch
 				local function show(v, instant)
-					local on
-					if sw then on = v == sw[2] else on = v ~= 0 end
+					local on = v ~= 0
 					if r.on == on then return end
 					r.on = on
 					local target = on and SWITCH_ON or SWITCH_OFF
@@ -20218,7 +20259,7 @@ __mods["ui/classic/settingsrows"] = function(import)
 				end
 				show(s:get(key), true)
 				life:connect(r.switch.MouseButton1Click, function()
-					if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+					s:set(key, s:on(key) and 0 or 1)
 				end)
 				classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 			else

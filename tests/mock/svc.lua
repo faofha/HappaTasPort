@@ -514,10 +514,12 @@ C.Sound.Methods.Pause = function(self) self.Playing = false end
 C.Sound.Methods.Resume = function(self) self.Playing = true end
 C.Tool.Methods.Activate = function(self) self.Activated:Fire() end
 C.Tool.Methods.Deactivate = function(self) self.Deactivated:Fire() end
+-- (M.mouseIcon: the mouse's Icon as every mouse object handed out reads it, e.g. the shift lock cursor)
+local MOUSE_MT = { __index = function(_, k) if k == "Icon" then return M.mouseIcon or "" end return nil end }
 C.Player.Methods.GetMouse = function(self)
-	return { Hit = CFrame.new(), Target = nil, X = M.mouse.X, Y = M.mouse.Y - M.inset, Icon = "", ViewSizeX = M.viewport.X,
+	return setmetatable({ Hit = CFrame.new(), Target = nil, X = M.mouse.X, Y = M.mouse.Y - M.inset, ViewSizeX = M.viewport.X,
 		ViewSizeY = M.viewport.Y, Move = M.newSignal("mouse.Move"), Button1Down = M.newSignal("b1d"), Button1Up = M.newSignal("b1u"),
-		Button2Down = M.newSignal("b2d"), Button2Up = M.newSignal("b2u"), WheelForward = M.newSignal("wf"), WheelBackward = M.newSignal("wb") }
+		Button2Down = M.newSignal("b2d"), Button2Up = M.newSignal("b2u"), WheelForward = M.newSignal("wf"), WheelBackward = M.newSignal("wb") }, MOUSE_MT)
 end
 C.Player.Methods.Kick = function() error("kicked (mock)") end
 C.Player.Methods.LoadCharacter = function() end
@@ -1044,6 +1046,20 @@ function M.step(dt)
 	for _, b in ipairs(table.clone(binds)) do
 		local ok, err = pcall(b.fn, dt)
 		if not ok then M.logs[#M.logs + 1] = "BIND ERROR " .. b.name .. ": " .. tostring(err) end
+	end
+	-- (M.shiftLockSnap: Roblox turns a shift locked character to the camera after each frame is drawn. Measured in
+	-- the client: with UserGameSettings.RotationType CameraRelative, between PreRender and PreAnimation the Y angle
+	-- of the root's orientation becomes the camera's; a tilt - its X and Z angles - is kept)
+	if M.shiftLockSnap and UserSettings():GetService("UserGameSettings").RotationType == Enum.RotationType.CameraRelative then
+		local ch = M.player.Character
+		local root = ch and ch:FindFirstChild("HumanoidRootPart")
+		local h = ch and ch:FindFirstChildOfClass("Humanoid")
+		local cam = workspace.CurrentCamera
+		if root and h and h.AutoRotate and not root.Anchored and cam then
+			local x, _, z = root.CFrame:ToOrientation()
+			local _, cy = cam.CFrame:ToOrientation()
+			root.CFrame = CFrame.new(root.Position) * CFrame.fromOrientation(x, cy, z)
+		end
 	end
 	-- PreAnimation starts at a fixed point of the frame (like Roblox: shortly after the frame starts), so the
 	-- time from one PreAnimation to the next is exactly the frame's dt; with M.jobMs the jobs take jobMs

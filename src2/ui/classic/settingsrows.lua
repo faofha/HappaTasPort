@@ -27,7 +27,11 @@ local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed =
 local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
 -- (and a multi row with Classic labels: a switch per option, keyed "<key>:<option>")
 -- (and Classic Look: the rows only Classic has)
-local function shownHere(def) return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true end
+-- (and the rows marked classicToo: the Glide settings)
+local function shownHere(def)
+	return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true
+		or def.classicToo == true
+end
 local SWITCH_OFF = { Position = u(0, 0, 0.5, 0), color = "classicSwitchOff" }
 
 -- V2's row shapes (p04_ui.lua toggleRow / numberRow)
@@ -58,8 +62,22 @@ local function inputRow(def, order)
 	} }
 end
 
+-- a choice: a box like the input box that shows the choice; a click goes to the next one (New -> Classic -> New)
+local function cycleRow(def, order)
+	local label = LABELS[def.key] or def.name
+	return { "Frame", def.key, 34, { Size = u(1, 0, 0, ROW_H), LayoutOrder = order }, {
+		{ "UICorner", "UICorner", 5, {} },
+		{ "TextButton", "Cycle", 20, { Position = u(0.86, 0, 0.5, 0), Size = u(0.23, 0, 0.7, 0), AnchorPoint = v2(0.5, 0.5), Text = "", TextSize = 13 }, {
+			{ "UICorner", "UICorner", 5, {} },
+			{ "UIStroke", "UIStroke", 41, {} },
+		} },
+		{ "TextLabel", "N", 35, { Position = u(0, 10, 0, 0), Size = u(0.7, 0, 1, 0), Text = label, TextSize = (#label > 24) and 13 or 16 } },
+		{ "Frame", "Border", 39, { Position = u(0, 0, 1, 0), Size = u(1, 0, 0, 1), AnchorPoint = v2(0, 1) } },
+	} }
+end
+
 -- every row into classic's Settings list; returns { [key] = row } (row: frame, label, and switch / knob / on,
--- or input)
+-- or input, or cycle)
 function SettingsRows.build(classic)
 	local E, life = classic.E, classic.ui.life
 	local s = E.settings
@@ -130,15 +148,23 @@ function SettingsRows.build(classic)
 		order = order + 1
 		local key = def.key
 		local r
-		if def.kind == "toggle" or def.switch then
+		if def.kind == "choice" then
+			local f = ClassicBuild.node(cycleRow(def, order), ClassicTree.STYLES)
+			f.Parent = list
+			r = { frame = f, label = f.N, cycle = f.Cycle }
+			r.cycle.Text = tostring(s:get(key))
+			life:connect(r.cycle.MouseButton1Click, function()
+				local i = table.find(def.options, s:get(key)) or 0
+				s:set(key, def.options[i % #def.options + 1])
+			end)
+			classic.offs[#classic.offs + 1] = s:changed(key, function(v) r.cycle.Text = tostring(v) end)
+		elseif def.kind == "toggle" then
 			local f = ClassicBuild.node(toggleRow(def, order), ClassicTree.STYLES)
 			f.Parent = list
 			r = { frame = f, label = f.N, switch = f.Switch, knob = f.Switch.Switcher, on = nil }
 			look:own(r.knob, "BackgroundColor3")
-			local sw = def.switch -- (a choice of two shown as a switch: off = sw[1], on = sw[2])
 			local function show(v, instant)
-				local on
-				if sw then on = v == sw[2] else on = v ~= 0 end
+				local on = v ~= 0
 				if r.on == on then return end
 				r.on = on
 				local target = on and SWITCH_ON or SWITCH_OFF
@@ -152,7 +178,7 @@ function SettingsRows.build(classic)
 			end
 			show(s:get(key), true)
 			life:connect(r.switch.MouseButton1Click, function()
-				if sw then s:set(key, (s:get(key) == sw[2]) and sw[1] or sw[2]) else s:set(key, s:on(key) and 0 or 1) end
+				s:set(key, s:on(key) and 0 or 1)
 			end)
 			classic.offs[#classic.offs + 1] = s:changed(key, function(v) show(v, false) end)
 		else
