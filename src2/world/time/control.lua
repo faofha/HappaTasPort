@@ -164,7 +164,7 @@ do
 	end
 	local function smoothReset()
 		SV.root, SV.head, SV.hn, SV.T, SV.D, SV.stepped, SV.go, SV.pose = nil, 1, 0, 0, nil, false, false, nil
-		SV.nMoving, SV.di, SV.lag = 0, 0, 1 / 240
+		SV.nMoving, SV.di, SV.lag, SV.clock = 0, 0, 1 / 240, nil
 		table.clear(SV.rp)
 		table.clear(SV.ht)
 		table.clear(SV.dts)
@@ -304,8 +304,27 @@ do
 		end
 		local hn = SV.hn
 		local T = ht[head]
-		local D = T + FS.acc - SV.lag
-		if SV.D and D < SV.D then D = SV.D end -- (never back: the lag just grew)
+		-- the time shown runs on its own clock: real time x the slider on every frame, 50 - 150 % of that to
+		-- close in on where it should be (the bank, which only moves on when a step runs, minus the lag). Live at
+		-- 0.1x and 240 FPS, following the bank itself stood the picture still on each frame without a step and
+		-- doubled the next, and every change of the lag (one step's time or two) jumped it a whole step or held it
+		-- for about ten frames
+		local nowC = os.clock()
+		local rdt = SV.clock and math.max(0, nowC - SV.clock) or 0
+		SV.clock = nowC
+		local target = T + FS.acc - 1.5 * SV.lag -- (half a step's margin: the picture doesn't catch the real pose up)
+		local D = target
+		if SV.D then
+			local err = target - SV.D
+			if err > 6 * SV.lag or err < -6 * SV.lag then
+				D = target -- (far off: a reset or a long gap)
+			else
+				local c = err / (4 * SV.lag)
+				if c > 0.5 then c = 0.5 elseif c < -0.5 then c = -0.5 end
+				D = SV.D + rdt * FS.s * (1 + c)
+			end
+		end
+		if SV.D and D < SV.D then D = SV.D end -- (never back)
 		if D >= T or hn < 2 then
 			SV.D = math.min(D, T) -- (the picture is the real pose)
 			return

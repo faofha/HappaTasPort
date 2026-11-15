@@ -141,7 +141,7 @@ do
 		lo, hi = math.min(lo, d), math.max(hi, d)
 	end
 	local want = 16 * 0.25 * EVEN
-	check(math.abs(lo - want) < 1e-6 and math.abs(hi - want) < 1e-6,
+	check(math.abs(lo - want) < 0.01 * want and math.abs(hi - want) < 0.01 * want, -- (within 1 %: the picture's clock closes in on its target)
 		"on: by the walking speed x the slider x the frame's time on each frame (" .. lo .. " .. " .. hi .. ", " .. want .. ")")
 	-- behind the real pose, by two steps' way at most; on the real path (a straight walk: only x differs)
 	local ahead, behind, side = 0, 0, 0
@@ -245,7 +245,7 @@ do
 		lo, hi = math.min(lo, d), math.max(hi, d)
 	end
 	local want = 6 * 0.25 * EVEN
-	check(math.abs(lo - want) < 1e-6 and math.abs(hi - want) < 1e-6, "by its speed x the slider x the frame's time on each frame (" .. lo .. " .. " .. hi .. ")")
+	check(math.abs(lo - want) < 0.01 * want and math.abs(hi - want) < 0.01 * want, "by its speed x the slider x the frame's time on each frame (" .. lo .. " .. " .. hi .. ")")
 	eq(box.Anchored, false, "the box isn't left anchored")
 	near(box.AssemblyLinearVelocity.Z, 6, 1e-9, "and keeps its velocity")
 	eq(still.CFrame, CFrame.new(70, 10, 0), "a loose part that doesn't move is left alone")
@@ -421,13 +421,15 @@ do
 	eq(back, 0, "never back")
 	eq(ahead, 0, "never ahead of the real pose")
 	check(moved > 185, "a new place on nearly every frame (" .. moved .. " of 199)")
-	-- (the picture's move on frame i is the game time banked by the frame before: speed x slider x that frame's time)
+	-- (the picture's move on frame i: speed x slider x the frame's time, x 0.5 - 1.5 while its clock closes in on
+	-- the bank: never a jump, never a stop)
 	local even2 = 0
 	for i = 100, 200 do
 		local d = un.pic[i].root.Position.X - un.pic[i - 1].root.Position.X
-		if math.abs(d - 16 * 0.3 * dts[i - 1]) < 1e-6 then even2 = even2 + 1 end
+		local w = 16 * 0.3 * dts[i] -- (this frame's own time: the frame being drawn)
+		if d >= 0.5 * w - 1e-9 and d <= 1.5 * w + 1e-9 then even2 = even2 + 1 end
 	end
-	check(even2 >= 85, "by the walking speed x the slider x the frame's time on most frames (" .. even2 .. " of 101)")
+	eq(even2, 101, "by the walking speed x the slider x the frame's time x 0.5 - 1.5 on every frame")
 	S.Set("Speed Hack Speed", 0.25)
 end
 
@@ -470,6 +472,43 @@ do
 		for c = 1, #tasA[i].Cframe do if tasA[i].Cframe[c] ~= tasB[i].Cframe[c] then diff = diff + 1 end end
 	end
 	eq(diff, 0, "the TAS is the same with the setting on and off")
+end
+
+section("0.1x at 240 FPS: frames without a step and steps of two lengths, the picture still glides evenly")
+do
+	-- (live, walking at 0.1x, 240 FPS: the picture stood still on every frame without a physics step and moved
+	-- double on the next, and every so often jumped a whole step and then stood still for about ten frames: the
+	-- time shown only moved on with the steps, and the delay behind the real pose switched between one and two
+	-- steps' time as frames with a 2/240 s step came and went)
+	S.Set("Speed Hack Speed", 0.1)
+	M.preAnimNeedsPhysics = true
+	local k = 0
+	M.simDt = function(dt)
+		k = k + 1
+		if k % 9 == 0 then return 0 end
+		return dt
+	end
+	local dts = {}
+	for i = 1, 600 do dts[i] = (i % 37 == 0) and 2 / 240 or 1 / 240 end
+	local _, g = record(dts, walk())
+	M.simDt = nil
+	M.preAnimNeedsPhysics = nil
+	local still, moves = 0, {}
+	for i = 200, 600 do
+		local d = g.pic[i].root.Position.X - g.pic[i - 1].root.Position.X
+		if d <= 1e-9 then still = still + 1 end
+		moves[#moves + 1] = d
+	end
+	table.sort(moves)
+	local med, top = moves[(#moves + 1) // 2], moves[#moves]
+	eq(still, 0, "the picture moves on every frame (" .. still .. " frames stood still)")
+	check(top < 2.5 * med, "no jumps: the biggest move is under 2.5 x the usual one (" .. top .. " vs " .. med .. ")")
+	local ahead = 0
+	for i = 1, 600 do
+		if g.pic[i].root.Position.X > g.hb[i].root.Position.X + 1e-9 then ahead = ahead + 1 end
+	end
+	eq(ahead, 0, "never ahead of the real pose")
+	S.Set("Speed Hack Speed", 0.25)
 end
 
 section("the speed hack ends while a picture is up: the real pose is back")
