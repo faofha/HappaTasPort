@@ -59,7 +59,7 @@ local V2_TITLES = {
 	"Back/Forward 1 Frame", "Return", "Unpause 1 Frame", "Look Around", "Lock Camera (Mode)", "Show Stats (Mode)",
 	"Restart When Testing", "Stats Text Size", "Playback Speed", "Interpolate Playback", "MicroProfiler",
 	"Mouse UV Normalization", "Death & Respawn Recording", "Tool Actions Support", "Button & Obby Mechanism Sync",
-	"Speed Hack (Slow / Fast Motion)", "EToH Kit Objects", "Frustum Culling & Sandboxing",
+	"Speed Hack (Slow Motion)", "EToH Kit Objects", "Frustum Culling & Sandboxing",
 	"Saving and Loading", "Merging a TAS", "Keyboard and Mouse Inputs", "Client Objects", "Executor Port Settings",
 }
 local topics = HelpText.topics(E)

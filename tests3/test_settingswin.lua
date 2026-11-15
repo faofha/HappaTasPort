@@ -110,7 +110,7 @@ M.pressKey(Enum.KeyCode.Two)
 M.releaseKey(Enum.KeyCode.Two)
 M.steps(3)
 eq(E.mode, 1, "typing 2 in the search box doesn't Create")
-box.Text = "0.1x to 4x"
+box.Text = "0.1x to 1x"
 local shown = {}
 for key, r in pairs(sw.rows) do if r.row.gui.Visible then shown[#shown + 1] = key end end
 eq(table.concat(shown, ","), "speedHackSpeed", "one row")

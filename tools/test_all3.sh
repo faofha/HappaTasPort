@@ -51,8 +51,9 @@ WFIELDS="FrameTime TotalTime Cframe Velocity State SK CO BT KE"
 # frame right before the step that runs, as at 1x; V2 ran a timed state's steps at full speed and made the frame
 # on the first held frame, so its runs are a frame longer and its game time runs ahead from a jump on. The kit
 # section's slow run and what follows it (one frame shorter: its pause, its Test, the end, the kit clock after) the same.
+# (C.end follows the 0.5x run directly since the 2x run went with fast motion.)
 # tests3/test_humanoidclock.lua checks Frame Step against 1x)
-WSKIP='^(C05[.].*|D05[.].*|D025[.].*|E05[.].*|D[.]end|slow[0-9]+|paused2|play[0-9]+|E[.]played|E[.]end|idle2)$'
+WSKIP='^(C05[.].*|D05[.].*|D025[.].*|E05[.].*|C[.]end|D[.]end|slow[0-9]+|paused2|play[0-9]+|E[.]played|E[.]end|idle2)$'
 tw=$(SCENARIO=world TGROUPS="$WGROUPS" FIELDS="$WFIELDS" SKIPTAGS="$WSKIP" bash tools/trace3.sh 2>&1 | head -12)
 echo "world trace: $(echo "$tw" | head -1)"
 echo "$tw" | grep -q "^SAME" || { fail=1; echo "$tw"; }

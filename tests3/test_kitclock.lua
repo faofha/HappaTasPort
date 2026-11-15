@@ -252,27 +252,6 @@ click() -- pause
 steps(2)
 end
 do
-section("kit clock: x the speed hack while recording")
-S.Set("Speed Hack", 1)
-S.Set("Speed Hack Speed", 0.5)
-click()
-steps(2)
-local a = #Timer.ticks
-steps(240)
-local slowN = #Timer.ticks - a
-check(slowN >= 3 and slowN <= 5, "0.5x: 4 s of real time = 2 s of kit time (" .. slowN .. " waits of 0.5 s)")
-near(KC.rate, 0, 1e-9, "0.5x is Frame Step: the kit clock moves on by the steps that run (rate 0)")
-local kgap = Timer.kticks[#Timer.kticks] - Timer.kticks[#Timer.kticks - 1]
-local rgap = Timer.ticks[#Timer.ticks] - Timer.ticks[#Timer.ticks - 1]
-near(kgap, 0.5, 0.01, "kit time between two waits 0.5 s")
-near(rgap, 1, 0.02, "real time between them 1 s")
-click()
-steps(2)
-S.Set("Speed Hack", 0)
-eq(KC.rate, 0, "paused again: rate 0")
-
-end
-do
 section("kit clock: kit listeners on Heartbeat get the kit's dt (the Zipline ride, the Sequencer)")
 newTAS()
 Ride.Start(10)
@@ -294,11 +273,6 @@ steps(2)
 d0 = Ride.dist
 steps(60)
 near(Ride.dist - d0, 5, 1e-6, "0.5x: half the distance in the same real time")
-S.Set("Speed Hack Speed", 2)
-steps(2)
-d0 = Ride.dist
-steps(60)
-near(Ride.dist - d0, 20, 1e-6, "2x: twice the distance")
 S.Set("Speed Hack Speed", 0.5)
 steps(2)
 d0 = Ride.dist

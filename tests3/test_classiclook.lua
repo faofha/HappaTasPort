@@ -29,8 +29,8 @@ for _, def in ipairs(Settings.SCHEMA) do
 	end
 end
 eq(shown, 63, "V2.38.17's 33 settings (Frame Step went with Part B), the interface choice, Classic Look's 27 and the 2 Glide settings")
-eq(rows.speedHack.label.Text, "Speed Hack (slow / fast motion)", "V2.38.17's label")
-eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 4, 0.5 = half, 2 = double)", "V2.38.17's label")
+eq(rows.speedHack.label.Text, "Speed Hack (slow motion)", "its label")
+eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 1, 0.5 = half)", "its label")
 eq(rows.syncKitObjects.label.Text, "Sync Kit Objects (Beat Blocks, Turrets)", "V2.38.17's label")
 eq(rows.allowPlayerGuiInterface.label.Text, "Allow Visible Interface (PlayerGui)", "V2.38.17's label")
 local list = b["MainMenu.SettingsFrame.List"]

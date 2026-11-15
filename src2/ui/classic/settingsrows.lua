@@ -20,7 +20,7 @@ local ROW_H, HEADER_H = 30, 28
 -- (V2.38.17's knobs; their colours are the Classic Look's Switch On / Switch Off)
 local SWITCH_ON = { Position = u(1, 0, 0.5, 0), color = "classicSwitchOn" }
 -- V2.38.17's labels and section names where they differ from its setting names
-local LABELS = { speedHack = "Speed Hack (slow / fast motion)", speedHackSpeed = "Speed (0.1 - 4, 0.5 = half, 2 = double)",
+local LABELS = { speedHack = "Speed Hack (slow motion)", speedHackSpeed = "Speed (0.1 - 1, 0.5 = half)",
 	invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
 	microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 	allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }

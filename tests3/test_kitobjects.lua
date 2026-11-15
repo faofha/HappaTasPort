@@ -862,51 +862,6 @@ vFolder:Destroy()
 end
 -- ------------------------------------------------------------------------------------------------ the world
 do
-section("speed hack: the world speeds up with the character (the scaling: above 1x)")
-newTAS()
-S.Set("Speed Hack", 1)
-S.Set("Speed Hack Speed", 2)
-steps(5)
-create()
-click()
-steps(3)
-near(hinge.AngularVelocity, -3, 1e-9, "hinge motor AngularVelocity x 2")
-eq(hinge.MotorMaxTorque, math.huge, "infinite torque stays infinite")
-check(vf.Force == Vector3.new(0, 0, 16000), "VectorForce x 4 (" .. tostring(vf.Force) .. ")")
-near(ap.MaxVelocity, 4000, 1e-9, "AlignPosition MaxVelocity x 2")
-near(ap.Responsiveness, 30, 1e-9, "AlignPosition Responsiveness x 2")
-near(ap.MaxForce, 40000, 1e-9, "AlignPosition MaxForce x 4")
-check(bv.Velocity == Vector3.new(2, 4, 6), "BodyVelocity Velocity x 2")
-near(bv.P, 2500, 1e-9, "BodyVelocity P x 2")
-check(conveyor.AssemblyLinearVelocity == Vector3.new(20, 0, 0), "conveyor x 2 (" .. tostring(conveyor.AssemblyLinearVelocity) .. ")")
-check(freeBox.AssemblyLinearVelocity == Vector3.new(0, 0, 16), "a free part goes on at twice the speed")
-local push = Instance.new("LinearVelocity"); push.VectorVelocity = Vector3.new(0, 60, 0); push.MaxAxesForce = Vector3.new(40000, 40000, 40000)
-push.Parent = hrp
-steps(2)
-check(push.VectorVelocity == Vector3.new(0, 120, 0), "a push added while sped up (jump launcher) x 2")
-check(push.MaxAxesForce == Vector3.new(160000, 160000, 160000), "its force limit x 4")
-hinge.AngularVelocity = -4 -- the game writes a new value
-steps(2)
-near(hinge.AngularVelocity, -8, 1e-9, "a value the game writes while sped up is the new normal value (x 2)")
-click()
-steps(3)
-near(hinge.AngularVelocity, -4, 1e-9, "paused: the game's latest value")
-check(vf.Force == Vector3.new(0, 0, 4000), "VectorForce back")
-near(ap.MaxVelocity, 2000, 1e-9, "AlignPosition back")
-near(ap.Responsiveness, 15, 1e-9, "Responsiveness back")
-check(bv.Velocity == Vector3.new(1, 2, 3), "BodyVelocity back")
-check(conveyor.AssemblyLinearVelocity == Vector3.new(10, 0, 0), "conveyor back")
-check(freeBox.AssemblyLinearVelocity == Vector3.new(0, 0, 8), "the free part at full speed again")
-check(push.VectorVelocity == Vector3.new(0, 60, 0), "the push back to its own value")
-local sk = nil
-for _, fr in ipairs(C.data) do if fr.SK then sk = fr.SK break end end
-near(sk, 2, 1e-9, "fast frames carry their factor (SK 2)")
-push:Destroy()
-S.Set("Speed Hack", 0)
-
-end
--- ------------------------------------------------------------------------------------------------ lighting
-do
 section("Sync Lighting: Idle and an empty TAS leave the lighting as it is")
 local L = M.services.Lighting
 newTAS()
