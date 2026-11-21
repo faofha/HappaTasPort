@@ -4609,6 +4609,11 @@ __mods["world/camera"] = function(import)
 		if E.mode ~= 2 or not E.paused or E.firstFrame or E.lookAround or not E.modes:setCam() then return end
 		if E.frame >= 1 and E.frame <= E.tl:count() then self:update(E.frame, false) end
 	end
+	local UIS = Env.svc("UserInputService")
+	function Camera:pointerFree()
+		if UIS and (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)) then return true end
+		return self.E.inputs:overOwnUI()
+	end
 	function Camera:updateMouseMode()
 		local E = self.E
 		local cs, tl = E.cs, E.tl
@@ -4623,6 +4628,7 @@ __mods["world/camera"] = function(import)
 				lockedView = cs:isFirstPerson() or cs:isShiftlocked()
 			end
 		end
+		if camFreeze and lockedView and not modal and self:pointerFree() then lockedView = false end
 		local forceLock = camFreeze and lockedView
 		cs:setCameraFreeze(camFreeze, forceLock, camFreeze)
 		local hold = camFreeze and not lockedView and E.inputs:camButtonHeld()

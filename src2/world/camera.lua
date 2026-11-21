@@ -142,6 +142,12 @@ function Camera:holdPaused()
 	if E.frame >= 1 and E.frame <= E.tl:count() then self:update(E.frame, false) end
 end
 
+local UIS = Env.svc("UserInputService")
+function Camera:pointerFree()
+	if UIS and (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)) then return true end
+	return self.E.inputs:overOwnUI()
+end
+
 -- mouse rules: free while paused with a locked camera / testing with a scriptable camera. For a short time
 -- after HappaTAS hands the camera back, the camera's mouse lock is checked every frame (stale first person
 -- state from older camera scripts), never longer.
@@ -159,6 +165,9 @@ function Camera:updateMouseMode()
 			lockedView = cs:isFirstPerson() or cs:isShiftlocked()
 		end
 	end
+	-- (a locked frame leaves the mouse free while it is on HappaTAS's interface (or a press there isn't released:
+	-- dragging the timeline across shift lock / first person frames), or Ctrl is held. Asked only on such frames.)
+	if camFreeze and lockedView and not modal and self:pointerFree() then lockedView = false end
 	local forceLock = camFreeze and lockedView
 	cs:setCameraFreeze(camFreeze, forceLock, camFreeze)
 	-- (paused, right / middle button held: the cursor stays locked, see cs:setHoldCursor)
