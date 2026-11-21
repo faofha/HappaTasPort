@@ -135,9 +135,10 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 			ST(22),
 		} }
 	end
-	-- update log: a version line and its items
-	local function LV(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), Text = text, TextSize = 16 } } end
-	local function LI(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 20), Text = text, TextSize = 12 } } end
+	-- update log: a version line and its items (and the credits' lines). A long line wraps, and each line is as tall
+	-- as its text (the height given is the least: V2's look for a one-line row)
+	local function LV(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), Text = text, TextSize = 16, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y } } end
+	local function LI(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 20), Text = text, TextSize = 12, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y } } end
 	local UI_TREE = {
 		{"Frame","JoinMessage",1,{Position=u(0,10,1,150),Size=u(0,280,0,75),AnchorPoint=v2(0,1)},{
 			{"TextLabel","M",2,{Position=u(0,15,0,40),Size=u(0,200,0,30),Text="M - Main Menu",TextSize=20}},
@@ -264,10 +265,10 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 			}},
 			{"TextButton","HelpToggle",28,{Position=u(0,240,0,41),Size=u(0,80,0,30),ZIndex=3,Text="Help",TextSize=15}},
 			{"TextButton","MoreToggle",28,{Position=u(0,320,0,41),Size=u(0,80,0,30),ZIndex=3,Text="More",TextSize=15}},
-			{"ScrollingFrame","MoreFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,4.3,0)},{
-				{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,1,-60)},{
+			{"ScrollingFrame","MoreFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y},{
+				{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,0,0),AutomaticSize=Enum.AutomaticSize.Y},{
 					{"UIListLayout","UIListLayout",44,{}},
-					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108)},{
+					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108),AutomaticSize=Enum.AutomaticSize.Y},{
 						UC,
 						LV("0", " Happy_Liam/happa - Main Scripter/UI Design"),
 						UL9,
@@ -281,7 +282,7 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 						local kids = { LV("0", " HappaTAS " .. HelpText.WHATS_NEW.version) }
 						for i, item in ipairs(items) do kids[#kids + 1] = LI(tostring(i), "   -   " .. item) end
 						kids[#kids + 1] = UL9
-						return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items) }, kids }
+						return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items), AutomaticSize = Enum.AutomaticSize.Y }, kids }
 					end)(),
 					HD("0ModelN", "Executor port - client side script", 14),
 					{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{ K(21), ST(48) }},
