@@ -46,7 +46,7 @@ eq(s:get("playbackSpeed"), 1, "playbackSpeed")
 eq(s:get("ignoreGameProcessed"), 0, "ignoreGameProcessed")
 eq(s:get("speedHackSpeed"), 0.5, "speedHackSpeed")
 eq(s:get("statsTextSize"), 11, "statsTextSize")
-eq(s:get("syncClientObjects"), 0, "syncClientObjects")
+eq(s:get("syncClientObjects"), 1, "syncClientObjects (on by default since V3.1)")
 eq(s:on("lockCameraTest"), true, "lockCameraTest on")
 eq(s:on("speedHack"), false, "speedHack off")
 

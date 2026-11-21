@@ -56,7 +56,7 @@ local function newShows(def, v)
 end
 local SKIP = { theme = true, interface = true } -- (theme loads saved looks; interface switches)
 -- (the New interface's own settings aren't shown in Classic, Part E2: only V2.38.17's are compared)
-for _, def in ipairs(Settings.SCHEMA) do if not def.v2 then SKIP[def.key] = true end end
+for _, def in ipairs(Settings.SCHEMA) do if not def.v2 or def.hidden then SKIP[def.key] = true end end
 
 section("the store -> both interfaces, in the same frame")
 local bad = {}

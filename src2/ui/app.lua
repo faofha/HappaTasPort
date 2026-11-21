@@ -42,7 +42,7 @@ function UI.start(E)
 	self.root = Root.new(E)
 	life:own(function() self.root:destroy() end)
 	if self.root.refused then
-		E.bus:emit("status", "The interface needs gethui, CoreGui or \"Allow PlayerGui Interface\"", true)
+		E.bus:emit("status", "The interface needs gethui or CoreGui (this executor has neither)", true)
 		return self
 	end
 	self.pointer = Pointer.new(E, self.root, life)

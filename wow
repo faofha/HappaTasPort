@@ -1458,24 +1458,24 @@ __mods["engine/settings"] = function(import)
 		row("speedHackModes", nil, "Speed hack", "Create", { kind = "multi", options = { "Idle", "Create" },
 			classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
 			desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
-		row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
+		row("smoothSlowMotion", nil, "Speed hack", 1, { hidden = true, desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
 		row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
 		row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, classicToo = true, desc = "0 = never glides, 100 = always glides" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
-		row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { desc = "Mouse positions follow the screen size" }),
+		row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { hidden = true, desc = "Mouse positions follow the screen size" }),
 		row("nohboardCursor", "NohBoard Cursor", "Inputs", 1, { desc = "Shows a cursor where the mouse is, for key overlays" }),
 		row("pausedMouse", nil, "Inputs", 1, { desc = "Paused: a cursor image shows the frame's mouse; unpausing puts the mouse back there" }),
-		row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 100, desc = "How fast the hidden mouse moves when the camera is locked" }),
+		row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 1, desc = "How fast the hidden mouse moves when the camera is locked" }),
 		row("windowGuarding", "Window Guarding", "Inputs", 1, { desc = "Stops replayed input when the Roblox window isn't focused" }),
-		row("syncClientObjects", "Sync Client Objects", "World sync", 0, { desc = "Records and replays the parts only you see" }),
-		row("smoothClientObjects", "Smooth Client Objects", "World sync", 1, { desc = "Fills the gaps between client object frames smoothly" }),
-		row("frustumCullingCO", "Frustum Culling CO", "World sync", 1, { desc = "Only records client objects on screen or close by" }),
-		row("syncButtonTimers", "Sync Button Timers", "World sync", 1, { desc = "Timed buttons follow the TAS clock" }),
-		row("syncLighting", "Sync Lighting", "World sync", 1, { desc = "Records and replays lighting changes" }),
-		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
-		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
+		row("syncClientObjects", "Sync Client Objects", "World sync", 1, { desc = "Client objects, button timers, lighting and the EToH kit follow the TAS" }),
+		row("smoothClientObjects", "Smooth Client Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Fills the gaps between client object frames smoothly" }),
+		row("frustumCullingCO", "Frustum Culling CO", "World sync", 1, { follows = "syncClientObjects", desc = "Only records client objects on screen or close by" }),
+		row("syncButtonTimers", "Sync Button Timers", "World sync", 1, { follows = "syncClientObjects", desc = "Timed buttons follow the TAS clock" }),
+		row("syncLighting", "Sync Lighting", "World sync", 1, { follows = "syncClientObjects", desc = "Records and replays lighting changes" }),
+		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { follows = "syncClientObjects", desc = "The EToH kit's scripts run on the TAS clock" }),
+		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
 		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
 			desc = "New: HappaTAS 3's interface. Classic: V2's" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
@@ -1486,8 +1486,8 @@ __mods["engine/settings"] = function(import)
 		row("statsTextSize", "Stats Text Size", "Interface", 11, { kind = NUM, min = 6, max = 30, integer = true, desc = "The size of the stats text" }),
 		row("showMicroProfiler", "Show MicroProfiler", "Interface", 0, { desc = "Shows the MicroProfiler" }),
 		row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4, desc = "The size of the MicroProfiler" }),
-		row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, desc = "Moves the MicroProfiler's text up or down" }),
-		row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { desc = "Lets the interface sit where game scripts can see it" }),
+		row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, hidden = true, desc = "Moves the MicroProfiler's text up or down" }),
+		row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { hidden = true, desc = "Lets the interface sit where game scripts can see it" }),
 		row("classicMainColor", nil, "Classic look", "#003481", { kind = "color", classicOnly = true, desc = "The colour every Auto colour follows (darker parts stay darker)" }),
 		row("classicWindow", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "The main menu, stats panels, merge dialog and join message" }),
 		row("classicPanel", nil, "Classic look", "Auto", { kind = "autocolor", classicOnly = true, desc = "Lists, the slot list and a slot's expansion" }),
@@ -1524,16 +1524,22 @@ __mods["engine/settings"] = function(import)
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 		interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
+		pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
 		glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 		classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 	}
-	Settings.byKey, Settings.byV2 = {}, {}
+	Settings.byKey, Settings.byV2, Settings.followers = {}, {}, {}
 	for i, r in ipairs(Settings.SCHEMA) do
 		r.order = i
 		r.name = NAMES[r.key] or r.v2
 		Settings.byKey[r.key] = r
 		if r.v2 then Settings.byV2[r.v2] = r end
+		if r.follows then
+			r.hidden = true
+			local list = Settings.followers[r.follows] or {}
+			list[#list + 1] = r.key
+			Settings.followers[r.follows] = list
+		end
 	end
 	local function hexColor(v)
 		if type(v) ~= "string" then return nil end
@@ -1624,6 +1630,8 @@ __mods["engine/settings"] = function(import)
 			local ok, err = pcall(f, key, v)
 			if not ok and self.errs then self.errs:report("settings", err) end
 		end
+		local fl = Settings.followers[key]
+		if fl then for _, fk in ipairs(fl) do self:set(fk, v) end end
 		return true
 	end
 	function Settings:onAny(f)
@@ -4197,6 +4205,19 @@ __mods["persist/settingsfile"] = function(import)
 		end
 		return ui
 	end
+	local function loadSettings(settings, entries)
+		local old, any = false, false
+		for key, v in pairs(entries) do
+			local def = Settings.byKey[key]
+			if def and def.follows then
+				old = true
+				if tonumber(v) and tonumber(v) ~= 0 then any = true end
+			elseif def and not def.hidden then
+				settings:set(key, v)
+			end
+		end
+		if old and any then settings:set("syncClientObjects", 1) end
+	end
 	local function setKey(controls, control, keyName)
 		if type(keyName) == "string" and (keyName == "None" or Keys.isValid(keyName)) then controls:set(control, keyName) end
 	end
@@ -4207,7 +4228,7 @@ __mods["persist/settingsfile"] = function(import)
 		local raw3 = files:read(V3_PATH)
 		local t3 = decode(self, raw3)
 		if t3 and t3.format == FORMAT then
-			for key, v in pairs(type(t3.settings) == "table" and t3.settings or {}) do settings:set(key, v) end
+			loadSettings(settings, type(t3.settings) == "table" and t3.settings or {})
 			for control, keyName in pairs(type(t3.controls) == "table" and t3.controls or {}) do setKey(controls, control, keyName) end
 			self.profiler = type(t3.profiler) == "table" and t3.profiler or nil
 			self.ui = cleanUi(t3.ui)
@@ -4219,10 +4240,12 @@ __mods["persist/settingsfile"] = function(import)
 			end
 			local t2 = decode(self, files:read(V2_PATH))
 			if t2 then
+				local byKey = {}
 				for name, v in pairs(type(t2.settings) == "table" and t2.settings or {}) do
 					local def = Settings.byV2[name]
-					if def then settings:set(def.key, v) end
+					if def then byKey[def.key] = v end
 				end
+				loadSettings(settings, byKey)
 				for name, keyName in pairs(type(t2.controls) == "table" and t2.controls or {}) do
 					local ctl = Controls.byV2[name]
 					if ctl then setKey(controls, ctl.key, keyName) end
@@ -4237,7 +4260,12 @@ __mods["persist/settingsfile"] = function(import)
 	end
 	function SettingsFile:write()
 		if not self.files.available or not self.http then return false end
-		local out = { format = FORMAT, version = 1, settings = table.clone(self.settings.values),
+		local saved = {}
+		for key, v in pairs(self.settings.values) do
+			local def = Settings.byKey[key]
+			if not (def and def.hidden) then saved[key] = v end
+		end
+		local out = { format = FORMAT, version = 1, settings = saved,
 			controls = table.clone(self.controls.values), profiler = self.profiler, ui = self:getUi() }
 		local ok, json = pcall(self.http.JSONEncode, self.http, out)
 		if not ok then return false end
@@ -6702,8 +6730,11 @@ __mods["world/co/registry"] = function(import)
 			if s and s.rcf and s.rv and self.playActive then
 				pcall(function()
 					part.CFrame = s.rcf
-					part.Transparency = s.rv[1] / 1000
-					part.CanCollide = s.rv[2] == 1
+					local ko = Registry.kitOwns
+					if not (ko and ko(part)) then
+						part.Transparency = s.rv[1] / 1000
+						part.CanCollide = s.rv[2] == 1
+					end
 					part.Color = Color3.fromRGB(s.rv[3], s.rv[4], s.rv[5])
 					part.Size = Vector3.new(s.rv[6] / 1000, s.rv[7] / 1000, s.rv[8] / 1000)
 					local okM, mat = pcall(function() return Enum.Material:FromValue(s.rv[9]) end)
@@ -11357,6 +11388,11 @@ __mods["world/kit/vanishers"] = function(import)
 	local Players = Env.svc("Players")
 	local Vanishers = {}
 	local groups, groupOf = {}, {}
+	local partGroup = setmetatable({}, { __mode = "k" })
+	import("world/co/registry").kitOwns = function(part)
+		local g = partGroup[part]
+		return g ~= nil and g.last ~= nil and groupOf[g.cfg] == g
+	end
 	local MODES = { Fade = true, Blink = true, Constant = true }
 	local params = OverlapParams.new()
 	local function attr(inst, name, def)
@@ -11408,6 +11444,7 @@ __mods["world/kit/vanishers"] = function(import)
 				end
 				local sel = p:FindFirstChild("VanisherSelectionBox")
 				if sel and not sel:IsA("SelectionBox") then sel = nil end
+				partGroup[p] = g
 				g.parts[#g.parts + 1] = { part = p, defT = defT, defC = defC, touchT = touchT, touchC = touchC, sel = sel,
 					selColor = sel and sel.Color3, selThick = sel and sel.LineThickness or 0.1 }
 			end
@@ -13462,166 +13499,6 @@ __mods["engine/frame"] = function(import)
 		end)
 	end
 	return Frame
-end
-__mods["engine/diagnostics"] = function(import)
-	local CONFIG = import("config")
-	local Env = import("platform/env")
-	local Diag = {}
-	local N = 4096
-	local WINDOW = 10
-	local STEP = 1 / 240
-	local FUNCS = { "writefile", "readfile", "isfile", "isfolder", "makefolder", "listfiles", "delfile", "appendfile",
-		"delfolder", "gethui", "cloneref", "getgc", "filtergc", "getconnections", "hookfunction", "restorefunction",
-		"iscclosure", "getloadedmodules", "setreadonly", "isreadonly", "isactive", "keypress", "keyrelease",
-		"mousemoveabs", "mousemoverel", "mousescroll", "getcustomasset", "identifyexecutor", "envOf", "setclipboard" }
-	function Diag.census()
-		local c = { parts = 0, collide = 0, loose = 0, meshes = 0, constraints = {} }
-		for _, d in ipairs(workspace:GetDescendants()) do
-			if d:IsA("BasePart") then
-				c.parts = c.parts + 1
-				if d.CanCollide then
-					c.collide = c.collide + 1
-					if not d.Anchored then c.loose = c.loose + 1 end
-					if d:IsA("MeshPart") or d:IsA("UnionOperation") then c.meshes = c.meshes + 1 end
-				end
-			elseif d:IsA("Constraint") or d:IsA("BodyMover") then
-				c.constraints[d.ClassName] = (c.constraints[d.ClassName] or 0) + 1
-			end
-		end
-		return c
-	end
-	local function ring() return { t = table.create(N, 0), v = table.create(N, 0), i = 0, n = 0 } end
-	local function push(r, t, v)
-		local i = r.i % N + 1
-		r.t[i], r.v[i], r.i = t, v, i
-		if r.n < N then r.n = r.n + 1 end
-	end
-	local function recent(r, now)
-		local out = {}
-		for k = r.n - 1, 0, -1 do
-			local i = (r.i - k - 1) % N + 1
-			if now - r.t[i] <= WINDOW then out[#out + 1] = r.v[i] end
-		end
-		return out
-	end
-	function Diag.start(E)
-		local d = { frames = ring(), steps = ring() }
-		E.diag = d
-		E.pipe:add("Heartbeat", 95, "diagnostics.frame", function(dt) push(d.frames, os.clock(), dt) end, "diagnostics")
-		E.pipe:add("PostSimulation", 95, "diagnostics.step", function(dt) push(d.steps, os.clock(), dt) end, "diagnostics")
-	end
-	local function fmt(v)
-		if type(v) == "number" then return string.format("%.6g", v) end
-		return tostring(v)
-	end
-	function Diag.report(E)
-		local d = E.diag
-		local now = os.clock()
-		local L = {}
-		local function add(s) L[#L + 1] = s end
-		add("HappaTAS diagnostics")
-		add("Version: " .. CONFIG.VERSION .. "   Executor: " .. tostring(Env.executor) .. "   Date: " .. os.date("%Y-%m-%d %H:%M:%S"))
-		add("Interface: " .. tostring(E.settings:get("interface")) .. "   Touch: "
-			.. tostring(game:GetService("UserInputService").TouchEnabled) .. "   Place: " .. tostring(game.PlaceId))
-		local have, miss = {}, {}
-		for _, name in ipairs(FUNCS) do
-			if Env[name] then have[#have + 1] = name else miss[#miss + 1] = name end
-		end
-		add("Executor functions present: " .. table.concat(have, ", "))
-		add("Executor functions missing: " .. (#miss > 0 and table.concat(miss, ", ") or "none"))
-		for _, n in ipairs(Env.notes) do add("  note: " .. n) end
-		local ft = d and recent(d.frames, now) or {}
-		local sum, worst = 0, 0
-		for _, v in ipairs(ft) do
-			sum = sum + v
-			if v > worst then worst = v end
-		end
-		if #ft > 0 then
-			add(string.format("Frames (last %d s): %d, FPS %.1f, average %.2f ms, worst %.2f ms", WINDOW, #ft, #ft / math.max(sum, 1e-6),
-				1000 * sum / #ft, 1000 * worst))
-		else
-			add("Frames: no samples")
-		end
-		if Env.getfpscap then
-			local ok, v = pcall(Env.getfpscap)
-			if ok then add("FPS cap: " .. fmt(v)) end
-		end
-		local st = d and recent(d.steps, now) or {}
-		local hist, whole, offMax, steps = {}, 0, 0, 0
-		for _, v in ipairs(st) do
-			local n = v / STEP
-			local r = math.floor(n + 0.5)
-			local off = math.abs(n - r)
-			if off < 1e-3 then whole = whole + 1 end
-			if off > offMax then offMax = off end
-			steps = steps + n
-			local key = off < 1e-3 and tostring(r) or string.format("%.2f", n)
-			hist[key] = (hist[key] or 0) + 1
-		end
-		if #st > 0 then
-			local h = {}
-			for k, c in pairs(hist) do h[#h + 1] = k .. " step(s) x" .. c end
-			table.sort(h)
-			add(string.format("Physics (last %d s): %d PostSimulation events, %.3f steps each on average, %.1f %% whole 1/240 s steps (largest off: %.4f of a step)",
-				WINDOW, #st, steps / #st, 100 * whole / #st, offMax))
-			add("  " .. table.concat(h, ", "))
-		else
-			add("Physics: no samples")
-		end
-		local mode = ({ "Idle", "Create", "Test" })[E.mode or 1] or tostring(E.mode)
-		add("Mode: " .. mode .. "   paused: " .. tostring(E.paused) .. "   frames: " .. tostring(E.tl:count()))
-		local SH = E.time and E.time.SH
-		if SH then
-			local FS = SH.FS or {}
-			add("Speed hack now: wanted " .. fmt(SH.Wanted()) .. ", physics scale " .. fmt(SH.scale) .. ", animation rate " .. fmt(SH.anim)
-				.. ", Frame Step " .. (FS.on and ("on (" .. fmt(FS.s) .. ")") or "off"))
-			local cy = SH.Humanoid and SH.Humanoid.coyote
-			if cy then
-				add("Coyote now: enforcing " .. tostring(cy.enforce == true) .. ", restored " .. tostring(cy.restored)
-					.. ", off floor " .. fmt(cy.off) .. " s, jumped " .. tostring(cy.jumped) .. ", Jumping disabled by it "
-					.. tostring(cy.disabled) .. ", Freefall disabled by it " .. tostring(cy.noFall))
-			end
-		end
-		local hum = E.char and E.char.hum
-		if hum then
-			local ok, s = pcall(function()
-				return string.format("Humanoid: state %s, WalkSpeed %s, JumpPower %s, Jumping enabled %s, Freefall enabled %s, Gravity %s",
-					hum:GetState().Name, fmt(hum.WalkSpeed), fmt(hum.JumpPower), tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Jumping)),
-					tostring(hum:GetStateEnabled(Enum.HumanoidStateType.Freefall)), fmt(workspace.Gravity))
-			end)
-			if ok then add(s) end
-		end
-		local okC, c = pcall(Diag.census)
-		if okC then
-			add("World: " .. c.parts .. " parts, " .. c.collide .. " collide, " .. c.loose .. " of them loose (held with the character in slow motion)")
-			local list = {}
-			for class, n in pairs(c.constraints) do list[#list + 1] = class .. " x" .. n end
-			table.sort(list)
-			add("  Constraints and movers: " .. (#list > 0 and table.concat(list, ", ") or "none"))
-			add("  Meshes and unions that collide: " .. c.meshes)
-		end
-		add("Settings:")
-		local keys = {}
-		for k in pairs(E.settings.values) do keys[#keys + 1] = k end
-		table.sort(keys)
-		for _, k in ipairs(keys) do add("  " .. k .. " = " .. fmt(E.settings.values[k])) end
-		local errs = E.errs
-		local counts = {}
-		for src, c in pairs(errs.counts) do counts[#counts + 1] = src .. " x" .. c end
-		table.sort(counts)
-		add("Errors per source: " .. (#counts > 0 and table.concat(counts, ", ") or "none"))
-		for _, m in ipairs(errs.last) do add("  " .. m) end
-		return table.concat(L, "\n")
-	end
-	function Diag.share(E)
-		local text = Diag.report(E)
-		if Env.setclipboard and pcall(Env.setclipboard, text) then return "Diagnostics copied to the clipboard" end
-		local path = "HappaTasPort/diagnostics-" .. os.date("%Y%m%d-%H%M%S") .. ".txt"
-		E.files:makeFolder("HappaTasPort")
-		if E.files:write(path, text) then return "Diagnostics saved to " .. path end
-		return "Diagnostics: no clipboard and no file functions"
-	end
-	return Diag
 end
 __mods["ui/write"] = function(import)
 	local W = { version = 0 }
@@ -16953,7 +16830,6 @@ __mods["ui/win/settings"] = function(import)
 	local Row = import("ui/kit/row")
 	local ColorPicker = import("ui/kit/colorpicker")
 	local Bezier = import("ui/kit/bezier")
-	local Diagnostics = import("engine/diagnostics")
 	local SettingsWin = {}
 	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
@@ -17114,7 +16990,7 @@ __mods["ui/win/settings"] = function(import)
 		local sw = { rows = {}, sections = {}, chips = {}, offs = {}, items = {} }
 		local search = Field.new(ctx, body, { search = true, placeholder = "Search settings", w = 300 })
 		search.gui.Position = UDim2.new(0, PAD, 0, 10)
-		search.gui.Size = UDim2.new(1, -PAD * 3 - 96, 0, 32)
+		search.gui.Size = UDim2.new(1, -PAD * 2, 0, 32)
 		sw.search = search
 		local x, y = PAD, 50
 		local width = 420 - PAD * 2
@@ -17165,7 +17041,7 @@ __mods["ui/win/settings"] = function(import)
 				end
 			end
 			for _, def in ipairs(Settings.SCHEMA) do
-				if def.section == secName and not BEZIER[def.key] then
+				if def.section == secName and not BEZIER[def.key] and not def.hidden then
 					local ctl, kind = controlFor(lctx, s, def, sw)
 					local row = Row.new(lctx, list, { name = def.name, desc = def.desc, control = ctl })
 					local r = { row = row, ctl = ctl, kind = kind, def = def }
@@ -17240,9 +17116,6 @@ __mods["ui/win/settings"] = function(import)
 				W.bump()
 			end
 		end
-		sw.diag = Button.new(ctx, body, { text = "Diagnostics", kind = "plain", w = 96, h = 32 })
-		sw.diag.gui.Position = UDim2.new(1, -PAD - 96, 0, 10)
-		sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 		filter()
 		ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 		return sw
@@ -18769,10 +18642,9 @@ __mods["ui/win/helptext"] = function(import)
 			.. "mousescroll). HappaTAS's own keys are never recorded, and nothing reacts while you type in chat or a text "
 			.. "box. Keep the Roblox window focused during playback (Window Guarding stops replayed input while it isn't) and keep "
 			.. "your hands off the keyboard and mouse.\n\nReplay Keyboard, Replay Mouse Clicks and Replay Mouse Movement "
-			.. "turn each part off. Normalize Mouse UV (Mouse UV Normalization) stores the cursor as a fraction of the "
-			.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
-			.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
-			.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
+			.. "turn each part off. The cursor is stored as a fraction of the screen, so a run aims the same at another "
+			.. "window size. NohBoard Cursor draws a still cursor while the camera is locked (right click, shift lock, "
+			.. "first person); NohBoard Mouse Speed (at most 1) scales how the hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
 			.. "frame shown while you are paused, and puts the mouse back there when you unpause. Hold right click while "
 			.. "paused and the cursor stays locked, as in the game, so unpausing with it held doesn't turn the camera." },
 		{ "death", "Death & Respawn Recording",
@@ -18782,19 +18654,19 @@ __mods["ui/win/helptext"] = function(import)
 			"Record Tool Actions records equipping, unequipping and using tools. During playback a tool that isn't there "
 			.. "is skipped with a short notice." },
 		{ "buttons", "Button & Obby Mechanism Sync",
-			"Sync Button Timers: the EToH kit's buttons and timers (timed switches, pressure plates, countdown doors, "
-			.. "disappearing parts) are saved with every press. While paused the timers wait; going back puts the buttons "
-			.. "back exactly; testing runs them on the run's clock. Sync Lighting keeps lighting changes with the run." },
+			"With Sync Client Objects on, the EToH kit's buttons and timers (timed switches, pressure plates, countdown "
+			.. "doors, disappearing parts) are saved with every press. While paused the timers wait; going back puts the "
+			.. "buttons back exactly; testing runs them on the run's clock. Lighting changes are kept with the run too." },
 		{ "co", "Client Objects",
-			"Sync Client Objects records the parts only your game client moves: moving, falling and swinging "
-			.. "platforms, pushboxes, vanishers, morphs and the like. They are saved with the run and put back while "
-			.. "testing and scrubbing. Smooth Client Objects blends between the saved positions so they move smoothly at "
-			.. "any frame rate.\n\nFrustum Culling CO (V2's Frustum Culling & Sandboxing) only keeps objects that are on "
-			.. "screen or within 25 studs, which keeps files small." },
+			"Sync Client Objects (on by default) is one switch for everything that follows the run besides your "
+			.. "character: the parts only your game client moves (moving, falling and swinging platforms, pushboxes, "
+			.. "vanishers, morphs and the like), timed buttons, lighting and the EToH kit. Client objects are saved with "
+			.. "the run and put back while testing and scrubbing, blended between the saved positions so they move "
+			.. "smoothly at any frame rate. Only objects on screen or within 25 studs are kept, which keeps files small." },
 		{ "kit", "EToH Kit Objects",
-			"Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the run's clock, so they "
+			"With Sync Client Objects on, the EToH kit's own timers (waits, delays, tweens) follow the run's clock, so they "
 			.. "stop while paused and slow down with the speed hack. A jump launcher's push, moving platforms and spawner "
-			.. "cooldowns keep the same timing whether you pause or not.\n\nSync Kit Objects: beat blocks follow the run's "
+			.. "cooldowns keep the same timing whether you pause or not.\n\nBeat blocks follow the run's "
 			.. "time, turret bullets are saved with their hits and damage, pushboxes are hidden before they were spawned, "
 			.. "and bounce pad and launcher effects play again in Test." },
 		{ "speed", "Speed Hack (Slow Motion)",
@@ -18807,10 +18679,10 @@ __mods["ui/win/helptext"] = function(import)
 			.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
 			.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
 			.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
-			.. "and record what matters at 1x or below.\n\nSmooth Slow Motion draws the frames in between: your "
+			.. "and record what matters at 1x or below.\n\nSlow motion draws the frames in between: your "
 			.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
 			.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
-			.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
+			.. "physics; the run recorded is the same. Things the kit's scripts move still move in steps." },
 		{ "glide", "Glide Manipulation",
 			"A glide: falling fast along a part with shift lock, strafing with A / D, the camera turns your torso's "
 			.. "vertical corner into the part's side. If a physics step starts with the torso 0.1 - 0.2 studs inside the "
@@ -18832,8 +18704,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "is Crop, Fit or Stretch." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
-			.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
-			.. "interface in PlayerGui on an executor that has neither gethui nor CoreGui access (off by default).\n\n"
+			.. "always works). No HappaTAS key does anything while you type.\n\n"
 			.. "Settings and Controls are their own windows; every setting has a reset arrow (←) when it isn't at its "
 			.. "default." },
 		{ "profiler", "MicroProfiler",
@@ -18841,13 +18712,11 @@ __mods["ui/win/helptext"] = function(import)
 			.. "since the count started, Max = the biggest frame so far. Aggregate Infinite counts the frames; picking it "
 			.. "starts Avg and Max again. Custom > TAS Timeline shows your run (green = the current frame, click to jump there). "
 			.. "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves the frames to the place's folder. Pause or "
-			.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
-			.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
+			.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it." },
 		{ "limits", "Known limits",
 			"Some things can't follow the run: other players; in slow motion a push against a loose platform can start "
-			.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Turn on Sync Client "
-			.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
-			.. "constraints." },
+			.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Keep Sync Client "
+			.. "Objects on for platforms you need exactly." },
 		{ "missing", "Missing executor functions", "" },
 		{ "credits", "Credits", CREDITS },
 	}
@@ -19302,8 +19171,8 @@ __mods["ui/classic/tree"] = function(import)
 				ST(22),
 			} }
 		end
-		local function LV(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), Text = text, TextSize = 16 } } end
-		local function LI(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 20), Text = text, TextSize = 12 } } end
+		local function LV(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), Text = text, TextSize = 16, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y } } end
+		local function LI(name, text) return { "TextLabel", name, 35, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 20), Text = text, TextSize = 12, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y } } end
 		local UI_TREE = {
 			{"Frame","JoinMessage",1,{Position=u(0,10,1,150),Size=u(0,280,0,75),AnchorPoint=v2(0,1)},{
 				{"TextLabel","M",2,{Position=u(0,15,0,40),Size=u(0,200,0,30),Text="M - Main Menu",TextSize=20}},
@@ -19430,10 +19299,10 @@ __mods["ui/classic/tree"] = function(import)
 				}},
 				{"TextButton","HelpToggle",28,{Position=u(0,240,0,41),Size=u(0,80,0,30),ZIndex=3,Text="Help",TextSize=15}},
 				{"TextButton","MoreToggle",28,{Position=u(0,320,0,41),Size=u(0,80,0,30),ZIndex=3,Text="More",TextSize=15}},
-				{"ScrollingFrame","MoreFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,4.3,0)},{
-					{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,1,-60)},{
+				{"ScrollingFrame","MoreFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y},{
+					{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,0,0),AutomaticSize=Enum.AutomaticSize.Y},{
 						{"UIListLayout","UIListLayout",44,{}},
-						{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108)},{
+						{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108),AutomaticSize=Enum.AutomaticSize.Y},{
 							UC,
 							LV("0", " Happy_Liam/happa - Main Scripter/UI Design"),
 							UL9,
@@ -19447,7 +19316,7 @@ __mods["ui/classic/tree"] = function(import)
 							local kids = { LV("0", " HappaTAS " .. HelpText.WHATS_NEW.version) }
 							for i, item in ipairs(items) do kids[#kids + 1] = LI(tostring(i), "   -   " .. item) end
 							kids[#kids + 1] = UL9
-							return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items) }, kids }
+							return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items), AutomaticSize = Enum.AutomaticSize.Y }, kids }
 						end)(),
 						HD("0ModelN", "Executor port - client side script", 14),
 						{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{ K(21), ST(48) }},
@@ -20121,11 +19990,12 @@ __mods["ui/classic/settingsrows"] = function(import)
 	local ROW_H, HEADER_H = 30, 28
 	local SWITCH_ON = { Position = u(1, 0, 0.5, 0), color = "classicSwitchOn" }
 	local LABELS = { speedHack = "Speed Hack (slow motion)", speedHackSpeed = "Speed (0.1 - 1, 0.5 = half)",
-		invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
+		invisibleMouseSpeed = "NohBoard Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
 		microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 		allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
 	local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
 	local function shownHere(def)
+		if def.hidden then return false end
 		return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true
 			or def.classicToo == true
 	end
@@ -21135,7 +21005,7 @@ __mods["ui/app"] = function(import)
 		self.root = Root.new(E)
 		life:own(function() self.root:destroy() end)
 		if self.root.refused then
-			E.bus:emit("status", "The interface needs gethui, CoreGui or \"Allow PlayerGui Interface\"", true)
+			E.bus:emit("status", "The interface needs gethui or CoreGui (this executor has neither)", true)
 			return self
 		end
 		self.pointer = Pointer.new(E, self.root, life)
@@ -24202,7 +24072,6 @@ __mods["main"] = function(import)
 	local SettingsFile = import("persist/settingsfile")
 	local UIApp = import("ui/app")
 	local ProfilerApp = import("profiler/app")
-	local Diagnostics = import("engine/diagnostics")
 	local Main = {}
 	local kernel = nil
 	local function share(key, value, errs)
@@ -24245,7 +24114,6 @@ __mods["main"] = function(import)
 		E.persist = Persist.new(E)
 		E.modes = Modes.new(E)
 		k.pipe:keep("engine")
-		Diagnostics.start(E)
 		E.inputs:start()
 		Frame.start(E)
 		E.cs:start()
@@ -24283,11 +24151,6 @@ __mods["main"] = function(import)
 			local E, why = engine()
 			if not E then return false, why end
 			return E.persist:load(path)
-		end
-		handle.Diagnostics = function()
-			local E = k.engine
-			if not E then return nil, "HappaTAS isn't running" end
-			return Diagnostics.report(E)
 		end
 		handle.List = function()
 			local E, why = engine()

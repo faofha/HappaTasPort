@@ -114,10 +114,9 @@ local TOPICS = {
 		.. "mousescroll). HappaTAS's own keys are never recorded, and nothing reacts while you type in chat or a text "
 		.. "box. Keep the Roblox window focused during playback (Window Guarding stops replayed input while it isn't) and keep "
 		.. "your hands off the keyboard and mouse.\n\nReplay Keyboard, Replay Mouse Clicks and Replay Mouse Movement "
-		.. "turn each part off. Normalize Mouse UV (Mouse UV Normalization) stores the cursor as a fraction of the "
-		.. "screen, so a run aims the same at another window size. NohBoard Cursor draws a still cursor while the "
-		.. "camera is locked (right click, shift lock, first person); Invisible Mouse Speed Multiplier scales how the "
-		.. "hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
+		.. "turn each part off. The cursor is stored as a fraction of the screen, so a run aims the same at another "
+		.. "window size. NohBoard Cursor draws a still cursor while the camera is locked (right click, shift lock, "
+		.. "first person); NohBoard Mouse Speed (at most 1) scales how the hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
 		.. "frame shown while you are paused, and puts the mouse back there when you unpause. Hold right click while "
 		.. "paused and the cursor stays locked, as in the game, so unpausing with it held doesn't turn the camera." },
 	{ "death", "Death & Respawn Recording",
@@ -127,19 +126,19 @@ local TOPICS = {
 		"Record Tool Actions records equipping, unequipping and using tools. During playback a tool that isn't there "
 		.. "is skipped with a short notice." },
 	{ "buttons", "Button & Obby Mechanism Sync",
-		"Sync Button Timers: the EToH kit's buttons and timers (timed switches, pressure plates, countdown doors, "
-		.. "disappearing parts) are saved with every press. While paused the timers wait; going back puts the buttons "
-		.. "back exactly; testing runs them on the run's clock. Sync Lighting keeps lighting changes with the run." },
+		"With Sync Client Objects on, the EToH kit's buttons and timers (timed switches, pressure plates, countdown "
+		.. "doors, disappearing parts) are saved with every press. While paused the timers wait; going back puts the "
+		.. "buttons back exactly; testing runs them on the run's clock. Lighting changes are kept with the run too." },
 	{ "co", "Client Objects",
-		"Sync Client Objects records the parts only your game client moves: moving, falling and swinging "
-		.. "platforms, pushboxes, vanishers, morphs and the like. They are saved with the run and put back while "
-		.. "testing and scrubbing. Smooth Client Objects blends between the saved positions so they move smoothly at "
-		.. "any frame rate.\n\nFrustum Culling CO (V2's Frustum Culling & Sandboxing) only keeps objects that are on "
-		.. "screen or within 25 studs, which keeps files small." },
+		"Sync Client Objects (on by default) is one switch for everything that follows the run besides your "
+		.. "character: the parts only your game client moves (moving, falling and swinging platforms, pushboxes, "
+		.. "vanishers, morphs and the like), timed buttons, lighting and the EToH kit. Client objects are saved with "
+		.. "the run and put back while testing and scrubbing, blended between the saved positions so they move "
+		.. "smoothly at any frame rate. Only objects on screen or within 25 studs are kept, which keeps files small." },
 	{ "kit", "EToH Kit Objects",
-		"Kit Scripts On TAS Clock: the EToH kit's own timers (waits, delays, tweens) follow the run's clock, so they "
+		"With Sync Client Objects on, the EToH kit's own timers (waits, delays, tweens) follow the run's clock, so they "
 		.. "stop while paused and slow down with the speed hack. A jump launcher's push, moving platforms and spawner "
-		.. "cooldowns keep the same timing whether you pause or not.\n\nSync Kit Objects: beat blocks follow the run's "
+		.. "cooldowns keep the same timing whether you pause or not.\n\nBeat blocks follow the run's "
 		.. "time, turret bullets are saved with their hits and damage, pushboxes are hidden before they were spawned, "
 		.. "and bounce pad and launcher effects play again in Test." },
 	{ "speed", "Speed Hack (Slow Motion)",
@@ -152,10 +151,10 @@ local TOPICS = {
 		.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
 		.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
 		.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
-		.. "and record what matters at 1x or below.\n\nSmooth Slow Motion draws the frames in between: your "
+		.. "and record what matters at 1x or below.\n\nSlow motion draws the frames in between: your "
 		.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
 		.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
-		.. "physics; the run recorded is the same with it on or off. Things the kit's scripts move still move in steps." },
+		.. "physics; the run recorded is the same. Things the kit's scripts move still move in steps." },
 	{ "glide", "Glide Manipulation",
 		"A glide: falling fast along a part with shift lock, strafing with A / D, the camera turns your torso's "
 		.. "vertical corner into the part's side. If a physics step starts with the torso 0.1 - 0.2 studs inside the "
@@ -177,8 +176,7 @@ local TOPICS = {
 		.. "is Crop, Fit or Stretch." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
-		.. "always works). No HappaTAS key does anything while you type. Allow PlayerGui Interface puts the "
-		.. "interface in PlayerGui on an executor that has neither gethui nor CoreGui access (off by default).\n\n"
+		.. "always works). No HappaTAS key does anything while you type.\n\n"
 		.. "Settings and Controls are their own windows; every setting has a reset arrow (←) when it isn't at its "
 		.. "default." },
 	{ "profiler", "MicroProfiler",
@@ -186,13 +184,11 @@ local TOPICS = {
 		.. "since the count started, Max = the biggest frame so far. Aggregate Infinite counts the frames; picking it "
 		.. "starts Avg and Max again. Custom > TAS Timeline shows your run (green = the current frame, click to jump there). "
 		.. "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves the frames to the place's folder. Pause or "
-		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it. If the "
-		.. "text sits too high or low, change MicroProfiler Text Offset (- = up)." },
+		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it." },
 	{ "limits", "Known limits",
 		"Some things can't follow the run: other players; in slow motion a push against a loose platform can start "
-		.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Turn on Sync Client "
-		.. "Objects for platforms you need exactly. Diagnostics (Settings) counts the place's loose parts and "
-		.. "constraints." },
+		.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Keep Sync Client "
+		.. "Objects on for platforms you need exactly." },
 	{ "missing", "Missing executor functions", "" },
 	{ "credits", "Credits", CREDITS },
 }

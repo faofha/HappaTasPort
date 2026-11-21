@@ -33,11 +33,14 @@ end
 section("every setting has a control of its kind")
 local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 local CLASSIC_ONLY = 0 -- (Classic Look's rows: only Classic's Settings tab has them)
-for _, def in ipairs(Settings.SCHEMA) do if def.classicOnly then CLASSIC_ONLY = CLASSIC_ONLY + 1 end end
+-- (and V3.1's hidden rows: no setting of their own any more, shown nowhere)
+for _, def in ipairs(Settings.SCHEMA) do if def.classicOnly or def.hidden then CLASSIC_ONLY = CLASSIC_ONLY + 1 end end
 local n = 0
 for _, def in ipairs(Settings.SCHEMA) do
 	local r = sw.rows[def.key]
-	if def.classicOnly then
+	if def.hidden then
+		eq(r, nil, def.key .. ": no setting of its own (V3.1)")
+	elseif def.classicOnly then
 		eq(r, nil, def.key .. ": Classic Look is Classic's only")
 	elseif BEZIER[def.key] then
 		eq(r, nil, def.key .. ": shown by the curve editor, not a row")
@@ -129,11 +132,11 @@ box:ReleaseFocus()
 
 section("a row scrolled out of the list takes no click (it isn't shown there)")
 sw.list.CanvasPosition = Vector2.new(0, 0)
-local hidden = sw.rows.syncLighting
-local before = E.settings:get("syncLighting")
+local hidden = sw.rows.syncClientObjects
+local before = E.settings:get("syncClientObjects")
 check(hidden.ctl.gui.AbsolutePosition.Y > sw.list.AbsolutePosition.Y + sw.list.AbsoluteSize.Y, "World sync is below the list's view")
 UIH.click(UIH.center(hidden.ctl.gui))
-eq(E.settings:get("syncLighting"), before, "a click there does nothing")
+eq(E.settings:get("syncClientObjects"), before, "a click there does nothing")
 
 section("section chips scroll to their section")
 UIH.click(sw.chips["World sync"].gui)
