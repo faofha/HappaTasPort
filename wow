@@ -78,6 +78,7 @@ __mods["platform/env"] = function(import)
 	Env.gethui = fn(gethui)
 	Env.cloneref = fn(cloneref, clonereference)
 	Env.getgc, Env.filtergc = fn(getgc), fn(filtergc)
+	Env.getupvalues = fn(type(debug) == "table" and debug.getupvalues or nil, getupvalues)
 	Env.getconnections = fn(getconnections, getsignals, get_signal_cons)
 	Env.hookfunction = fn(hookfunction, replaceclosure)
 	Env.restorefunction = fn(restorefunction)
@@ -342,6 +343,7 @@ __mods["platform/camerascript"] = function(import)
 		local cameras, activeCamCtrl, zoomModTbl, transparencyCtrl, patchedModule, mouseLockCtrl = nil, nil, nil, nil, nil, nil
 		local originals = {}
 		local rotate, shiftlockBlocked, freeMouse, camFreeze, camFreezeZoom, forceLockCenter, snapZoom = true, false, false, false, false, false, false
+		local zoomSpring
 		local pendingRestore = nil
 		local holdCursor = false
 		local zoomControllers = {}
@@ -507,6 +509,18 @@ __mods["platform/camerascript"] = function(import)
 				local okR, Zoom = pcall(require, zoomMod)
 				if okR and type(Zoom) == "table" then
 					zoomModTbl = Zoom
+					zoomSpring = nil
+					if Env.getupvalues and type(Zoom.Update) == "function" then
+						pcall(function()
+							for _, up in pairs(Env.getupvalues(Zoom.Update)) do
+								if type(up) == "table" and type(rawget(up, "x")) == "number" and type(rawget(up, "v")) == "number"
+									and type(rawget(up, "goal")) == "number" then
+									zoomSpring = up
+									break
+								end
+							end
+						end)
+					end
 					patch(Zoom, "Update", function(orig)
 						return function(renderDt, ...)
 							if snapZoom then
@@ -681,6 +695,23 @@ __mods["platform/camerascript"] = function(import)
 		end
 		function cs:removeZoomSpring()
 			snapZoom = true
+		end
+		function cs:zoomSpring()
+			local s = zoomSpring
+			if not s then return nil end
+			local x, v = rawget(s, "x"), rawget(s, "v")
+			if type(x) ~= "number" or type(v) ~= "number" then return nil end
+			return x, v
+		end
+		function cs:setZoomSpring(zoom, x, v)
+			local s = zoomSpring
+			if not s or type(zoom) ~= "number" or zoom < FIRST_PERSON or type(x) ~= "number" or x <= 0 or type(v) ~= "number" then
+				return false
+			end
+			cs:setZoom(zoom, false)
+			s.goal, s.x, s.v = zoom, x, v
+			snapZoom = false
+			return true
 		end
 		function cs:setZoom(zoom, static)
 			if type(zoom) ~= "number" or zoom ~= zoom or zoom == math.huge or zoom <= 0 then return end
@@ -4471,6 +4502,7 @@ __mods["world/camera"] = function(import)
 	local Util = import("engine/util")
 	local CameraScript = import("platform/camerascript")
 	local round = Util.round
+	local noop = function() end
 	local Camera = { name = "camera", order = 20 }
 	Camera.__index = Camera
 	function Camera.new(E)
@@ -4479,6 +4511,7 @@ __mods["world/camera"] = function(import)
 		tl:addColumn("CamCframe", "f64", 12, { key = "CamCframe", keepOnChange = true })
 		tl:addColumn("Zoom", "f64", 1, { key = "Zoom" })
 		tl:addColumn("ShiftLock", "u8", 1, { key = "ShiftLock" })
+		tl:addColumn("ZoomSpring", "f64", 2, { save = false, toV2 = noop, fromV2 = noop })
 		E.life:connect(Env.svc("UserInputService").InputChanged, function(io)
 			if io.UserInputType == Enum.UserInputType.MouseWheel then self.wheelAt = os.clock() end
 		end)
@@ -4495,8 +4528,17 @@ __mods["world/camera"] = function(import)
 			round(d, 1000), round(e, 1000), round(f, 1000), round(g, 1000), round(h, 1000), round(k, 1000))
 		tl:set("ShiftLock", i, 1, cs:isShiftlocked() and 1 or 0)
 		tl:set("Zoom", i, 1, round(cs:getZoom(), 1000))
+		local sx, sv = cs:zoomSpring()
+		if sx then tl:setN("ZoomSpring", i, sx, sv) end
 	end
 	function Camera:zoomAt(tl, i) return tl:get("Zoom", i, 1) end
+	function Camera:restoreZoom(tl, i)
+		local z = self:zoomAt(tl, i)
+		local sx, sv = tl:getN("ZoomSpring", i)
+		if sx > 0 and self.E.cs:setZoomSpring(z, sx, sv) then return z end
+		self.E.cs:setZoom(z, true)
+		return z
+	end
 	function Camera:shiftAt(tl, i) return tl:get("ShiftLock", i, 1) end
 	function Camera:averaged(tl, i1, i2, w)
 		if i1 == i2 then return cfAt(tl, i1), tl:get("Zoom", i1, 1) end
@@ -4557,7 +4599,7 @@ __mods["world/camera"] = function(import)
 		if not (cam and f) then return end
 		if self.wheelAt and self.wheelAt >= g.t0 then self.guard = nil return end
 		local off = cam.CFrame.Position - f
-		if off.Magnitude >= g.dist - 0.5 or off.Magnitude < 1e-3 then return end
+		if off.Magnitude >= math.min(g.dist, g.zoom) - 0.5 or off.Magnitude < 1e-3 then return end
 		rayParams.FilterDescendantsInstances = { E.char.model }
 		if workspace:Raycast(f, off.Unit * g.dist, rayParams) then return end
 		E.cs:setZoom(g.zoom, true)
@@ -12674,8 +12716,7 @@ __mods["engine/modes"] = function(import)
 		else
 			E.plugins:call("onRestoreUnpause", tl, i)
 			if self:setCam() then
-				local z = E.cam:zoomAt(tl, i)
-				E.cs:setZoom(z, true)
+				local z = E.cam:restoreZoom(tl, i)
 				E.cs:updateGhost(z, 0, true)
 			end
 			E.cs:resetGhost(true)
@@ -12836,7 +12877,7 @@ __mods["engine/modes"] = function(import)
 		local n = E.tl:count()
 		if n > 0 then
 			E.cam:update(n, true)
-			E.cs:setZoom(E.cam:zoomAt(E.tl, n), true)
+			E.cam:restoreZoom(E.tl, n)
 		end
 	end
 	local function noJump(E)

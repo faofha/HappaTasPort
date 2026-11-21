@@ -48,6 +48,7 @@ function CameraScript.new(life, errs, hooks)
 	local cameras, activeCamCtrl, zoomModTbl, transparencyCtrl, patchedModule, mouseLockCtrl = nil, nil, nil, nil, nil, nil
 	local originals = {}
 	local rotate, shiftlockBlocked, freeMouse, camFreeze, camFreezeZoom, forceLockCenter, snapZoom = true, false, false, false, false, false, false
+	local zoomSpring
 	local pendingRestore = nil
 	-- the camera is held (paused) and the right / middle button is down: the cursor stays locked (see cs:setHoldCursor)
 	local holdCursor = false
@@ -219,6 +220,20 @@ function CameraScript.new(life, errs, hooks)
 			local okR, Zoom = pcall(require, zoomMod)
 			if okR and type(Zoom) == "table" then
 				zoomModTbl = Zoom
+				-- (the zoom spring: Roblox's ZoomController keeps it in an upvalue of Update, { x, v, goal, ... };
+				-- live, EToH kit: upvalue 1. Read so an unpause can go on with a tween instead of cutting it)
+				zoomSpring = nil
+				if Env.getupvalues and type(Zoom.Update) == "function" then
+					pcall(function()
+						for _, up in pairs(Env.getupvalues(Zoom.Update)) do
+							if type(up) == "table" and type(rawget(up, "x")) == "number" and type(rawget(up, "v")) == "number"
+								and type(rawget(up, "goal")) == "number" then
+								zoomSpring = up
+								break
+							end
+						end
+					end)
+				end
 				patch(Zoom, "Update", function(orig)
 					return function(renderDt, ...)
 						if snapZoom then
@@ -408,6 +423,28 @@ function CameraScript.new(life, errs, hooks)
 	-- spring then took it back out (the user's file: 4 of 7 unpauses went to ~3.3 studs, then 7.3)
 	function cs:removeZoomSpring()
 		snapZoom = true
+	end
+
+	-- the zoom spring's distance and speed (nil when the game's ZoomController has no spring HappaTAS can read)
+	function cs:zoomSpring()
+		local s = zoomSpring
+		if not s then return nil end
+		local x, v = rawget(s, "x"), rawget(s, "v")
+		if type(x) ~= "number" or type(v) ~= "number" then return nil end
+		return x, v
+	end
+
+	-- the zoom with its spring part way (a tween in progress): the camera's next updates go on from x / v toward
+	-- zoom, like the recording did. False when that can't be done (no spring, first person): use setZoom(static).
+	function cs:setZoomSpring(zoom, x, v)
+		local s = zoomSpring
+		if not s or type(zoom) ~= "number" or zoom < FIRST_PERSON or type(x) ~= "number" or x <= 0 or type(v) ~= "number" then
+			return false
+		end
+		cs:setZoom(zoom, false)
+		s.goal, s.x, s.v = zoom, x, v
+		snapZoom = false
+		return true
 	end
 
 	-- static = land on the zoom at once (no spring)
