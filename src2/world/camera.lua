@@ -10,6 +10,7 @@ local Util = import("engine/util")
 local CameraScript = import("platform/camerascript")
 
 local round = Util.round
+local noop = function() end
 local Camera = { name = "camera", order = 20 }
 Camera.__index = Camera
 
@@ -19,6 +20,9 @@ function Camera.new(E)
 	tl:addColumn("CamCframe", "f64", 12, { key = "CamCframe", keepOnChange = true })
 	tl:addColumn("Zoom", "f64", 1, { key = "Zoom" })
 	tl:addColumn("ShiftLock", "u8", 1, { key = "ShiftLock" })
+	-- (the zoom spring's distance and speed when the frame started: memory only, an unpause goes on with a tween.
+	-- 0 = not kept, e.g. a frame loaded from a file: the zoom lands at once then)
+	tl:addColumn("ZoomSpring", "f64", 2, { save = false, toV2 = noop, fromV2 = noop })
 	-- (a mouse wheel turn ends the unpause guard below: the zoom is yours again)
 	E.life:connect(Env.svc("UserInputService").InputChanged, function(io)
 		if io.UserInputType == Enum.UserInputType.MouseWheel then self.wheelAt = os.clock() end
@@ -38,9 +42,20 @@ function Camera:begin(tl, i)
 		round(d, 1000), round(e, 1000), round(f, 1000), round(g, 1000), round(h, 1000), round(k, 1000))
 	tl:set("ShiftLock", i, 1, cs:isShiftlocked() and 1 or 0)
 	tl:set("Zoom", i, 1, round(cs:getZoom(), 1000))
+	local sx, sv = cs:zoomSpring()
+	if sx then tl:setN("ZoomSpring", i, sx, sv) end
 end
 
 function Camera:zoomAt(tl, i) return tl:get("Zoom", i, 1) end
+
+-- unpausing on frame i: the zoom as it was then, a tween in progress going on (else landing at once)
+function Camera:restoreZoom(tl, i)
+	local z = self:zoomAt(tl, i)
+	local sx, sv = tl:getN("ZoomSpring", i)
+	if sx > 0 and self.E.cs:setZoomSpring(z, sx, sv) then return z end
+	self.E.cs:setZoom(z, true)
+	return z
+end
 function Camera:shiftAt(tl, i) return tl:get("ShiftLock", i, 1) end
 
 -- the camera between frames i1 and i2 (weight w), and its zoom
@@ -114,7 +129,8 @@ function Camera:onFrameEnd()
 	if not (cam and f) then return end
 	if self.wheelAt and self.wheelAt >= g.t0 then self.guard = nil return end -- (you zoomed since)
 	local off = cam.CFrame.Position - f
-	if off.Magnitude >= g.dist - 0.5 or off.Magnitude < 1e-3 then return end
+	-- (a tween inward comes in to the zoom: only closer than both counts as pulled in)
+	if off.Magnitude >= math.min(g.dist, g.zoom) - 0.5 or off.Magnitude < 1e-3 then return end
 	rayParams.FilterDescendantsInstances = { E.char.model }
 	if workspace:Raycast(f, off.Unit * g.dist, rayParams) then return end
 	E.cs:setZoom(g.zoom, true)

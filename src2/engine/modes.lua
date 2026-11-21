@@ -75,8 +75,7 @@ function Modes:loadFrame(i, unpausing, backtrack)
 	else
 		E.plugins:call("onRestoreUnpause", tl, i)
 		if self:setCam() then
-			local z = E.cam:zoomAt(tl, i)
-			E.cs:setZoom(z, true)
+			local z = E.cam:restoreZoom(tl, i)
 			E.cs:updateGhost(z, 0, true)
 		end
 		E.cs:resetGhost(true)
@@ -250,7 +249,7 @@ local function unpauseFrom(self)
 	local n = E.tl:count()
 	if n > 0 then
 		E.cam:update(n, true)
-		E.cs:setZoom(E.cam:zoomAt(E.tl, n), true)
+		E.cam:restoreZoom(E.tl, n)
 	end
 end
 
