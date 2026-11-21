@@ -455,10 +455,13 @@ function CameraScript.new(life, errs, hooks)
 	-- ------------------------------------------------------------------------------------------- ghost
 	-- the camera script's see-through character doesn't run while the camera is Scriptable (Test): the same
 	-- maths is applied here
+	-- (BaseParts and Decals, like Roblox's TransparencyController: a classic face is a Decal on the Head, and a
+	-- Texture is a Decal too. LocalTransparencyModifier is Roblox's local fade, separate from Transparency, so a
+	-- decal's own values are never changed. Without the decals the face stayed visible in first person.)
 	local function collectGhostParts(char)
 		local list = {}
 		for _, d in ipairs(char:GetDescendants()) do
-			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and not d:FindFirstAncestorWhichIsA("Tool") then
+			if (d:IsA("BasePart") or d:IsA("Decal")) and d.Name ~= "HumanoidRootPart" and not d:FindFirstAncestorWhichIsA("Tool") then
 				list[#list + 1] = d
 			end
 		end
@@ -489,13 +492,20 @@ function CameraScript.new(life, errs, hooks)
 		end
 		value = clamp(math.floor(value * 100 + 0.5) / 100, 0, 1)
 		ghost.tick = ghost.tick + 1
-		local rebuild = snap or ghost.char ~= char or ghost.tick % 60 == 1
+		-- (the list is rebuilt when the fade starts, the character changes, and every 60 calls for parts added later;
+		-- paused Create snaps every frame, and rebuilding on every snap cost a GetDescendants pass a frame)
+		local rebuild = (snap and not ghost.active) or ghost.char ~= char or ghost.tick % 60 == 1
 		if rebuild then
 			ghost.char = char
 			ghost.parts = collectGhostParts(char)
 		end
-		for _, part in ipairs(ghost.parts) do
-			if part.Parent and part.LocalTransparencyModifier ~= value then part.LocalTransparencyModifier = value end
+		-- (written when the value changes, and on every rebuild of the list: the engine reads nothing on the frames
+		-- in between, so fading the decals too costs no reads)
+		if rebuild or ghost.applied ~= value then
+			for _, part in ipairs(ghost.parts) do
+				if part.Parent and part.LocalTransparencyModifier ~= value then part.LocalTransparencyModifier = value end
+			end
+			ghost.applied = value
 		end
 		local tc = getTransparencyController()
 		if tc then
@@ -521,6 +531,7 @@ function CameraScript.new(life, errs, hooks)
 			end
 		end
 		ghost.parts = {}
+		ghost.applied, ghost.char = nil, nil -- (the next fade rebuilds the list and writes every part)
 		pcall(function()
 			local tc = getTransparencyController()
 			if tc then

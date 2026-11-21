@@ -132,6 +132,50 @@ near(head.LocalTransparencyModifier, 1 - math.floor(2.8 / 60 * 100 + 0.5) / 100,
 cs:resetGhost(false)
 eq(head.LocalTransparencyModifier, 0, "reset puts it back")
 
+section("ghost: the face and other decals fade with the body")
+do
+	-- (a classic face is a Decal on the Head: Roblox's own TransparencyController fades BaseParts and Decals; the
+	-- face showed in first person, most of all while climbing)
+	local face = Instance.new("Decal")
+	face.Name = "face"
+	face.Texture = "rbxasset://textures/face.png"
+	face.Parent = head
+	local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+	local tex = Instance.new("Texture")
+	tex.Parent = torso
+	local tool = Instance.new("Tool")
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Parent = tool
+	local toolDecal = Instance.new("Decal")
+	toolDecal.Parent = handle
+	tool.Parent = char
+	cam.CFrame = CFrame.new(head.Position + Vector3.new(0, 0, 0.6))
+	cs:updateGhost(0.5, 1 / 60, true)
+	eq(face.LocalTransparencyModifier, 1, "fully zoomed in: the face is hidden")
+	eq(tex.LocalTransparencyModifier, 1, "and a texture on the body")
+	eq(toolDecal.LocalTransparencyModifier, 0, "a held tool's decal is left alone (like its parts)")
+	eq(face.Transparency, 0, "the face's own Transparency is never touched")
+	cam.CFrame = CFrame.new(head.Position + Vector3.new(0, 0, 12))
+	for _ = 1, 40 do cs:updateGhost(12.5, 1 / 60, false) end
+	eq(face.LocalTransparencyModifier, 0, "zoomed out: the face comes back")
+	cam.CFrame = CFrame.new(head.Position + Vector3.new(0, 0, 0.6))
+	cs:updateGhost(0.5, 1 / 60, true)
+	cs:resetGhost(false)
+	eq(face.LocalTransparencyModifier, 0, "reset puts the face back")
+	-- (a face added later, e.g. after the appearance loads, is picked up when the list is rebuilt: within 60 calls)
+	cs:updateGhost(0.5, 1 / 60, true)
+	local late = Instance.new("Decal")
+	late.Parent = head
+	for _ = 1, 60 do cs:updateGhost(0.5, 1 / 60, true) end
+	eq(late.LocalTransparencyModifier, 1, "a decal added later fades too (within 60 frames)")
+	cs:resetGhost(false)
+	tool:Destroy()
+	face:Destroy()
+	tex:Destroy()
+	late:Destroy()
+end
+
 section("restore: patches undone and never made again")
 mode = 1
 cs:restore()

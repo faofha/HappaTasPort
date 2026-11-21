@@ -725,7 +725,7 @@ __mods["platform/camerascript"] = function(import)
 		local function collectGhostParts(char)
 			local list = {}
 			for _, d in ipairs(char:GetDescendants()) do
-				if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and not d:FindFirstAncestorWhichIsA("Tool") then
+				if (d:IsA("BasePart") or d:IsA("Decal")) and d.Name ~= "HumanoidRootPart" and not d:FindFirstAncestorWhichIsA("Tool") then
 					list[#list + 1] = d
 				end
 			end
@@ -755,13 +755,16 @@ __mods["platform/camerascript"] = function(import)
 			end
 			value = clamp(math.floor(value * 100 + 0.5) / 100, 0, 1)
 			ghost.tick = ghost.tick + 1
-			local rebuild = snap or ghost.char ~= char or ghost.tick % 60 == 1
+			local rebuild = (snap and not ghost.active) or ghost.char ~= char or ghost.tick % 60 == 1
 			if rebuild then
 				ghost.char = char
 				ghost.parts = collectGhostParts(char)
 			end
-			for _, part in ipairs(ghost.parts) do
-				if part.Parent and part.LocalTransparencyModifier ~= value then part.LocalTransparencyModifier = value end
+			if rebuild or ghost.applied ~= value then
+				for _, part in ipairs(ghost.parts) do
+					if part.Parent and part.LocalTransparencyModifier ~= value then part.LocalTransparencyModifier = value end
+				end
+				ghost.applied = value
 			end
 			local tc = getTransparencyController()
 			if tc then
@@ -786,6 +789,7 @@ __mods["platform/camerascript"] = function(import)
 				end
 			end
 			ghost.parts = {}
+			ghost.applied, ghost.char = nil, nil
 			pcall(function()
 				local tc = getTransparencyController()
 				if tc then
