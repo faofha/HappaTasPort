@@ -17,6 +17,13 @@ local Players = Env.svc("Players")
 
 local Vanishers = {}
 local groups, groupOf = {}, {}
+local partGroup = setmetatable({}, { __mode = "k" }) -- (part -> its group)
+-- (while a group is driven (g.last set), Client Objects doesn't put its parts' Transparency / CanCollide back
+-- when it lets go of them in playback (Registry:releasePart): with both on, the fade jumped in Test)
+import("world/co/registry").kitOwns = function(part)
+	local g = partGroup[part]
+	return g ~= nil and g.last ~= nil and groupOf[g.cfg] == g
+end
 local MODES = { Fade = true, Blink = true, Constant = true }
 local params = OverlapParams.new()
 
@@ -77,6 +84,7 @@ function Vanishers.add(cfg, key, id)
 			end
 			local sel = p:FindFirstChild("VanisherSelectionBox")
 			if sel and not sel:IsA("SelectionBox") then sel = nil end
+			partGroup[p] = g
 			g.parts[#g.parts + 1] = { part = p, defT = defT, defC = defC, touchT = touchT, touchC = touchC, sel = sel,
 				selColor = sel and sel.Color3, selThick = sel and sel.LineThickness or 0.1 }
 		end

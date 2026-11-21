@@ -47,7 +47,6 @@ world/kit/objects
 engine/merge
 engine/modes
 engine/frame
-engine/diagnostics
 ui/write
 ui/root
 ui/sounds

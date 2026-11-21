@@ -73,16 +73,17 @@ chat or a text box.
   length, rename, move, delete (with a confirm). New attempt keeps numbered attempts
   (`Name (2)`, `Name (3)`...) grouped under the run.
 - **Merging**: join a run before or after the one loaded, standing where they meet.
-- **Client objects** (Settings > World sync > Sync Client Objects, off by default): parts only your client
+- **Client objects** (Settings > World sync > Sync Client Objects, on by default; the one switch also covers
+  timed buttons, lighting and the EToH kit below): parts only your client
   shows (spinners, moving / falling / swinging platforms, pushboxes, vanishers...) are saved with the run and
   put back while testing and scrubbing. Only the ones on screen are saved. A part that changes for the first
   time while recording (a morph, a vanisher) also gets the state it had before.
 - **EToH kit** (Eternal Towers of Hell kit v6.1.3): timed buttons and their timers, lighting changers, beat
   blocks, turrets, pushboxes, morphs.
-  - *Kit Scripts On TAS Clock*: the kit's own scripts wait, delay and tween on the TAS clock, so they stop
+  - *Kit scripts on the TAS clock*: the kit's own scripts wait, delay and tween on the TAS clock, so they stop
     while you are paused and slow down with the speed hack. Kit scripts that move things every frame (the
     Zipline ride, the Sequencer) get the TAS clock's frame time too.
-  - *Sync Kit Objects*: beat blocks follow the TAS time, turret bullets are saved in the run (with their hits
+  - *Kit objects*: beat blocks follow the TAS time, turret bullets are saved in the run (with their hits
     and damage), pushboxes are hidden on frames before they were spawned, and the effects of bounce pads and
     jump launchers are saved and shown again when testing.
 - **Speed hack** (Settings > Speed hack): slow motion while recording (0.1x - 1x), like a video played
@@ -96,7 +97,7 @@ chat or a text box.
     right before its step as at 1x, so walking, jumping, falling and landing come out like normal speed. A
     loose platform you push or stand on is held with you, so slow motion stays slow there too (the push itself
     can start up to about 0.2 s of game time later than at 1x).
-  - *Smooth Slow Motion* (on by default): with Frame Step alone the world only moves on the frames whose
+  - *Smooth slow motion* (always on): with Frame Step alone the world only moves on the frames whose
     physics ran (41 times a second at 0.25x and 165 FPS), which looks laggy at any frame rate. This draws the
     frames in between, the way games with fixed physics steps do: the character, the loose parts that move
     and the camera are shown where they were a step or two ago, on the way between their real places, so the
@@ -131,11 +132,11 @@ chat or a text box.
 | --- | --- |
 | Playback | Lock Camera (Test), Interpolate Playback, Playback Speed, Restart When Testing, Show Completion Message |
 | Create | Lock Camera (Paused), Record Death & Respawn, Record Tool Actions, Ignore Game Processed |
-| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 1), Speed Hack In, Smooth Slow Motion |
+| Speed hack | Speed Hack, Speed Hack Speed (0.1 - 1), Speed Hack In |
 | Glide | Glide Manipulation, Glide Chance (%) (in Classic's Settings tab too) |
-| Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, Normalize Mouse UV, NohBoard Cursor, Keep Mouse Position (Paused), Invisible Mouse Speed Multiplier, Window Guarding |
-| World sync | Sync Client Objects, Smooth Client Objects, Frustum Culling CO, Sync Button Timers, Sync Lighting, Kit Scripts On TAS Clock, Sync Kit Objects |
-| Interface | Interface (New / Classic), Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale, MicroProfiler Text Offset, Allow PlayerGui Interface |
+| Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, NohBoard Cursor, Keep Mouse Position (Paused), NohBoard Mouse Speed (at most 1), Window Guarding |
+| World sync | Sync Client Objects (client objects, timed buttons, lighting and the EToH kit; on by default) |
+| Interface | Interface (New / Classic), Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale |
 | Appearance | Theme, Glass, colours, fonts, text size, interface scale, corners, button shape, shadows, animations |
 | Classic look (Classic only) | Main Colour, 23 colours (Window, Panel, Button, Shade, Scroll Bar, Light Fill, Text, Dark Text, Label Text, Placeholder Text, Section Title, Outline, Field Outline, Divider, Line, Light Outline, Cancel, Warning, Merge OK, Toggle Off, Icon Button, Switch On, Switch Off), Background, Background Transparency, Background Fit |
 

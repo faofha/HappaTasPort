@@ -42,12 +42,13 @@ local sf, s, c, life = fresh()
 eq(sf:load(), "v2", "source v2")
 for name, v in pairs(V2.settings) do
 	local def = Settings.byV2[name]
-	if def then
+	if def and not def.hidden then
 		eq(s:get(def.key), Settings.sanitize(def, v), "setting " .. name)
 	end
 end
 eq(s:get("playbackSpeed"), 1.5, "Playback Speed 1.5")
-eq(s:get("microProfilerTextOffset"), -2, "a negative value")
+eq(s:get("microProfilerTextOffset"), 0, "a removed setting keeps its fixed value (V3.1)")
+eq(s:get("syncClientObjects"), 1, "client objects on, as in the file")
 for name, keyName in pairs(V2.controls) do
 	local ctl = Controls.byV2[name]
 	check(ctl ~= nil, "control known: " .. name)
@@ -86,12 +87,12 @@ eq(files:read(V2_PATH), V2_JSON, "Settings.json still unchanged")
 
 section("Unload within 0.4 s still saves")
 FSFAIL.log = {}
-s:set("syncLighting", 0)
+s:set("syncClientObjects", 0)
 M.step(0.05)
 life:cleanup()
 eq(writes("Settings3%.json$"), 1, "written on Unload")
-eq(HttpService:JSONDecode(files:read(V3_PATH)).settings.syncLighting, 0, "with the change")
-s:set("syncLighting", 1)
+eq(HttpService:JSONDecode(files:read(V3_PATH)).settings.syncClientObjects, 0, "with the change")
+s:set("syncClientObjects", 1)
 wait(0.5)
 eq(writes("Settings3%.json$"), 1, "no saving after Unload")
 
@@ -101,7 +102,7 @@ local sf2, s2, c2 = fresh()
 eq(sf2:load(), "v3", "source v3")
 eq(s2:get("playbackSpeed"), 1.5, "v3's value, not V2's")
 eq(c2:get("pause"), "Q", "v3's control")
-eq(s2:get("syncLighting"), 0, "the value saved on Unload")
+eq(s2:get("syncClientObjects"), 0, "the value saved on Unload")
 check(sf2.profiler and sf2.profiler.mode == "Detailed", "profiler from v3")
 
 section("bad values (Review focus 4)")

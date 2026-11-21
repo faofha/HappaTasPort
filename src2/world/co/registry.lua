@@ -417,8 +417,12 @@ function Registry:releasePart(id)
 		if s and s.rcf and s.rv and self.playActive then
 			pcall(function()
 				part.CFrame = s.rcf
-				part.Transparency = s.rv[1] / 1000
-				part.CanCollide = s.rv[2] == 1
+				-- (a vanisher the EToH kit sync drives keeps its look: Registry.kitOwns, world/kit/vanishers)
+				local ko = Registry.kitOwns
+				if not (ko and ko(part)) then
+					part.Transparency = s.rv[1] / 1000
+					part.CanCollide = s.rv[2] == 1
+				end
 				part.Color = Color3.fromRGB(s.rv[3], s.rv[4], s.rv[5])
 				part.Size = Vector3.new(s.rv[6] / 1000, s.rv[7] / 1000, s.rv[8] / 1000)
 				local okM, mat = pcall(function() return Enum.Material:FromValue(s.rv[9]) end)

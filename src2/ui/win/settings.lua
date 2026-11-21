@@ -19,7 +19,6 @@ local Button = import("ui/kit/button")
 local Row = import("ui/kit/row")
 local ColorPicker = import("ui/kit/colorpicker")
 local Bezier = import("ui/kit/bezier")
-local Diagnostics = import("engine/diagnostics")
 
 local SettingsWin = {}
 
@@ -198,7 +197,7 @@ function SettingsWin.build(ui, body, win)
 	-- search
 	local search = Field.new(ctx, body, { search = true, placeholder = "Search settings", w = 300 })
 	search.gui.Position = UDim2.new(0, PAD, 0, 10)
-	search.gui.Size = UDim2.new(1, -PAD * 3 - 96, 0, 32)
+	search.gui.Size = UDim2.new(1, -PAD * 2, 0, 32)
 	sw.search = search
 	-- chips (wrapped to the window's default width)
 	local x, y = PAD, 50
@@ -252,7 +251,7 @@ function SettingsWin.build(ui, body, win)
 			end
 		end
 		for _, def in ipairs(Settings.SCHEMA) do
-			if def.section == secName and not BEZIER[def.key] then
+			if def.section == secName and not BEZIER[def.key] and not def.hidden then
 				local ctl, kind = controlFor(lctx, s, def, sw)
 				local row = Row.new(lctx, list, { name = def.name, desc = def.desc, control = ctl })
 				local r = { row = row, ctl = ctl, kind = kind, def = def }
@@ -329,10 +328,6 @@ function SettingsWin.build(ui, body, win)
 			W.bump()
 		end
 	end
-	-- (a read-only report to share when the physics acts differently on another PC)
-	sw.diag = Button.new(ctx, body, { text = "Diagnostics", kind = "plain", w = 96, h = 32 })
-	sw.diag.gui.Position = UDim2.new(1, -PAD - 96, 0, 10)
-	sw.diag.onClick = function() E.bus:emit("status", Diagnostics.share(E)) end
 	filter()
 	ui.life:own(function() for _, off in ipairs(sw.offs) do off() end end)
 	return sw

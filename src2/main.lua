@@ -40,7 +40,6 @@ local Persist = import("persist/persist")
 local SettingsFile = import("persist/settingsfile")
 local UIApp = import("ui/app")
 local ProfilerApp = import("profiler/app")
-local Diagnostics = import("engine/diagnostics")
 
 local Main = {}
 local kernel = nil
@@ -95,7 +94,6 @@ local function startEngine(k)
 	E.persist = Persist.new(E)
 	E.modes = Modes.new(E)
 	k.pipe:keep("engine") -- (one failing call is reported; the engine's frame always goes on)
-	Diagnostics.start(E) -- (read-only: frame times and physics steps for the report)
 	E.inputs:start() -- (before the engine's key dispatch, as in V2.38.16)
 	Frame.start(E)
 	E.cs:start()
@@ -138,11 +136,6 @@ local function addSaveApi(handle, k)
 		local E, why = engine()
 		if not E then return false, why end
 		return E.persist:load(path)
-	end
-	handle.Diagnostics = function()
-		local E = k.engine
-		if not E then return nil, "HappaTAS isn't running" end
-		return Diagnostics.report(E)
 	end
 	handle.List = function()
 		local E, why = engine()

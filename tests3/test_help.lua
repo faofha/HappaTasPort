@@ -58,10 +58,11 @@ local V2_TITLES = {
 	"Idle", "Create", "Unpause", "Pause", "Back/Forward", "Test", "Optimize TAS", "Delete TAS",
 	"Back/Forward 1 Frame", "Return", "Unpause 1 Frame", "Look Around", "Lock Camera (Mode)", "Show Stats (Mode)",
 	"Restart When Testing", "Stats Text Size", "Playback Speed", "Interpolate Playback", "MicroProfiler",
-	"Mouse UV Normalization", "Death & Respawn Recording", "Tool Actions Support", "Button & Obby Mechanism Sync",
-	"Speed Hack (Slow Motion)", "EToH Kit Objects", "Frustum Culling & Sandboxing",
+	"Death & Respawn Recording", "Tool Actions Support", "Button & Obby Mechanism Sync",
+	"Speed Hack (Slow Motion)", "EToH Kit Objects",
 	"Saving and Loading", "Merging a TAS", "Keyboard and Mouse Inputs", "Client Objects", "Executor Port Settings",
 }
+-- (V3.1: Mouse UV Normalization and Frustum Culling & Sandboxing are no settings any more: always on)
 local topics = HelpText.topics(E)
 local homeless = {}
 for _, title in ipairs(V2_TITLES) do

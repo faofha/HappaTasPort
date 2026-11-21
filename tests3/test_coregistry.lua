@@ -3,6 +3,9 @@
 -- listeners, holding and releasing; V2.38.17 p13_clientobjects.lua 42-519)
 -- ================================================================================================
 check(boot(3), "boots")
+-- (these checks are about the speed hack / a registry of their own: HappaTAS's own client objects, on by default
+-- since V3.1, would hold the same test parts while paused)
+getgenv().__HappaTAS3_T.engine.settings:set("syncClientObjects", 0)
 local Registry = __T3("world/co/registry")
 
 local statuses = {}

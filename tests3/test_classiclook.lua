@@ -21,18 +21,19 @@ local b = c.byPath
 local rows = c.settingsRows
 local shown = 0
 for _, def in ipairs(Settings.SCHEMA) do
-	if def.v2 or def.key == "interface" or def.classicOnly or def.classicToo then
+	if def.hidden then
+		eq(rows[def.key], nil, def.key .. " not shown (V3.1: no setting of its own)")
+	elseif def.v2 or def.key == "interface" or def.classicOnly or def.classicToo then
 		check(rows[def.key] ~= nil, def.key .. " shown")
 		shown = shown + 1
 	else
 		eq(rows[def.key], nil, def.key .. " hidden (the New interface's only)")
 	end
 end
-eq(shown, 63, "V2.38.17's 33 settings (Frame Step went with Part B), the interface choice, Classic Look's 27 and the 2 Glide settings")
+eq(shown, 54, "V2.38.17's 24 settings left in V3.1 (Frame Step went with Part B), the interface choice, Classic Look's 27 and the 2 Glide settings")
 eq(rows.speedHack.label.Text, "Speed Hack (slow motion)", "its label")
 eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 1, 0.5 = half)", "its label")
-eq(rows.syncKitObjects.label.Text, "Sync Kit Objects (Beat Blocks, Turrets)", "V2.38.17's label")
-eq(rows.allowPlayerGuiInterface.label.Text, "Allow Visible Interface (PlayerGui)", "V2.38.17's label")
+eq(rows.invisibleMouseSpeed.label.Text, "NohBoard Mouse Speed", "V3.1's name")
 local list = b["MainMenu.SettingsFrame.List"]
 check(list:FindFirstChild("Section_Speed Hack") ~= nil and list:FindFirstChild("Section_World Sync") ~= nil, "V2.38.17's section names")
 eq(list:FindFirstChild("Section_Appearance"), nil, "no Appearance section")
@@ -69,7 +70,7 @@ eq(stroke and stroke.Color, stroke0, "a list's blue stroke")
 eq(b["MainMenu.SettingsToggle"].BackgroundColor3, tab0, "the selected tab: V2's colour (only its transparency changes)")
 eq(list:FindFirstChild("Section_Playback").TextColor3, header0, "section headers keep their colour")
 eq(b.MainMenu:FindFirstChildOfClass("UIScale"), nil, "no interface scale")
-local on = rows.syncButtonTimers
+local on = rows.syncClientObjects
 eq(on.on, true, "(an on switch)")
 eq(on.knob.BackgroundColor3, Color3.fromRGB(75, 75, 75), "an on switch: V2.38.17's grey knob")
 E.modes:request("create")

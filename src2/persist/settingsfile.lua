@@ -99,6 +99,23 @@ local function cleanUi(t)
 	return ui
 end
 
+-- (V3.1: settings that follow another or are fixed values are never read from a file. A file from before V3.1 has
+-- the six settings Sync Client Objects now stands for: it is on when it or any of them was on, so button timers,
+-- lighting and the kit stay synced for a file that had client objects off, the old default.)
+local function loadSettings(settings, entries)
+	local old, any = false, false
+	for key, v in pairs(entries) do
+		local def = Settings.byKey[key]
+		if def and def.follows then
+			old = true
+			if tonumber(v) and tonumber(v) ~= 0 then any = true end
+		elseif def and not def.hidden then
+			settings:set(key, v)
+		end
+	end
+	if old and any then settings:set("syncClientObjects", 1) end
+end
+
 local function setKey(controls, control, keyName)
 	if type(keyName) == "string" and (keyName == "None" or Keys.isValid(keyName)) then controls:set(control, keyName) end
 end
@@ -111,7 +128,7 @@ function SettingsFile:load()
 	local raw3 = files:read(V3_PATH)
 	local t3 = decode(self, raw3)
 	if t3 and t3.format == FORMAT then
-		for key, v in pairs(type(t3.settings) == "table" and t3.settings or {}) do settings:set(key, v) end
+		loadSettings(settings, type(t3.settings) == "table" and t3.settings or {})
 		for control, keyName in pairs(type(t3.controls) == "table" and t3.controls or {}) do setKey(controls, control, keyName) end
 		self.profiler = type(t3.profiler) == "table" and t3.profiler or nil
 		self.ui = cleanUi(t3.ui)
@@ -123,10 +140,12 @@ function SettingsFile:load()
 		end
 		local t2 = decode(self, files:read(V2_PATH))
 		if t2 then
+			local byKey = {}
 			for name, v in pairs(type(t2.settings) == "table" and t2.settings or {}) do
 				local def = Settings.byV2[name]
-				if def then settings:set(def.key, v) end
+				if def then byKey[def.key] = v end
 			end
+			loadSettings(settings, byKey)
 			for name, keyName in pairs(type(t2.controls) == "table" and t2.controls or {}) do
 				local ctl = Controls.byV2[name]
 				if ctl then setKey(controls, ctl.key, keyName) end
@@ -142,7 +161,12 @@ end
 
 function SettingsFile:write()
 	if not self.files.available or not self.http then return false end
-	local out = { format = FORMAT, version = 1, settings = table.clone(self.settings.values),
+	local saved = {}
+	for key, v in pairs(self.settings.values) do
+		local def = Settings.byKey[key]
+		if not (def and def.hidden) then saved[key] = v end
+	end
+	local out = { format = FORMAT, version = 1, settings = saved,
 		controls = table.clone(self.controls.values), profiler = self.profiler, ui = self:getUi() }
 	local ok, json = pcall(self.http.JSONEncode, self.http, out)
 	if not ok then return false end
