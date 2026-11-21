@@ -65,10 +65,13 @@ function Slider.new(ctx, parent, opts)
 		W.set(track, "BackgroundTransparency", 0.75)
 		W.set(fill, "BackgroundColor3", th.c.accent)
 	end)
+	-- (the knob's centre travels from half a knob in at one end to half a knob in at the other, so the knob never
+	-- leaves the track: at the low end it covered the number beside it. The scale is the interface's.)
 	local function fromX(pos)
 		local x0, w = track.AbsolutePosition.X, track.AbsoluteSize.X
-		if w <= 0 then return end
-		local a = math.clamp((pos.X - x0) / w, 0, 1)
+		local k = KNOB * (hit.AbsoluteSize.Y / KNOB)
+		if w - k <= 0 then return end
+		local a = math.clamp((pos.X - x0 - k / 2) / (w - k), 0, 1)
 		self:userSet(self.min + a * (self.max - self.min))
 	end
 	K.rect(self, { gui = hit, onPress = fromX, onDrag = function(pos) fromX(pos) end }, opts.z)
@@ -103,8 +106,9 @@ end
 
 function Slider:show()
 	local a = (self.max > self.min) and (self.value - self.min) / (self.max - self.min) or 0
-	W.set(self.fill, "Size", UDim2.new(a, 0, 1, 0))
-	W.set(self.knob, "Position", UDim2.new(a, 0, 0, 0))
+	local off = KNOB * (0.5 - a)
+	W.set(self.fill, "Size", UDim2.new(a, off, 1, 0))
+	W.set(self.knob, "Position", UDim2.new(a, off, 0, 0))
 	W.set(self.label, "Text", self.fmt(self.value))
 end
 

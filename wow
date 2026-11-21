@@ -10633,8 +10633,13 @@ __mods["world/time/control"] = function(import)
 		E.tl:addColumn("CY", "list", 1, { key = "CY", save = false })
 		E.anim.gameDt = function(_, dt) return SH.GameDt(dt) end
 		E.life:own(E.settings:changed("speedHack", function() announce() end))
+		local SETTLE, token = 0.3, 0
 		E.life:own(E.settings:changed("speedHackSpeed", function()
-			if E.settings:on("speedHack") then announce() end
+			token = token + 1
+			local mine = token
+			task.delay(SETTLE, function()
+				if mine == token and not E.life.unloading and E.settings:on("speedHack") then announce() end
+			end)
 		end))
 		E.life:own(E.settings:changed("speedHackModes", function()
 			if E.settings:on("speedHack") then announce() end
@@ -14694,8 +14699,9 @@ __mods["ui/kit/slider"] = function(import)
 		end)
 		local function fromX(pos)
 			local x0, w = track.AbsolutePosition.X, track.AbsoluteSize.X
-			if w <= 0 then return end
-			local a = math.clamp((pos.X - x0) / w, 0, 1)
+			local k = KNOB * (hit.AbsoluteSize.Y / KNOB)
+			if w - k <= 0 then return end
+			local a = math.clamp((pos.X - x0 - k / 2) / (w - k), 0, 1)
 			self:userSet(self.min + a * (self.max - self.min))
 		end
 		K.rect(self, { gui = hit, onPress = fromX, onDrag = function(pos) fromX(pos) end }, opts.z)
@@ -14726,8 +14732,9 @@ __mods["ui/kit/slider"] = function(import)
 	end
 	function Slider:show()
 		local a = (self.max > self.min) and (self.value - self.min) / (self.max - self.min) or 0
-		W.set(self.fill, "Size", UDim2.new(a, 0, 1, 0))
-		W.set(self.knob, "Position", UDim2.new(a, 0, 0, 0))
+		local off = KNOB * (0.5 - a)
+		W.set(self.fill, "Size", UDim2.new(a, off, 1, 0))
+		W.set(self.knob, "Position", UDim2.new(a, off, 0, 0))
 		W.set(self.label, "Text", self.fmt(self.value))
 	end
 	function Slider:set(v)
