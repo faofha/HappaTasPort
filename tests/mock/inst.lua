@@ -297,7 +297,7 @@ class("Backpack", "Instance")
 class("PlayerScripts", "Instance")
 class("Tool", "Instance", { Enabled = true, RequiresHandle = true, CanBeDropped = true, ManualActivationOnly = false, ToolTip = "" },
 	{}, { "Equipped", "Unequipped", "Activated", "Deactivated" })
-class("Decal", "Instance", { Texture = "", Transparency = 0, Color3 = Color3.new(1, 1, 1) })
+class("Decal", "Instance", { Texture = "", Transparency = 0, Color3 = Color3.new(1, 1, 1), LocalTransparencyModifier = 0 })
 class("Texture", "Decal")
 class("SpecialMesh", "Instance", { MeshId = "", Scale = Vector3.one })
 class("ClickDetector", "Instance", { MaxActivationDistance = 32 }, {}, { "MouseClick", "MouseHoverEnter", "MouseHoverLeave" })
