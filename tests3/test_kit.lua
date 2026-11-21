@@ -62,10 +62,13 @@ sl.onChange = function(v) sv[#sv + 1] = v end
 sl:set(100)
 eq(sl.label.Text, "100%", "the value shown with its format")
 local tr = sl.track
-local x0, w = tr.AbsolutePosition.X, tr.AbsoluteSize.X
+-- (the knob's centre travels the track less half a knob at each end, so the knob stays on the track: a point
+-- at fraction a of that travel is value a)
+local kn = sl.knob.AbsoluteSize.X
+local x0, w = tr.AbsolutePosition.X + kn / 2, tr.AbsoluteSize.X - kn
 local cy = tr.AbsolutePosition.Y + tr.AbsoluteSize.Y / 2
 UIH.click(Vector2.new(x0 + w * 0.25, cy))
-eq(sl.value, 50, "a click on the track at a quarter: 50")
+eq(sl.value, 50, "a click a quarter along the knob's travel: 50")
 UIH.drag(Vector2.new(x0 + w * 0.25, cy), Vector2.new(x0 + w * 0.755, cy))
 eq(sl.value, 151, "dragged to ~75.5 %: 151 (step 1)")
 UIH.drag(Vector2.new(x0 + w * 0.5, cy), Vector2.new(x0 - 500, cy))

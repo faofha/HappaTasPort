@@ -759,8 +759,15 @@ function TimeControl.new(E)
 	-- (the animations' game time: the real dt x the factor, or with Frame Step the time of the step that ran)
 	E.anim.gameDt = function(_, dt) return SH.GameDt(dt) end
 	E.life:own(E.settings:changed("speedHack", function() announce() end))
+	-- (a slider drag changes the speed on every mouse move: the speed follows at once, the notification comes
+	-- once the value has settled for SETTLE seconds, so a drag shows one)
+	local SETTLE, token = 0.3, 0
 	E.life:own(E.settings:changed("speedHackSpeed", function()
-		if E.settings:on("speedHack") then announce() end
+		token = token + 1
+		local mine = token
+		task.delay(SETTLE, function()
+			if mine == token and not E.life.unloading and E.settings:on("speedHack") then announce() end
+		end)
 	end))
 	E.life:own(E.settings:changed("speedHackModes", function()
 		if E.settings:on("speedHack") then announce() end
