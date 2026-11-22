@@ -27,7 +27,7 @@ local LABELS = { speedHack = "Speed Hack (slow motion)", speedHackSpeed = "Speed
 local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
 -- (and a multi row with Classic labels: a switch per option, keyed "<key>:<option>")
 -- (and Classic Look: the rows only Classic has)
--- (and the rows marked classicToo: the Glide settings)
+-- (and the rows marked classicToo: the Glide settings, Replay Chat)
 local function shownHere(def)
 	if def.hidden then return false end -- (V3.1: no setting of its own any more)
 	return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true
