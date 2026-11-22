@@ -232,7 +232,8 @@ function Compact:buildPanel(id, title, width, side)
 	local p = { id = id, gui = gui, body = body, open = false, width = width, side = side, stroke = stroke, line = line,
 		bar = bar, name = name }
 	self.panels[id] = p
-	self:addRect({ gui = gui }, 0)
+	-- (a panel is outside the window: its rects are grouped with the panel, or the pointer cuts them away)
+	self:addRect({ gui = gui, group = gui }, 0)
 	return p
 end
 
@@ -275,7 +276,12 @@ function Compact:place(x, y, w, h)
 	h = math.max(Compact.MIN_H, math.min(h or Compact.H, sh - top))
 	if type(x) ~= "number" then x = (sw - w) / 2 end
 	if type(y) ~= "number" then y = top + (sh - top - h) / 2 end
-	x = math.max(0, math.min(x, sw - w))
+	-- (open side panels stay on screen too, when there is room for them)
+	local lib, ins = self.panels.library, self.panels.inspector
+	local left = (lib and lib.open and not self.folded) and (lib.width + Compact.GAP) or 0
+	local right = (ins and ins.open and not self.folded) and (ins.width + Compact.GAP) or 0
+	if left + w + right > sw then left, right = 0, 0 end
+	x = math.max(left, math.min(x, sw - w - right))
 	y = math.max(top, math.min(y, sh - (self.folded and (Compact.TITLE_H + 2) or h)))
 	self.x, self.y, self.w, self.h = x, y, w, h
 	W.set(self.gui, "Position", UDim2.new(0, x, 0, y))
@@ -307,8 +313,8 @@ function Compact:hostSpec(id)
 	if id == "help" then return HelpWin.build, p.help end
 	if id == "about" then return AboutWin.build, p.about end
 	if id == "controls" then return ControlsWin.build, self.keysFrame end
-	if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true } end
-	if id == "inspector" then return InspectorWin.build, self.panels.inspector.body end
+	if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
+	if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
 	return nil
 end
 
@@ -362,6 +368,7 @@ function Compact:setPanel(id, on)
 	if not p then return end
 	p.open = on == true
 	if p.open and self.folded then self:setFolded(false) end
+	if self.x then self:place(self.x, self.y, self.w, self.h) end
 	self:applyVisible()
 	self:syncHosted()
 	if self.onPanel then self.onPanel(id, p.open) end
@@ -378,7 +385,8 @@ function Compact:setFolded(on)
 end
 
 -- the window frees the mouse (like a New window) while it is live, shown and unfolded
-function Compact:modal() return self.live and not self.folded end
+-- (not while the Merge window is open: you play during a merge, as with the New interface, V3.1 review)
+function Compact:modal() return self.live and not self.folded and not self.ui.wm:isOpen("merge") end
 
 function Compact:pointerOver() return self.live and self.ui.pointer ~= nil and self.ui.pointer:busy() end
 

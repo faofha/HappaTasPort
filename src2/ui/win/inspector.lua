@@ -268,6 +268,8 @@ end
 
 -- the pipeline is timed only while the Performance rows show in an open, unminimised Inspector
 function Insp:timing()
+	-- (two copies exist with Compact: only the one shown now owns the pipeline's timing, V3.1 review)
+	if not self:here() then return end
 	local data = saved(self.ui)
 	local all = self:statsShown()
 	local perf = all and self.win.open and self.ui:newActive() and self:here() and not self.win.min and not data.collapsed.Performance

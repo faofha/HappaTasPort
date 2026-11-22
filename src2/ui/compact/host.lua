@@ -12,7 +12,8 @@ local Host = {}
 Host.__index = Host
 
 -- compact: the Compact interface; id: the window's id; build: XWin.build; parent: where its frame goes;
--- opts.narrow: the builder may lay itself out for a narrow panel
+-- opts.narrow: the builder may lay itself out for a narrow panel; opts.group: the frame its rects belong to (a
+-- side panel outside the Compact window)
 function Host.new(compact, id, build, parent, opts)
 	opts = opts or {}
 	local self = setmetatable({ compact = compact, id = id }, Host)
@@ -25,6 +26,7 @@ function Host.new(compact, id, build, parent, opts)
 	ctx.pointer = {
 		add = function(r, z)
 			r.clip = r.clip or frame
+			if opts.group then r.group = r.group or opts.group end
 			return base.pointer.add(r, z)
 		end,
 		remove = base.pointer.remove,

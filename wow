@@ -15900,9 +15900,12 @@ __mods["ui/dock"] = function(import)
 		title.ZIndex = 2
 		self.title = title
 		self.offs[#self.offs + 1] = ui.theme:changed(function() self:layout() end)
-		self.offs[#self.offs + 1] = ui.wm:changed(function(id, open)
+		self.offs[#self.offs + 1] = ui.wm:changed(function(id)
 			local b = self.buttons[id]
-			if b then b:setKind(open and "primary" or "plain") end
+			if b then b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
+		end)
+		self.offs[#self.offs + 1] = E.bus:on("uiShown", function()
+			for id, b in pairs(self.buttons) do b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
 		end)
 		ui.life:own(function() self:destroy() end)
 		self:layout()
@@ -16079,7 +16082,8 @@ __mods["ui/frost"] = function(import)
 		end
 	end
 	function Frost:wanted()
-		return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and self.ui.wm:anyOpen() and self:available()
+		return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and not (self.ui.isCompact and self.ui:isCompact())
+			and self.ui.wm:anyOpen() and self:available()
 	end
 	function Frost:update()
 		if not self:wanted() then return self:clear() end
@@ -17744,6 +17748,7 @@ __mods["ui/win/inspector"] = function(import)
 		self:timing()
 	end
 	function Insp:timing()
+		if not self:here() then return end
 		local data = saved(self.ui)
 		local all = self:statsShown()
 		local perf = all and self.win.open and self.ui:newActive() and self:here() and not self.win.min and not data.collapsed.Performance
@@ -21369,6 +21374,7 @@ __mods["ui/compact/host"] = function(import)
 		ctx.pointer = {
 			add = function(r, z)
 				r.clip = r.clip or frame
+				if opts.group then r.group = r.group or opts.group end
 				return base.pointer.add(r, z)
 			end,
 			remove = base.pointer.remove,
@@ -21807,7 +21813,7 @@ __mods["ui/compact/compact"] = function(import)
 		local p = { id = id, gui = gui, body = body, open = false, width = width, side = side, stroke = stroke, line = line,
 			bar = bar, name = name }
 		self.panels[id] = p
-		self:addRect({ gui = gui }, 0)
+		self:addRect({ gui = gui, group = gui }, 0)
 		return p
 	end
 	function Compact:paint()
@@ -21844,7 +21850,11 @@ __mods["ui/compact/compact"] = function(import)
 		h = math.max(Compact.MIN_H, math.min(h or Compact.H, sh - top))
 		if type(x) ~= "number" then x = (sw - w) / 2 end
 		if type(y) ~= "number" then y = top + (sh - top - h) / 2 end
-		x = math.max(0, math.min(x, sw - w))
+		local lib, ins = self.panels.library, self.panels.inspector
+		local left = (lib and lib.open and not self.folded) and (lib.width + Compact.GAP) or 0
+		local right = (ins and ins.open and not self.folded) and (ins.width + Compact.GAP) or 0
+		if left + w + right > sw then left, right = 0, 0 end
+		x = math.max(left, math.min(x, sw - w - right))
 		y = math.max(top, math.min(y, sh - (self.folded and (Compact.TITLE_H + 2) or h)))
 		self.x, self.y, self.w, self.h = x, y, w, h
 		W.set(self.gui, "Position", UDim2.new(0, x, 0, y))
@@ -21871,8 +21881,8 @@ __mods["ui/compact/compact"] = function(import)
 		if id == "help" then return HelpWin.build, p.help end
 		if id == "about" then return AboutWin.build, p.about end
 		if id == "controls" then return ControlsWin.build, self.keysFrame end
-		if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true } end
-		if id == "inspector" then return InspectorWin.build, self.panels.inspector.body end
+		if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
+		if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
 		return nil
 	end
 	function Compact:host(id)
@@ -21918,6 +21928,7 @@ __mods["ui/compact/compact"] = function(import)
 		if not p then return end
 		p.open = on == true
 		if p.open and self.folded then self:setFolded(false) end
+		if self.x then self:place(self.x, self.y, self.w, self.h) end
 		self:applyVisible()
 		self:syncHosted()
 		if self.onPanel then self.onPanel(id, p.open) end
@@ -21931,7 +21942,7 @@ __mods["ui/compact/compact"] = function(import)
 		self.ui:updateModal()
 		self:save()
 	end
-	function Compact:modal() return self.live and not self.folded end
+	function Compact:modal() return self.live and not self.folded and not self.ui.wm:isOpen("merge") end
 	function Compact:pointerOver() return self.live and self.ui.pointer ~= nil and self.ui.pointer:busy() end
 	function Compact:load()
 		local sf = self.E.settingsFile
