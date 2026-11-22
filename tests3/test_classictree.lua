@@ -89,6 +89,32 @@ eq(log and rows("MainMenu.MoreFrame.List.3UpdateLog"), 1 + #(HelpText.WHATS_NEW 
 check(HelpText.WHATS_NEW ~= nil and #HelpText.WHATS_NEW.items > 0, "built from Help's What's new list")
 check(c.byPath["MainMenu.MoreFrame.List.5Credits"] ~= nil, "the credits stay")
 
+section("the More page grows with its text (nothing cut off)")
+-- (live: the credits box was a fixed 108 px with clipping on, its rows needed 120: the last name was cut; the page
+-- scrolled 1720 px for 463 px of content; log lines didn't wrap, so a long one ran off the 360 px panel)
+local Y = Enum.AutomaticSize.Y
+local function autoY(path) local g = c.byPath[path]; return g ~= nil and (g.AutomaticSize == Y or g.AutomaticSize == 2) end
+check(autoY("MainMenu.MoreFrame.List.5Credits"), "the credits box grows with its names")
+check(autoY("MainMenu.MoreFrame.List.3UpdateLog"), "the update log grows with its lines")
+check(autoY("MainMenu.MoreFrame.List"), "the page's list grows with its content")
+local mf = c.byPath["MainMenu.MoreFrame"]
+check(mf.AutomaticCanvasSize == Y or mf.AutomaticCanvasSize == 2, "the page scrolls as far as its content")
+do
+	local wrapped, grows, n = 0, 0, 0
+	for _, path in ipairs({ "MainMenu.MoreFrame.List.3UpdateLog", "MainMenu.MoreFrame.List.5Credits" }) do
+		for _, ch in ipairs(c.byPath[path]:GetChildren()) do
+			if ch:IsA("TextLabel") then
+				n = n + 1
+				if ch.TextWrapped then wrapped = wrapped + 1 end
+				if ch.AutomaticSize == Y or ch.AutomaticSize == 2 then grows = grows + 1 end
+			end
+		end
+	end
+	check(n > 3, "log and credit lines (" .. n .. ")")
+	eq(wrapped, n, "every line wraps")
+	eq(grows, n, "and is as tall as its text")
+end
+
 section("no auto-translation, nothing per frame")
 eq(c.gui.AutoLocalize, false, "AutoLocalize off")
 eq(c.gui.ResetOnSpawn, false, "kept over a respawn")
