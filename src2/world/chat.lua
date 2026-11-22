@@ -9,6 +9,7 @@
 local Env = import("platform/env")
 
 local Chat = { name = "chat", order = 56 }
+local StarterGui = Env.svc("StarterGui")
 Chat.__index = Chat
 
 local FIND_EVERY = 2 -- (seconds between looks for the chat bar while it is missing)
@@ -94,7 +95,11 @@ function Chat:apply(e)
 	local text, kind = e[1], e[2]
 	self.owns = true
 	self.E.typing.chatReplay = b -- (the bar Typing:active() doesn't count as the player typing)
-	if not b:IsFocused() then b:CaptureFocus() end
+	if not b:IsFocused() then
+		-- (the chat window may be collapsed, e.g. after a rejoin: pressing / opens it, so the replay does too)
+		if StarterGui then pcall(StarterGui.SetCore, StarterGui, "ChatActive", true) end
+		b:CaptureFocus()
+	end
 	if b.Text ~= text then b.Text = text end
 	-- (a Text set by a script leaves the text cursor where it was: at the start, live; put it after the last letter)
 	if b.CursorPosition ~= #text + 1 then b.CursorPosition = #text + 1 end
@@ -102,7 +107,10 @@ function Chat:apply(e)
 		b:ReleaseFocus(true)
 		self:release(false)
 	elseif kind == 2 then
-		self:release(true)
+		-- (closed without sending, e.g. the click that paused: Roblox keeps the text in the bar, so the replay does too;
+		-- emptying it made the text come back all at once when the bar opened again)
+		if b:IsFocused() then b:ReleaseFocus(false) end
+		self:release(false)
 	end
 end
 
