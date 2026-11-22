@@ -88,13 +88,30 @@ function K.redrawOnGrow(frame, scroller)
 end
 
 -- Tasability's layered edge on a kit control (the theme's compact mode), none otherwise (V3.1)
-function K.edge(gui, th)
+-- like Tasability's own boxes (compact/kit CK.border): a 2 px dark inner edge and a 1 px outline. ring: the
+-- control's own UIStroke, which then paints the outline itself (a field's focus ring); without one a stroke
+-- "Edge" is made and shown only in Tasability
+function K.edge(gui, th, ring)
+	local s = ring or gui:FindFirstChild("Edge")
 	if th.compact and th.shades then
 		W.set(gui, "BorderMode", Enum.BorderMode.Inset)
 		W.set(gui, "BorderSizePixel", 2)
 		W.set(gui, "BorderColor3", th.shades.border)
+		if not s then
+			s = Instance.new("UIStroke")
+			s.Name = "Edge"
+			pcall(function() s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border end)
+			pcall(function() s.LineJoinMode = Enum.LineJoinMode.Miter end)
+			s.Parent = gui
+		end
+		if s.Name == "Edge" then
+			W.set(s, "Enabled", true)
+			W.set(s, "Thickness", 1)
+			W.set(s, "Color", th.shades.outline or th.shades.border)
+		end
 	else
 		W.set(gui, "BorderSizePixel", 0)
+		if s and s.Name == "Edge" then W.set(s, "Enabled", false) end
 	end
 end
 

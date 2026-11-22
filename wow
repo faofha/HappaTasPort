@@ -14606,13 +14606,27 @@ __mods["ui/kit/base"] = function(import)
 			end)
 		end)
 	end
-	function K.edge(gui, th)
+	function K.edge(gui, th, ring)
+		local s = ring or gui:FindFirstChild("Edge")
 		if th.compact and th.shades then
 			W.set(gui, "BorderMode", Enum.BorderMode.Inset)
 			W.set(gui, "BorderSizePixel", 2)
 			W.set(gui, "BorderColor3", th.shades.border)
+			if not s then
+				s = Instance.new("UIStroke")
+				s.Name = "Edge"
+				pcall(function() s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border end)
+				pcall(function() s.LineJoinMode = Enum.LineJoinMode.Miter end)
+				s.Parent = gui
+			end
+			if s.Name == "Edge" then
+				W.set(s, "Enabled", true)
+				W.set(s, "Thickness", 1)
+				W.set(s, "Color", th.shades.outline or th.shades.border)
+			end
 		else
 			W.set(gui, "BorderSizePixel", 0)
+			if s and s.Name == "Edge" then W.set(s, "Enabled", false) end
 		end
 	end
 	function K.style(self, f)
@@ -15025,20 +15039,20 @@ __mods["ui/kit/field"] = function(import)
 		local size = opts.search and 13.5 or 12
 		K.style(self, function(th)
 			W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
-			K.edge(gui, th)
+			K.edge(gui, th, ring)
+			self:paintRing()
 			W.set(gui, "BackgroundColor3", (th.compact and th.shades) and th.shades.element or Color3.new(0, 0, 0))
 			W.set(gui, "BackgroundTransparency", (th.compact and th.shades) and 0 or 0.75)
 			W.set(box, "FontFace", th.font(opts.number and "number" or "text"))
 			W.set(box, "TextSize", th.size(size))
 			W.set(box, "TextColor3", th.c.text)
 			W.set(box, "PlaceholderColor3", th.c.text2)
-			W.set(ring, "Color", th.c.accent)
 		end)
 		K.rect(self, { onRelease = function(_, clicked) if clicked then box:CaptureFocus() end end }, opts.z)
 		self.cancel = false
 		local uis = Env.svc("UserInputService")
 		local conns = {
-			box.Focused:Connect(function() W.set(ring, "Transparency", 0) end),
+			box.Focused:Connect(function() self.focused = true; self:paintRing() end),
 			box.FocusLost:Connect(function(_, cause)
 				if cause and cause.KeyCode == Enum.KeyCode.Escape then self.cancel = true end
 				self:commit()
@@ -15054,8 +15068,16 @@ __mods["ui/kit/field"] = function(import)
 		end)
 		return self
 	end
+	function Field:paintRing()
+		local th = self.ctx.theme
+		local compact = th.compact and th.shades
+		W.set(self.ring, "Color", (compact and not self.focused) and (th.shades.outline or th.shades.border) or th.c.accent)
+		W.set(self.ring, "Thickness", compact and 1 or 2)
+		W.set(self.ring, "Transparency", (self.focused or compact) and 0 or 1)
+	end
 	function Field:commit()
-		W.set(self.ring, "Transparency", 1)
+		self.focused = false
+		self:paintRing()
 		local box = self.box
 		if self.cancel then
 			self.cancel = false
@@ -19249,7 +19271,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "windows.\n\n"
 			.. "Your zoom and shift lock are saved with every frame." },
 		{ "bar", "Timeline bar",
-			"The bar at the bottom shows your TAS while you are in Create and Test.\n\n"
+			"The bar at the bottom (New interface) shows your TAS while you are in Create and Test.\n\n"
 			.. "On the left you see the mode and the speed. In the middle are buttons for: go to the start, back one "
 			.. "frame, record / pause, forward one frame, Test and marker. On the right, a dot shows your TAS has unsaved "
 			.. "changes, then the frame and the time.\n\n"
@@ -19361,7 +19383,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "In KEYS (on CONTROLS), click a key box and press the new key (Esc cancels), × clears it, and Reset all "
 			.. "puts every key back. Two actions on one key are marked; hover one to see the other.\n\n"
 			.. "It uses your accent colour, text colours and text size. The New interface's glass, fonts, corners and "
-			.. "animations don't apply here. The timeline bar, messages and the Merge window are the same as in New." },
+			.. "animations don't apply here. There is no timeline bar here: move through your TAS with the keys (Back / Forward, Return). Messages and the "
+			.. "Merge window are the same as in New." },
 		{ "settings", "Executor Port Settings",
 			"Ignore Game Processed: HappaTAS's keys work even when Roblox says the game already used the key. The Menu "
 			.. "key always works.\n\n"
@@ -23440,6 +23463,7 @@ __mods["ui/app"] = function(import)
 		self.live = name
 		if self.wm then self.wm:setHideAll(name == "Tasability") end
 		if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+		if self.bar then W.set(self.bar.gui, "Visible", name ~= "Tasability") end
 		if self.root and self.root.layer then
 			self.square = self.square or Square.new(self.root.layer)
 			if name ~= "Tasability" then self.square:set(false) end

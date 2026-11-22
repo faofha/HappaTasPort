@@ -19,7 +19,7 @@ local function shown(d, root)
 	return true
 end
 local function audit(root)
-	local rounded, edgeless = {}, {}
+	local rounded, edgeless, outlineless = {}, {}, {}
 	for _, d in ipairs(root:GetDescendants()) do
 		if d:IsA("UICorner") and shown(d, root) and not d:GetAttribute("HappaRound")
 			and (d.CornerRadius.Offset > 0 or d.CornerRadius.Scale > 0) then
@@ -29,8 +29,15 @@ local function audit(root)
 			and d.BorderSizePixel < 2 then
 			edgeless[#edgeless + 1] = d:GetFullName():gsub("^.*HappaTASCompact%.", "")
 		end
+		if d:IsA("Frame") and (d.Name == "Button" or d.Name == "Field" or d.Name == "Dropdown") and shown(d, root) and d.Visible then
+			local ok = false
+			for _, st in ipairs(d:GetChildren()) do
+				if st:IsA("UIStroke") and st.Enabled and st.Transparency < 0.5 and st.Thickness >= 1 then ok = true end
+			end
+			if not ok then outlineless[#outlineless + 1] = d:GetFullName():gsub("^.*HappaTASCompact%.", "") end
+		end
 	end
-	return rounded, edgeless
+	return rounded, edgeless, outlineless
 end
 
 E.settings:set("interface", "Tasability")
@@ -38,11 +45,12 @@ M.steps(2)
 local cp = ui.compact
 cp:setPanel("library", true)
 cp:setPanel("inspector", true)
-local allRounded, allEdgeless = {}, {}
+local allRounded, allEdgeless, allOutlineless = {}, {}, {}
 for _, tab in ipairs({ "controls", "settings", "help", "about" }) do
 	cp:showTab(tab)
 	M.steps(2)
-	local r, e = audit(cp.gui)
+	local r, e, o = audit(cp.gui)
+	for _, x in ipairs(o) do allOutlineless[#allOutlineless + 1] = tab .. ": " .. x end
 	for _, x in ipairs(r) do allRounded[#allRounded + 1] = tab .. ": " .. x end
 	for _, x in ipairs(e) do allEdgeless[#allEdgeless + 1] = tab .. ": " .. x end
 end
@@ -50,6 +58,19 @@ end
 section("Tasability: square everywhere, every control with the edge")
 eq(#allRounded, 0, "no rounded corner (" .. table.concat(allRounded, " | "):sub(1, 400) .. ")")
 eq(#allEdgeless, 0, "no button / field / dropdown without the edge (" .. table.concat(allEdgeless, " | "):sub(1, 400) .. ")")
+eq(#allOutlineless, 0, "every button / field / dropdown has the outline too, like Tasability's own boxes (" .. table.concat(allOutlineless, " | "):sub(1, 400) .. ")")
+do
+	local _, _, missing = audit(cp.titleBar)
+	eq(#missing, 0, "the title bar's search box has the outline (" .. table.concat(missing, " | ") .. ")")
+end
+
+section("Tasability: no timeline bar")
+eq(ui.bar.gui.Visible, false, "the timeline bar is hidden")
+E.modes:request("create")
+M.steps(2)
+eq(ui.bar.gui.Visible, false, "also in Create")
+E.modes:request("idle")
+M.steps(2)
 
 section("back to New: the rounded look comes back")
 E.settings:set("interface", "New")
@@ -62,4 +83,15 @@ check(c ~= nil and c.CornerRadius.Offset == 8, "a Help topic row is rounded agai
 local btnCorner = hw.unload.gui:FindFirstChildOfClass("UICorner")
 check(btnCorner ~= nil and btnCorner.CornerRadius.Offset > 0, "and the Unload button")
 eq(hw.unload.gui.BorderSizePixel, 0, "without the Tasability edge")
+do
+	local outlined = false
+	for _, st in ipairs(hw.unload.gui:GetChildren()) do
+		if st:IsA("UIStroke") and st.Enabled and st.Transparency < 0.5 then outlined = true end
+	end
+	eq(outlined, false, "and without its outline")
+	local f = hw.search.gui
+	eq(hw.search.ring.Transparency, 1, "a field's ring is hidden again until it is focused")
+	check(f ~= nil, "(the Help search box)")
+end
+eq(ui.bar.gui.Visible, true, "the timeline bar is back")
 finish()

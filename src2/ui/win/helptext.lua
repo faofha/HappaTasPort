@@ -86,7 +86,7 @@ local TOPICS = {
 		.. "windows.\n\n"
 		.. "Your zoom and shift lock are saved with every frame." },
 	{ "bar", "Timeline bar",
-		"The bar at the bottom shows your TAS while you are in Create and Test.\n\n"
+		"The bar at the bottom (New interface) shows your TAS while you are in Create and Test.\n\n"
 		.. "On the left you see the mode and the speed. In the middle are buttons for: go to the start, back one "
 		.. "frame, record / pause, forward one frame, Test and marker. On the right, a dot shows your TAS has unsaved "
 		.. "changes, then the frame and the time.\n\n"
@@ -198,7 +198,8 @@ local TOPICS = {
 		.. "In KEYS (on CONTROLS), click a key box and press the new key (Esc cancels), × clears it, and Reset all "
 		.. "puts every key back. Two actions on one key are marked; hover one to see the other.\n\n"
 		.. "It uses your accent colour, text colours and text size. The New interface's glass, fonts, corners and "
-		.. "animations don't apply here. The timeline bar, messages and the Merge window are the same as in New." },
+		.. "animations don't apply here. There is no timeline bar here: move through your TAS with the keys (Back / Forward, Return). Messages and the "
+		.. "Merge window are the same as in New." },
 	{ "settings", "Executor Port Settings",
 		"Ignore Game Processed: HappaTAS's keys work even when Roblox says the game already used the key. The Menu "
 		.. "key always works.\n\n"

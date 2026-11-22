@@ -145,6 +145,8 @@ function UI:setInterface(name)
 	self.live = name
 	if self.wm then self.wm:setHideAll(name == "Tasability") end
 	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+	-- (V3.1: Tasability has no timeline bar: it belongs to the New interface's look)
+	if self.bar then W.set(self.bar.gui, "Visible", name ~= "Tasability") end
 	-- (Tasability: every corner square; the corners' own radii are kept first and put back first, so the theme's
 	-- restyle on the switch back finds them as they were)
 	if self.root and self.root.layer then
