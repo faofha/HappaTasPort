@@ -14,6 +14,7 @@ local Field = import("ui/kit/field")
 local CK = import("ui/compact/kit")
 local CONFIG = import("config")
 local Host = import("ui/compact/host")
+local Controls = import("ui/compact/controls")
 local SettingsWin = import("ui/win/settings")
 local HelpWin = import("ui/win/help")
 local AboutWin = import("ui/win/about")
@@ -48,6 +49,7 @@ function Compact.new(ui)
 	self:addRect({ gui = gui }, 0) -- (a press on the window is the window's)
 	self:buildTitleBar()
 	self:buildBody()
+	self.controls = Controls.build(self)
 	self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 	self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
 	self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
@@ -294,6 +296,7 @@ function Compact:setLive(on)
 	self.live = on == true
 	self:applyVisible()
 	self:syncHosted()
+	if self.controls then self.controls:follow(self.live) end
 end
 
 -- ------------------------------------------------------------------------------------------------ hosting

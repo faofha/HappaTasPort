@@ -99,6 +99,7 @@ ui/classic/mobile
 ui/classic/classic
 ui/compact/kit
 ui/compact/host
+ui/compact/controls
 ui/compact/compact
 ui/app
 profiler/profiler
