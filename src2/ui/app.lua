@@ -143,6 +143,7 @@ function UI:setInterface(name)
 	self.live = name
 	if self.wm then self.wm:setHideAll(name == "Compact") end
 	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Compact") end
+	if self.theme then self.theme:setCompact(name == "Compact") end
 	if self.compact then self.compact:setLive(name == "Compact") end
 	self:applyShown()
 	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end

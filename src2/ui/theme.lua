@@ -4,6 +4,8 @@
 --  theme.font(kind), theme.size(n), theme.corner(kind). changed(f) fires once for each Appearance setting
 --  that changes, and for a font preview (a font shown everywhere while a font list is hovered; the stored
 --  setting stays as it is).
+--  Compact mode (V3.1, the Compact interface): Gotham fonts, square corners, solid dark shades tinted toward the
+--  accent (theme.shades), an outline rim (theme.c.rim), no shadows. setCompact(false) gives the New look back.
 -- ================================================================================================
 local Settings = import("engine/settings")
 
@@ -12,6 +14,9 @@ Theme.__index = Theme
 
 local CONTROL_CORNER = { Pill = 999, Rounded = 8, Square = 2 }
 local FIXED = { reset1 = "#FFC86E", reset2 = "#F0A032", close = "#FF6A6A" }
+-- (Compact's dark shades as grey levels out of 255, each mixed a little toward the accent's colour)
+local SHADES = { deep = 10, window = 15, inline = 21, panel = 28, element = 35, hover = 44, border = 8, outline = 30 }
+local TINT = 0.08
 
 local function color(hex)
 	local h = tostring(hex or ""):gsub("#", "")
@@ -36,12 +41,16 @@ function Theme.new(E, life)
 	-- (plain functions, so they can be passed around: theme.size(13))
 	self.size = function(n) return n * self.s:get("textSize") / 13 end
 	self.font = function(kind)
+		if self.compact then
+			return Font.fromEnum((kind == "bold") and Enum.Font.GothamBold or Enum.Font.GothamMedium)
+		end
 		local s = self.s
 		local name = (kind == "number") and s:get("numberFont") or (self.previewName or s:get("font"))
 		local weight = (kind == "bold") and Enum.FontWeight.Bold or Enum.FontWeight.Regular
 		return Font.new(family(name), weight)
 	end
 	self.corner = function(kind)
+		if self.compact then return 0 end
 		if kind == "window" then return self.s:get("windowCorners") end
 		return CONTROL_CORNER[self.s:get("buttonShape")] or 999
 	end
@@ -58,6 +67,30 @@ function Theme:refresh()
 	for k, hex in pairs(FIXED) do c[k] = color(hex) end
 	t.glass = s:get("glassTransparency") / 100
 	t.rim = 1 - s:get("edgeLight") / 100
+	c.rim = Color3.new(1, 1, 1)
+	self.shades = nil
+	if self.compact then
+		local sh = Theme.compactShades(c.accent)
+		self.shades = sh
+		c.glass, c.rim = sh.window, sh.outline
+		t.glass, t.rim = 0, 0
+	end
+end
+
+-- Compact's shades for an accent colour: { deep, window, inline, panel, element, hover, border, outline }
+function Theme.compactShades(accent)
+	local out = {}
+	for k, v in pairs(SHADES) do out[k] = Color3.fromRGB(v, v, v):Lerp(accent, TINT) end
+	return out
+end
+
+-- on: the Compact interface's look (fires changed once when it flips)
+function Theme:setCompact(on)
+	on = on == true
+	if (self.compact == true) == on then return end
+	self.compact = on
+	self:refresh()
+	self:fire()
 end
 
 function Theme:fire()
