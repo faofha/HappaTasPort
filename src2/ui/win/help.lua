@@ -57,7 +57,6 @@ function HelpWin.build(ui, body, win)
 	page.ScrollBarThickness = 4
 	page.Position = UDim2.new(0, SIDE + 18, 0, 10)
 	page.Size = UDim2.new(1, -SIDE - 18 - PAD, 1, -18)
-	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	page.CanvasSize = UDim2.new(0, 0, 0, 0)
 	page.Parent = body
 	hw.page = page
@@ -67,12 +66,23 @@ function HelpWin.build(ui, body, win)
 	hw.title = title
 	local text = K.text("TextLabel", "Body", page)
 	text.Position = UDim2.new(0, 0, 0, 34)
-	text.Size = UDim2.new(1, -8, 0, 0)
-	text.AutomaticSize = Enum.AutomaticSize.Y
+	text.Size = UDim2.new(1, -8, 0, 100000)
 	text.TextWrapped = true
 	text.TextXAlignment = Enum.TextXAlignment.Left
 	text.TextYAlignment = Enum.TextYAlignment.Top
 	hw.body = text
+	-- (V3.1: the text is far taller than any topic and the page scrolls as far as its measured text: live, a
+	-- self-sizing text in a scrolling page stopped growing at about the page's height, cutting a long topic's end
+	-- off. TextBounds catches up a frame or two after a new text, text size or width, and its change signal didn't
+	-- always fire live, so the page is measured again over the next frames)
+	local function fitNow()
+		if text.Parent then W.set(page, "CanvasSize", UDim2.new(0, 0, 0, 34 + math.ceil(text.TextBounds.Y) + 8)) end
+	end
+	local function fitText()
+		fitNow()
+		task.spawn(function() for _ = 1, 3 do task.wait(); fitNow() end end)
+	end
+	page:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitText) -- (a new width rewraps the text)
 
 	local function paintText()
 		W.set(title, "FontFace", th.font("bold"))
@@ -82,6 +92,7 @@ function HelpWin.build(ui, body, win)
 		W.set(text, "TextSize", th.size(13))
 		W.set(text, "TextColor3", th.c.text)
 		W.set(text, "LineHeight", 1.15)
+		fitText()
 	end
 	paintText()
 
@@ -94,6 +105,7 @@ function HelpWin.build(ui, body, win)
 				self.shown = id
 				W.set(title, "Text", t.title)
 				W.set(text, "Text", t.body)
+				fitText()
 				W.set(page, "CanvasPosition", Vector2.new(0, 0))
 				for _, r in ipairs(self.topicRows) do
 					W.set(r.gui, "BackgroundTransparency", (r.id == id) and 0.84 or 1)
