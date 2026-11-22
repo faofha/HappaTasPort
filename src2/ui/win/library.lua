@@ -7,6 +7,8 @@
 --  click within 3 s; Load / Save / New attempt
 --  / Merge are dimmed while a save or load runs (E.busy). Results and refusals show as status toasts; the
 --  list is read again when the window opens and after every save or load (bus "persist").
+--  Narrow (win.narrow: docked in the Compact interface's 320 px side panel, V3.1): a 96 px folder column, the
+--  list shows name and frames, the buttons in three rows of fixed widths.
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
@@ -67,6 +69,8 @@ end
 
 function LibraryWin.build(ui, body, win)
 	local E, ctx, th = ui.E, win.ctx, ui.theme
+	local narrow = win.narrow == true
+	local SIDE = narrow and 96 or SIDE
 	local lw = { ui = ui, E = E, ctx = ctx, win = win, offs = {}, rows = {}, visible = {}, folderRows = {},
 		buttons = {}, expanded = {}, folder = nil, selected = nil, query = "", sortIndex = 1, confirm = nil }
 
@@ -87,11 +91,11 @@ function LibraryWin.build(ui, body, win)
 	local main = K.frame("Main", body)
 	main.Position = UDim2.new(0, SIDE, 0, 0)
 	main.Size = UDim2.new(1, -SIDE, 1, 0)
-	lw.search = Field.new(ctx, main, { search = true, w = 260, placeholder = "Search" })
+	lw.search = Field.new(ctx, main, { search = true, w = narrow and 110 or 260, placeholder = "Search" })
 	lw.search.gui.Position = UDim2.new(0, PAD, 0, 8)
 	local sortNames = {}
 	for _, s in ipairs(SORTS) do sortNames[#sortNames + 1] = s[1] end
-	lw.sort = Dropdown.new(ctx, main, { options = sortNames, w = 130 })
+	lw.sort = Dropdown.new(ctx, main, { options = sortNames, w = narrow and 74 or 130 })
 	lw.sort.gui.AnchorPoint = Vector2.new(1, 0)
 	lw.sort.gui.Position = UDim2.new(1, -PAD, 0, 12)
 
@@ -116,8 +120,9 @@ function LibraryWin.build(ui, body, win)
 		if static then lw.static[#lw.static + 1] = { l, secondary, kind } end
 		return l
 	end
+	local NAME_W = narrow and 110 or 320
 	local COLS = {
-		name = { { 0, 24 }, { 1, -320 } },
+		name = { { 0, 24 }, { 1, -NAME_W } },
 		length = { { 1, -290 }, { 0, 70 } },
 		frames = { { 1, -212 }, { 0, 80 } },
 		saved = { { 1, -126 }, { 0, 120 } },
@@ -129,37 +134,52 @@ function LibraryWin.build(ui, body, win)
 		column(header, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, nil, true),
 	}
 	lw.headers[1].Text, lw.headers[2].Text, lw.headers[3].Text, lw.headers[4].Text = "Name", "Length", "Frames", "Saved"
+	if narrow then
+		lw.headers[2].Visible, lw.headers[4].Visible = false, false
+		lw.headers[3].Position, lw.headers[3].Size = UDim2.new(1, -82, 0, 0), UDim2.new(0, 80, 1, 0)
+	end
 
 	local list, lctx = scrollList(lw, ctx, main, "List")
 	list.Position = UDim2.new(0, PAD, 0, 66)
-	list.Size = UDim2.new(1, -PAD * 2, 1, -66 - 110)
+	list.Size = UDim2.new(1, -PAD * 2, 1, -66 - (narrow and 176 or 110))
 	lw.list, lw.lctx = list, lctx
 
 	lw.info = column(main, "Info", { 0, PAD }, { 1, -PAD * 2 }, nil, true, nil, true)
-	lw.info.Position = UDim2.new(0, PAD, 1, -104)
+	lw.info.Position = UDim2.new(0, PAD, 1, narrow and -168 or -104)
 	lw.info.Size = UDim2.new(1, -PAD * 2, 0, 18)
 	lw.info.Text = ""
 
 	-- the name field and the buttons (two rows)
-	lw.nameField = Field.new(ctx, main, { w = 200, placeholder = "Name" })
-	lw.nameField.gui.Position = UDim2.new(0, PAD, 1, -78)
-	local function button(key, text, parent, x, y, kind)
-		local b = Button.new(ctx, parent, { text = text, kind = kind or "plain" })
+	lw.nameField = Field.new(ctx, main, { w = narrow and 188 or 200, placeholder = "Name" })
+	lw.nameField.gui.Position = UDim2.new(0, PAD, 1, narrow and -144 or -78)
+	local function button(key, text, parent, x, y, kind, w)
+		local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w })
 		b.gui.Position = UDim2.new(0, x, 1, y)
 		b.enabled = true
 		b.text = text
 		lw.buttons[key] = b
 		return b
 	end
-	local x1 = PAD + 208
-	button("save", "Save", main, x1, -78, "primary")
-	button("attempt", "New attempt", main, x1 + 62, -78)
-	button("rename", "Rename", main, x1 + 168, -78)
-	button("load", "Load", main, PAD, -44, "primary")
-	button("merge", "Merge", main, PAD + 62, -44)
-	button("delete", "Delete", main, PAD + 134, -44)
-	lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 150 })
-	lw.moveDrop.gui.Position = UDim2.new(0, PAD + 214, 1, -44)
+	if narrow then
+		button("save", "Save", main, PAD, -112, "primary", 60)
+		button("load", "Load", main, PAD + 64, -112, "primary", 60)
+		button("merge", "Merge", main, PAD + 128, -112, nil, 60)
+		button("attempt", "New attempt", main, PAD, -80, nil, 92)
+		button("rename", "Rename", main, PAD + 96, -80, nil, 92)
+		button("delete", "Delete", main, PAD, -46, nil, 60)
+		lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 124 })
+		lw.moveDrop.gui.Position = UDim2.new(0, PAD + 64, 1, -46)
+	else
+		local x1 = PAD + 208
+		button("save", "Save", main, x1, -78, "primary")
+		button("attempt", "New attempt", main, x1 + 62, -78)
+		button("rename", "Rename", main, x1 + 168, -78)
+		button("load", "Load", main, PAD, -44, "primary")
+		button("merge", "Merge", main, PAD + 62, -44)
+		button("delete", "Delete", main, PAD + 134, -44)
+		lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 150 })
+		lw.moveDrop.gui.Position = UDim2.new(0, PAD + 214, 1, -44)
+	end
 
 	-- (the Merge window, when there is one: ui.startMerge opens it and reads the selected run)
 	if ui.startMerge then lw.onMerge = function(path) ui.startMerge(path) end end
@@ -302,14 +322,18 @@ function LibraryWin.build(ui, body, win)
 			gui.Size = UDim2.new(1, -6, 0, ROW_H)
 			K.corner(gui, 8)
 			local indent = v.depth * 16
-			local name = column(gui, "Name", { 0, 24 + indent }, { 1, -320 - indent })
+			local name = column(gui, "Name", { 0, 24 + indent }, { 1, -NAME_W - indent })
 			name.Text = (lw.folder == nil and e.folder ~= "" and v.depth == 0) and (e.folder .. "/" .. e.name) or e.name
-			column(gui, "Length", COLS.length[1], COLS.length[2], Enum.TextXAlignment.Right, true, "number").Text =
-				Util.toTime(e.length or 0)
-			column(gui, "Frames", COLS.frames[1], COLS.frames[2], Enum.TextXAlignment.Right, true, "number").Text =
-				tostring(e.frames or "-")
-			column(gui, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, "number").Text =
-				dateText(e.saved)
+			if not narrow then
+				column(gui, "Length", COLS.length[1], COLS.length[2], Enum.TextXAlignment.Right, true, "number").Text =
+					Util.toTime(e.length or 0)
+			end
+			column(gui, "Frames", narrow and { 1, -82 } or COLS.frames[1], narrow and { 0, 80 } or COLS.frames[2],
+				Enum.TextXAlignment.Right, true, "number").Text = tostring(e.frames or "-")
+			if not narrow then
+				column(gui, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, "number").Text =
+					dateText(e.saved)
+			end
 			local r = { entry = e, depth = v.depth, gui = gui, label = name }
 			r.rect = lctx.pointer.add({ gui = gui, onRelease = function(_, clicked) if clicked then selectRow(e.path) end end }, 1)
 			if v.depth == 0 and v.group and #v.group.attempts > 0 then

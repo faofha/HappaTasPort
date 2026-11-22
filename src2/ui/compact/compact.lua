@@ -13,19 +13,27 @@ local K = import("ui/kit/base")
 local Field = import("ui/kit/field")
 local CK = import("ui/compact/kit")
 local CONFIG = import("config")
+local Host = import("ui/compact/host")
+local SettingsWin = import("ui/win/settings")
+local HelpWin = import("ui/win/help")
+local AboutWin = import("ui/win/about")
+local ControlsWin = import("ui/win/controls")
+local LibraryWin = import("ui/win/library")
+local InspectorWin = import("ui/win/inspector")
 
 local Compact = {}
 Compact.__index = Compact
 
 Compact.W, Compact.H, Compact.MIN_W, Compact.MIN_H = 700, 500, 560, 400
 Compact.TITLE_H = 28
-Compact.LIB_W, Compact.INS_W, Compact.GAP = 180, 200, 8
+-- (the Library's narrow layout needs ~320; 260 is the Inspector's own minimum)
+Compact.LIB_W, Compact.INS_W, Compact.GAP = 320, 260, 8
 Compact.TABS = { "controls", "settings", "help", "about" }
 local Z = 20 -- (pointer z: under every New window, so the shared Merge window is above it)
 
 function Compact.new(ui)
 	local self = setmetatable({ ui = ui, E = ui.E, live = false, folded = false, tab = "controls", rects = {}, offs = {},
-		pieces = {}, pages = {}, tabs = {}, panels = {} }, Compact)
+		pieces = {}, pages = {}, tabs = {}, panels = {}, hosted = {} }, Compact)
 	local th = ui.theme
 	self.ctx = { E = ui.E, ui = ui, theme = th, tween = ui.tween, typing = ui.E.typing,
 		-- (controls sit above the window's own rects: the title bar's drag, the grip)
@@ -44,6 +52,15 @@ function Compact.new(ui)
 	self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
 	self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
 	self.offs[#self.offs + 1] = ui.wm:screenChanged(function() self:place(self.x, self.y, self.w, self.h) end)
+	-- (a merge started from the Library panel: the panel closes, as the Library window does)
+	self.offs[#self.offs + 1] = ui.wm:changed(function(id, open)
+		if id == "merge" and open and self.panels.library.open then self:setPanel("library", false) end
+	end)
+	self.search.onInput = function(t)
+		if self.tab ~= "settings" then self:showTab("settings") end
+		local h = self:host("settings")
+		if h and h.obj and h.obj.setQuery then h.obj.setQuery(t or "") end
+	end
 	self:paint()
 	self:load()
 	return self
@@ -140,14 +157,17 @@ function Compact:buildBody()
 	self.content = content
 	self.contentStroke = CK.border(content)
 	for _, id in ipairs(Compact.TABS) do
-		local page = Instance.new("ScrollingFrame")
+		-- (CONTROLS scrolls itself; a hosted window's page is a plain frame: the window scrolls its own list)
+		local page = Instance.new(id == "controls" and "ScrollingFrame" or "Frame")
 		page.Name = "Page_" .. id
 		page.BackgroundTransparency = 1
 		page.BorderSizePixel = 0
-		page.ScrollBarThickness = 2
 		page.Size = UDim2.new(1, 0, 1, 0)
-		page.CanvasSize = UDim2.new(0, 0, 0, 0)
-		page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		if id == "controls" then
+			page.ScrollBarThickness = 2
+			page.CanvasSize = UDim2.new(0, 0, 0, 0)
+			page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		end
 		page.Visible = id == self.tab
 		page.ZIndex = 2
 		page.Parent = content
@@ -166,6 +186,13 @@ function Compact:buildBody()
 		g.ZIndex = 6
 	end
 	self.grip = grip
+	-- (CONTROLS: the KEYS section holds the Controls window's list)
+	local keys = CK.section(ctx, self.pages.controls, "keys")
+	keys.gui.Size = UDim2.new(1, -4, 0, 0)
+	self.pieces[#self.pieces + 1] = keys
+	local kf = K.frame("Keys", keys.body)
+	kf.Size = UDim2.new(1, 0, 0, 320)
+	self.keysSection, self.keysFrame = keys, kf
 	local start = nil
 	self:addRect({ gui = grip,
 		onPress = function() start = Vector2.new(self.w, self.h) end,
@@ -224,7 +251,7 @@ function Compact:paint()
 	CK.paintBorder(self.inline, self.inlineStroke, th)
 	W.set(self.content, "BackgroundColor3", s.deep)
 	CK.paintBorder(self.content, self.contentStroke, th)
-	for _, page in pairs(self.pages) do W.set(page, "ScrollBarImageColor3", th.c.accent) end
+	W.set(self.pages.controls, "ScrollBarImageColor3", th.c.accent)
 	for _, p in pairs(self.panels) do
 		W.set(p.gui, "BackgroundColor3", s.window)
 		W.set(p.stroke, "Color", th.c.accent)
@@ -266,6 +293,55 @@ end
 function Compact:setLive(on)
 	self.live = on == true
 	self:applyVisible()
+	self:syncHosted()
+end
+
+-- ------------------------------------------------------------------------------------------------ hosting
+-- what each hosted window is built from and where it goes
+function Compact:hostSpec(id)
+	local p = self.pages
+	if id == "settings" then return SettingsWin.build, p.settings end
+	if id == "help" then return HelpWin.build, p.help end
+	if id == "about" then return AboutWin.build, p.about end
+	if id == "controls" then return ControlsWin.build, self.keysFrame end
+	if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true } end
+	if id == "inspector" then return InspectorWin.build, self.panels.inspector.body end
+	return nil
+end
+
+-- the hosted window id (built the first time it is needed)
+function Compact:host(id)
+	local h = self.hosted[id]
+	if h then return h end
+	local build, parent, opts = self:hostSpec(id)
+	if not (build and parent) then return nil end
+	h = Host.new(self, id, build, parent, opts)
+	self.hosted[id] = h
+	if self.E.typing and h.frame then self.E.typing:watch(h.frame) end
+	return h
+end
+
+-- each hosted window open while it shows (its per-frame work and refreshes follow win.open)
+function Compact:syncHosted()
+	local shown = self.live and not self.folded
+	for _, id in ipairs(Compact.TABS) do
+		if self.hosted[id] or (shown and self.tab == id) then
+			local h = self:host(id)
+			if h then h:setOpen(shown and self.tab == id) end
+		end
+	end
+	for id, p in pairs(self.panels) do
+		if self.hosted[id] or (shown and p.open) then
+			local h = self:host(id)
+			if h then h:setOpen(shown and p.open) end
+		end
+	end
+end
+
+-- a key being bound ends with the interface going away
+function Compact:endTyping()
+	local h = self.hosted.controls
+	if h and h.obj and h.obj.stopWaiting then h.obj.stopWaiting() end
 end
 
 function Compact:showTab(id)
@@ -273,6 +349,7 @@ function Compact:showTab(id)
 	self.tab = id
 	for name, page in pairs(self.pages) do W.set(page, "Visible", name == id) end
 	for name, t in pairs(self.tabs) do t:setActive(name == id) end
+	self:syncHosted()
 	if self.onTab then self.onTab(id) end
 	self:save()
 end
@@ -283,6 +360,7 @@ function Compact:setPanel(id, on)
 	p.open = on == true
 	if p.open and self.folded then self:setFolded(false) end
 	self:applyVisible()
+	self:syncHosted()
 	if self.onPanel then self.onPanel(id, p.open) end
 	if id == "library" then self:save() end
 end
@@ -291,6 +369,7 @@ function Compact:setFolded(on)
 	self.folded = on == true
 	self:place(self.x, self.y, self.w, self.h)
 	self:applyVisible()
+	self:syncHosted()
 	self.ui:updateModal()
 	self:save()
 end

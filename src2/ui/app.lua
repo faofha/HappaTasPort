@@ -120,6 +120,7 @@ function UI:endTyping()
 	E.typing.own = nil
 	if self.controlsWin and self.controlsWin.stopWaiting then self.controlsWin.stopWaiting() end
 	if self.classic and self.classic.stopWaiting then self.classic.stopWaiting() end
+	if self.compact then self.compact:endTyping() end
 	E.typing.rebinding = false
 end
 
