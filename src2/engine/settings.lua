@@ -89,6 +89,7 @@ Settings.SCHEMA = {
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 	row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
+	row("replayChat", nil, "Inputs", 1, { desc = "Types the recorded chat into the chat bar again while testing" }),
 	row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { hidden = true, desc = "Mouse positions follow the screen size" }),
 	row("nohboardCursor", "NohBoard Cursor", "Inputs", 1, { desc = "Shows a cursor where the mouse is, for key overlays" }),
 	row("pausedMouse", nil, "Inputs", 1, { desc = "Paused: a cursor image shows the frame's mouse; unpausing puts the mouse back there" }),
@@ -158,7 +159,7 @@ local NAMES = {
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
+	pausedMouse = "Keep Mouse Position (Paused)", replayChat = "Replay Chat", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
 	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 	classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 }

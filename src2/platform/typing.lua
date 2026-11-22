@@ -38,10 +38,13 @@ end
 
 function Typing:active(inp)
 	if self.rebinding or (inp ~= nil and inp == self.boundInput) then return true end
-	if self.uis:GetFocusedTextBox() ~= nil then return true end -- game text boxes, the old chat
+	-- (V3.1: the chat bar Test's chat replay focused isn't the player typing; live, GetFocusedTextBox reports it)
+	local focused = self.uis:GetFocusedTextBox()
+	if focused ~= nil and not (self.chatReplay and focused == self.chatReplay) then return true end -- game boxes, old chat
 	local own = self.own
 	if own and own.Parent and own:IsFocused() then return true end
 	if self.gui and self.gui.MenuIsOpen then return true end
+	if self.chatReplay then return false end
 	local ok, chat = pcall(self.chatFocused, self)
 	return ok and chat == true
 end

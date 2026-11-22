@@ -20,6 +20,7 @@ local Saves = import("ui/classic/saves")
 local ClassicStats = import("ui/classic/stats")
 local ClassicMobile = import("ui/classic/mobile")
 local HelpText = import("ui/win/helptext")
+local K = import("ui/kit/base")
 
 local Classic = {}
 Classic.__index = Classic
@@ -60,6 +61,10 @@ function Classic.new(ui)
 	self.saves = Saves.build(self)
 	self.stats = ClassicStats.new(self)
 	self:buildHelp()
+	for _, name in ipairs({ "3UpdateLog", "5Credits" }) do -- (V3.1: their light boxes are drawn at once)
+		local f = byPath["MainMenu.MoreFrame.List." .. name]
+		if f then K.redrawOnGrow(f, byPath["MainMenu.MoreFrame"]) end
+	end
 	self:wire()
 	self.background = Background.new(self)
 	ClassicMobile.wire(self)
