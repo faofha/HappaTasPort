@@ -1,7 +1,7 @@
 -- needs: ui
 -- ================================================================================================
 -- HappaTAS 3, phase 5b: the Help window: every V2.38.17 help topic has a home, keys shown are the bound
--- ones, search, the missing executor functions (Env.notes), the credits word for word (headless mock)
+-- ones, search, the missing executor functions (Env.notes); the credits are in the About window (test_pages)
 -- ================================================================================================
 -- (getconnections taken away for the first run: Env.notes says what that switches off)
 local savedGC = getconnections
@@ -73,13 +73,18 @@ for _, title in ipairs(V2_TITLES) do
 	if not found then homeless[#homeless + 1] = title end
 end
 eq(#homeless, 0, "every title found (" .. table.concat(homeless, ", ") .. ")")
-local new = { "Timeline bar", "Library", "Inspector", "Known limits", "Missing executor functions", "Credits" }
+local new = { "Timeline bar", "Library", "Inspector", "Common problems", "Missing executor functions" }
 for _, title in ipairs(new) do
 	local found = false
 	for _, t in ipairs(topics) do if t.title:find(title, 1, true) then found = true end end
 	check(found, "a topic for " .. title)
 end
 check(#hw.topicRows == #topics, "one row per topic in the list")
+do
+	local limits = false
+	for _, t in ipairs(topics) do if t.id == "problems" and t.body:find("Known limits", 1, true) then limits = true end end
+	check(limits, "the known limits are in Common problems")
+end
 
 section("keys are live")
 E.controls:set("pause", "P")
@@ -123,35 +128,16 @@ M.steps(1)
 eq(hw.shown, "library", "shows the clicked topic")
 check(hw.title.Text:find("Library", 1, true) ~= nil, "its title")
 
-section("credits exact")
-hw:show("credits")
-M.steps(1)
-eq(hw.body.Text, table.concat({
-	"Happy_Liam/happa - Main Scripter/UI Design",
-	"plusgiant5 - Tasability creator",
-	"TestMicrowaveDinner - Scripting Help",
-	"Skittlesuna - Playtester",
-	"Executor port - client side script",
-}, "\n"), "the five lines")
-
-section("what's new (phase 7)")
+section("what's new (phase 7; the About window shows it since V3.1)")
 do
 	local list = HelpText.topics(E)
 	local function topicById(id)
 		for _, t in ipairs(list) do if t.id == id then return t end end
 		return nil
 	end
-	local function order(id)
-		for i, t in ipairs(list) do if t.id == id then return i end end
-		return -1
-	end
 	eq(__T3("config").VERSION, "3.0.0", "version 3.0.0")
-	local t = topicById("whatsnew")
-	check(t ~= nil and t.title == "What's new", "a What's new topic")
-	eq(order("whatsnew"), order("start") + 1, "right after Getting started")
-	check(t ~= nil and t.body:find("HappaTAS 3.0.0", 1, true) ~= nil, "names the version")
+	eq(HelpText.WHATS_NEW.version, "3.0.0", "the log names the version")
 	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
-		check(t ~= nil and t.body:find("• " .. item, 1, true) ~= nil, "lists: " .. item)
 		check(#item <= 60, "fits a classic row: " .. item)
 	end
 	eq(HelpText.WHATS_NEW and #HelpText.WHATS_NEW.items or 0, 8, "eight items")
@@ -159,7 +145,7 @@ do
 	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
 		check(not item:lower():find("faster frames", 1, true), "no faster-frames claim: " .. item)
 	end
-	check(t ~= nil and t.body:find("faster saving", 1, true) ~= nil, "says what is faster: saving")
+	check(table.concat(HelpText.WHATS_NEW.items, "\n"):find("faster saving", 1, true) ~= nil, "says what is faster: saving")
 	local start = topicById("start")
 	local u = start and start.body:find("unload HappaTAS first", 1, true)
 	local d = start and start.body:find("delete HappaTasPort/Settings3.json", 1, true)

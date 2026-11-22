@@ -29,7 +29,7 @@ end
 section("start: the Dock and the Inspector")
 eq(wm:isOpen("inspector"), true, "the Inspector opens by default (phase 5b)")
 eq(wm:isOpen("settings") or wm:isOpen("controls"), false, "no other window")
-eq(table.concat(ui.dock.order, ","), "inspector,library,settings,controls,help", "the Dock's five buttons, in order")
+eq(table.concat(ui.dock.order, ","), "inspector,library,settings,controls,help,about", "the Dock's six buttons, in order (About: V3.1)")
 eq(E.modalOpen(), false, "the mouse isn't freed")
 eq(ui.bar.strip, true, "the timeline bar is a strip (Idle, no run)")
 
