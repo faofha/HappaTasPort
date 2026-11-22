@@ -9,7 +9,7 @@ local E = T.engine
 local ui = E.ui
 local guard = 0
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 cp:showTab("controls")
@@ -92,7 +92,7 @@ eq(handlers(), 1, "one Compact handler while live")
 s:set("interface", "New")
 M.steps(2)
 eq(handlers(), 0, "none in New")
-s:set("interface", "Compact")
+s:set("interface", "Tasability")
 M.steps(2)
 UIH.click(c.buttons.unload.gui)
 M.steps(5)

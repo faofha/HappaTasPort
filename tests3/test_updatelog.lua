@@ -30,7 +30,7 @@ local V30 = { "A new interface: Dock, windows, timeline bar, Inspector", "Classi
 eq(#entries[2].bullets, #V30, "V3.0's eight lines")
 for i, t in ipairs(V30) do eq(entries[2].bullets[i], "   -   " .. t, "V3.0 line " .. i) end
 local v31 = table.concat(entries[1].bullets, "\n")
-for _, want in ipairs({ "Compact", "colour picker", "Green default colours", "Sync Client Objects", "Smooth Slow Motion",
+for _, want in ipairs({ "Tasability", "colour picker", "Green default colours", "Sync Client Objects", "Smooth Slow Motion",
 	"Glide Manipulation", "Classic Look", "About window" }) do
 	check(v31:find(want, 1, true) ~= nil, "V3.1 mentions " .. want)
 end
@@ -94,8 +94,8 @@ local join
 for _, d in ipairs(c.gui:GetDescendants()) do if d:IsA("TextLabel") and d.Name == "Title" and d.Text:find("Loaded", 1, true) then join = d end end
 check(join == nil or join.Text == "HappaTAS V3.1 Loaded", "the join message")
 
-section("Compact")
-E.settings:set("interface", "Compact")
+section("Tasability")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 eq(ui.compact.version.label.Text, "V3.1", "the version chip")
 ui.compact:showTab("about")

@@ -84,7 +84,7 @@ eq(g.shadow.Visible, before.shadow, "the shadow back")
 eq(g.rim.Color, Color3.new(1, 1, 1), "the white rim back")
 
 section("the interface switch drives it")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 eq(th.compact, true, "Compact: compact mode")
 E.settings:set("interface", "New")

@@ -17,7 +17,7 @@ local function handlers()
 	return n
 end
 local wmSettings = ui.settingsWin
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 local firstHandlers = handlers()
@@ -125,11 +125,11 @@ eq(cw.waiting, nil, "and the hosted key list stops waiting")
 section("New -> Compact -> Classic -> Compact (Review Focus 4)")
 local rowsBefore = 0
 for _ in pairs(sw.rows) do rowsBefore = rowsBefore + 1 end
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 E.settings:set("interface", "Classic")
 M.steps(2)
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 check(cp.hosted.settings.obj == sw, "the same hosted Settings")
 local rowsAfter = 0

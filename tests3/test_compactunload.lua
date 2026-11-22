@@ -15,7 +15,7 @@ section("Help")
 local topics = HelpText.topics(E)
 local compact
 for _, t in ipairs(topics) do if t.id == "compact" then compact = t end end
-check(compact ~= nil and compact.title == "Compact interface", "a Compact interface topic")
+check(compact ~= nil and compact.title == "Tasability interface", "a Tasability interface topic")
 if compact then
 	for _, word in ipairs({ "title bar", "tabs", "LIBRARY", "INSPECTOR", "minimise" }) do
 		check(compact.body:find(word, 1, true) ~= nil, "it names " .. word)
@@ -31,10 +31,10 @@ end
 eq(#bad, 0, "New-only lines name the New interface (" .. table.concat(bad, ", ") .. ")")
 local cl
 for _, t in ipairs(topics) do if t.id == "classiclook" then cl = t end end
-check(cl ~= nil and cl.body:find("Compact", 1, true) ~= nil, "the Interface line lists Compact too")
+check(cl ~= nil and cl.body:find("Tasability", 1, true) ~= nil, "the Interface line lists Compact too")
 
 section("Unload with Compact live, folded, a popover open (Review Focus 5)")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 cp:showTab("settings")

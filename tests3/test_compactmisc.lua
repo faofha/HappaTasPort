@@ -29,7 +29,7 @@ local function record(n)
 	M.steps(2)
 	E.char.hrp.AssemblyLinearVelocity = Vector3.zero
 end
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 
@@ -95,7 +95,7 @@ check(E.merge, "merging")
 E.settings:set("interface", "New")
 M.steps(2)
 check(mwin.holder.Visible, "still shown in New")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 check(mwin.holder.Visible, "and back in Compact")
 check(E.merge, "the merge goes on")
