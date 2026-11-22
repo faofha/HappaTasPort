@@ -20,8 +20,9 @@ local SHARED_OK = { pause = "unpause", unpause = "pause" }
 -- the list's height for this many controls (rows, Reset all, the hover line)
 function TKeys.height() return #Controls.LIST * (ROW + GAP) + ROW + GAP + HOVER end
 
-function TKeys.build(cp, parent)
-	local ui, ctx = cp.ui, cp.ctx
+function TKeys.build(cp, parent, ctx)
+	local ui = cp.ui
+	ctx = ctx or cp.ctx
 	local E = ui.E
 	local c = E.controls
 	local self = setmetatable({ cp = cp, E = E, rows = {}, also = {}, parts = {}, offs = {} }, TKeys)

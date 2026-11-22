@@ -22111,6 +22111,7 @@ __mods["ui/compact/settings"] = function(import)
 		scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 		scroll.Parent = root
 		self.scroll = scroll
+		ctx = cp:clippedCtx(scroll)
 		local scrollConn = scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 		self.offs[#self.offs + 1] = function() scrollConn:Disconnect() end
 		local hover = K.text("TextLabel", "Hover", root)
@@ -22310,8 +22311,9 @@ __mods["ui/compact/keys"] = function(import)
 	local ROW, GAP, HOVER = 22, 4, 16
 	local SHARED_OK = { pause = "unpause", unpause = "pause" }
 	function TKeys.height() return #Controls.LIST * (ROW + GAP) + ROW + GAP + HOVER end
-	function TKeys.build(cp, parent)
-		local ui, ctx = cp.ui, cp.ctx
+	function TKeys.build(cp, parent, ctx)
+		local ui = cp.ui
+		ctx = ctx or cp.ctx
 		local E = ui.E
 		local c = E.controls
 		local self = setmetatable({ cp = cp, E = E, rows = {}, also = {}, parts = {}, offs = {} }, TKeys)
@@ -22468,7 +22470,8 @@ __mods["ui/compact/controls"] = function(import)
 		end
 	end
 	function Controls.build(cp)
-		local ui, ctx = cp.ui, cp.ctx
+		local ui = cp.ui
+		local ctx = cp:clippedCtx(cp.pages.controls)
 		local E = ui.E
 		local self = setmetatable({ cp = cp, ui = ui, E = E, values = {}, buttons = {}, labels = {}, last = {}, t = 0, file = "-" }, Controls)
 		local page = cp.pages.controls
@@ -22675,7 +22678,7 @@ __mods["ui/compact/compact"] = function(import)
 		self.controls = Controls.build(self)
 		self.settingsPage = TSettings.build(self)
 		self.pieces[#self.pieces + 1] = self.settingsPage
-		self.keys = TKeys.build(self, self.keysFrame)
+		self.keys = TKeys.build(self, self.keysFrame, self:clippedCtx(self.pages.controls))
 		self.pieces[#self.pieces + 1] = self.keys
 		self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 		self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
@@ -22691,6 +22694,19 @@ __mods["ui/compact/compact"] = function(import)
 		self:paint()
 		self:load()
 		return self
+	end
+	function Compact:clippedCtx(frame)
+		local base = self.ctx
+		local c = {}
+		for k, v in pairs(base) do c[k] = v end
+		c.pointer = {
+			add = function(r, z)
+				r.clip = r.clip or frame
+				return base.pointer.add(r, z)
+			end,
+			remove = base.pointer.remove,
+		}
+		return c
 	end
 	function Compact:addRect(r, z)
 		r.z = Z + (z or 0)

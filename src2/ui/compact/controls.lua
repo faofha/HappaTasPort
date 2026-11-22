@@ -44,7 +44,8 @@ local function fix(sec, y, h)
 end
 
 function Controls.build(cp)
-	local ui, ctx = cp.ui, cp.ctx
+	local ui = cp.ui
+	local ctx = cp:clippedCtx(cp.pages.controls) -- (rows scrolled out of view take no click)
 	local E = ui.E
 	local self = setmetatable({ cp = cp, ui = ui, E = E, values = {}, buttons = {}, labels = {}, last = {}, t = 0, file = "-" }, Controls)
 	local page = cp.pages.controls

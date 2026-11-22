@@ -49,6 +49,7 @@ function TSettings.build(cp)
 	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	scroll.Parent = root
 	self.scroll = scroll
+	ctx = cp:clippedCtx(scroll) -- (rows scrolled out of view take no click)
 	-- (the pointer keeps rects' bounds until told: a scroll moves them)
 	local scrollConn = scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 	self.offs[#self.offs + 1] = function() scrollConn:Disconnect() end

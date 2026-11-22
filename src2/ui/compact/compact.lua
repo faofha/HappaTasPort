@@ -54,7 +54,7 @@ function Compact.new(ui)
 	self.settingsPage = TSettings.build(self)
 	self.pieces[#self.pieces + 1] = self.settingsPage
 	-- (KEYS: its own key boxes, V3.1)
-	self.keys = TKeys.build(self, self.keysFrame)
+	self.keys = TKeys.build(self, self.keysFrame, self:clippedCtx(self.pages.controls))
 	self.pieces[#self.pieces + 1] = self.keys
 	self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 	self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
@@ -74,6 +74,22 @@ function Compact.new(ui)
 end
 
 -- ------------------------------------------------------------------------------------------------ pointer
+-- a pointer context whose rects are cut to frame (a scrolling page: a row scrolled out of view takes no click,
+-- final review)
+function Compact:clippedCtx(frame)
+	local base = self.ctx
+	local c = {}
+	for k, v in pairs(base) do c[k] = v end
+	c.pointer = {
+		add = function(r, z)
+			r.clip = r.clip or frame
+			return base.pointer.add(r, z)
+		end,
+		remove = base.pointer.remove,
+	}
+	return c
+end
+
 function Compact:addRect(r, z)
 	r.z = Z + (z or 0)
 	r.group = r.group or self.gui
