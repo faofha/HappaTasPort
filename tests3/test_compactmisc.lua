@@ -1,6 +1,6 @@
 -- needs: ui
 -- ================================================================================================
--- HappaTAS 3, V3.1 Compact (Task 7): the shared pieces in Compact's look (timeline bar, toasts, the colour
+-- HappaTAS 3, V3.1 Compact (Task 7): the shared pieces in Compact's look (toasts, the colour
 -- picker) and a merge that goes on across interface switches (headless mock)
 -- ================================================================================================
 check(boot(30), "boots")
@@ -33,14 +33,11 @@ E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 
-section("the timeline bar")
+section("the timeline bar: not in Tasability (V3.1)")
 record(30)
 M.steps(2)
 local bar = ui.bar
-check(bar ~= nil and bar.gui.Visible, "shown in Create")
-eq(bar.glass.corner.CornerRadius, UDim.new(0, 0), "square")
-eq(bar.glass.panel.BackgroundTransparency, 0, "solid")
-eq(bar.glass.shadow.Visible, false, "no shadow")
+check(bar ~= nil and not bar.gui.Visible, "hidden in Create too")
 
 section("a toast")
 E.bus:emit("status", "Saved run 1", false)

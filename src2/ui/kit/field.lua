@@ -56,20 +56,20 @@ function Field.new(ctx, parent, opts)
 	local size = opts.search and 13.5 or 12
 	K.style(self, function(th)
 		W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
-		K.edge(gui, th)
+		K.edge(gui, th, ring)
+		self:paintRing()
 		W.set(gui, "BackgroundColor3", (th.compact and th.shades) and th.shades.element or Color3.new(0, 0, 0))
 		W.set(gui, "BackgroundTransparency", (th.compact and th.shades) and 0 or 0.75)
 		W.set(box, "FontFace", th.font(opts.number and "number" or "text"))
 		W.set(box, "TextSize", th.size(size))
 		W.set(box, "TextColor3", th.c.text)
 		W.set(box, "PlaceholderColor3", th.c.text2)
-		W.set(ring, "Color", th.c.accent)
 	end)
 	K.rect(self, { onRelease = function(_, clicked) if clicked then box:CaptureFocus() end end }, opts.z)
 	self.cancel = false
 	local uis = Env.svc("UserInputService")
 	local conns = {
-		box.Focused:Connect(function() W.set(ring, "Transparency", 0) end),
+		box.Focused:Connect(function() self.focused = true; self:paintRing() end),
 		box.FocusLost:Connect(function(_, cause)
 			if cause and cause.KeyCode == Enum.KeyCode.Escape then self.cancel = true end
 			self:commit()
@@ -86,8 +86,18 @@ function Field.new(ctx, parent, opts)
 	return self
 end
 
+-- the ring: the accent while typing; otherwise hidden, or in Tasability the outline its boxes have (V3.1)
+function Field:paintRing()
+	local th = self.ctx.theme
+	local compact = th.compact and th.shades
+	W.set(self.ring, "Color", (compact and not self.focused) and (th.shades.outline or th.shades.border) or th.c.accent)
+	W.set(self.ring, "Thickness", compact and 1 or 2)
+	W.set(self.ring, "Transparency", (self.focused or compact) and 0 or 1)
+end
+
 function Field:commit()
-	W.set(self.ring, "Transparency", 1)
+	self.focused = false
+	self:paintRing()
 	local box = self.box
 	if self.cancel then
 		self.cancel = false
