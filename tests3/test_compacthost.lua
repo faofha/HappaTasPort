@@ -30,28 +30,29 @@ cp:showTab("controls")
 cp:setPanel("library", true)
 cp:setPanel("inspector", true)
 M.steps(2)
-for _, id in ipairs({ "settings", "help", "about", "controls", "library", "inspector" }) do
+-- (V3.1: SETTINGS is the Tasability page of its own, test_tsettings, not a hosted window)
+for _, id in ipairs({ "help", "about", "controls", "library", "inspector" }) do
 	check(cp.hosted[id] ~= nil and cp.hosted[id].obj ~= nil, id .. " hosted")
 end
 check(ui.settingsWin == wmSettings, "ui.settingsWin is never the hosted copy")
 check(ui.helpWin == nil or ui.helpWin ~= cp.hosted.help.obj, "nor ui.helpWin")
-check(cp.hosted.settings.win.hosted and cp.hosted.settings.win.compact, "the fake window says hosted / compact")
+check(cp.hosted.help.win.hosted and cp.hosted.help.win.compact, "the fake window says hosted / compact")
 
 section("the hosted Settings")
-local sw = cp.hosted.settings.obj
+local sw = cp.settingsPage
 check(sw.rows.accentColor ~= nil, "the accent row")
 local leaked = {}
 for _, def in ipairs(Settings.SCHEMA) do if def.newOnly and sw.rows[def.key] then leaked[#leaked + 1] = def.key end end
 eq(#leaked, 0, "no New-only rows (" .. table.concat(leaked, ", ") .. ")")
-check(cp.hosted.settings.frame:IsDescendantOf(cp.pages.settings), "inside the SETTINGS page")
+check(sw.scroll:IsDescendantOf(cp.pages.settings), "inside the SETTINGS tab")
 
 section("the title-bar search")
 cp:showTab("controls")
 UIH.typeInto(cp.search.box, "accent", false)
 M.steps(1)
 eq(cp.tab, "settings", "typing shows SETTINGS")
-eq(sw.rows.accentColor.row.gui.Visible, true, "the accent row matches")
-eq(sw.rows.textSize.row.gui.Visible, false, "Text size doesn't")
+eq(sw.rows.accentColor.gui.Visible, true, "the accent row matches")
+eq(sw.rows.textSize.gui.Visible, false, "Text size doesn't")
 -- (Review Focus 2: typing never fires a HappaTAS key)
 cp.search.box:CaptureFocus()
 M.steps(1)
@@ -61,7 +62,7 @@ eq(E.mode, 1, "the Create key while typing in the search: still Idle")
 cp.search.box:ReleaseFocus()
 UIH.typeInto(cp.search.box, "", false)
 M.steps(1)
-eq(sw.rows.textSize.row.gui.Visible, true, "cleared: every row again")
+eq(sw.rows.textSize.gui.Visible, true, "cleared: every row again")
 
 section("Help, About, Library, Inspector")
 check(#cp.hosted.help.obj.topicRows > 5, "HELP lists the topics")
@@ -131,13 +132,13 @@ E.settings:set("interface", "Classic")
 M.steps(2)
 E.settings:set("interface", "Tasability")
 M.steps(2)
-check(cp.hosted.settings.obj == sw, "the same hosted Settings")
+check(cp.settingsPage == sw, "the same SETTINGS page")
 local rowsAfter = 0
 for _ in pairs(sw.rows) do rowsAfter = rowsAfter + 1 end
 eq(rowsAfter, rowsBefore, "no duplicated rows")
 local n = 0
-for _, ch in ipairs(cp.pages.settings:GetChildren()) do if ch.Name == "Host_settings" then n = n + 1 end end
-eq(n, 1, "one hosted Settings frame")
+for _, ch in ipairs(cp.pages.settings:GetChildren()) do if ch.Name == "SettingsPage" then n = n + 1 end end
+eq(n, 1, "one SETTINGS page")
 cp:setPanel("inspector", false)
 M.steps(1)
 eq(handlers(), firstHandlers, "no extra pipeline handlers with the same panels shut (" .. handlers() .. " vs " .. firstHandlers .. ")")

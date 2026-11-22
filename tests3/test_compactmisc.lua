@@ -60,9 +60,8 @@ eq(#corners, 0, "no rounded corner in it (" .. table.concat(corners, ", ") .. ")
 section("the colour picker")
 cp:showTab("settings")
 M.steps(2)
-local sw = cp.hosted.settings.obj
-local acc = sw.rows.accentColor
-UIH.click(acc.ctl.gui)
+local acc = cp.settingsPage.rows.accentColor
+UIH.click(acc.part.swatch)
 M.steps(1)
 local pop
 for _, d in ipairs(ui.root.layer:GetDescendants()) do if d.Name == "Popover" then pop = d end end

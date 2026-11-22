@@ -39,7 +39,7 @@ M.steps(2)
 local cp = ui.compact
 cp:showTab("settings")
 M.steps(2)
-UIH.click(cp.hosted.settings.obj.rows.accentColor.ctl.gui)
+UIH.click(cp.settingsPage.rows.accentColor.part.swatch)
 M.steps(1)
 cp:setFolded(true)
 M.steps(1)
