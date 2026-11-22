@@ -191,6 +191,21 @@ do -- TextChatService's chat bar settings (IsFocused = the player is typing in t
 	bar.Name = "ChatInputBarConfiguration"
 	bar.Parent = services.TextChatService
 	M.chatBar = bar
+	-- the new chat's input bar (live path, EToH kit test place 2026-11-22); M.chatSent: the texts it sent
+	local parent = services.CoreGui
+	for _, name in ipairs({ "ExperienceChat", "appLayout", "chatInputRow", "fillArea", "chatInputBar", "ChatInputBarV2",
+		"Container", "InputGroup", "TextContainer", "TextBoxContainer" }) do
+		local f = Instance.new(name == "ExperienceChat" and "ScreenGui" or "Frame")
+		f.Name = name
+		f.Parent = parent
+		parent = f
+	end
+	local box = Instance.new("TextBox")
+	box.Name = "TextBox"
+	box.Text = ""
+	box.Parent = parent
+	M.chatBox = box
+	M.chatSent = {}
 end
 workspace = services.Workspace
 Workspace = workspace
@@ -316,16 +331,28 @@ U.GetFocusedTextBox = function()
 	if b and inCoreGui(b) then return nil end
 	return b
 end
-function M.focus(box)
+-- (submitted: the old box lost focus by Enter. The new chat's bar (M.chatBox) sends a submitted text like Roblox:
+-- M.chatSent gets it and the bar empties after FocusLost; M.chatBar.IsFocused follows its focus)
+function M.focus(box, submitted)
 	local old = M.focusedBox
 	if old == box then return end
 	M.focusedBox = box
-	if old then old.FocusLost:Fire(false, nil) end
-	if box then box.Focused:Fire() end
+	if old then
+		if old == M.chatBox then M.chatBar.IsFocused = false end
+		old.FocusLost:Fire(submitted == true, nil)
+		if old == M.chatBox and submitted == true then
+			if old.Text ~= "" then M.chatSent[#M.chatSent + 1] = old.Text end
+			old.Text = ""
+		end
+	end
+	if box then
+		if box == M.chatBox then M.chatBar.IsFocused = true end
+		box.Focused:Fire()
+	end
 end
 C.TextBox.Methods.IsFocused = function(self) return M.focusedBox == self end
 C.TextBox.Methods.CaptureFocus = function(self) M.focus(self) end
-C.TextBox.Methods.ReleaseFocus = function(self) if M.focusedBox == self then M.focus(nil) end end
+C.TextBox.Methods.ReleaseFocus = function(self, submitted) if M.focusedBox == self then M.focus(nil, submitted) end end
 U.GetKeysPressed = function()
 	local out = {}
 	for k, v in pairs(M.keysDown) do if v then out[#out + 1] = { KeyCode = k } end end
