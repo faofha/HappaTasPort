@@ -79,6 +79,15 @@ local function cleanUi(t)
 			end
 		end
 	end
+	-- (the Compact interface's window, V3.1: rect numbers, tab, Library panel open, folded)
+	if type(t.compact) == "table" then
+		local c, out = t.compact, {}
+		for _, k in ipairs({ "x", "y", "w", "h" }) do if type(c[k]) == "number" then out[k] = c[k] end end
+		if type(c.tab) == "string" then out.tab = c.tab end
+		out.library = c.library == true
+		out.folded = c.folded == true
+		ui.compact = out
+	end
 	if type(t.themes) == "table" then
 		for name, look in pairs(t.themes) do
 			if type(name) == "string" and type(look) == "table" then ui.themes[name] = look end
