@@ -9,6 +9,7 @@
 -- ================================================================================================
 local CONFIG = import("config")
 local HelpText = import("ui/win/helptext")
+local UpdateLog = import("ui/updatelog")
 
 local ClassicTree = {}
 do -- (the style / tree helpers are locals of this block, as in V2)
@@ -142,7 +143,7 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 	local UI_TREE = {
 		{"Frame","JoinMessage",1,{Position=u(0,10,1,150),Size=u(0,280,0,75),AnchorPoint=v2(0,1)},{
 			{"TextLabel","M",2,{Position=u(0,15,0,40),Size=u(0,200,0,30),Text="M - Main Menu",TextSize=20}},
-			{"TextLabel","Title",3,{Position=u(0,15,0,5),Size=u(0,220,0,30),Text="HappaTAS " .. CONFIG.VERSION .. " Loaded",TextSize=20}},
+			{"TextLabel","Title",3,{Position=u(0,15,0,5),Size=u(0,220,0,30),Text="HappaTAS " .. CONFIG.LABEL .. " Loaded",TextSize=20}},
 			{"TextButton","Close",4,{Position=u(1,-5,0,5),Size=u(0,30,0,30),AnchorPoint=v2(1,0),ZIndex=2,Text="X",TextSize=14},{ UC, ST(6) }},
 			UC,
 			{"TextLabel","FailureMessage",2,{Position=u(0,15,0,65),Size=u(0,250,0,40),Visible=false,Text="Note: your executor has no file functions, so saving to disk is disabled (recording and testing still work).",TextSize=12}},
@@ -229,7 +230,7 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 			R("1", " Current Distance: ")
 		}},
 		{"Frame","MainMenu",8,{Position=u(0.5,0,0.5,0),Size=u(0,400,0,400),AnchorPoint=v2(0.5,0.5),Visible=false},{
-			{"TextLabel","Title",16,{Position=u(0,15,0,5),Size=u(0,370,0,30),Text="HappaTAS " .. CONFIG.VERSION,TextSize=20}},
+			{"TextLabel","Title",16,{Position=u(0,15,0,5),Size=u(0,370,0,30),Text="HappaTAS " .. CONFIG.LABEL,TextSize=20}},
 			{"TextButton","ModalFree",27,{Position=u(0,0,0,0),Size=u(0,1,0,1),Text="",Modal=true}},
 			UC,
 			{"Frame","Line",26,{Position=u(0,0,0,40),Size=u(0,400,0,1)}},
@@ -275,12 +276,15 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 					end)(),
 					HD("4CreditsN", "Credits", 14),
 					(function() -- (V2's 3UpdateLog: a version line, then its items)
-						local items = HelpText.WHATS_NEW.items
-						local kids = { LV("0", " HappaTAS " .. HelpText.WHATS_NEW.version) }
-						for i, item in ipairs(items) do kids[#kids + 1] = LI(tostring(i), "   -   " .. item) end
+						-- (every version since 2.01, ui/updatelog; names keep the order: the frame lists by name)
+						local kids = {}
+						for i, e in ipairs(UpdateLog.ENTRIES) do
+							kids[#kids + 1] = LV(string.format("%03d", i), e.heading)
+							for j, b in ipairs(e.bullets) do kids[#kids + 1] = LI(string.format("%03d_%03d", i, j), b) end
+						end
 						kids[#kids + 1] = UL9
 						kids[#kids + 1] = UC -- (rounded like the credits above it)
-						return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items), AutomaticSize = Enum.AutomaticSize.Y }, kids }
+						return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.Y }, kids }
 					end)(),
 					HD("0ModelN", HelpText.PORT, 14),
 					{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{ K(21), ST(48) }},

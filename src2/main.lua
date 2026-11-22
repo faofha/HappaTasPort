@@ -182,7 +182,7 @@ function Main.Start()
 		if CONFIG.Debug then
 			k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env, engine = k.engine }
 			share("__HappaTAS3_T", k.debug, errs)
-			print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
+			print("[HappaTAS3] loaded " .. CONFIG.LABEL .. " (" .. Env.executor .. ")")
 		end
 	end)
 	if not ok then

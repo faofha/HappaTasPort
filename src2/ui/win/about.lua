@@ -1,11 +1,14 @@
 -- ================================================================================================
 --  ABOUT WINDOW  (HappaTAS 3 ui, V3.1): the version, the credits and the update log, in the Dock after Help.
---  Both lists come from ui/win/helptext (CREDITS, WHATS_NEW), the same ones Classic's More page shows. One
+--  The credits come from ui/win/helptext (CREDITS), the log from ui/updatelog (every version since 2.01), the same
+--  lists Classic's More page shows. One
 --  scrolling page: a rounded panel for the credits, one for the log; the texts wrap and grow with the window.
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
 local HelpText = import("ui/win/helptext")
+local UpdateLog = import("ui/updatelog")
+local CONFIG = import("config")
 
 local AboutWin = {}
 
@@ -18,11 +21,8 @@ function AboutWin.define(ui)
 end
 
 -- the log as lines: "HappaTAS <version>", then a bullet per item
-function AboutWin.logText()
-	local lines = { "HappaTAS " .. HelpText.WHATS_NEW.version }
-	for _, item in ipairs(HelpText.WHATS_NEW.items) do lines[#lines + 1] = "• " .. item end
-	return table.concat(lines, "\n")
-end
+function AboutWin.logText() return UpdateLog.text() end
+
 
 function AboutWin.build(ui, body, win)
 	local th = ui.theme
@@ -77,12 +77,39 @@ function AboutWin.build(ui, body, win)
 		return p, l
 	end
 
-	aw.title = label("Title", page, "HappaTAS " .. HelpText.WHATS_NEW.version, "title")
+	aw.title = label("Title", page, "HappaTAS " .. CONFIG.LABEL, "title")
 	aw.port = label("Port", page, HelpText.PORT, "small")
 	label("CreditsTitle", page, "Credits", "heading")
 	aw.credits, aw.creditsText = panel("Credits", table.concat(HelpText.CREDITS, "\n"))
 	label("LogTitle", page, "Update log", "heading")
-	aw.log, aw.logText = panel("UpdateLog", AboutWin.logText())
+	-- (one label per line, version headings in bold: a self-sizing label stops growing at about the page's
+	-- height in Roblox (live: capped at 356 px), so one label per version still cut the longest one off)
+	local lines = {}
+	for _, e in ipairs(UpdateLog.ENTRIES) do
+		lines[#lines + 1] = { e.heading, "heading" }
+		for _, b in ipairs(e.bullets) do lines[#lines + 1] = { b, "body" } end
+	end
+	aw.log, aw.logLabels = panel("UpdateLog", lines[1][1]), {}
+	local first = aw.log:FindFirstChild("Text")
+	first.Name = "Line0001"
+	first.LayoutOrder = 1
+	aw.labels[#aw.labels].kind = "heading"
+	aw.logLabels[1] = first
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 2)
+	list.Parent = aw.log
+	for i = 2, #lines do
+		local l = label(string.format("Line%04d", i), aw.log, lines[i][1], lines[i][2])
+		l.Size = UDim2.new(1, 0, 0, 0)
+		l.LayoutOrder = i
+		aw.logLabels[i] = l
+	end
+	function aw.logAll()
+		local out = {}
+		for i, l in ipairs(aw.logLabels) do out[i] = l.Text end
+		return table.concat(out, "\n")
+	end
 
 	local function paint()
 		for _, it in ipairs(aw.labels) do

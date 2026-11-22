@@ -3,28 +3,11 @@
 --  topic has a home here: its title, or named in a body). topics(E) -> { { id, title, body } }; a body's
 --  {key:<control>} becomes the control's key as bound now, in brackets. "missing" lists Env.notes. Text uses
 --  only characters every listed font has (ASCII and × ▼ ← … •). The credits and what's new aren't Help
---  topics: the About window and Classic's More page show them (one list each, here).
+--  topics: the About window and Classic's More page show them (the credits here, the log in ui/updatelog).
 -- ================================================================================================
-local CONFIG = import("config")
 local Env = import("platform/env")
 
 local HelpText = {}
-
--- what this version brings: the About window's update log and Classic's (More tab); one line an item, at
--- most 60 characters (a classic update log row is 360 px of 12 px text)
-HelpText.WHATS_NEW = {
-	version = CONFIG.VERSION,
-	items = {
-		"A new interface: Dock, windows, timeline bar, Inspector",
-		"Classic interface: Settings > Interface",
-		"Library: folders, search, sort, numbered attempts",
-		"File format v6: smaller files, safe saving",
-		"Old .tas files (v1-v5) and Settings.json carry over",
-		"Smaller files and faster saving, a clean Unload",
-		"Touch buttons and thumbstick replay on phones",
-		"The MicroProfiler on the new engine",
-	},
-}
 
 -- the credits, in order (the About window and Classic's More page)
 HelpText.CREDITS = {

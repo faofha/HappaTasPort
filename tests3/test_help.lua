@@ -135,17 +135,15 @@ do
 		for _, t in ipairs(list) do if t.id == id then return t end end
 		return nil
 	end
-	eq(__T3("config").VERSION, "3.0.0", "version 3.0.0")
-	eq(HelpText.WHATS_NEW.version, "3.0.0", "the log names the version")
-	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
-		check(#item <= 60, "fits a classic row: " .. item)
-	end
-	eq(HelpText.WHATS_NEW and #HelpText.WHATS_NEW.items or 0, 8, "eight items")
+	-- (V3.1: the log is ui/updatelog, test_updatelog; the version 3.1)
+	eq(__T3("config").VERSION, "3.1", "version 3.1")
+	eq(HelpText.WHATS_NEW, nil, "no What's new list in Help any more")
 	-- (review, phase 7: spec 13 measured the engine a little slower than V2 live; only saving is faster)
-	for _, item in ipairs(HelpText.WHATS_NEW and HelpText.WHATS_NEW.items or {}) do
-		check(not item:lower():find("faster frames", 1, true), "no faster-frames claim: " .. item)
+	local v3 = __T3("ui/updatelog").ENTRIES
+	for _, e in ipairs({ v3[1], v3[2] }) do
+		for _, item in ipairs(e.bullets) do check(not item:lower():find("faster frames", 1, true), "no faster-frames claim: " .. item) end
 	end
-	check(table.concat(HelpText.WHATS_NEW.items, "\n"):find("faster saving", 1, true) ~= nil, "says what is faster: saving")
+	check(table.concat(v3[2].bullets, "\n"):find("faster saving", 1, true) ~= nil, "says what is faster: saving")
 	local start = topicById("start")
 	local u = start and start.body:find("unload HappaTAS first", 1, true)
 	local d = start and start.body:find("delete HappaTasPort/Settings3.json", 1, true)

@@ -103,7 +103,7 @@ function ProfilerApp.start(E)
 	ctx.Janitor = { add = function(x) life:own(x) end }
 	ctx.on = function(signal, fn) return life:connect(signal, fn) end
 	ctx.reportError = function(where, err) E.pipe.errs:report("profiler " .. tostring(where), err) end
-	ctx.VERSION = CONFIG.VERSION
+	ctx.VERSION = CONFIG.LABEL -- (dump titles: "HappaTAS V3.1")
 
 	-- (a re-run: the old copy's profiler goes before this one is built)
 	for _, root in ipairs({ Env.svc("CoreGui"), hui() }) do

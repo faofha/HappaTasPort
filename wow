@@ -1,4 +1,4 @@
--- HappaTAS 3.0.0 - records and replays TAS runs on the client (executor script).
+-- HappaTAS V3.1 - records and replays TAS runs on the client (executor script).
 -- Saves to <executor workspace>/HappaTasPort/<PlaceId>/. Press M for the menu.
 -- Release build: comments and blank lines removed. The commented source is src2/ (HappaTasPort repository).
 local __mods, __cache, __loading, __stack = {}, {}, {}, {}
@@ -28,7 +28,8 @@ local function import(name)
 end
 __mods["config"] = function(import)
 	return {
-		VERSION = "3.0.0",
+		VERSION = "3.1",
+		LABEL = "V3.1",
 		Debug = false,
 		MaxFileBytes = 512 * 1024 * 1024,
 		MaxFrames = 16777216,
@@ -18618,23 +18619,305 @@ __mods["ui/win/merge"] = function(import)
 	end
 	return MergeWin
 end
+__mods["ui/updatelog"] = function(import)
+	local UpdateLog = {}
+	UpdateLog.ENTRIES = {
+		{ heading = " 11/22/26 - V3.1", bullets = {
+			"   -   Compact: a third interface, inspired by Tasability",
+			"   -   About window: version, credits and the update log",
+			"   -   Help rewritten in short sections; credits out of Help",
+			"   -   A new colour picker: one box, quick and recent colours",
+			"   -   Green default colours for the New interface",
+			"   -   One Sync Client Objects switch; fewer settings",
+			"   -   NohBoard Mouse Speed (was Invisible Mouse Speed)",
+			"   -   Face fades with the character when zoomed all the way in",
+			"   -   Zooming keeps its smooth move through a pause",
+			"   -   Dragging the timeline never locks the mouse",
+			"   -   Speed slider: one message, knob inside the track",
+			"   -   Long text on Classic's More page wraps, never cut off",
+			"   -   Speed hack: exact slow motion, no lag after jumps",
+			"   -   Smooth Slow Motion: the frames between physics steps",
+			"   -   Speed Hack In: pick Idle and / or Create",
+			"   -   Speed hack capped at 1x, fast motion removed",
+			"   -   Shift lock works in slow motion",
+			"   -   Glide Manipulation: decide side-edge glides",
+			"   -   Right click held while paused keeps the camera",
+			"   -   Classic Look: colours, picker and background",
+			"   -   Glide settings and choice boxes in Classic",
+			"   -   Smaller TAS files; Classic on phones",
+			"   -   The Inspector updates every frame",
+			"   -   Keep Mouse Position (Paused); interface sounds",
+			"   -   The full update log, back to 2.01",
+		} },
+		{ heading = " 11/02/26 - V3.0", bullets = {
+			"   -   A new interface: Dock, windows, timeline bar, Inspector",
+			"   -   Classic interface: Settings > Interface",
+			"   -   Library: folders, search, sort, numbered attempts",
+			"   -   File format v6: smaller files, safe saving",
+			"   -   Old .tas files (v1-v5) and Settings.json carry over",
+			"   -   Smaller files and faster saving, a clean Unload",
+			"   -   Touch buttons and thumbstick replay on phones",
+			"   -   The MicroProfiler on the new engine",
+		} },
+		{ heading = " 10/25/26 - 2.38.17", bullets = {
+			"   -   Sounds removed (keyboard / click sounds)",
+			"   -   Keys replayed with keypress / keyrelease only",
+			"   -   Speed Hack: walking, turning, jumps and gravity on the TAS clock",
+			"   -   Speed Hack: coyote time as at normal speed",
+			"   -   Coyote time kept across a pause",
+		} },
+		{ heading = " 10/18/26 - 2.38.16", bullets = {
+			"   -   Speed Hack: speeds above 1 (fast motion, up to 4x)",
+			"   -   Speed Hack Frame Step: normal physics in slow motion",
+			"   -   Zoom plays back at normal speed after slow / fast motion",
+			"   -   Bounce pad / jump launcher effects shown when testing",
+			"   -   Zipline and Sequencer follow the TAS clock",
+			"   -   Camera script patches work again (zoom, mouse)",
+		} },
+		{ heading = " 10/18/26 - 2.38.15", bullets = {
+			"   -   Speed Hack: bounce pads bounce as high as at normal speed",
+			"   -   Client objects saved from their start: morphs show up",
+			"   -   before their button is pressed when testing",
+		} },
+		{ heading = " 10/18/26 - 2.38.14", bullets = {
+			"   -   Kit scripts on the TAS clock: pause / slow motion stop them",
+			"   -   Jump launcher push no longer cut short by a pause",
+			"   -   Beat blocks follow the TAS time (same beat in playback)",
+			"   -   Turret bullets saved in the TAS, hits and damage replayed",
+			"   -   Pushboxes hidden on frames before they were spawned",
+			"   -   Speed Hack slows spinners, platforms, conveyors too",
+			"   -   Idle (1) leaves the lighting as it is",
+		} },
+		{ heading = " 10/17/26 - 2.38.13", bullets = {
+			"   -   Speed Hack: slow motion while recording (Settings)",
+			"   -   Slow recordings are saved and tested at normal speed",
+			"   -   Client objects on their own clocks: smaller files",
+			"   -   240 FPS: frames without physics are no longer dropped",
+			"   -   Camera calls no longer break the interface when paused",
+		} },
+		{ heading = " 10/17/26 - 2.38.12", bullets = {
+			"   -   Synced exact button timer decimal places (e.g. 0.90) from live game UI & configs",
+		} },
+		{ heading = " 10/17/26 - 2.38.11", bullets = {
+			"   -   Eliminated lag with many buttons (event-indexed seek & cached scans)",
+			"   -   Fixed shiftlock cursor & mouse lock state after Test replay ends",
+			"   -   Fixed first-person zoom resetting to Frame 1 zoom after Test ends",
+			"   -   Synced part timer SurfaceGui/BillboardGui with top screen timer UI",
+		} },
+		{ heading = " 10/16/26 - 2.38.10", bullets = {
+			"   -   Create mode rewind fix: buttons un-glow & reset before press",
+			"   -   Locked mouse cursor in FP & shiftlock while paused/rewinding",
+			"   -   Cloned EToH v6.1.3 timer UI with UIStroke & zero duplicates",
+			"   -   Paused/unpaused button lock: no timer restart when near end",
+			"   -   Fixed first-person character body visibility (Test -> Create)",
+			"   -   FPS boost: event-driven lighting & CO props, cached CFrames",
+			"   -   Smaller files & lower RAM: compact v2/v3 encoding & table reuse",
+		} },
+		{ heading = " 10/16/26 - 2.38.9", bullets = {
+			"   -   3-digit number and Digits/NeedDigits part property support",
+			"   -   Duplicate timer prevention: re-touching after rewind starts 1 clean timer",
+			"   -   Matched timer sizing: restored timers dynamically match other timers' size",
+		} },
+		{ heading = " 10/16/26 - 2.38.8", bullets = {
+			"   -   Top screen timer UI direct sync & restoration across all ScreenGuis",
+			"   -   Screen countdown freezes strictly on pause without advancing",
+			"   -   Scrubbing backwards accurately restores and reverses top timer UI",
+			"   -   ModuleScript & Attribute config support for EToH kits",
+		} },
+		{ heading = " 10/16/26 - 2.38.7", bullets = {
+			"   -   Timed buttons: PlayerGui EffectGui.TimerList synchronized",
+			"   -   Screen timer freezes while paused and follows TAS frame scrubbing",
+			"   -   Fixed stale index cache preventing newly recorded button presses",
+			"   -   ModuleScript & Attribute config support for EToH kits",
+			"   -   Infinite restart loop suppressed via pause debounce",
+		} },
+		{ heading = " 10/16/26 - 2.38.6", bullets = {
+			"   -   EToH kit v6 Lighting Changers: all properties and effects synced",
+			"   -   Lighting timeline trimming fixes corrupted scrub/rewind searches",
+			"   -   Timed buttons: stopped infinite restart loop when paused",
+			"   -   Button timer UI locked at RenderPriority.Last to prevent overrides",
+			"   -   Vanishers (fading platforms): tracked, paused, and restored",
+		} },
+		{ heading = " 10/16/26 - 2.38.5", bullets = {
+			"   -   Timed buttons fixed: timer freezes while paused, reverses cleanly",
+			"   -   EToH Kit v6.1.3 button detection for Configurations & models",
+			"   -   Beat Blocks synced and frozen while paused without script overrides",
+			"   -   Morph buttons and morphing part (Base) shape/size tracked",
+			"   -   Lighting Changers: game.Lighting properties & effects synced",
+		} },
+		{ heading = " 10/14/26 - 2.38.4", bullets = {
+			"   -   MicroProfiler Avg = every frame since the count started",
+			"   -   Picking Aggregate Infinite starts Avg and Max again",
+			"   -   TAS Timeline: Avg / Max from the TAS's first frame",
+		} },
+		{ heading = " 10/14/26 - 2.38.3", bullets = {
+			"   -   Camera script hooked in place (hookfunction)",
+			"   -   No visible PlayerGui interface unless you allow it",
+		} },
+		{ heading = " 10/14/26 - 2.38.2", bullets = {
+			"   -   Every Real executor function checked for HappaTAS",
+			"   -   Arrow keys, Home, End, PgUp/PgDn, right Ctrl/Alt fixed",
+			"   -   Mouse replay within 1 px (Real's moves were up to 11 off)",
+			"   -   Mouse moves no longer arrive one move late",
+			"   -   Held keys pressed again when Roblox gets focus back",
+			"   -   Camera scripts found with filtergc, no full memory scan",
+		} },
+		{ heading = " 10/14/26 - 2.38.1", bullets = {
+			"   -   Frame colours checked against Roblox's own profiler",
+			"   -   Render time taken from the right frame (exact)",
+			"   -   Same bars as Roblox's: 501 of 503 the same colour",
+			"   -   Frame tooltip rows like Roblox's (GPU Time added)",
+		} },
+		{ heading = " 10/14/26 - 2.38", bullets = {
+			"   -   MicroProfiler compared side by side with Roblox's",
+			"   -   Close box turns grey under the mouse, hint box",
+			"   -   Hold Ctrl to click through; [Dump] box like Roblox's",
+			"   -   Orange = jobs longer, blue = render longer",
+			"   -   Frame graph is one image: far less render time",
+			"   -   Detailed lanes, Timers tooltip, Counters layout",
+			"   -   Drawn above Roblox's top bar",
+		} },
+		{ heading = " 10/13/26 - 2.37.2", bullets = {
+			"   -   Tested in the real Roblox client, the bugs found fixed",
+			"   -   Interface always loads, also when re-running the script",
+			"   -   Client objects stay put when the game un-anchors them",
+			"   -   Rebinding a key doesn't also run the old control",
+			"   -   Replayed keys play their sound once, errors print once",
+			"   -   2-5x less CPU per frame (auto-translate off, less work)",
+			"   -   Click sound plays (its old sound id was not a sound)",
+		} },
+		{ heading = " 10/13/26 - 2.37.1", bullets = {
+			"   -   Menu key works even when the game used the key",
+			"   -   Keys do nothing while typing in chat or a text box",
+			"   -   Clicks on the HappaTAS menu never pause / unpause",
+		} },
+		{ heading = " 10/13/26 - 2.37", bullets = {
+			"   -   Client objects: change signals, far fewer engine calls",
+			"   -   Stats panel and playback do less work every frame",
+			"   -   Smaller script: compact interface data, shared code",
+			"   -   Same TAS files and behaviour as 2.36",
+		} },
+		{ heading = " 10/12/26 - 2.36", bullets = {
+			"   -   MicroProfiler font, menus and tooltip match Roblox",
+			"   -   Avg = frames on the bar, Max keeps the biggest spike",
+			"   -   Detailed, Timers, Counters modes and a flame graph",
+			"   -   MicroProfiler Size setting, dumps as HTML/text/CSV",
+			"   -   MicroProfiler clicks fixed, text sits like Roblox's",
+		} },
+		{ heading = " 10/12/26 - 2.35 (Rebuild)", bullets = {
+			"   -   Timed buttons saved, timer frozen while paused",
+			"   -   First person camera works right after unpausing",
+			"   -   Fake cursor shows up on the same frame (no gap)",
+			"   -   Smooth client objects, in sync with the character",
+			"   -   New MicroProfiler (Roblox look, real timings, F6)",
+			"   -   File v3: saves viewport, tools, deaths, buttons",
+			"   -   Settings grouped by topic, faster settings reads",
+			"   -   Fixes: sounds, window guarding, unload, zoom",
+			"   -   Lower CPU cost per frame while recording and testing",
+		} },
+		{ heading = " 10/12/26 - 2.34 (Master Engine Update)", bullets = {
+			"   -   Official Roblox MicroProfiler replica (Ctrl+F6) with live TAS sync, Aggregate modes & scrubbing",
+			"   -   Custom mechanical keyboard & click sound engine with dynamic pitch modulation",
+			"   -   Client Object sync overhaul with EToH Kit v6.1.3 & 25-stud frustum culling",
+			"   -   Button Timer & Obby Mechanism Sync (countdown doors & pressure plates)",
+			"   -   Humanoid Death & Respawn recording across character respawns",
+			"   -   Tool equip, unequip, activate, and deactivate recording & playback",
+			"   -   Modern executor sandboxing (cloneref, gethui, syn.protect_gui, native LZ4)",
+			"   -   Settings UI alignment fix and Help page documentation overhaul",
+		} },
+		{ heading = " 10/10/26 - 2.33.1", bullets = {
+			"   -   Mobile DynamicThumbstick middle tracking position & size",
+			"   -   Fixed first-person camera lock during pause and unpause",
+			"   -   Sub-pixel cursor UV normalization for cross-resolution aiming",
+		} },
+		{ heading = " 07/03/26 - 2.33", bullets = {
+			"   -   Fixed camera zoom, NohBoard mouse, and client objects",
+		} },
+		{ heading = " 10/11/25 - 2.31", bullets = {
+			"   -   Emotes 😛",
+			"   -   Animation fixes (PLEASE dont be bad)",
+			"   -   Fixed coyote frame abuse",
+		} },
+		{ heading = " 9/19/25 - 2.3", bullets = {
+			"   -   GUI Redesign/recolor",
+			"   -   Public Save Slots",
+			"   -   Merge TAS (refer to help)",
+			"   -   Interpolate Playback Setting (refer to help)",
+			"   -   Fixed save slot order/IDs (new slots only)",
+			"   -   Update to character animations",
+			"   -   Renamed \"Spectate\" mode to \"Idle\"",
+			"   -   Fixed TAS not loading in studio (must update HappaTAS loader)",
+		} },
+		{ heading = " 9/16/25 - 2.23.1", bullets = {
+			"   -   Fixed saving and loading crashing (i think)",
+		} },
+		{ heading = " 1/11/23 - 2.23", bullets = {
+			"   -   Patched boosted bounce (lied last time)",
+			"   -   Fixed repeating slot IDs",
+			"   -   Small adjustments/fixes for quality of life",
+		} },
+		{ heading = " 1/2/23 - 2.22", bullets = {
+			"   -   Patched physics bugs and cheats",
+			"   -   Fixed animations (not fake at all)",
+		} },
+		{ heading = " 12/14/22 - 2.21", bullets = {
+			"   -   Data limit removed  : }",
+			"   -   Better animations (real)",
+			"   -   Fixed a couple TAS breaking bugs",
+		} },
+		{ heading = " 11/5/22 - 2.2", bullets = {
+			"  -  Mobile support",
+			"  -  Playback speed controller",
+			"  -  Replay matches the timer of recording (no FPS/lag abuse)",
+			"  -  Fixes to animations, camera, and player transparency",
+			"  -  Patched physics bug \"super bounce\"",
+			"  -  Discord Server (link in description of main game)",
+		} },
+		{ heading = " 7/25/22 - 2.1", bullets = {
+			"  -  Added Help menu",
+			"  -  A couple minor bug fixes",
+		} },
+		{ heading = " 7/25/22 - 2.05", bullets = {
+			"  -  Save/Load is a lot faster now",
+			"  -  Fixed getting kicked by saving large files",
+			"  -  Max slots increased",
+			"  -  Unpause 1 works on any humanoid state except \"Landed\"",
+			"  -  New setting 'Stats Text Size'",
+		} },
+		{ heading = " 7/24/22 - 2.04", bullets = {
+			"  -  New Setting 'Restart When Testing'",
+			"  -  New Control 'Look Around' while paused with camera lock ",
+			"  -  Fixed animations",
+			"  -  Fixed transparency when testing",
+		} },
+		{ heading = " 7/21/22 - 2.03", bullets = {
+			"  -  Timers now show in minutes and seconds",
+			"  -  Message on the bottom when the TAS playback is complete",
+			"  -  You can see others move while they are testing",
+			"  -  Removed manually toggling shiftlock while in test",
+		} },
+		{ heading = " 7/16/22 - 2.02", bullets = {
+			"  -  Fixed issue with the shiftlock cursor",
+			"  -  Fixed issue with the \"Delete\" keybind",
+			"  -  Fixed timer skipping forward after TAS is optimized",
+		} },
+		{ heading = " 7/14/22 - 2.01", bullets = {
+			"  -  Script still usable in studio when API services are turned off",
+		} },
+	}
+	function UpdateLog.text()
+		local out = {}
+		for _, e in ipairs(UpdateLog.ENTRIES) do
+			out[#out + 1] = e.heading
+			for _, b in ipairs(e.bullets) do out[#out + 1] = b end
+		end
+		return table.concat(out, "\n")
+	end
+	return UpdateLog
+end
 __mods["ui/win/helptext"] = function(import)
-	local CONFIG = import("config")
 	local Env = import("platform/env")
 	local HelpText = {}
-	HelpText.WHATS_NEW = {
-		version = CONFIG.VERSION,
-		items = {
-			"A new interface: Dock, windows, timeline bar, Inspector",
-			"Classic interface: Settings > Interface",
-			"Library: folders, search, sort, numbered attempts",
-			"File format v6: smaller files, safe saving",
-			"Old .tas files (v1-v5) and Settings.json carry over",
-			"Smaller files and faster saving, a clean Unload",
-			"Touch buttons and thumbstick replay on phones",
-			"The MicroProfiler on the new engine",
-		},
-	}
 	HelpText.CREDITS = {
 		"Happy_Liam/happa - UI design",
 		"plusgiant5 - Tasability creator",
@@ -18998,6 +19281,8 @@ __mods["ui/win/about"] = function(import)
 	local W = import("ui/write")
 	local K = import("ui/kit/base")
 	local HelpText = import("ui/win/helptext")
+	local UpdateLog = import("ui/updatelog")
+	local CONFIG = import("config")
 	local AboutWin = {}
 	local PAD = 16
 	function AboutWin.define(ui)
@@ -19005,11 +19290,7 @@ __mods["ui/win/about"] = function(import)
 			build = function(body, win) ui.aboutWin = AboutWin.build(ui, body, win) end })
 		ui:addDockButton("about")
 	end
-	function AboutWin.logText()
-		local lines = { "HappaTAS " .. HelpText.WHATS_NEW.version }
-		for _, item in ipairs(HelpText.WHATS_NEW.items) do lines[#lines + 1] = "• " .. item end
-		return table.concat(lines, "\n")
-	end
+	function AboutWin.logText() return UpdateLog.text() end
 	function AboutWin.build(ui, body, win)
 		local th = ui.theme
 		local aw = { ui = ui, offs = {}, labels = {}, panels = {} }
@@ -19059,12 +19340,37 @@ __mods["ui/win/about"] = function(import)
 			l.Size = UDim2.new(1, 0, 0, 0)
 			return p, l
 		end
-		aw.title = label("Title", page, "HappaTAS " .. HelpText.WHATS_NEW.version, "title")
+		aw.title = label("Title", page, "HappaTAS " .. CONFIG.LABEL, "title")
 		aw.port = label("Port", page, HelpText.PORT, "small")
 		label("CreditsTitle", page, "Credits", "heading")
 		aw.credits, aw.creditsText = panel("Credits", table.concat(HelpText.CREDITS, "\n"))
 		label("LogTitle", page, "Update log", "heading")
-		aw.log, aw.logText = panel("UpdateLog", AboutWin.logText())
+		local lines = {}
+		for _, e in ipairs(UpdateLog.ENTRIES) do
+			lines[#lines + 1] = { e.heading, "heading" }
+			for _, b in ipairs(e.bullets) do lines[#lines + 1] = { b, "body" } end
+		end
+		aw.log, aw.logLabels = panel("UpdateLog", lines[1][1]), {}
+		local first = aw.log:FindFirstChild("Text")
+		first.Name = "Line0001"
+		first.LayoutOrder = 1
+		aw.labels[#aw.labels].kind = "heading"
+		aw.logLabels[1] = first
+		local list = Instance.new("UIListLayout")
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Padding = UDim.new(0, 2)
+		list.Parent = aw.log
+		for i = 2, #lines do
+			local l = label(string.format("Line%04d", i), aw.log, lines[i][1], lines[i][2])
+			l.Size = UDim2.new(1, 0, 0, 0)
+			l.LayoutOrder = i
+			aw.logLabels[i] = l
+		end
+		function aw.logAll()
+			local out = {}
+			for i, l in ipairs(aw.logLabels) do out[i] = l.Text end
+			return table.concat(out, "\n")
+		end
 		local function paint()
 			for _, it in ipairs(aw.labels) do
 				local g, kind = it.gui, it.kind
@@ -19247,6 +19553,7 @@ end
 __mods["ui/classic/tree"] = function(import)
 	local CONFIG = import("config")
 	local HelpText = import("ui/win/helptext")
+	local UpdateLog = import("ui/updatelog")
 	local ClassicTree = {}
 	do
 		local c  = function(r_, g, b) return Color3.fromRGB(r_, g, b) end
@@ -19369,7 +19676,7 @@ __mods["ui/classic/tree"] = function(import)
 		local UI_TREE = {
 			{"Frame","JoinMessage",1,{Position=u(0,10,1,150),Size=u(0,280,0,75),AnchorPoint=v2(0,1)},{
 				{"TextLabel","M",2,{Position=u(0,15,0,40),Size=u(0,200,0,30),Text="M - Main Menu",TextSize=20}},
-				{"TextLabel","Title",3,{Position=u(0,15,0,5),Size=u(0,220,0,30),Text="HappaTAS " .. CONFIG.VERSION .. " Loaded",TextSize=20}},
+				{"TextLabel","Title",3,{Position=u(0,15,0,5),Size=u(0,220,0,30),Text="HappaTAS " .. CONFIG.LABEL .. " Loaded",TextSize=20}},
 				{"TextButton","Close",4,{Position=u(1,-5,0,5),Size=u(0,30,0,30),AnchorPoint=v2(1,0),ZIndex=2,Text="X",TextSize=14},{ UC, ST(6) }},
 				UC,
 				{"TextLabel","FailureMessage",2,{Position=u(0,15,0,65),Size=u(0,250,0,40),Visible=false,Text="Note: your executor has no file functions, so saving to disk is disabled (recording and testing still work).",TextSize=12}},
@@ -19456,7 +19763,7 @@ __mods["ui/classic/tree"] = function(import)
 				R("1", " Current Distance: ")
 			}},
 			{"Frame","MainMenu",8,{Position=u(0.5,0,0.5,0),Size=u(0,400,0,400),AnchorPoint=v2(0.5,0.5),Visible=false},{
-				{"TextLabel","Title",16,{Position=u(0,15,0,5),Size=u(0,370,0,30),Text="HappaTAS " .. CONFIG.VERSION,TextSize=20}},
+				{"TextLabel","Title",16,{Position=u(0,15,0,5),Size=u(0,370,0,30),Text="HappaTAS " .. CONFIG.LABEL,TextSize=20}},
 				{"TextButton","ModalFree",27,{Position=u(0,0,0,0),Size=u(0,1,0,1),Text="",Modal=true}},
 				UC,
 				{"Frame","Line",26,{Position=u(0,0,0,40),Size=u(0,400,0,1)}},
@@ -19502,12 +19809,14 @@ __mods["ui/classic/tree"] = function(import)
 						end)(),
 						HD("4CreditsN", "Credits", 14),
 						(function()
-							local items = HelpText.WHATS_NEW.items
-							local kids = { LV("0", " HappaTAS " .. HelpText.WHATS_NEW.version) }
-							for i, item in ipairs(items) do kids[#kids + 1] = LI(tostring(i), "   -   " .. item) end
+							local kids = {}
+							for i, e in ipairs(UpdateLog.ENTRIES) do
+								kids[#kids + 1] = LV(string.format("%03d", i), e.heading)
+								for j, b in ipairs(e.bullets) do kids[#kids + 1] = LI(string.format("%03d_%03d", i, j), b) end
+							end
 							kids[#kids + 1] = UL9
 							kids[#kids + 1] = UC
-							return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items), AutomaticSize = Enum.AutomaticSize.Y }, kids }
+							return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.Y }, kids }
 						end)(),
 						HD("0ModelN", HelpText.PORT, 14),
 						{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{ K(21), ST(48) }},
@@ -21698,7 +22007,7 @@ __mods["ui/compact/compact"] = function(import)
 			self.pieces[#self.pieces + 1] = c
 			return c
 		end
-		self.version = chip("V" .. CONFIG.VERSION, 90, 56, { bold = false })
+		self.version = chip(CONFIG.LABEL, 90, 56, { bold = false })
 		self.libraryChip = chip("LIBRARY", 154, 64, { button = true, onClick = function() self:setPanel("library", not self.panels.library.open) end })
 		self.inspectorChip = chip("INSPECTOR", 224, 74, { button = true, onClick = function() self:setPanel("inspector", not self.panels.inspector.open) end })
 		self.status = chip("Idle", -154, 118, { bold = false })
@@ -24936,7 +25245,7 @@ __mods["profiler/app"] = function(import)
 		ctx.Janitor = { add = function(x) life:own(x) end }
 		ctx.on = function(signal, fn) return life:connect(signal, fn) end
 		ctx.reportError = function(where, err) E.pipe.errs:report("profiler " .. tostring(where), err) end
-		ctx.VERSION = CONFIG.VERSION
+		ctx.VERSION = CONFIG.LABEL
 		for _, root in ipairs({ Env.svc("CoreGui"), hui() }) do
 			local old = root and root:FindFirstChild(NAME)
 			if old and old:IsA("ScreenGui") then pcall(function() old:Destroy() end) end
@@ -25207,7 +25516,7 @@ __mods["main"] = function(import)
 			if CONFIG.Debug then
 				k.debug = { errs = errs, life = life, state = k.state, bus = k.bus, pipe = k.pipe, Env = Env, engine = k.engine }
 				share("__HappaTAS3_T", k.debug, errs)
-				print("[HappaTAS3] loaded " .. CONFIG.VERSION .. " (" .. Env.executor .. ")")
+				print("[HappaTAS3] loaded " .. CONFIG.LABEL .. " (" .. Env.executor .. ")")
 			end
 		end)
 		if not ok then

@@ -111,7 +111,7 @@ function Compact:buildTitleBar()
 		self.pieces[#self.pieces + 1] = c
 		return c
 	end
-	self.version = chip("V" .. CONFIG.VERSION, 90, 56, { bold = false })
+	self.version = chip(CONFIG.LABEL, 90, 56, { bold = false })
 	self.libraryChip = chip("LIBRARY", 154, 64, { button = true, onClick = function() self:setPanel("library", not self.panels.library.open) end })
 	self.inspectorChip = chip("INSPECTOR", 224, 74, { button = true, onClick = function() self:setPanel("inspector", not self.panels.inspector.open) end })
 	self.status = chip("Idle", -154, 118, { bold = false })
