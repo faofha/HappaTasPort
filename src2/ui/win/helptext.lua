@@ -65,7 +65,9 @@ local TOPICS = {
 		.. "Lock Camera (Test) follows the recorded camera while testing.\n"
 		.. "• Look Around {key:lookAround}: while paused with the camera locked, look around freely. Press it again "
 		.. "(or unpause) and the camera goes back to the frame.\n"
-		.. "• Turn Lock Camera (Paused) off to turn the camera between frames.\n\n"
+		.. "• Turn Lock Camera (Paused) off to turn the camera between frames.\n"
+		.. "• In shift lock or first person the mouse stays locked even with a window open; hold Ctrl to use the "
+		.. "windows.\n\n"
 		.. "Zoom and shift lock are recorded with every frame." },
 	{ "bar", "Timeline bar",
 		"The bar at the bottom shows the run in Create and Test.\n\n"

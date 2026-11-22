@@ -156,6 +156,21 @@ function Camera:updateMouseMode()
 	local cs, tl = E.cs, E.tl
 	local modal = E.modal == true -- (kept by the interface: read every frame, no call)
 	local camFreeze = (E.mode == 2 and E.paused and not E.firstFrame and tl:count() > 0 and E.modes:setCam() and not E.lookAround)
+	-- (an open window frees the mouse, except while the game wants it locked: shift lock, first person, or a held
+	-- frame that has them; then the mouse locks as without HappaTAS, and Ctrl held frees it to use the windows,
+	-- V3.1: the Tasability window is open all the time)
+	if modal and E.mode ~= 3 then
+		local wants
+		local f = E.frame
+		if camFreeze and f >= 1 and f <= tl:count() and tl:isFilled(f) then
+			wants = tl:get("ShiftLock", f, 1) == 1 or tl:get("Zoom", f, 1) <= CameraScript.FIRST_PERSON
+		else
+			wants = cs:isFirstPerson() or cs:isShiftlocked()
+		end
+		if wants and not (UIS and (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl))) then
+			modal = false
+		end
+	end
 	local lockedView = false
 	if E.mode == 2 and not modal then
 		local f = E.frame
