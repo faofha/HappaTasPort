@@ -295,6 +295,10 @@ do
 	eq(rgb(pk.square.Black.BackgroundColor3), "0,0,0", "its black overlay stays black")
 	eq(rgb(pk.hueBar.BackgroundColor3), "255,255,255", "the hue bar stays white under its gradient")
 	eq(rgb(pk.frame.Old.BackgroundColor3), rgb(look:color("classicWindow")), "the old colour preview shows the colour")
+	for _, name in ipairs({ "Old", "New" }) do
+		local c = pk.frame[name]:FindFirstChildOfClass("UICorner")
+		check(c ~= nil and c.CornerRadius.Offset > 0, name .. " colour preview: rounded corners")
+	end
 	pk:close()
 	E.settings:set("classicShade", "Auto")
 	E.settings:set("classicLight", "Auto")

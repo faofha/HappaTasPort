@@ -91,6 +91,10 @@ function ColorPicker.open(ctx, anchor, opts)
 	local new = K.frame("New", f, c0)
 	new.Position, new.Size, new.ZIndex = UDim2.new(0, 50, 0, y), UDim2.new(0, 36, 0, 28), 3
 	self.oldHalf, self.newHalf = old, new
+	-- (rounded like the other controls; square in Compact, where everything is)
+	local r = math.min(6, ctx.theme.corner("control"))
+	K.corner(old, r)
+	K.corner(new, r)
 	local pctx = pop.ctx
 	local cap = K.label(self, f, "HEX", "bold", 11, true)
 	cap.Position, cap.Size = UDim2.new(0, 98, 0, y), UDim2.new(0, 30, 0, 28)
