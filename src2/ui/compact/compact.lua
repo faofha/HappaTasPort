@@ -16,9 +16,9 @@ local CONFIG = import("config")
 local Host = import("ui/compact/host")
 local Controls = import("ui/compact/controls")
 local TSettings = import("ui/compact/settings")
+local TKeys = import("ui/compact/keys")
 local HelpWin = import("ui/win/help")
 local AboutWin = import("ui/win/about")
-local ControlsWin = import("ui/win/controls")
 local LibraryWin = import("ui/win/library")
 local InspectorWin = import("ui/win/inspector")
 
@@ -53,6 +53,9 @@ function Compact.new(ui)
 	-- (SETTINGS: its own page in Tasability's style, V3.1)
 	self.settingsPage = TSettings.build(self)
 	self.pieces[#self.pieces + 1] = self.settingsPage
+	-- (KEYS: its own key boxes, V3.1)
+	self.keys = TKeys.build(self, self.keysFrame)
+	self.pieces[#self.pieces + 1] = self.keys
 	self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 	self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
 	self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
@@ -176,6 +179,11 @@ function Compact:buildBody()
 		page.ZIndex = 2
 		page.Parent = content
 		self.pages[id] = page
+		if page:IsA("ScrollingFrame") then
+			-- (the pointer keeps rects' bounds until told: a scroll moves them, V3.1)
+			local conn = page:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
+			self.offs[#self.offs + 1] = function() conn:Disconnect() end
+		end
 	end
 	local grip = K.frame("Grip", self.gui)
 	grip.AnchorPoint = Vector2.new(1, 1)
@@ -315,7 +323,6 @@ function Compact:hostSpec(id)
 	local p = self.pages
 	if id == "help" then return HelpWin.build, p.help end
 	if id == "about" then return AboutWin.build, p.about end
-	if id == "controls" then return ControlsWin.build, self.keysFrame end
 	if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
 	if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
 	return nil
@@ -352,8 +359,7 @@ end
 
 -- a key being bound ends with the interface going away
 function Compact:endTyping()
-	local h = self.hosted.controls
-	if h and h.obj and h.obj.stopWaiting then h.obj.stopWaiting() end
+	if self.keys then self.keys:stopWaiting() end
 end
 
 function Compact:showTab(id)

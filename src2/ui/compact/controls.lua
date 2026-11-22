@@ -15,6 +15,7 @@ local Slider = import("ui/kit/slider")
 local CK = import("ui/compact/kit")
 local Env = import("platform/env")
 local Util = import("engine/util")
+local TKeys = import("ui/compact/keys")
 
 local Controls = {}
 Controls.__index = Controls
@@ -23,7 +24,7 @@ local EVERY = 0.1
 local MODE = { "Idle", "Create", "Test" }
 local GAP, TOP, ROW = 7, 26, 21 -- (between sections; a section's first row; a row's pitch)
 -- section heights: title + rows + padding
-local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + 320 + 6, tools = TOP + 24 + 8 }
+local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + TKeys.height() + 8, tools = TOP + 24 + 8 }
 
 local function column(parent, x)
 	local f = K.frame(x == 0 and "Left" or "Right", parent)
@@ -136,7 +137,8 @@ function Controls.build(cp)
 	cp.keysSection.gui.Parent = self.right
 	fix(cp.keysSection, 0, H.keys)
 	cp.keysFrame.Position = UDim2.new(0, 4, 0, 2)
-	cp.keysFrame.Size = UDim2.new(1, -8, 0, 320)
+	cp.keysFrame.Size = UDim2.new(1, -16, 0, TKeys.height())
+	cp.keysFrame.Position = UDim2.new(0, 8, 0, 4)
 	self.right.Size = UDim2.new(0.5, -5, 0, H.keys + GAP + H.tools)
 	self.tools = section(self.right, "tools", H.keys + GAP, H.tools)
 	local trow = K.frame("Buttons", self.tools.body)

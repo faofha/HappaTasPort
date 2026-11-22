@@ -102,6 +102,7 @@ ui/classic/classic
 ui/compact/kit
 ui/compact/parts
 ui/compact/settings
+ui/compact/keys
 ui/compact/host
 ui/compact/controls
 ui/compact/compact

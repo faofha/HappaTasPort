@@ -31,7 +31,8 @@ cp:setPanel("library", true)
 cp:setPanel("inspector", true)
 M.steps(2)
 -- (V3.1: SETTINGS is the Tasability page of its own, test_tsettings, not a hosted window)
-for _, id in ipairs({ "help", "about", "controls", "library", "inspector" }) do
+-- (V3.1: KEYS is the Tasability key list of its own, test_tkeys)
+for _, id in ipairs({ "help", "about", "library", "inspector" }) do
 	check(cp.hosted[id] ~= nil and cp.hosted[id].obj ~= nil, id .. " hosted")
 end
 check(ui.settingsWin == wmSettings, "ui.settingsWin is never the hosted copy")
@@ -105,23 +106,19 @@ check(cp.panels.library.width >= 300, "a Library panel wide enough for its narro
 check(cp.panels.inspector.width >= 260, "an Inspector panel as wide as the Inspector's minimum")
 
 section("rebinding then switching (Review Focus 2)")
-local cw = cp.hosted.controls.obj
-local keyRow
-for _, r in pairs(cw.rows or {}) do
-	if r.key and (not keyRow or r.key.gui.AbsolutePosition.Y < keyRow.key.gui.AbsolutePosition.Y) then keyRow = r end
-end
+local keyRow = cp.keys.rows.idle
 check(keyRow ~= nil, "a key row")
 if keyRow then
 	cp:showTab("controls")
 	M.steps(1)
-	UIH.click(keyRow.key and keyRow.key.gui or keyRow.gui)
+	UIH.click(keyRow.gui.AbsolutePosition + Vector2.new(10, 11))
 	M.steps(1)
 	eq(E.typing.rebinding, true, "a click on a key starts the wait")
 end
 E.settings:set("interface", "New")
 M.steps(2)
 eq(E.typing.rebinding == true, false, "the switch ends the wait for a key")
-eq(cw.waiting, nil, "and the hosted key list stops waiting")
+eq(cp.keys.rebind.waiting, nil, "and the key list stops waiting")
 
 section("New -> Compact -> Classic -> Compact (Review Focus 4)")
 local rowsBefore = 0

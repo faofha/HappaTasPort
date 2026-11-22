@@ -49,6 +49,9 @@ function TSettings.build(cp)
 	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	scroll.Parent = root
 	self.scroll = scroll
+	-- (the pointer keeps rects' bounds until told: a scroll moves them)
+	local scrollConn = scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
+	self.offs[#self.offs + 1] = function() scrollConn:Disconnect() end
 	local hover = K.text("TextLabel", "Hover", root)
 	hover.Position = UDim2.new(0, 8, 1, -STRIP)
 	hover.Size = UDim2.new(1, -16, 0, STRIP - 2)

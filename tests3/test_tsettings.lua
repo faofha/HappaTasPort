@@ -152,6 +152,8 @@ local function scrollTo(part)
 	M.steps(1)
 end
 scrollTo(iface)
+local o = ui.pointer:over(UIH.center(iface.button))
+check(o ~= nil and o.gui == iface.button, "after scrolling the page, the click area follows")
 UIH.click(iface.button)
 M.steps(1)
 check(iface.list ~= nil, "open")
