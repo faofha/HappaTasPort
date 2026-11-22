@@ -78,9 +78,11 @@ theme change, pointer rects through the Compact ctx (rects grouped with the wind
   the name and a button), same behaviour as the New window's Theme control.
 - **Key box** (controls): a 22-high button: the control's name on the left (10.5, dim), an inset box on the right 42 %
   (`deep` fill, accent-dim outline) with the key in the accent. A click waits for a key ("..." in the warning yellow
-  #DCC83C); the next key / mouse button binds it through `E.controls` exactly like the Controls window (same allowed
-  keys, same conflict rules, Esc cancels, Backspace / Delete clears to None, `Typing.rebinding` while waiting, ended
-  by `UI:endTyping`). A conflict paints the key box's outline in the recording colour.
+  #DCC83C); the next key / mouse button binds it through `E.controls` like the Controls window (same allowed keys,
+  Backspace and Delete included, same conflict rules, Esc cancels, `Typing.rebinding` while waiting, ended by
+  `UI:endTyping`). A small "×" chip at the key box's right end clears it to None (the Controls window's ×). No per-key
+  reset (the "Reset all" button stays). A conflict paints the key box's outline in the recording colour and the hover
+  strip says which other control shares the key (the Controls window's "Also: ..."). (Call, from the builder check.)
 - **Button**: full width (or a given width) 22 high, `element` fill with a soft top-to-bottom shine, layered border,
   text centred 11.
 - **Slider** (CONTROLS' Speed Hack speed only): a thin 6-high track (`deep`, layered border) with the accent fill and
