@@ -109,7 +109,9 @@ local function playTest(stopAt)
 end
 
 section("Test types and sends")
+M.coreSet.ChatActive = false -- (the chat window collapsed, as after a rejoin)
 local sends, seen, at = playTest()
+eq(M.coreSet.ChatActive, true, "opening the bar opens the chat window, as pressing / does")
 eq(sends, 1, "sent once")
 eq(M.chatSent[#M.chatSent], "/e dance2", "the recorded text")
 check(seen["/e"] and seen["/e dance2"], "the text grew in the bar")
@@ -230,6 +232,44 @@ local lastE
 for _, x in ipairs(entries(fA)) do lastE = x end
 check(lastE and lastE.kind == 1 and lastE.text == "/e wave", "recorded as { /e wave, 1 } (" .. tostring(lastE and lastE.text) .. ")")
 req("idle")
+
+section("typed, paused (the click closes the bar), unpaused, Enter: replay keeps the text, no paste")
+req("create")
+E.modes:seek(tl:count()); M.steps(2)
+req("unpause")
+M.steps(2)
+box.Text = ""
+box:CaptureFocus(); M.steps(1)
+typeOn("a")
+typeOn("ab")
+typeOn("abc")
+box:ReleaseFocus(false); M.steps(1) -- (Left Click to pause: the bar loses focus, Roblox keeps the text)
+req("pause")
+M.steps(5)
+req("unpause")
+M.steps(3)
+box:CaptureFocus(); M.steps(1) -- (the bar opened again: the text is still there)
+typeOn("abcd")
+box:ReleaseFocus(true); M.steps(1)
+M.steps(40)
+req("pause")
+req("idle")
+local texts, jump, closedText = {}, 0, nil
+local prev = ""
+local wasOpen = false
+req("test")
+for _ = 1, tl:count() * 4 + 60 do
+	if E.mode ~= 3 then break end
+	local t = box.Text
+	if t:sub(1, 1) == "a" and #t > #prev + 1 then jump = jump + 1; texts[#texts + 1] = "[" .. prev .. "->" .. t .. "]" end
+	if wasOpen and not box:IsFocused() and t ~= "" then closedText = t end
+	wasOpen = box:IsFocused()
+	prev = t
+	M.step(1 / 60)
+end
+eq(closedText, "abc", "closed by the pause: the bar keeps abc")
+eq(jump, 0, "the text never jumps by more than a letter " .. table.concat(texts, " "))
+eq(M.chatSent[#M.chatSent], "abcd", "abcd is sent")
 
 section("Help and the update log")
 do
