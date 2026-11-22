@@ -93,7 +93,7 @@ function Chat:apply(e)
 	if not b then return end
 	local text, kind = e[1], e[2]
 	self.owns = true
-	self.E.typing.chatReplay = true
+	self.E.typing.chatReplay = b -- (the bar Typing:active() doesn't count as the player typing)
 	if not b:IsFocused() then b:CaptureFocus() end
 	if b.Text ~= text then b.Text = text end
 	if kind == 1 then
@@ -112,7 +112,7 @@ function Chat:release(close)
 		if b:IsFocused() then b:ReleaseFocus(false) end
 	end
 	self.owns = false
-	self.E.typing.chatReplay = false
+	self.E.typing.chatReplay = nil
 end
 
 -- the entries of frames from .. to join the queue; drain applies them, stopping after one send a frame (all:

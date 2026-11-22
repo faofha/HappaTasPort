@@ -132,12 +132,14 @@ eq(#M.chatSent - s0, 1, "then sends it")
 E.settings:set("restartWhenTesting", 1)
 
 section("stop mid-typing, keys still work")
+M.focusedChatBarSeen = true -- (live: GetFocusedTextBox reports the chat bar the replay focused)
 local active
 sends = playTest(function()
 	if box:IsFocused() and box.Text == "/e" then active = E.typing:active(); return true end
 	return false
 end)
 eq(active, false, "while the replay types, HappaTAS's keys still work")
+M.focusedChatBarSeen = false
 req("idle")
 eq(sends, 0, "nothing sent")
 check(not box:IsFocused() and box.Text == "", "the bar is closed and empty")

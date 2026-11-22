@@ -328,7 +328,8 @@ local function inCoreGui(inst)
 end
 U.GetFocusedTextBox = function()
 	local b = M.focusedBox
-	if b and inCoreGui(b) then return nil end
+	-- (M.focusedChatBarSeen: the chat bar focused by a script IS reported, live 2026-11-22, Real at identity 8)
+	if b and inCoreGui(b) and not (M.focusedChatBarSeen and b == M.chatBox) then return nil end
 	return b
 end
 -- (submitted: the old box lost focus by Enter. The new chat's bar (M.chatBox) sends a submitted text like Roblox:
