@@ -134,6 +134,8 @@ function P.valueBox(ctx, parent, label, opts)
 		return ok
 	end)
 	K.rect(self, { gui = self.gui, onHover = function(on) if opts.onHover then opts.onHover(on) end end }, -1)
+	-- (the interface's pointer sits over Roblox's own text box: a click on it focuses the box, like ui/kit/field)
+	K.rect(self, { gui = box, onRelease = function(_, clicked) if clicked then box:CaptureFocus() end end })
 	return self
 end
 
@@ -375,6 +377,7 @@ function P.slider(ctx, parent, opts)
 		report(self.min + (self.max - self.min) * t)
 	end
 	K.rect(self, { gui = track, onPress = fromX, onDrag = function(pos) fromX(pos) end })
+	K.rect(self, { gui = value, onRelease = function(_, clicked) if clicked then value:CaptureFocus() end end })
 	K.connect(self, value.FocusLost, function()
 		local n = tonumber((value.Text:gsub("[^%d%.%-]", "")))
 		if n then report(n) else show() end

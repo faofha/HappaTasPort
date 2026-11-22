@@ -106,7 +106,7 @@ Settings.SCHEMA = {
 	-- (a choice of two: a pill in the New interface's Settings window, in Classic a box that goes to the next
 	-- choice when it is clicked)
 	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic", "Tasability" },
-		desc = "New: HappaTAS 3's interface. Classic: V2's. Tasability: one window with tabs, in Tasability's style" }),
+		desc = "New: HappaTAS 3's. Classic: V2's. Tasability: one window with tabs, in Tasability's style" }),
 	row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 	row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 	row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),

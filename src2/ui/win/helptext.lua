@@ -167,6 +167,10 @@ local TOPICS = {
 		.. "• The tabs: CONTROLS (your run, the speed hack, your keys, the MicroProfiler and Unload), SETTINGS, HELP "
 		.. "and ABOUT.\n"
 		.. "• LIBRARY opens your saved runs on the left, INSPECTOR the frame's numbers on the right.\n"
+		.. "• SETTINGS: tick a box to turn a setting on, type a number and press Enter, pick from a list (▼), or click a "
+		.. "colour's swatch for the picker. RESET puts a section back to its defaults; hover a row to read what it does.\n"
+		.. "• KEYS (on CONTROLS): click a key box and press the new key (Esc cancels), × clears it, Reset all puts every "
+		.. "key back. Two actions on one key are marked; hover one to see the other.\n"
 		.. "• It uses your accent colour, text colours and text size; the New interface's glass, fonts, corners and "
 		.. "animations don't apply here.\n"
 		.. "• The timeline bar, messages and the Merge window are the same as in the New interface." },

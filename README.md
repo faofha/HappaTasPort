@@ -64,9 +64,11 @@ chat or a text box.
 - **Tasability** (V3.1, in Tasability's style; no code or assets taken from it): one main window with a
   title bar (version, the mode, a settings search, minimise to the title bar), tabs CONTROLS / SETTINGS / HELP /
   ABOUT and two side panels docked to it, LIBRARY on the left and INSPECTOR on the right. Square, dark, with
-  the accent colour on its edges and section titles. It uses the accent, text colours and text size; the New
-  interface's glass, fonts, corners and animations don't apply. The timeline bar, messages and the Merge window
-  are the New interface's.
+  the accent colour on its edges and section titles. Its SETTINGS tab and KEYS list are its own, in Tasability's
+  style: checkboxes, value boxes, dropdowns, colour boxes and key boxes in two columns of sections, a RESET per
+  section, descriptions when you hover a row. It uses the accent, text colours and text size; the New interface's
+  glass, fonts, corners and animations don't apply. The timeline bar, messages and the Merge window are the New
+  interface's.
 
 All three read one settings store: a setting changed in one shows in the others at once. Phones (a touch
 screen without a keyboard) always get Classic, with V2's mobile buttons.
