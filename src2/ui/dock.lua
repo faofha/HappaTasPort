@@ -41,9 +41,13 @@ function Dock.new(ui)
 	title.ZIndex = 2
 	self.title = title
 	self.offs[#self.offs + 1] = ui.theme:changed(function() self:layout() end)
-	self.offs[#self.offs + 1] = ui.wm:changed(function(id, open)
+	-- (lit = open in the window manager: Compact's hosted copies send open / close too, V3.1 review)
+	self.offs[#self.offs + 1] = ui.wm:changed(function(id)
 		local b = self.buttons[id]
-		if b then b:setKind(open and "primary" or "plain") end
+		if b then b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
+	end)
+	self.offs[#self.offs + 1] = E.bus:on("uiShown", function()
+		for id, b in pairs(self.buttons) do b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
 	end)
 	ui.life:own(function() self:destroy() end)
 	self:layout()

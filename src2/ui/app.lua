@@ -5,8 +5,10 @@
 --  its text boxes count as typing (E.typing:watch). Everything is undone on Unload (its own scope).
 --  The Menu key shows / hides the whole interface; it works even when the game took the key, never while
 --  the player types (V2.37.1).
---  Interface: New / Classic (spec 8.5): only one interface is live; the other is hidden and does no
---  per-frame work (bus "uiShown" with newActive()), and the engine's hooks answer for the live one.
+--  Interface: New / Classic (spec 8.5) / Compact (V3.1): only one interface is live; the others are hidden and
+--  do no per-frame work (bus "uiShown" with newActive()), and the engine's hooks answer for the live one.
+--  Compact is the New interface's machinery (root, pointer, bar, toasts, Merge window) in its own window
+--  (ui/compact): newActive() is true for both.
 --  A touch screen without a keyboard always gets Classic (the new interface was too buggy on phones; Classic
 --  goes with V2's mobile buttons): the setting is kept as saved but has no effect there.
 -- ================================================================================================
@@ -31,6 +33,7 @@ local MergeWin = import("ui/win/merge")
 local HelpWin = import("ui/win/help")
 local AboutWin = import("ui/win/about")
 local Classic = import("ui/classic/classic")
+local Compact = import("ui/compact/compact")
 local Touch = import("ui/touch")
 
 local UI = {}
@@ -88,7 +91,7 @@ function UI.start(E)
 	life:connect(uis.InputBegan, function(inp)
 		if E.typing:active(inp) then return end
 		if E.controls:matches(inp, "menu") then
-			if self.live == "Classic" and self.classic then self.classic:toggle() else self:toggle() end
+			if self.live == "Classic" and self.classic then self.classic:toggle() else self:toggle() end -- (New and Compact)
 		end
 	end)
 	-- (the interface chosen, now and whenever the setting changes)
@@ -97,8 +100,11 @@ function UI.start(E)
 	return self
 end
 
--- the new interface is live and shown (its per-frame work runs only then)
-function UI:newActive() return self.live == "New" and self.shown end
+-- the new interface (or Compact, which shares its machinery) is live and shown: its per-frame work runs only then
+function UI:newActive() return (self.live == "New" or self.live == "Compact") and self.shown end
+
+-- the Compact interface is live
+function UI:isCompact() return self.live == "Compact" end
 
 -- the live interface is shown
 function UI:liveShown()
@@ -114,15 +120,21 @@ function UI:endTyping()
 	E.typing.own = nil
 	if self.controlsWin and self.controlsWin.stopWaiting then self.controlsWin.stopWaiting() end
 	if self.classic and self.classic.stopWaiting then self.classic.stopWaiting() end
+	if self.compact then self.compact:endTyping() end
 	E.typing.rebinding = false
 end
 
--- "New" or "Classic" (anything else is New): the other one hidden, in the same frame
+-- "New", "Classic" or "Compact" (anything else is New): the others hidden, in the same frame
 function UI:setInterface(name)
-	if name ~= "Classic" then name = "New" end
+	if name ~= "Classic" and name ~= "Compact" then name = "New" end
 	if self.classicOnly then name = "Classic" end
-	if name == self.live and (name == "New" or self.classic) then return end
+	if name == self.live and (name ~= "Classic" or self.classic) then return end
 	self:endTyping()
+	if name == "Compact" and not self.compact then
+		self.compact = Compact.new(self)
+		local cp = self.compact
+		self.life:own(function() cp:destroy() end)
+	end
 	if name == "Classic" and not self.classic then
 		self.classic = Classic.new(self)
 		local c = self.classic
@@ -130,6 +142,10 @@ function UI:setInterface(name)
 		self.E.typing:watch(c.gui)
 	end
 	self.live = name
+	if self.wm then self.wm:setHideAll(name == "Compact") end
+	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Compact") end
+	if self.theme then self.theme:setCompact(name == "Compact") end
+	if self.compact then self.compact:setLive(name == "Compact") end
 	self:applyShown()
 	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
 	if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
@@ -155,13 +171,15 @@ end
 function UI:updateModal()
 	if self.live == "Classic" then
 		self.modal = self.classic ~= nil and self.classic:modal()
+	elseif self.live == "Compact" then
+		self.modal = self.shown and self.compact ~= nil and self.compact:modal()
 	else
 		self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()
 	end
 	self.E.modal = self.modal
 end
 
--- the new interface shown / hidden (the Menu key while it is live)
+-- the new interface (or Compact) shown / hidden (the Menu key while it is live)
 function UI:setShown(on)
 	self.shown = on == true
 	self:applyShown()

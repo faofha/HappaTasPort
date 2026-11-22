@@ -61,7 +61,9 @@ function Frost:qualityChanged(f)
 end
 
 function Frost:wanted()
-	return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and self.ui.wm:anyOpen() and self:available()
+	-- (Compact hides the New windows without closing them and has no glass: no Frost there, V3.1 review)
+	return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and not (self.ui.isCompact and self.ui:isCompact())
+		and self.ui.wm:anyOpen() and self:available()
 end
 
 function Frost:update()

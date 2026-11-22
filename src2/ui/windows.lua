@@ -310,7 +310,7 @@ function Windows:open(id)
 	end
 	win.open = true
 	self:rememberOpen(id, true)
-	W.set(win.holder, "Visible", true)
+	W.set(win.holder, "Visible", self:allowed(id))
 	self:apply(win, win.x, win.y, win.w, win.h)
 	self:focus(id)
 	self:fire(id, true)
@@ -328,6 +328,20 @@ function Windows:close(id)
 	self:updateCover()
 	self:save(id)
 	self:fire(id, false)
+end
+
+-- (Compact, V3.1: its own pages show what the windows show; only the Merge window stays, it is shared)
+function Windows:allowed(id) return not self.hideAll or id == "merge" end
+
+-- on: every window but Merge hidden (open ones stay open, and show again when it ends)
+function Windows:setHideAll(on)
+	on = on == true
+	if self.hideAll == on then return end
+	self.hideAll = on
+	for id, win in pairs(self.windows) do
+		if win.open then W.set(win.holder, "Visible", self:allowed(id)) end
+	end
+	self:updateCover()
 end
 
 function Windows:toggle(id)

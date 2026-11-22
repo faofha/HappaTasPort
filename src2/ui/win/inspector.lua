@@ -268,9 +268,11 @@ end
 
 -- the pipeline is timed only while the Performance rows show in an open, unminimised Inspector
 function Insp:timing()
+	-- (two copies exist with Compact: only the one shown now owns the pipeline's timing, V3.1 review)
+	if not self:here() then return end
 	local data = saved(self.ui)
 	local all = self:statsShown()
-	local perf = all and self.win.open and self.ui:newActive() and not self.win.min and not data.collapsed.Performance
+	local perf = all and self.win.open and self.ui:newActive() and self:here() and not self.win.min and not data.collapsed.Performance
 		and not (data.hidden.fps and data.hidden.happaMs)
 	self.E.pipe.timing = perf == true
 	if not perf then self.E.pipe.timeSum, self.E.pipe.timeFrames = 0, 0 end
@@ -343,8 +345,11 @@ function Insp:openOptions(reopen)
 end
 
 -- ------------------------------------------------------------------------------------------------ per frame
+-- the copy that shows now: the New window outside Compact, the hosted panel in Compact (V3.1)
+function Insp:here() return (self.win.hosted == true) == (self.ui.isCompact ~= nil and self.ui:isCompact()) end
+
 function Insp:follow()
-	local open = self.win.open and self.ui:newActive()
+	local open = self.win.open and self.ui:newActive() and self:here()
 	if open and not self.off then
 		self.pausedKey = nil -- (opened again on the same frame: shown afresh)
 		self.off = self.E.pipe:add("PreRender", 230, "ui.inspector", function(dt) self:step(dt) end, "ui")

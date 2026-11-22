@@ -1418,32 +1418,37 @@ __mods["engine/settings"] = function(import)
 	local EASINGS = { "Preset", "Linear", "Sine", "Quad", "Cubic", "Quart", "Quint", "Exponential", "Circular", "Back", "Elastic",
 		"Bounce", "Custom" }
 	local function look(key, default, extra, desc) return row(key, nil, "Appearance", default, with(extra, desc)) end
+	local function lookNew(key, default, extra, desc)
+		local r = look(key, default, extra, desc)
+		r.newOnly = true
+		return r
+	end
 	Settings.SCHEMA = {
 		look("theme", "Default", { kind = "text" }, "Save your look and switch between saved looks"),
-		look("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
-		look("glassColor", "#232B26", color(), "The colour of the windows' glass"),
-		look("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
-		look("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
-		look("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
+		lookNew("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
+		lookNew("glassColor", "#232B26", color(), "The colour of the windows' glass"),
+		lookNew("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
+		lookNew("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
+		lookNew("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
 		look("accentColor", "#3FB950", color(), "Switches, sliders and main buttons"),
 		look("textColor", "#FFFFFF", color(), "The interface's text"),
 		look("secondaryTextColor", "#B4BBC8", color(), "Explanations and other quieter text"),
 		look("recordingColor", "#FF5A5A", color(), "Shown while recording"),
-		look("font", "BuilderSans", choice(Settings.FONTS), "The interface's text font"),
-		look("numberFont", "RobotoMono", choice(Settings.FONTS), "The font for numbers"),
+		lookNew("font", "BuilderSans", choice(Settings.FONTS), "The interface's text font"),
+		lookNew("numberFont", "RobotoMono", choice(Settings.FONTS), "The font for numbers"),
 		look("textSize", 13, num(8, 24, true), "Click the number to type a value"),
 		look("interfaceScale", 100, num(50, 200, true), "The size of the whole interface"),
-		look("windowCorners", 16, num(0, 24, true), "How round the windows' corners are"),
-		look("buttonShape", "Pill", choice({ "Pill", "Rounded", "Square" }), "The corners of buttons and fields"),
-		look("shadows", 1, { kind = "toggle" }, "Soft shadows under the windows"),
-		look("animations", "Smooth", choice({ "Off", "Smooth", "Snappy", "Bouncy" }), "How the interface moves"),
-		look("animationLength", 0.2, num(0.05, 1), "How long a move takes, in seconds"),
-		look("easing", "Preset", choice(EASINGS), "The curve moves follow (Preset: the Animations style)"),
-		look("easingDirection", "Out", choice({ "In", "Out", "InOut" }), "Where the curve speeds up or slows down"),
-		look("bezierX1", 0.25, num(0, 1), "Custom curve: first handle x"),
-		look("bezierY1", 0.1, num(-1, 2), "Custom curve: first handle y"),
-		look("bezierX2", 0.25, num(0, 1), "Custom curve: second handle x"),
-		look("bezierY2", 1, num(-1, 2), "Custom curve: second handle y"),
+		lookNew("windowCorners", 16, num(0, 24, true), "How round the windows' corners are"),
+		lookNew("buttonShape", "Pill", choice({ "Pill", "Rounded", "Square" }), "The corners of buttons and fields"),
+		lookNew("shadows", 1, { kind = "toggle" }, "Soft shadows under the windows"),
+		lookNew("animations", "Smooth", choice({ "Off", "Smooth", "Snappy", "Bouncy" }), "How the interface moves"),
+		lookNew("animationLength", 0.2, num(0.05, 1), "How long a move takes, in seconds"),
+		lookNew("easing", "Preset", choice(EASINGS), "The curve moves follow (Preset: the Animations style)"),
+		lookNew("easingDirection", "Out", choice({ "In", "Out", "InOut" }), "Where the curve speeds up or slows down"),
+		lookNew("bezierX1", 0.25, num(0, 1), "Custom curve: first handle x"),
+		lookNew("bezierY1", 0.1, num(-1, 2), "Custom curve: first handle y"),
+		lookNew("bezierX2", 0.25, num(0, 1), "Custom curve: second handle x"),
+		lookNew("bezierY2", 1, num(-1, 2), "Custom curve: second handle y"),
 		row("lockCameraTest", "Lock Camera (Test)", "Playback", 1, { desc = "The camera follows the recorded camera while testing" }),
 		row("interpolatePlayback", "Interpolate Playback", "Playback", 1, { desc = "Blends between frames for smooth playback" }),
 		row("playbackSpeed", "Playback Speed", "Playback", 1, { kind = NUM, nonzero = true, desc = "How fast Test plays the run (1 = normal)" }),
@@ -1476,8 +1481,8 @@ __mods["engine/settings"] = function(import)
 		row("syncLighting", "Sync Lighting", "World sync", 1, { follows = "syncClientObjects", desc = "Records and replays lighting changes" }),
 		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { follows = "syncClientObjects", desc = "The EToH kit's scripts run on the TAS clock" }),
 		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
-		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
-			desc = "New: HappaTAS 3's interface. Classic: V2's" }),
+		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic", "Compact" },
+			desc = "New: HappaTAS 3's interface. Classic: V2's. Compact: one window with tabs" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 		row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 		row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -4185,6 +4190,14 @@ __mods["persist/settingsfile"] = function(import)
 					end
 				end
 			end
+		end
+		if type(t.compact) == "table" then
+			local c, out = t.compact, {}
+			for _, k in ipairs({ "x", "y", "w", "h" }) do if type(c[k]) == "number" then out[k] = c[k] end end
+			if type(c.tab) == "string" then out.tab = c.tab end
+			out.library = c.library == true
+			out.folded = c.folded == true
+			ui.compact = out
 		end
 		if type(t.themes) == "table" then
 			for name, look in pairs(t.themes) do
@@ -13700,7 +13713,7 @@ __mods["ui/sounds"] = function(import)
 		local snd = self.sounds[name]
 		if not snd then return end
 		local s = self.E.settings
-		if not s:on("uiSounds") or self.ui.live ~= "New" then return end
+		if not s:on("uiSounds") or (self.ui.live ~= "New" and self.ui.live ~= "Compact") then return end
 		self.last = name
 		pcall(function()
 			snd.Volume = math.clamp((tonumber(s:get("uiSoundVolume")) or 50) / 100, 0, 1)
@@ -13887,6 +13900,8 @@ __mods["ui/theme"] = function(import)
 	Theme.__index = Theme
 	local CONTROL_CORNER = { Pill = 999, Rounded = 8, Square = 2 }
 	local FIXED = { reset1 = "#FFC86E", reset2 = "#F0A032", close = "#FF6A6A" }
+	local SHADES = { deep = 10, window = 15, inline = 21, panel = 28, element = 35, hover = 44, border = 8, outline = 30 }
+	local TINT = 0.08
 	local function color(hex)
 		local h = tostring(hex or ""):gsub("#", "")
 		local r, g, b = tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16)
@@ -13907,12 +13922,16 @@ __mods["ui/theme"] = function(import)
 		end))
 		self.size = function(n) return n * self.s:get("textSize") / 13 end
 		self.font = function(kind)
+			if self.compact then
+				return Font.fromEnum((kind == "bold") and Enum.Font.GothamBold or Enum.Font.GothamMedium)
+			end
 			local s = self.s
 			local name = (kind == "number") and s:get("numberFont") or (self.previewName or s:get("font"))
 			local weight = (kind == "bold") and Enum.FontWeight.Bold or Enum.FontWeight.Regular
 			return Font.new(family(name), weight)
 		end
 		self.corner = function(kind)
+			if self.compact then return 0 end
 			if kind == "window" then return self.s:get("windowCorners") end
 			return CONTROL_CORNER[self.s:get("buttonShape")] or 999
 		end
@@ -13928,6 +13947,26 @@ __mods["ui/theme"] = function(import)
 		for k, hex in pairs(FIXED) do c[k] = color(hex) end
 		t.glass = s:get("glassTransparency") / 100
 		t.rim = 1 - s:get("edgeLight") / 100
+		c.rim = Color3.new(1, 1, 1)
+		self.shades = nil
+		if self.compact then
+			local sh = Theme.compactShades(c.accent)
+			self.shades = sh
+			c.glass, c.rim = sh.window, sh.outline
+			t.glass, t.rim = 0, 0
+		end
+	end
+	function Theme.compactShades(accent)
+		local out = {}
+		for k, v in pairs(SHADES) do out[k] = Color3.fromRGB(v, v, v):Lerp(accent, TINT) end
+		return out
+	end
+	function Theme:setCompact(on)
+		on = on == true
+		if (self.compact == true) == on then return end
+		self.compact = on
+		self:refresh()
+		self:fire()
 	end
 	function Theme:fire()
 		for _, f in ipairs(table.clone(self.listeners)) do
@@ -14196,7 +14235,9 @@ __mods["ui/kit/glass"] = function(import)
 		W.set(self.panel, "BackgroundTransparency", t)
 		W.set(self.corner, "CornerRadius", UDim.new(0, r))
 		W.set(self.rim, "Transparency", th.t.rim)
-		W.set(self.shadow, "Visible", th.E.settings:on("shadows"))
+		W.set(self.rim, "Color", th.c.rim or Color3.new(1, 1, 1))
+		if th.compact then W.set(self.panel, "BackgroundTransparency", 0) end
+		W.set(self.shadow, "Visible", th.E.settings:on("shadows") and not th.compact)
 		for _, sc in ipairs(self.shadowCorners) do W.set(sc.c, "CornerRadius", UDim.new(0, r + sc.grow)) end
 	end
 	function Glass:setCover(on)
@@ -15731,7 +15772,7 @@ __mods["ui/windows"] = function(import)
 		end
 		win.open = true
 		self:rememberOpen(id, true)
-		W.set(win.holder, "Visible", true)
+		W.set(win.holder, "Visible", self:allowed(id))
 		self:apply(win, win.x, win.y, win.w, win.h)
 		self:focus(id)
 		self:fire(id, true)
@@ -15748,6 +15789,16 @@ __mods["ui/windows"] = function(import)
 		self:updateCover()
 		self:save(id)
 		self:fire(id, false)
+	end
+	function Windows:allowed(id) return not self.hideAll or id == "merge" end
+	function Windows:setHideAll(on)
+		on = on == true
+		if self.hideAll == on then return end
+		self.hideAll = on
+		for id, win in pairs(self.windows) do
+			if win.open then W.set(win.holder, "Visible", self:allowed(id)) end
+		end
+		self:updateCover()
 	end
 	function Windows:toggle(id)
 		if self:isOpen(id) then self:close(id) else self:open(id) end
@@ -15849,9 +15900,12 @@ __mods["ui/dock"] = function(import)
 		title.ZIndex = 2
 		self.title = title
 		self.offs[#self.offs + 1] = ui.theme:changed(function() self:layout() end)
-		self.offs[#self.offs + 1] = ui.wm:changed(function(id, open)
+		self.offs[#self.offs + 1] = ui.wm:changed(function(id)
 			local b = self.buttons[id]
-			if b then b:setKind(open and "primary" or "plain") end
+			if b then b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
+		end)
+		self.offs[#self.offs + 1] = E.bus:on("uiShown", function()
+			for id, b in pairs(self.buttons) do b:setKind(ui.wm:isOpen(id) and "primary" or "plain") end
 		end)
 		ui.life:own(function() self:destroy() end)
 		self:layout()
@@ -16028,7 +16082,8 @@ __mods["ui/frost"] = function(import)
 		end
 	end
 	function Frost:wanted()
-		return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and self.ui.wm:anyOpen() and self:available()
+		return self.E.settings:get("glass") == "Frost" and self.ui:newActive() and not (self.ui.isCompact and self.ui:isCompact())
+			and self.ui.wm:anyOpen() and self:available()
 	end
 	function Frost:update()
 		if not self:wanted() then return self:clear() end
@@ -17035,7 +17090,7 @@ __mods["ui/win/settings"] = function(import)
 				end
 			end
 			for _, def in ipairs(Settings.SCHEMA) do
-				if def.section == secName and not BEZIER[def.key] and not def.hidden then
+				if def.section == secName and not BEZIER[def.key] and not def.hidden and not (win.compact and def.newOnly) then
 					local ctl, kind = controlFor(lctx, s, def, sw)
 					local row = Row.new(lctx, list, { name = def.name, desc = def.desc, control = ctl })
 					local r = { row = row, ctl = ctl, kind = kind, def = def }
@@ -17089,11 +17144,18 @@ __mods["ui/win/settings"] = function(import)
 				end
 				W.set(sec.header, "Visible", any)
 			end
-			local curve = s:get("easing") == "Custom" and sw.rows.easing.row.gui.Visible
-			W.set(sw.bezier.gui, "Visible", curve)
+			if sw.bezier and sw.rows.easing then
+				local curve = s:get("easing") == "Custom" and sw.rows.easing.row.gui.Visible
+				W.set(sw.bezier.gui, "Visible", curve)
+			end
 			relayout()
 		end
 		search.onInput = function(t) query = t; filter() end
+		function sw.setQuery(t)
+			query = t or ""
+			search:set(query)
+			filter()
+		end
 		local function frostNote()
 			local r = sw.rows.glass
 			if not (r and r.row.desc) then return end
@@ -17686,9 +17748,10 @@ __mods["ui/win/inspector"] = function(import)
 		self:timing()
 	end
 	function Insp:timing()
+		if not self:here() then return end
 		local data = saved(self.ui)
 		local all = self:statsShown()
-		local perf = all and self.win.open and self.ui:newActive() and not self.win.min and not data.collapsed.Performance
+		local perf = all and self.win.open and self.ui:newActive() and self:here() and not self.win.min and not data.collapsed.Performance
 			and not (data.hidden.fps and data.hidden.happaMs)
 		self.E.pipe.timing = perf == true
 		if not perf then self.E.pipe.timeSum, self.E.pipe.timeFrames = 0, 0 end
@@ -17757,8 +17820,9 @@ __mods["ui/win/inspector"] = function(import)
 			end
 		end
 	end
+	function Insp:here() return (self.win.hosted == true) == (self.ui.isCompact ~= nil and self.ui:isCompact()) end
 	function Insp:follow()
-		local open = self.win.open and self.ui:newActive()
+		local open = self.win.open and self.ui:newActive() and self:here()
 		if open and not self.off then
 			self.pausedKey = nil
 			self.off = self.E.pipe:add("PreRender", 230, "ui.inspector", function(dt) self:step(dt) end, "ui")
@@ -17900,6 +17964,8 @@ __mods["ui/win/library"] = function(import)
 	end
 	function LibraryWin.build(ui, body, win)
 		local E, ctx, th = ui.E, win.ctx, ui.theme
+		local narrow = win.narrow == true
+		local SIDE = narrow and 96 or SIDE
 		local lw = { ui = ui, E = E, ctx = ctx, win = win, offs = {}, rows = {}, visible = {}, folderRows = {},
 			buttons = {}, expanded = {}, folder = nil, selected = nil, query = "", sortIndex = 1, confirm = nil }
 		local side = K.frame("Sidebar", body)
@@ -17916,11 +17982,11 @@ __mods["ui/win/library"] = function(import)
 		local main = K.frame("Main", body)
 		main.Position = UDim2.new(0, SIDE, 0, 0)
 		main.Size = UDim2.new(1, -SIDE, 1, 0)
-		lw.search = Field.new(ctx, main, { search = true, w = 260, placeholder = "Search" })
+		lw.search = Field.new(ctx, main, { search = true, w = narrow and 110 or 260, placeholder = "Search" })
 		lw.search.gui.Position = UDim2.new(0, PAD, 0, 8)
 		local sortNames = {}
 		for _, s in ipairs(SORTS) do sortNames[#sortNames + 1] = s[1] end
-		lw.sort = Dropdown.new(ctx, main, { options = sortNames, w = 130 })
+		lw.sort = Dropdown.new(ctx, main, { options = sortNames, w = narrow and 74 or 130 })
 		lw.sort.gui.AnchorPoint = Vector2.new(1, 0)
 		lw.sort.gui.Position = UDim2.new(1, -PAD, 0, 12)
 		local header = K.frame("Header", main)
@@ -17942,8 +18008,9 @@ __mods["ui/win/library"] = function(import)
 			if static then lw.static[#lw.static + 1] = { l, secondary, kind } end
 			return l
 		end
+		local NAME_W = narrow and 110 or 320
 		local COLS = {
-			name = { { 0, 24 }, { 1, -320 } },
+			name = { { 0, 24 }, { 1, -NAME_W } },
 			length = { { 1, -290 }, { 0, 70 } },
 			frames = { { 1, -212 }, { 0, 80 } },
 			saved = { { 1, -126 }, { 0, 120 } },
@@ -17955,33 +18022,48 @@ __mods["ui/win/library"] = function(import)
 			column(header, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, nil, true),
 		}
 		lw.headers[1].Text, lw.headers[2].Text, lw.headers[3].Text, lw.headers[4].Text = "Name", "Length", "Frames", "Saved"
+		if narrow then
+			lw.headers[2].Visible, lw.headers[4].Visible = false, false
+			lw.headers[3].Position, lw.headers[3].Size = UDim2.new(1, -82, 0, 0), UDim2.new(0, 80, 1, 0)
+		end
 		local list, lctx = scrollList(lw, ctx, main, "List")
 		list.Position = UDim2.new(0, PAD, 0, 66)
-		list.Size = UDim2.new(1, -PAD * 2, 1, -66 - 110)
+		list.Size = UDim2.new(1, -PAD * 2, 1, -66 - (narrow and 176 or 110))
 		lw.list, lw.lctx = list, lctx
 		lw.info = column(main, "Info", { 0, PAD }, { 1, -PAD * 2 }, nil, true, nil, true)
-		lw.info.Position = UDim2.new(0, PAD, 1, -104)
+		lw.info.Position = UDim2.new(0, PAD, 1, narrow and -168 or -104)
 		lw.info.Size = UDim2.new(1, -PAD * 2, 0, 18)
 		lw.info.Text = ""
-		lw.nameField = Field.new(ctx, main, { w = 200, placeholder = "Name" })
-		lw.nameField.gui.Position = UDim2.new(0, PAD, 1, -78)
-		local function button(key, text, parent, x, y, kind)
-			local b = Button.new(ctx, parent, { text = text, kind = kind or "plain" })
+		lw.nameField = Field.new(ctx, main, { w = narrow and 188 or 200, placeholder = "Name" })
+		lw.nameField.gui.Position = UDim2.new(0, PAD, 1, narrow and -144 or -78)
+		local function button(key, text, parent, x, y, kind, w)
+			local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w })
 			b.gui.Position = UDim2.new(0, x, 1, y)
 			b.enabled = true
 			b.text = text
 			lw.buttons[key] = b
 			return b
 		end
-		local x1 = PAD + 208
-		button("save", "Save", main, x1, -78, "primary")
-		button("attempt", "New attempt", main, x1 + 62, -78)
-		button("rename", "Rename", main, x1 + 168, -78)
-		button("load", "Load", main, PAD, -44, "primary")
-		button("merge", "Merge", main, PAD + 62, -44)
-		button("delete", "Delete", main, PAD + 134, -44)
-		lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 150 })
-		lw.moveDrop.gui.Position = UDim2.new(0, PAD + 214, 1, -44)
+		if narrow then
+			button("save", "Save", main, PAD, -112, "primary", 60)
+			button("load", "Load", main, PAD + 64, -112, "primary", 60)
+			button("merge", "Merge", main, PAD + 128, -112, nil, 60)
+			button("attempt", "New attempt", main, PAD, -80, nil, 92)
+			button("rename", "Rename", main, PAD + 96, -80, nil, 92)
+			button("delete", "Delete", main, PAD, -46, nil, 60)
+			lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 124 })
+			lw.moveDrop.gui.Position = UDim2.new(0, PAD + 64, 1, -46)
+		else
+			local x1 = PAD + 208
+			button("save", "Save", main, x1, -78, "primary")
+			button("attempt", "New attempt", main, x1 + 62, -78)
+			button("rename", "Rename", main, x1 + 168, -78)
+			button("load", "Load", main, PAD, -44, "primary")
+			button("merge", "Merge", main, PAD + 62, -44)
+			button("delete", "Delete", main, PAD + 134, -44)
+			lw.moveDrop = Dropdown.new(ctx, main, { options = { MOVE_LABEL }, w = 150 })
+			lw.moveDrop.gui.Position = UDim2.new(0, PAD + 214, 1, -44)
+		end
 		if ui.startMerge then lw.onMerge = function(path) ui.startMerge(path) end end
 		local function status(text, isError) E.bus:emit("status", text, isError == true) end
 		local function shownFolder() return lw.folder or "" end
@@ -18112,14 +18194,18 @@ __mods["ui/win/library"] = function(import)
 				gui.Size = UDim2.new(1, -6, 0, ROW_H)
 				K.corner(gui, 8)
 				local indent = v.depth * 16
-				local name = column(gui, "Name", { 0, 24 + indent }, { 1, -320 - indent })
+				local name = column(gui, "Name", { 0, 24 + indent }, { 1, -NAME_W - indent })
 				name.Text = (lw.folder == nil and e.folder ~= "" and v.depth == 0) and (e.folder .. "/" .. e.name) or e.name
-				column(gui, "Length", COLS.length[1], COLS.length[2], Enum.TextXAlignment.Right, true, "number").Text =
-					Util.toTime(e.length or 0)
-				column(gui, "Frames", COLS.frames[1], COLS.frames[2], Enum.TextXAlignment.Right, true, "number").Text =
-					tostring(e.frames or "-")
-				column(gui, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, "number").Text =
-					dateText(e.saved)
+				if not narrow then
+					column(gui, "Length", COLS.length[1], COLS.length[2], Enum.TextXAlignment.Right, true, "number").Text =
+						Util.toTime(e.length or 0)
+				end
+				column(gui, "Frames", narrow and { 1, -82 } or COLS.frames[1], narrow and { 0, 80 } or COLS.frames[2],
+					Enum.TextXAlignment.Right, true, "number").Text = tostring(e.frames or "-")
+				if not narrow then
+					column(gui, "Saved", COLS.saved[1], COLS.saved[2], Enum.TextXAlignment.Right, true, "number").Text =
+						dateText(e.saved)
+				end
 				local r = { entry = e, depth = v.depth, gui = gui, label = name }
 				r.rect = lctx.pointer.add({ gui = gui, onRelease = function(_, clicked) if clicked then selectRow(e.path) end end }, 1)
 				if v.depth == 0 and v.group and #v.group.attempts > 0 then
@@ -18565,7 +18651,8 @@ __mods["ui/win/helptext"] = function(import)
 			.. "3. Made a mistake? Go back, then unpause to record over it.\n"
 			.. "4. Press {key:test} to play the run.\n"
 			.. "5. Save it in the Library.\n\n"
-			.. "The Dock at the top opens the windows. {key:menu} hides or shows the interface.\n\n"
+			.. "In the New interface the Dock at the top opens the windows; Compact has one window with tabs. {key:menu} "
+			.. "hides or shows the interface.\n\n"
 			.. "If you used V2, its settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
 			.. "To convert them again: unload HappaTAS first (Unload HappaTAS below the topics, or rejoin), then delete "
 			.. "HappaTasPort/Settings3.json, then run the script. That also resets the look, the windows and the "
@@ -18687,7 +18774,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "• HappaTAS moves you by at most a few tenths of a stud.\n"
 			.. "• Idle and recording, R6 characters." },
 		{ "classiclook", "Classic interface",
-			"Settings > Interface switches between the New and the Classic interface.\n\n"
+			"Settings > Interface switches between the New, the Classic and the Compact interface.\n\n"
 			.. "Classic Look (Classic's Settings tab) sets Classic's colours and background:\n"
 			.. "• Main Colour: every colour set to Auto follows it.\n"
 			.. "• Each of the 23 colours has a row: type #RRGGBB or r, g, b, clear the box for Auto, or click the "
@@ -18696,11 +18783,23 @@ __mods["ui/win/helptext"] = function(import)
 			.. "uses the internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files "
 			.. "from links.\n"
 			.. "• Background Transparency and Background Fit (Crop, Fit, Stretch)." },
+		{ "compact", "Compact interface",
+			"One window holds everything. Pick it in Settings > Interface (not on phones).\n\n"
+			.. "• The title bar: drag it to move the window, the corner grip resizes it. It shows the version, the mode "
+			.. "(and paused / recording), a search box that finds settings, and minimise (_), which folds the window to "
+			.. "its title bar.\n"
+			.. "• The tabs: CONTROLS (your run, the speed hack, your keys, the MicroProfiler and Unload), SETTINGS, HELP "
+			.. "and ABOUT.\n"
+			.. "• LIBRARY opens your saved runs on the left, INSPECTOR the frame's numbers on the right.\n"
+			.. "• It uses your accent colour, text colours and text size; the New interface's glass, fonts, corners and "
+			.. "animations don't apply here.\n"
+			.. "• The timeline bar, messages and the Merge window are the same as in the New interface." },
 		{ "settings", "Executor Port Settings",
 			"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
 			.. "always works.\n"
 			.. "• No HappaTAS key does anything while you type.\n"
-			.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←).\n"
+			.. "• In the New interface, Settings and Controls are their own windows; Compact has them as tabs. A setting "
+			.. "that isn't at its default has a reset arrow (←).\n"
 			.. "• A colour swatch opens the colour picker: drag the square and the hue bar, type #RRGGBB or r, g, b, or "
 			.. "pick a quick or recent colour. The colour shows while you pick. Cancel puts the old one back; Reset to "
 			.. "default sets the default." },
@@ -21107,6 +21206,775 @@ __mods["ui/classic/classic"] = function(import)
 	end
 	return Classic
 end
+__mods["ui/compact/kit"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local CK = {}
+	local Piece = {}
+	Piece.__index = Piece
+	Piece.destroy = K.destroy
+	local function sh(th) return th.shades or {} end
+	function CK.border(gui)
+		gui.BorderSizePixel = 2
+		gui.BorderMode = Enum.BorderMode.Inset
+		local s = Instance.new("UIStroke")
+		s.Thickness = 1
+		pcall(function() s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border end)
+		pcall(function() s.LineJoinMode = Enum.LineJoinMode.Miter end)
+		s.Parent = gui
+		return s
+	end
+	function CK.paintBorder(gui, stroke, th)
+		local s = sh(th)
+		if s.border then W.set(gui, "BorderColor3", s.border) end
+		if s.outline then W.set(stroke, "Color", s.outline) end
+	end
+	function CK.accentLine(parent)
+		local line = K.frame("AccentLine", parent, Color3.new(1, 1, 1))
+		line.Size = UDim2.new(1, 0, 0, 2)
+		line.ZIndex = (parent.ZIndex or 1) + 2
+		K.gradient(line, Color3.new(1, 1, 1), Color3.fromRGB(65, 65, 65)).Rotation = 90
+		return line
+	end
+	function CK.section(ctx, parent, title)
+		local self = K.new(ctx, Piece)
+		local gui = K.frame("Section", parent, Color3.new(0, 0, 0))
+		gui.Size = UDim2.new(1, 0, 0, 0)
+		gui.AutomaticSize = Enum.AutomaticSize.Y
+		self.gui = gui
+		local stroke = CK.border(gui)
+		local line = CK.accentLine(gui)
+		local t = K.text("TextLabel", "Title", gui)
+		t.Text = string.upper(title or "")
+		t.Position = UDim2.new(0, 7, 0, 4)
+		t.Size = UDim2.new(1, -12, 0, 16)
+		t.TextXAlignment = Enum.TextXAlignment.Left
+		K.stroke(t, Color3.new(0, 0, 0), 0, 1)
+		self.title = t
+		local body = K.frame("Body", gui)
+		body.Position = UDim2.new(0, 0, 0, 22)
+		body.Size = UDim2.new(1, 0, 0, 0)
+		body.AutomaticSize = Enum.AutomaticSize.Y
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft, pad.PaddingRight = UDim.new(0, 8), UDim.new(0, 8)
+		pad.PaddingTop, pad.PaddingBottom = UDim.new(0, 4), UDim.new(0, 6)
+		pad.Parent = body
+		local list = Instance.new("UIListLayout")
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Padding = UDim.new(0, 5)
+		list.Parent = body
+		self.body = body
+		K.style(self, function(th)
+			local s = sh(th)
+			if s.inline then W.set(gui, "BackgroundColor3", s.inline) end
+			CK.paintBorder(gui, stroke, th)
+			W.set(line, "BackgroundColor3", th.c.accent)
+			W.set(t, "TextColor3", th.c.accent)
+			W.set(t, "FontFace", th.font("bold"))
+			W.set(t, "TextSize", th.size(10.5))
+		end)
+		return self
+	end
+	function CK.chip(ctx, parent, text, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Piece)
+		local gui = K.frame("Chip", parent, Color3.new(0, 0, 0))
+		gui.Size = UDim2.new(0, 62, 0, 18)
+		self.gui = gui
+		local stroke = CK.border(gui)
+		local l = K.text("TextLabel", "Label", gui)
+		l.Size = UDim2.new(1, 0, 1, 0)
+		l.Text = text or ""
+		self.label = l
+		self.color = opts.color
+		self.hover = false
+		function self.set(_, t) W.set(l, "Text", t) end
+		function self.setColor(_, c)
+			self.color = c
+			W.set(l, "TextColor3", c or ctx.theme.c.text2)
+		end
+		K.style(self, function(th)
+			local s = sh(th)
+			local bg = self.hover and s.hover or s.element
+			if bg then W.set(gui, "BackgroundColor3", bg) end
+			CK.paintBorder(gui, stroke, th)
+			W.set(l, "FontFace", th.font(opts.bold == false and "text" or "bold"))
+			W.set(l, "TextSize", th.size(9.5))
+			W.set(l, "TextColor3", self.color or (self.hover and th.c.accent) or th.c.text2)
+		end)
+		if opts.button then
+			local function repaint()
+				local th = ctx.theme
+				local s = sh(th)
+				if s.element then W.set(gui, "BackgroundColor3", self.hover and s.hover or s.element) end
+				W.set(l, "TextColor3", self.color or (self.hover and th.c.accent) or th.c.text2)
+			end
+			K.rect(self, { gui = gui,
+				onHover = function(on) self.hover = on; repaint() end,
+				onRelease = function(_, clicked) if clicked and opts.onClick then opts.onClick() end end })
+		end
+		return self
+	end
+	function CK.tab(ctx, parent, text, onClick)
+		local self = K.new(ctx, Piece)
+		local gui = K.frame("Tab", parent, Color3.new(0, 0, 0))
+		gui.Size = UDim2.new(0, 90, 0, 22)
+		self.gui = gui
+		local stroke = CK.border(gui)
+		local l = K.text("TextLabel", "Label", gui)
+		l.Size = UDim2.new(1, 0, 1, 0)
+		l.Position = UDim2.new(0, 0, 0, -1)
+		l.Text = string.upper(text or "")
+		K.stroke(l, Color3.new(0, 0, 0), 0, 1)
+		self.label = l
+		local under = K.frame("Underline", gui, Color3.new(1, 1, 1))
+		under.AnchorPoint = Vector2.new(0, 1)
+		under.Position = UDim2.new(0, 0, 1, 0)
+		under.Size = UDim2.new(1, 0, 0, 2)
+		under.Visible = false
+		self.underline = under
+		self.active, self.hover = false, false
+		local function paint(th)
+			local s = sh(th)
+			local bg = self.active and s.inline or (self.hover and s.hover) or s.panel
+			if bg then W.set(gui, "BackgroundColor3", bg) end
+			CK.paintBorder(gui, stroke, th)
+			W.set(under, "BackgroundColor3", th.c.accent)
+			W.set(under, "Visible", self.active)
+			W.set(l, "FontFace", th.font("text"))
+			W.set(l, "TextSize", th.size(11))
+			W.set(l, "TextColor3", (self.active or self.hover) and th.c.accent or th.c.text)
+			W.set(l, "TextTransparency", (self.active or self.hover) and 0 or 0.48)
+		end
+		K.style(self, paint)
+		function self.setActive(_, on)
+			self.active = on == true
+			paint(ctx.theme)
+		end
+		K.rect(self, { gui = gui,
+			onHover = function(on) self.hover = on; paint(ctx.theme) end,
+			onRelease = function(_, clicked) if clicked and onClick then onClick() end end })
+		return self
+	end
+	return CK
+end
+__mods["ui/compact/host"] = function(import)
+	local K = import("ui/kit/base")
+	local Host = {}
+	Host.__index = Host
+	function Host.new(compact, id, build, parent, opts)
+		opts = opts or {}
+		local self = setmetatable({ compact = compact, id = id }, Host)
+		local frame = K.frame("Host_" .. id, parent)
+		frame.Size = UDim2.new(1, 0, 1, 0)
+		self.frame = frame
+		local base = compact.ctx
+		local ctx = {}
+		for k, v in pairs(base) do ctx[k] = v end
+		ctx.pointer = {
+			add = function(r, z)
+				r.clip = r.clip or frame
+				if opts.group then r.group = r.group or opts.group end
+				return base.pointer.add(r, z)
+			end,
+			remove = base.pointer.remove,
+		}
+		self.win = { id = id, ctx = ctx, body = frame, open = false, min = false, hosted = true, compact = true,
+			narrow = opts.narrow == true }
+		ctx.win = self.win
+		local ok, obj = pcall(build, compact.ui, frame, self.win)
+		if ok then
+			self.obj = obj
+		else
+			compact.E.errs:report("compact " .. id, obj)
+		end
+		return self
+	end
+	function Host:setOpen(on)
+		on = on == true
+		if self.win.open == on then return end
+		self.win.open = on
+		self.compact.ui.wm:fire(self.id, on)
+	end
+	return Host
+end
+__mods["ui/compact/controls"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local Button = import("ui/kit/button")
+	local Toggle = import("ui/kit/toggle")
+	local Slider = import("ui/kit/slider")
+	local CK = import("ui/compact/kit")
+	local Env = import("platform/env")
+	local Util = import("engine/util")
+	local Controls = {}
+	Controls.__index = Controls
+	local EVERY = 0.1
+	local MODE = { "Idle", "Create", "Test" }
+	local GAP, TOP, ROW = 7, 26, 21
+	local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + 320 + 6, tools = TOP + 24 + 8 }
+	local function column(parent, x)
+		local f = K.frame(x == 0 and "Left" or "Right", parent)
+		f.Position = UDim2.new(x, x == 0 and 0 or 5, 0, 0)
+		f.Size = UDim2.new(0.5, -5, 0, H.run + H.speed + GAP)
+		return f
+	end
+	local function fix(sec, y, h)
+		sec.gui.AutomaticSize = Enum.AutomaticSize.None
+		sec.gui.Position = UDim2.new(0, 0, 0, y)
+		sec.gui.Size = UDim2.new(1, 0, 0, h)
+		sec.body.AutomaticSize = Enum.AutomaticSize.None
+		sec.body.Size = UDim2.new(1, 0, 1, -22)
+		for _, ch in ipairs(sec.body:GetChildren()) do
+			if ch:IsA("UIListLayout") or ch:IsA("UIPadding") then ch:Destroy() end
+		end
+	end
+	function Controls.build(cp)
+		local ui, ctx = cp.ui, cp.ctx
+		local E = ui.E
+		local self = setmetatable({ cp = cp, ui = ui, E = E, values = {}, buttons = {}, labels = {}, last = {}, t = 0, file = "-" }, Controls)
+		local page = cp.pages.controls
+		local pad = Instance.new("UIPadding")
+		pad.PaddingTop, pad.PaddingLeft, pad.PaddingRight = UDim.new(0, 6), UDim.new(0, 6), UDim.new(0, 8)
+		pad.Parent = page
+		self.left, self.right = column(page, 0), column(page, 0.5)
+		local function section(col, title, y, h)
+			local s = CK.section(ctx, col, title)
+			fix(s, y, h)
+			cp.pieces[#cp.pieces + 1] = s
+			return s
+		end
+		self.run = section(self.left, "run", 0, H.run)
+		local function row(key, name, order)
+			local f = K.frame("Row_" .. key, self.run.body)
+			f.Size = UDim2.new(1, -16, 0, 16)
+			f.Position = UDim2.new(0, 8, 0, 4 + (order - 1) * ROW)
+			local l = K.text("TextLabel", "Name", f)
+			l.Text = name
+			l.Size = UDim2.new(0.4, 0, 1, 0)
+			l.TextXAlignment = Enum.TextXAlignment.Left
+			local v = K.text("TextLabel", "Value", f)
+			v.Position = UDim2.new(0.4, 0, 0, 0)
+			v.Size = UDim2.new(0.6, 0, 1, 0)
+			v.TextXAlignment = Enum.TextXAlignment.Right
+			v.TextTruncate = Enum.TextTruncate.AtEnd
+			self.labels[#self.labels + 1] = l
+			self.values[key] = v
+		end
+		row("mode", "Mode", 1)
+		row("frame", "Frame", 2)
+		row("time", "Time", 3)
+		row("file", "File", 4)
+		local brow = K.frame("Buttons", self.run.body)
+		brow.Size = UDim2.new(1, -16, 0, 24)
+		brow.Position = UDim2.new(0, 8, 0, 4 + 4 * ROW)
+		local function button(key, text, parent, x, w, onClick, kind)
+			local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w, h = 22 })
+			b.gui.Position = UDim2.new(x, x > 0 and 2 or 0, 0, 0)
+			b.gui.Size = UDim2.new(w and 0 or 0.333, w or -3, 0, 22)
+			b.onClick = onClick
+			self.buttons[key] = b
+			cp.pieces[#cp.pieces + 1] = b
+			return b
+		end
+		local function request(what) E.modes:request(what) end
+		button("idle", "Idle", brow, 0, nil, function() request("idle") end)
+		button("create", "Create", brow, 0.333, nil, function() request("create") end)
+		button("test", "Test", brow, 0.666, nil, function() if E.tl:count() > 0 then request("test") end end)
+		self.speed = section(self.left, "speed hack", H.run + GAP, H.speed)
+		local s = E.settings
+		local tr = K.frame("Row_speedHack", self.speed.body)
+		tr.Size = UDim2.new(1, -16, 0, 26)
+		tr.Position = UDim2.new(0, 8, 0, 4)
+		local tl = K.text("TextLabel", "Name", tr)
+		tl.Text = "Speed Hack"
+		tl.Size = UDim2.new(0.6, 0, 1, 0)
+		tl.TextXAlignment = Enum.TextXAlignment.Left
+		self.labels[#self.labels + 1] = tl
+		local tog = Toggle.new(ctx, tr)
+		tog.gui.AnchorPoint = Vector2.new(1, 0.5)
+		tog.gui.Position = UDim2.new(1, 0, 0.5, 0)
+		tog.onChange = function(on) s:set("speedHack", on and 1 or 0) end
+		tog:set(s:on("speedHack"))
+		self.speedToggle = tog
+		cp.pieces[#cp.pieces + 1] = tog
+		local sr = K.frame("Row_speedHackSpeed", self.speed.body)
+		sr.Size = UDim2.new(1, -16, 0, 26)
+		sr.Position = UDim2.new(0, 8, 0, 35)
+		local sl = K.text("TextLabel", "Name", sr)
+		sl.Text = "Speed"
+		sl.Size = UDim2.new(0.3, 0, 1, 0)
+		sl.TextXAlignment = Enum.TextXAlignment.Left
+		self.labels[#self.labels + 1] = sl
+		local slider = Slider.new(ctx, sr, { min = 0.1, max = 1, w = 120, fmt = function(v) return string.format("%gx", v) end })
+		slider.gui.AnchorPoint = Vector2.new(1, 0.5)
+		slider.gui.Position = UDim2.new(1, 0, 0.5, 0)
+		slider.onChange = function(x) s:set("speedHackSpeed", x) end
+		slider:set(s:get("speedHackSpeed"))
+		self.speedSlider = slider
+		cp.pieces[#cp.pieces + 1] = slider
+		cp.offs[#cp.offs + 1] = s:changed("speedHack", function(v) tog:set(v == 1) end)
+		cp.offs[#cp.offs + 1] = s:changed("speedHackSpeed", function(v) slider:set(v) end)
+		cp.keysSection.gui.Parent = self.right
+		fix(cp.keysSection, 0, H.keys)
+		cp.keysFrame.Position = UDim2.new(0, 4, 0, 2)
+		cp.keysFrame.Size = UDim2.new(1, -8, 0, 320)
+		self.right.Size = UDim2.new(0.5, -5, 0, H.keys + GAP + H.tools)
+		self.tools = section(self.right, "tools", H.keys + GAP, H.tools)
+		local trow = K.frame("Buttons", self.tools.body)
+		trow.Size = UDim2.new(1, -16, 0, 24)
+		trow.Position = UDim2.new(0, 8, 0, 4)
+		button("profiler", "MicroProfiler", trow, 0, nil, function()
+			s:set("showMicroProfiler", s:on("showMicroProfiler") and 0 or 1)
+		end)
+		self.buttons.profiler.gui.Size = UDim2.new(0.5, -2, 0, 22)
+		button("unload", "Unload HappaTAS", trow, 0.5, nil, function()
+			local h = Env.genv.__HappaTAS3
+			if h and h.Unload then task.spawn(h.Unload) end
+		end)
+		self.buttons.unload.gui.Size = UDim2.new(0.5, -2, 0, 22)
+		cp.offs[#cp.offs + 1] = E.bus:on("persist", function(ev)
+			if ev and ev.ok and (ev.op == "save" or ev.op == "load") and ev.path then
+				self.file = (tostring(ev.path):match("([^/]+)$") or tostring(ev.path)):gsub("%.[^%.]+$", "")
+			end
+		end)
+		local function paint()
+			local th = ui.theme
+			for _, l in ipairs(self.labels) do
+				W.set(l, "FontFace", th.font("text"))
+				W.set(l, "TextSize", th.size(11))
+				W.set(l, "TextColor3", th.c.text2)
+			end
+			for _, v in pairs(self.values) do
+				W.set(v, "FontFace", th.font("number"))
+				W.set(v, "TextSize", th.size(11))
+				W.set(v, "TextColor3", th.c.text)
+			end
+			self.last = {}
+			self:update()
+		end
+		cp.offs[#cp.offs + 1] = ui.theme:changed(paint)
+		cp.offs[#cp.offs + 1] = E.state:watch("mode", function() self:update() end)
+		paint()
+		cp.offs[#cp.offs + 1] = function() self:follow(false) end
+		return self
+	end
+	function Controls:follow(on)
+		if on and not self.off then
+			self.off = self.E.pipe:add("PreRender", 240, "ui.compact", function(dt) self:step(dt) end, "ui")
+			self:update()
+		elseif not on and self.off then
+			self.off()
+			self.off = nil
+		end
+	end
+	function Controls:step(dt)
+		self.t = self.t + (dt or 0)
+		if self.t < EVERY then return end
+		self.t = 0
+		self:update()
+	end
+	local function put(self, gui, prop, v)
+		local key = tostring(gui) .. prop
+		if self.last[key] == v then return end
+		self.last[key] = v
+		W.set(gui, prop, v)
+	end
+	function Controls:update()
+		local E = self.E
+		local tl = E.tl
+		local n = tl and tl:count() or 0
+		local f = math.clamp(E.frame or 0, n > 0 and 1 or 0, n)
+		put(self, self.values.mode, "Text", MODE[E.mode] or "Idle")
+		put(self, self.values.frame, "Text", string.format("%d / %d", f, n))
+		put(self, self.values.time, "Text", n > 0 and Util.toTime(tl:get("TotalTime", math.max(1, f), 1)) or "0:00.000")
+		put(self, self.values.file, "Text", self.file)
+		local status, rec = MODE[E.mode] or "Idle", false
+		if E.mode == 2 then
+			rec = not E.paused
+			status = "Create - " .. (rec and "recording" or "paused")
+		end
+		local chip = self.cp.status
+		put(self, chip.label, "Text", status)
+		local th = self.ui.theme
+		local color = rec and th.c.rec or nil
+		if self.lastColor ~= (color or false) then
+			self.lastColor = color or false
+			chip:setColor(color)
+		end
+	end
+	return Controls
+end
+__mods["ui/compact/compact"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local Field = import("ui/kit/field")
+	local CK = import("ui/compact/kit")
+	local CONFIG = import("config")
+	local Host = import("ui/compact/host")
+	local Controls = import("ui/compact/controls")
+	local SettingsWin = import("ui/win/settings")
+	local HelpWin = import("ui/win/help")
+	local AboutWin = import("ui/win/about")
+	local ControlsWin = import("ui/win/controls")
+	local LibraryWin = import("ui/win/library")
+	local InspectorWin = import("ui/win/inspector")
+	local Compact = {}
+	Compact.__index = Compact
+	Compact.W, Compact.H, Compact.MIN_W, Compact.MIN_H = 700, 500, 560, 400
+	Compact.TITLE_H = 28
+	Compact.LIB_W, Compact.INS_W, Compact.GAP = 320, 260, 8
+	Compact.TABS = { "controls", "settings", "help", "about" }
+	local Z = 20
+	function Compact.new(ui)
+		local self = setmetatable({ ui = ui, E = ui.E, live = false, folded = false, tab = "controls", rects = {}, offs = {},
+			pieces = {}, pages = {}, tabs = {}, panels = {}, hosted = {} }, Compact)
+		local th = ui.theme
+		self.ctx = { E = ui.E, ui = ui, theme = th, tween = ui.tween, typing = ui.E.typing,
+			pointer = { add = function(r, z) return self:addRect(r, 10 + (z or 0)) end, remove = function(r) self:removeRect(r) end } }
+		local gui = K.frame("HappaTASCompact", ui.root.layer, Color3.new(0, 0, 0))
+		gui.Visible = false
+		gui.ZIndex = 0
+		gui.Active = true
+		self.gui = gui
+		self.stroke = K.stroke(gui, Color3.new(1, 1, 1), 0, 1)
+		self.line = CK.accentLine(gui)
+		self:addRect({ gui = gui }, 0)
+		self:buildTitleBar()
+		self:buildBody()
+		self.controls = Controls.build(self)
+		self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
+		self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
+		self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
+		self.offs[#self.offs + 1] = ui.wm:screenChanged(function() self:place(self.x, self.y, self.w, self.h) end)
+		self.offs[#self.offs + 1] = ui.wm:changed(function(id, open)
+			if id == "merge" and open and self.panels.library.open then self:setPanel("library", false) end
+		end)
+		self.search.onInput = function(t)
+			if self.tab ~= "settings" then self:showTab("settings") end
+			local h = self:host("settings")
+			if h and h.obj and h.obj.setQuery then h.obj.setQuery(t or "") end
+		end
+		self:paint()
+		self:load()
+		return self
+	end
+	function Compact:addRect(r, z)
+		r.z = Z + (z or 0)
+		r.group = r.group or self.gui
+		self.rects[#self.rects + 1] = r
+		self.ui.pointer:add(r)
+		return r
+	end
+	function Compact:removeRect(r)
+		local i = table.find(self.rects, r)
+		if i then table.remove(self.rects, i) end
+		self.ui.pointer:remove(r)
+	end
+	function Compact:buildTitleBar()
+		local ctx = self.ctx
+		local bar = K.frame("TitleBar", self.gui, Color3.new(0, 0, 0))
+		bar.Position = UDim2.new(0, 0, 0, 2)
+		bar.Size = UDim2.new(1, 0, 0, Compact.TITLE_H)
+		bar.ZIndex = 2
+		self.titleBar = bar
+		local sep = K.frame("Separator", bar, Color3.new(0, 0, 0))
+		sep.AnchorPoint = Vector2.new(0, 1)
+		sep.Position = UDim2.new(0, 0, 1, 0)
+		sep.Size = UDim2.new(1, 0, 0, 1)
+		self.sep = sep
+		local name = K.text("TextLabel", "Name", bar)
+		name.Text = "HAPPATAS"
+		name.Position = UDim2.new(0, 8, 0, 0)
+		name.Size = UDim2.new(0, 78, 1, 0)
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		K.stroke(name, Color3.new(0, 0, 0), 0, 1)
+		self.name = name
+		local function chip(text, x, w, opts)
+			local c = CK.chip(ctx, bar, text, opts)
+			c.gui.Position = UDim2.new(x < 0 and 1 or 0, x, 0, 5)
+			c.gui.Size = UDim2.new(0, w, 0, 18)
+			c.gui.ZIndex = 3
+			self.pieces[#self.pieces + 1] = c
+			return c
+		end
+		self.version = chip("V" .. CONFIG.VERSION, 90, 56, { bold = false })
+		self.libraryChip = chip("LIBRARY", 154, 64, { button = true, onClick = function() self:setPanel("library", not self.panels.library.open) end })
+		self.inspectorChip = chip("INSPECTOR", 224, 74, { button = true, onClick = function() self:setPanel("inspector", not self.panels.inspector.open) end })
+		self.status = chip("Idle", -154, 118, { bold = false })
+		self.status.label.TextXAlignment = Enum.TextXAlignment.Left
+		self.status.label.Position = UDim2.new(0, 6, 0, 0)
+		self.minimise = chip("_", -30, 22, { button = true, onClick = function() self:setFolded(not self.folded) end })
+		local search = Field.new(ctx, bar, { w = 160, placeholder = "search settings..." })
+		search.gui.Position = UDim2.new(1, -322, 0, 5)
+		search.gui.Size = UDim2.new(0, 160, 0, 18)
+		search.gui.ZIndex = 3
+		self.search = search
+		self.pieces[#self.pieces + 1] = search
+		local from = nil
+		self:addRect({ gui = bar,
+			onPress = function() from = Vector2.new(self.x, self.y) end,
+			onDrag = function(_, d)
+				if not from then return end
+				local p = from + d / self.ui.root.scale.Scale
+				self:place(p.X, p.Y, self.w, self.h)
+			end,
+			onRelease = function() if from then from = nil; self:save() end end }, 1)
+	end
+	function Compact:buildBody()
+		local ctx = self.ctx
+		local inline = K.frame("Inline", self.gui, Color3.new(0, 0, 0))
+		inline.Position = UDim2.new(0, 7, 0, Compact.TITLE_H + 6)
+		inline.Size = UDim2.new(1, -14, 1, -(Compact.TITLE_H + 13))
+		inline.ZIndex = 1
+		self.inline = inline
+		self.inlineStroke = CK.border(inline)
+		for i, id in ipairs(Compact.TABS) do
+			local t = CK.tab(ctx, inline, id, function() self:showTab(id) end)
+			t.gui.Position = UDim2.new(0, 7 + (i - 1) * 95, 0, 7)
+			t.gui.ZIndex = 2
+			self.tabs[id] = t
+			self.pieces[#self.pieces + 1] = t
+		end
+		local content = K.frame("Content", inline, Color3.new(0, 0, 0))
+		content.Position = UDim2.new(0, 7, 0, 34)
+		content.Size = UDim2.new(1, -14, 1, -41)
+		content.ClipsDescendants = true
+		content.ZIndex = 1
+		self.content = content
+		self.contentStroke = CK.border(content)
+		for _, id in ipairs(Compact.TABS) do
+			local page = Instance.new(id == "controls" and "ScrollingFrame" or "Frame")
+			page.Name = "Page_" .. id
+			page.BackgroundTransparency = 1
+			page.BorderSizePixel = 0
+			page.Size = UDim2.new(1, 0, 1, 0)
+			if id == "controls" then
+				page.ScrollBarThickness = 2
+				page.CanvasSize = UDim2.new(0, 0, 0, 0)
+				page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+			end
+			page.Visible = id == self.tab
+			page.ZIndex = 2
+			page.Parent = content
+			self.pages[id] = page
+		end
+		local grip = K.frame("Grip", self.gui)
+		grip.AnchorPoint = Vector2.new(1, 1)
+		grip.Position = UDim2.new(1, -2, 1, -2)
+		grip.Size = UDim2.new(0, 14, 0, 14)
+		grip.ZIndex = 6
+		for i, p in ipairs({ { 10, 4 }, { 10, 10 }, { 4, 10 } }) do
+			local g = K.frame("G" .. i, grip, Color3.new(1, 1, 1))
+			g.Size = UDim2.new(0, 2, 0, 2)
+			g.Position = UDim2.new(0, p[1], 0, p[2])
+			g.BackgroundTransparency = 0.3
+			g.ZIndex = 6
+		end
+		self.grip = grip
+		local keys = CK.section(ctx, self.pages.controls, "keys")
+		keys.gui.Size = UDim2.new(1, -4, 0, 0)
+		self.pieces[#self.pieces + 1] = keys
+		local kf = K.frame("Keys", keys.body)
+		kf.Size = UDim2.new(1, 0, 0, 320)
+		self.keysSection, self.keysFrame = keys, kf
+		local start = nil
+		self:addRect({ gui = grip,
+			onPress = function() start = Vector2.new(self.w, self.h) end,
+			onDrag = function(_, d)
+				if not start then return end
+				local s = d / self.ui.root.scale.Scale
+				self:place(self.x, self.y, start.X + s.X, start.Y + s.Y)
+			end,
+			onRelease = function() if start then start = nil; self:save() end end }, 6)
+	end
+	function Compact:buildPanel(id, title, width, side)
+		local gui = K.frame("Panel_" .. id, self.gui, Color3.new(0, 0, 0))
+		gui.Size = UDim2.new(0, width, 1, 0)
+		gui.Position = side < 0 and UDim2.new(0, -width - Compact.GAP, 0, 0) or UDim2.new(1, Compact.GAP, 0, 0)
+		gui.Visible = false
+		gui.Active = true
+		gui.ZIndex = 0
+		local stroke = K.stroke(gui, Color3.new(1, 1, 1), 0, 1)
+		local line = CK.accentLine(gui)
+		local bar = K.frame("TitleBar", gui, Color3.new(0, 0, 0))
+		bar.Position = UDim2.new(0, 0, 0, 2)
+		bar.Size = UDim2.new(1, 0, 0, 22)
+		local name = K.text("TextLabel", "Name", bar)
+		name.Text = title
+		name.Position = UDim2.new(0, 8, 0, 0)
+		name.Size = UDim2.new(1, -16, 1, 0)
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		K.stroke(name, Color3.new(0, 0, 0), 0, 1)
+		local body = K.frame("Body", gui)
+		body.Position = UDim2.new(0, 4, 0, 28)
+		body.Size = UDim2.new(1, -8, 1, -32)
+		body.ClipsDescendants = true
+		local p = { id = id, gui = gui, body = body, open = false, width = width, side = side, stroke = stroke, line = line,
+			bar = bar, name = name }
+		self.panels[id] = p
+		self:addRect({ gui = gui, group = gui }, 0)
+		return p
+	end
+	function Compact:paint()
+		local th = self.ui.theme
+		local s = th.shades
+		if not s then return end
+		W.set(self.gui, "BackgroundColor3", s.window)
+		W.set(self.stroke, "Color", th.c.accent)
+		W.set(self.line, "BackgroundColor3", th.c.accent)
+		W.set(self.titleBar, "BackgroundColor3", s.deep)
+		W.set(self.sep, "BackgroundColor3", s.outline)
+		W.set(self.name, "FontFace", th.font("bold"))
+		W.set(self.name, "TextSize", th.size(13))
+		W.set(self.name, "TextColor3", th.c.accent)
+		W.set(self.inline, "BackgroundColor3", s.inline)
+		CK.paintBorder(self.inline, self.inlineStroke, th)
+		W.set(self.content, "BackgroundColor3", s.deep)
+		CK.paintBorder(self.content, self.contentStroke, th)
+		W.set(self.pages.controls, "ScrollBarImageColor3", th.c.accent)
+		for _, p in pairs(self.panels) do
+			W.set(p.gui, "BackgroundColor3", s.window)
+			W.set(p.stroke, "Color", th.c.accent)
+			W.set(p.line, "BackgroundColor3", th.c.accent)
+			W.set(p.bar, "BackgroundColor3", s.deep)
+			W.set(p.name, "FontFace", th.font("bold"))
+			W.set(p.name, "TextSize", th.size(11))
+			W.set(p.name, "TextColor3", th.c.accent)
+		end
+	end
+	function Compact:shownH() return self.folded and (Compact.TITLE_H + 2) or self.h end
+	function Compact:place(x, y, w, h)
+		local sw, sh, top = self.ui.wm:screen()
+		w = math.max(Compact.MIN_W, math.min(w or Compact.W, sw))
+		h = math.max(Compact.MIN_H, math.min(h or Compact.H, sh - top))
+		if type(x) ~= "number" then x = (sw - w) / 2 end
+		if type(y) ~= "number" then y = top + (sh - top - h) / 2 end
+		local lib, ins = self.panels.library, self.panels.inspector
+		local left = (lib and lib.open and not self.folded) and (lib.width + Compact.GAP) or 0
+		local right = (ins and ins.open and not self.folded) and (ins.width + Compact.GAP) or 0
+		if left + w + right > sw then left, right = 0, 0 end
+		x = math.max(left, math.min(x, sw - w - right))
+		y = math.max(top, math.min(y, sh - (self.folded and (Compact.TITLE_H + 2) or h)))
+		self.x, self.y, self.w, self.h = x, y, w, h
+		W.set(self.gui, "Position", UDim2.new(0, x, 0, y))
+		W.set(self.gui, "Size", UDim2.new(0, w, 0, self:shownH()))
+		for _, p in pairs(self.panels) do W.set(p.gui, "Size", UDim2.new(0, p.width, 0, h)) end
+	end
+	function Compact:applyVisible()
+		local on = self.live
+		W.set(self.gui, "Visible", on)
+		W.set(self.inline, "Visible", not self.folded)
+		W.set(self.grip, "Visible", not self.folded)
+		for _, p in pairs(self.panels) do W.set(p.gui, "Visible", on and p.open and not self.folded) end
+		W.set(self.gui, "Size", UDim2.new(0, self.w or Compact.W, 0, self:shownH()))
+	end
+	function Compact:setLive(on)
+		self.live = on == true
+		self:applyVisible()
+		self:syncHosted()
+		if self.controls then self.controls:follow(self.live) end
+	end
+	function Compact:hostSpec(id)
+		local p = self.pages
+		if id == "settings" then return SettingsWin.build, p.settings end
+		if id == "help" then return HelpWin.build, p.help end
+		if id == "about" then return AboutWin.build, p.about end
+		if id == "controls" then return ControlsWin.build, self.keysFrame end
+		if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
+		if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
+		return nil
+	end
+	function Compact:host(id)
+		local h = self.hosted[id]
+		if h then return h end
+		local build, parent, opts = self:hostSpec(id)
+		if not (build and parent) then return nil end
+		h = Host.new(self, id, build, parent, opts)
+		self.hosted[id] = h
+		if self.E.typing and h.frame then self.E.typing:watch(h.frame) end
+		return h
+	end
+	function Compact:syncHosted()
+		local shown = self.live and not self.folded
+		for _, id in ipairs(Compact.TABS) do
+			if self.hosted[id] or (shown and self.tab == id) then
+				local h = self:host(id)
+				if h then h:setOpen(shown and self.tab == id) end
+			end
+		end
+		for id, p in pairs(self.panels) do
+			if self.hosted[id] or (shown and p.open) then
+				local h = self:host(id)
+				if h then h:setOpen(shown and p.open) end
+			end
+		end
+	end
+	function Compact:endTyping()
+		local h = self.hosted.controls
+		if h and h.obj and h.obj.stopWaiting then h.obj.stopWaiting() end
+	end
+	function Compact:showTab(id)
+		if not self.pages[id] then return end
+		self.tab = id
+		for name, page in pairs(self.pages) do W.set(page, "Visible", name == id) end
+		for name, t in pairs(self.tabs) do t:setActive(name == id) end
+		self:syncHosted()
+		if self.onTab then self.onTab(id) end
+		self:save()
+	end
+	function Compact:setPanel(id, on)
+		local p = self.panels[id]
+		if not p then return end
+		p.open = on == true
+		if p.open and self.folded then self:setFolded(false) end
+		if self.x then self:place(self.x, self.y, self.w, self.h) end
+		self:applyVisible()
+		self:syncHosted()
+		if self.onPanel then self.onPanel(id, p.open) end
+		if id == "library" then self:save() end
+	end
+	function Compact:setFolded(on)
+		self.folded = on == true
+		self:place(self.x, self.y, self.w, self.h)
+		self:applyVisible()
+		self:syncHosted()
+		self.ui:updateModal()
+		self:save()
+	end
+	function Compact:modal() return self.live and not self.folded and not self.ui.wm:isOpen("merge") end
+	function Compact:pointerOver() return self.live and self.ui.pointer ~= nil and self.ui.pointer:busy() end
+	function Compact:load()
+		local sf = self.E.settingsFile
+		local t = sf and sf:getUi().compact or {}
+		self.folded = t.folded == true
+		self.panels.library.open = t.library == true
+		self:place(t.x, t.y, t.w, t.h)
+		local tab = (type(t.tab) == "string" and self.pages[t.tab]) and t.tab or "controls"
+		self.tab = tab
+		for name, page in pairs(self.pages) do page.Visible = name == tab end
+		for name, tb in pairs(self.tabs) do tb:setActive(name == tab) end
+		self:applyVisible()
+	end
+	function Compact:save()
+		local sf = self.E.settingsFile
+		if not sf or not self.x then return end
+		local data = sf:getUi()
+		data.compact = { x = self.x, y = self.y, w = self.w, h = self.h, tab = self.tab, library = self.panels.library.open,
+			folded = self.folded }
+		sf:setUi(data)
+	end
+	function Compact:destroy()
+		if self.dead then return end
+		self.dead = true
+		for _, off in ipairs(self.offs) do pcall(off) end
+		for _, pc in ipairs(self.pieces) do pcall(function() pc:destroy() end) end
+		for _, r in ipairs(self.rects) do self.ui.pointer:remove(r) end
+		self.rects = {}
+		pcall(function() self.gui:Destroy() end)
+	end
+	return Compact
+end
 __mods["ui/app"] = function(import)
 	local Env = import("platform/env")
 	local W = import("ui/write")
@@ -21129,6 +21997,7 @@ __mods["ui/app"] = function(import)
 	local HelpWin = import("ui/win/help")
 	local AboutWin = import("ui/win/about")
 	local Classic = import("ui/classic/classic")
+	local Compact = import("ui/compact/compact")
 	local Touch = import("ui/touch")
 	local UI = {}
 	UI.__index = UI
@@ -21188,7 +22057,8 @@ __mods["ui/app"] = function(import)
 		self:setInterface(E.settings:get("interface"))
 		return self
 	end
-	function UI:newActive() return self.live == "New" and self.shown end
+	function UI:newActive() return (self.live == "New" or self.live == "Compact") and self.shown end
+	function UI:isCompact() return self.live == "Compact" end
 	function UI:liveShown()
 		if self.live == "Classic" then return self.classic ~= nil and self.classic.shown end
 		return self.shown
@@ -21200,13 +22070,19 @@ __mods["ui/app"] = function(import)
 		E.typing.own = nil
 		if self.controlsWin and self.controlsWin.stopWaiting then self.controlsWin.stopWaiting() end
 		if self.classic and self.classic.stopWaiting then self.classic.stopWaiting() end
+		if self.compact then self.compact:endTyping() end
 		E.typing.rebinding = false
 	end
 	function UI:setInterface(name)
-		if name ~= "Classic" then name = "New" end
+		if name ~= "Classic" and name ~= "Compact" then name = "New" end
 		if self.classicOnly then name = "Classic" end
-		if name == self.live and (name == "New" or self.classic) then return end
+		if name == self.live and (name ~= "Classic" or self.classic) then return end
 		self:endTyping()
+		if name == "Compact" and not self.compact then
+			self.compact = Compact.new(self)
+			local cp = self.compact
+			self.life:own(function() cp:destroy() end)
+		end
 		if name == "Classic" and not self.classic then
 			self.classic = Classic.new(self)
 			local c = self.classic
@@ -21214,6 +22090,10 @@ __mods["ui/app"] = function(import)
 			self.E.typing:watch(c.gui)
 		end
 		self.live = name
+		if self.wm then self.wm:setHideAll(name == "Compact") end
+		if self.dock then W.set(self.dock.gui, "Visible", name ~= "Compact") end
+		if self.theme then self.theme:setCompact(name == "Compact") end
+		if self.compact then self.compact:setLive(name == "Compact") end
 		self:applyShown()
 		if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
 		if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
@@ -21234,6 +22114,8 @@ __mods["ui/app"] = function(import)
 	function UI:updateModal()
 		if self.live == "Classic" then
 			self.modal = self.classic ~= nil and self.classic:modal()
+		elseif self.live == "Compact" then
+			self.modal = self.shown and self.compact ~= nil and self.compact:modal()
 		else
 			self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()
 		end

@@ -84,12 +84,12 @@ function Sounds.new(ui)
 	return self
 end
 
--- plays one sound (only the New interface, only with Interface sounds on)
+-- plays one sound (the New or the Compact interface, only with Interface sounds on)
 function Sounds:play(name)
 	local snd = self.sounds[name]
 	if not snd then return end
 	local s = self.E.settings
-	if not s:on("uiSounds") or self.ui.live ~= "New" then return end
+	if not s:on("uiSounds") or (self.ui.live ~= "New" and self.ui.live ~= "Compact") then return end
 	self.last = name
 	pcall(function()
 		snd.Volume = math.clamp((tonumber(s:get("uiSoundVolume")) or 50) / 100, 0, 1)

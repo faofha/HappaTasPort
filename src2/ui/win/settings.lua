@@ -255,7 +255,8 @@ function SettingsWin.build(ui, body, win)
 			end
 		end
 		for _, def in ipairs(Settings.SCHEMA) do
-			if def.section == secName and not BEZIER[def.key] and not def.hidden then
+			-- (hosted by Compact: the New interface's own look rows aren't shown, V3.1)
+			if def.section == secName and not BEZIER[def.key] and not def.hidden and not (win.compact and def.newOnly) then
 				local ctl, kind = controlFor(lctx, s, def, sw)
 				local row = Row.new(lctx, list, { name = def.name, desc = def.desc, control = ctl })
 				local r = { row = row, ctl = ctl, kind = kind, def = def }
@@ -310,11 +311,20 @@ function SettingsWin.build(ui, body, win)
 			end
 			W.set(sec.header, "Visible", any)
 		end
-		local curve = s:get("easing") == "Custom" and sw.rows.easing.row.gui.Visible
-		W.set(sw.bezier.gui, "Visible", curve)
+		-- (hosted by Compact there are no easing rows and no curve editor: the New interface's look only)
+		if sw.bezier and sw.rows.easing then
+			local curve = s:get("easing") == "Custom" and sw.rows.easing.row.gui.Visible
+			W.set(sw.bezier.gui, "Visible", curve)
+		end
 		relayout()
 	end
 	search.onInput = function(t) query = t; filter() end
+	-- (Compact's title-bar search, V3.1: the same filter from outside)
+	function sw.setQuery(t)
+		query = t or ""
+		search:set(query)
+		filter()
+	end
 	-- (the Glass row says when Frost can't be used here)
 	local function frostNote()
 		local r = sw.rows.glass

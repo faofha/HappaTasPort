@@ -75,7 +75,10 @@ function Glass:restyle()
 	W.set(self.panel, "BackgroundTransparency", t)
 	W.set(self.corner, "CornerRadius", UDim.new(0, r))
 	W.set(self.rim, "Transparency", th.t.rim)
-	W.set(self.shadow, "Visible", th.E.settings:on("shadows"))
+	W.set(self.rim, "Color", th.c.rim or Color3.new(1, 1, 1))
+	-- (Compact: solid and square, no shadow)
+	if th.compact then W.set(self.panel, "BackgroundTransparency", 0) end
+	W.set(self.shadow, "Visible", th.E.settings:on("shadows") and not th.compact)
 	for _, sc in ipairs(self.shadowCorners) do W.set(sc.c, "CornerRadius", UDim.new(0, r + sc.grow)) end
 end
 

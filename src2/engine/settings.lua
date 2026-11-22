@@ -28,33 +28,39 @@ Settings.FONTS = { "BuilderSans", "GothamSSm", "SourceSansPro", "Roboto", "Monts
 local EASINGS = { "Preset", "Linear", "Sine", "Quad", "Cubic", "Quart", "Quint", "Exponential", "Circular", "Back", "Elastic",
 	"Bounce", "Custom" }
 local function look(key, default, extra, desc) return row(key, nil, "Appearance", default, with(extra, desc)) end
+-- (an Appearance row only the New interface uses: not shown in Compact, V3.1)
+local function lookNew(key, default, extra, desc)
+	local r = look(key, default, extra, desc)
+	r.newOnly = true
+	return r
+end
 
 Settings.SCHEMA = {
 	look("theme", "Default", { kind = "text" }, "Save your look and switch between saved looks"),
-	look("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
-	look("glassColor", "#232B26", color(), "The colour of the windows' glass"),
-	look("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
-	look("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
-	look("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
+	lookNew("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
+	lookNew("glassColor", "#232B26", color(), "The colour of the windows' glass"),
+	lookNew("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
+	lookNew("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
+	lookNew("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
 	look("accentColor", "#3FB950", color(), "Switches, sliders and main buttons"),
 	look("textColor", "#FFFFFF", color(), "The interface's text"),
 	look("secondaryTextColor", "#B4BBC8", color(), "Explanations and other quieter text"),
 	look("recordingColor", "#FF5A5A", color(), "Shown while recording"),
-	look("font", "BuilderSans", choice(Settings.FONTS), "The interface's text font"),
-	look("numberFont", "RobotoMono", choice(Settings.FONTS), "The font for numbers"),
+	lookNew("font", "BuilderSans", choice(Settings.FONTS), "The interface's text font"),
+	lookNew("numberFont", "RobotoMono", choice(Settings.FONTS), "The font for numbers"),
 	look("textSize", 13, num(8, 24, true), "Click the number to type a value"),
 	look("interfaceScale", 100, num(50, 200, true), "The size of the whole interface"),
-	look("windowCorners", 16, num(0, 24, true), "How round the windows' corners are"),
-	look("buttonShape", "Pill", choice({ "Pill", "Rounded", "Square" }), "The corners of buttons and fields"),
-	look("shadows", 1, { kind = "toggle" }, "Soft shadows under the windows"),
-	look("animations", "Smooth", choice({ "Off", "Smooth", "Snappy", "Bouncy" }), "How the interface moves"),
-	look("animationLength", 0.2, num(0.05, 1), "How long a move takes, in seconds"),
-	look("easing", "Preset", choice(EASINGS), "The curve moves follow (Preset: the Animations style)"),
-	look("easingDirection", "Out", choice({ "In", "Out", "InOut" }), "Where the curve speeds up or slows down"),
-	look("bezierX1", 0.25, num(0, 1), "Custom curve: first handle x"),
-	look("bezierY1", 0.1, num(-1, 2), "Custom curve: first handle y"),
-	look("bezierX2", 0.25, num(0, 1), "Custom curve: second handle x"),
-	look("bezierY2", 1, num(-1, 2), "Custom curve: second handle y"),
+	lookNew("windowCorners", 16, num(0, 24, true), "How round the windows' corners are"),
+	lookNew("buttonShape", "Pill", choice({ "Pill", "Rounded", "Square" }), "The corners of buttons and fields"),
+	lookNew("shadows", 1, { kind = "toggle" }, "Soft shadows under the windows"),
+	lookNew("animations", "Smooth", choice({ "Off", "Smooth", "Snappy", "Bouncy" }), "How the interface moves"),
+	lookNew("animationLength", 0.2, num(0.05, 1), "How long a move takes, in seconds"),
+	lookNew("easing", "Preset", choice(EASINGS), "The curve moves follow (Preset: the Animations style)"),
+	lookNew("easingDirection", "Out", choice({ "In", "Out", "InOut" }), "Where the curve speeds up or slows down"),
+	lookNew("bezierX1", 0.25, num(0, 1), "Custom curve: first handle x"),
+	lookNew("bezierY1", 0.1, num(-1, 2), "Custom curve: first handle y"),
+	lookNew("bezierX2", 0.25, num(0, 1), "Custom curve: second handle x"),
+	lookNew("bezierY2", 1, num(-1, 2), "Custom curve: second handle y"),
 
 	row("lockCameraTest", "Lock Camera (Test)", "Playback", 1, { desc = "The camera follows the recorded camera while testing" }),
 	row("interpolatePlayback", "Interpolate Playback", "Playback", 1, { desc = "Blends between frames for smooth playback" }),
@@ -99,8 +105,8 @@ Settings.SCHEMA = {
 
 	-- (a choice of two: a pill in the New interface's Settings window, in Classic a box that goes to the next
 	-- choice when it is clicked)
-	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic" },
-		desc = "New: HappaTAS 3's interface. Classic: V2's" }),
+	row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic", "Compact" },
+		desc = "New: HappaTAS 3's interface. Classic: V2's. Compact: one window with tabs" }),
 	row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 	row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 	row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
