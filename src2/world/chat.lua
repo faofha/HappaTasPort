@@ -96,6 +96,8 @@ function Chat:apply(e)
 	self.E.typing.chatReplay = b -- (the bar Typing:active() doesn't count as the player typing)
 	if not b:IsFocused() then b:CaptureFocus() end
 	if b.Text ~= text then b.Text = text end
+	-- (a Text set by a script leaves the text cursor where it was: at the start, live; put it after the last letter)
+	if b.CursorPosition ~= #text + 1 then b.CursorPosition = #text + 1 end
 	if kind == 1 then
 		b:ReleaseFocus(true)
 		self:release(false)

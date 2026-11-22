@@ -88,6 +88,7 @@ req("pause")
 req("idle")
 check(fSend > fOpen + 1, "a run with chat (" .. fOpen .. " .. " .. fSend .. ")")
 
+local caretOff = 0 -- (frames where the text cursor wasn't after the last letter while Test typed)
 -- plays Test to the end (or until stopAt(frame) is true); returns sends, texts seen, frame of the send
 local function playTest(stopAt)
 	local s0 = #M.chatSent
@@ -95,7 +96,10 @@ local function playTest(stopAt)
 	req("test")
 	for _ = 1, tl:count() * 4 + 60 do
 		if E.mode ~= 3 then break end
-		if box.Text ~= "" then seen[box.Text] = true end
+		if box.Text ~= "" then
+			seen[box.Text] = true
+			if box.CursorPosition ~= #box.Text + 1 then caretOff = caretOff + 1 end
+		end
 		if not sentAt and #M.chatSent > s0 then sentAt = E.frame end
 		if stopAt and stopAt() then break end
 		M.step(1 / 60)
@@ -111,6 +115,7 @@ eq(M.chatSent[#M.chatSent], "/e dance2", "the recorded text")
 check(seen["/e"] and seen["/e dance2"], "the text grew in the bar")
 check(at and math.abs(at - fSend) <= 1, "on the send frame (" .. tostring(at) .. " vs " .. fSend .. ")")
 check(not box:IsFocused() and box.Text == "", "the bar is closed and empty after")
+eq(caretOff, 0, "the text cursor follows the typing (after the last letter)")
 
 section("skipped frames: Playback Speed 10")
 E.settings:set("playbackSpeed", 10)
