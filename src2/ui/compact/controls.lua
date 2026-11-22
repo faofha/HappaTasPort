@@ -9,9 +9,7 @@
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
-local Button = import("ui/kit/button")
-local Toggle = import("ui/kit/toggle")
-local Slider = import("ui/kit/slider")
+local Parts = import("ui/compact/parts")
 local CK = import("ui/compact/kit")
 local Env = import("platform/env")
 local Util = import("engine/util")
@@ -85,11 +83,10 @@ function Controls.build(cp)
 	local brow = K.frame("Buttons", self.run.body)
 	brow.Size = UDim2.new(1, -16, 0, 24)
 	brow.Position = UDim2.new(0, 8, 0, 4 + 4 * ROW)
-	local function button(key, text, parent, x, w, onClick, kind)
-		local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w, h = 22 })
+	local function button(key, text, parent, x, w, onClick)
+		local b = Parts.button(ctx, parent, text, { onClick = onClick })
 		b.gui.Position = UDim2.new(x, x > 0 and 2 or 0, 0, 0)
 		b.gui.Size = UDim2.new(w and 0 or 0.333, w or -3, 0, 22)
-		b.onClick = onClick
 		self.buttons[key] = b
 		cp.pieces[#cp.pieces + 1] = b
 		return b
@@ -101,18 +98,9 @@ function Controls.build(cp)
 	-- SPEED HACK
 	self.speed = section(self.left, "speed hack", H.run + GAP, H.speed)
 	local s = E.settings
-	local tr = K.frame("Row_speedHack", self.speed.body)
-	tr.Size = UDim2.new(1, -16, 0, 26)
-	tr.Position = UDim2.new(0, 8, 0, 4)
-	local tl = K.text("TextLabel", "Name", tr)
-	tl.Text = "Speed Hack"
-	tl.Size = UDim2.new(0.6, 0, 1, 0)
-	tl.TextXAlignment = Enum.TextXAlignment.Left
-	self.labels[#self.labels + 1] = tl
-	local tog = Toggle.new(ctx, tr)
-	tog.gui.AnchorPoint = Vector2.new(1, 0.5)
-	tog.gui.Position = UDim2.new(1, 0, 0.5, 0)
-	tog.onChange = function(on) s:set("speedHack", on and 1 or 0) end
+	local tog = Parts.checkbox(ctx, self.speed.body, "Speed Hack", { onChange = function(on) s:set("speedHack", on and 1 or 0) end })
+	tog.gui.Size = UDim2.new(1, -16, 0, 18)
+	tog.gui.Position = UDim2.new(0, 8, 0, 6)
 	tog:set(s:on("speedHack"))
 	self.speedToggle = tog
 	cp.pieces[#cp.pieces + 1] = tog
@@ -124,10 +112,11 @@ function Controls.build(cp)
 	sl.Size = UDim2.new(0.3, 0, 1, 0)
 	sl.TextXAlignment = Enum.TextXAlignment.Left
 	self.labels[#self.labels + 1] = sl
-	local slider = Slider.new(ctx, sr, { min = 0.1, max = 1, w = 120, fmt = function(v) return string.format("%gx", v) end })
+	local slider = Parts.slider(ctx, sr, { min = 0.1, max = 1, fmt = function(v) return string.format("%.2fx", v) end,
+		onChange = function(x) s:set("speedHackSpeed", math.floor(x * 100 + 0.5) / 100) end })
 	slider.gui.AnchorPoint = Vector2.new(1, 0.5)
 	slider.gui.Position = UDim2.new(1, 0, 0.5, 0)
-	slider.onChange = function(x) s:set("speedHackSpeed", x) end
+	slider.gui.Size = UDim2.new(0.7, 0, 0, 22)
 	slider:set(s:get("speedHackSpeed"))
 	self.speedSlider = slider
 	cp.pieces[#cp.pieces + 1] = slider

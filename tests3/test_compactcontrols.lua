@@ -70,6 +70,23 @@ eq(s:get("speedHackSpeed"), 0.3, "the slider sets the speed")
 s:set("speedHackSpeed", 0.7)
 M.steps(1)
 eq(c.speedSlider.value, 0.7, "and follows the setting")
+check(c.speedToggle.box ~= nil and c.speedToggle.tick ~= nil, "the speed hack switch is a Tasability checkbox (V3.1)")
+eq(c.speedToggle.value, true, "ticked")
+check(c.speedSlider.track ~= nil and c.speedSlider.knob ~= nil, "the speed is a Tasability slider")
+local tr = c.speedSlider.track
+UIH.click(tr.AbsolutePosition + Vector2.new(tr.AbsoluteSize.X / 2, 3))
+near(s:get("speedHackSpeed"), 0.55, 0.01, "a click at the track's middle: 0.55")
+eq(c.speedSlider.valueLabel.Text, "0.55x", "shown as 0.55x")
+local roundedButtons = {}
+for name, b in pairs(c.buttons) do
+	for _, d in ipairs(b.gui:GetDescendants()) do
+		if d:IsA("UICorner") and d.CornerRadius.Offset > 0 then roundedButtons[#roundedButtons + 1] = name end
+	end
+	local cr = b.gui:FindFirstChildOfClass("UICorner")
+	if cr and cr.CornerRadius.Offset > 0 then roundedButtons[#roundedButtons + 1] = name end
+end
+eq(#roundedButtons, 0, "square Tasability buttons (" .. table.concat(roundedButtons, ", ") .. ")")
+check(c.buttons.create.gui:FindFirstChildOfClass("UIGradient") ~= nil, "with the soft shine")
 s:set("speedHack", 0)
 
 section("TOOLS")
