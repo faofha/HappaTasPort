@@ -31,6 +31,7 @@ local function num(v)
 	if v == math.floor(v) then return tostring(v) end
 	return (string.format("%.2f", v):gsub("0+$", ""):gsub("%.$", ""))
 end
+SettingsWin.num = num -- (shared with the Tasability SETTINGS page, V3.1)
 
 local function fmtFor(key)
 	if PERCENT[key] then return function(v) return num(v) .. "%" end end
@@ -43,6 +44,7 @@ local function isDefault(def, v)
 	if type(v) == "number" and type(def.default) == "number" then return math.abs(v - def.default) < 1e-9 end
 	return v == def.default
 end
+SettingsWin.isDefault = isDefault
 
 -- ------------------------------------------------------------------------------------------------ controls
 local Swatch = {}
@@ -91,19 +93,37 @@ function SettingsWin.applyLook(E, name)
 	return true
 end
 
+-- the saved looks' names, Default first (the Theme row's options)
+function SettingsWin.lookNames(E)
+	local names = {}
+	for name in pairs(E.settingsFile:getUi().themes) do names[#names + 1] = name end
+	table.sort(names)
+	table.insert(names, 1, "Default")
+	return names
+end
+
+-- saves the Appearance values as look name and picks it; false, why for an empty name or Default
+function SettingsWin.saveLook(E, name)
+	name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	if name == "" then return false, "Type a name" end
+	if name:lower() == "default" then return false, "\"Default\" can't be overwritten: pick another name" end
+	local sf = E.settingsFile
+	local data = sf:getUi()
+	local look = {}
+	for _, def in ipairs(appearanceKeys()) do look[def.key] = E.settings:get(def.key) end
+	data.themes[name] = look
+	sf:setUi(data)
+	E.settings:set("theme", name)
+	return true
+end
+
 local function themeControl(ctx, s, sw)
 	local self = K.new(ctx, {})
 	local gui = K.frame("Theme", nil)
 	gui.Size = UDim2.new(0, 238, 0, 24)
 	self.gui = gui
 	local sf = ctx.E.settingsFile
-	local function options()
-		local names = {}
-		for name in pairs(sf:getUi().themes) do names[#names + 1] = name end
-		table.sort(names)
-		table.insert(names, 1, "Default")
-		return names
-	end
+	local function options() return SettingsWin.lookNames(ctx.E) end
 	local dd = Dropdown.new(ctx, gui, { options = options(), w = 150 })
 	local saveAs = Button.new(ctx, gui, { text = "Save as…", kind = "plain", w = 80 })
 	saveAs.gui.Position = UDim2.new(0, 158, 0, 0)
@@ -124,17 +144,9 @@ local function themeControl(ctx, s, sw)
 		W.set(dd.gui, "Visible", true)
 		local name = tostring(t):gsub("^%s+", ""):gsub("%s+$", "")
 		if name == "" then return true end
-		if name:lower() == "default" then
-			ctx.E.bus:emit("status", "\"Default\" can't be overwritten: pick another name", true)
-			return true
-		end
-		local data = sf:getUi()
-		local look = {}
-		for _, def in ipairs(appearanceKeys()) do look[def.key] = s:get(def.key) end
-		data.themes[name] = look
-		sf:setUi(data)
+		local ok, why = SettingsWin.saveLook(ctx.E, name)
+		if not ok then ctx.E.bus:emit("status", why, true) return true end
 		dd.options = options()
-		s:set("theme", name)
 		return true
 	end
 	self.set = function(_, v)

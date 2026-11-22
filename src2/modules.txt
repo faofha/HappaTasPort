@@ -76,6 +76,7 @@ ui/bar/model
 ui/bar/lanes
 ui/bar/bar
 ui/win/settings
+ui/rebind
 ui/win/controls
 ui/win/inspectorvalues
 ui/win/inspector
