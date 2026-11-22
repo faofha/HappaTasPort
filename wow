@@ -1421,11 +1421,11 @@ __mods["engine/settings"] = function(import)
 	Settings.SCHEMA = {
 		look("theme", "Default", { kind = "text" }, "Save your look and switch between saved looks"),
 		look("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
-		look("glassColor", "#242A38", color(), "The colour of the windows' glass"),
+		look("glassColor", "#232B26", color(), "The colour of the windows' glass"),
 		look("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
 		look("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
 		look("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
-		look("accentColor", "#3F7CF0", color(), "Switches, sliders and main buttons"),
+		look("accentColor", "#3FB950", color(), "Switches, sliders and main buttons"),
 		look("textColor", "#FFFFFF", color(), "The interface's text"),
 		look("secondaryTextColor", "#B4BBC8", color(), "Explanations and other quieter text"),
 		look("recordingColor", "#FF5A5A", color(), "Shown while recording"),
@@ -4205,6 +4205,7 @@ __mods["persist/settingsfile"] = function(import)
 		end
 		return ui
 	end
+	local OLD_DEFAULTS = { accentColor = "#3F7CF0", glassColor = "#242A38" }
 	local function loadSettings(settings, entries)
 		local old, any = false, false
 		for key, v in pairs(entries) do
@@ -4212,6 +4213,7 @@ __mods["persist/settingsfile"] = function(import)
 			if def and def.follows then
 				old = true
 				if tonumber(v) and tonumber(v) ~= 0 then any = true end
+			elseif OLD_DEFAULTS[key] and type(v) == "string" and v:upper() == OLD_DEFAULTS[key] then
 			elseif def and not def.hidden then
 				settings:set(key, v)
 			end
@@ -14490,7 +14492,7 @@ __mods["ui/kit/toggle"] = function(import)
 		knob.Position = UDim2.new(0, 2, 0, 2)
 		K.corner(knob, 11)
 		K.stroke(knob, Color3.new(1, 1, 1), 0.05, 1)
-		K.gradient(knob, Color3.new(1, 1, 1), Color3.fromHex("ECF2FF"))
+		K.gradient(knob, Color3.new(1, 1, 1), Color3.fromHex("ECFFF2"))
 		self.knob = knob
 		K.style(self, function() self:show(false) end)
 		K.rect(self, { onRelease = function(_, clicked)

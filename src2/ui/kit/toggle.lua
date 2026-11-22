@@ -20,7 +20,7 @@ function Toggle.new(ctx, parent, opts)
 	knob.Position = UDim2.new(0, 2, 0, 2)
 	K.corner(knob, 11)
 	K.stroke(knob, Color3.new(1, 1, 1), 0.05, 1)
-	K.gradient(knob, Color3.new(1, 1, 1), Color3.fromHex("ECF2FF"))
+	K.gradient(knob, Color3.new(1, 1, 1), Color3.fromHex("ECFFF2"))
 	self.knob = knob
 	K.style(self, function() self:show(false) end)
 	K.rect(self, { onRelease = function(_, clicked)

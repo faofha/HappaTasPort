@@ -17,8 +17,8 @@ local function sameColor(a, b, label)
 end
 
 section("the palette from the defaults")
-sameColor(theme.c.glass, c3("#242A38"), "glass")
-sameColor(theme.c.accent, c3("#3F7CF0"), "accent")
+sameColor(theme.c.glass, c3("#232B26"), "glass (V3.1: dark green-grey)")
+sameColor(theme.c.accent, c3("#3FB950"), "accent (V3.1: green)")
 sameColor(theme.c.text, c3("#FFFFFF"), "text")
 sameColor(theme.c.text2, c3("#B4BBC8"), "secondary text")
 sameColor(theme.c.rec, c3("#FF5A5A"), "recording")
