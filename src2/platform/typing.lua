@@ -42,6 +42,7 @@ function Typing:active(inp)
 	local own = self.own
 	if own and own.Parent and own:IsFocused() then return true end
 	if self.gui and self.gui.MenuIsOpen then return true end
+	if self.chatReplay then return false end -- (Test is typing the recorded chat: not the player, V3.1)
 	local ok, chat = pcall(self.chatFocused, self)
 	return ok and chat == true
 end

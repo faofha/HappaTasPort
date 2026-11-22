@@ -86,4 +86,86 @@ function Chat:fill(tl, i)
 	end
 end
 
+-- ------------------------------------------------------------------------------------------------ Test
+-- one entry into the bar: open it (ours while open), set the text, send (1) or close (2)
+function Chat:apply(e)
+	local b = self:box()
+	if not b then return end
+	local text, kind = e[1], e[2]
+	self.owns = true
+	self.E.typing.chatReplay = true
+	if not b:IsFocused() then b:CaptureFocus() end
+	if b.Text ~= text then b.Text = text end
+	if kind == 1 then
+		b:ReleaseFocus(true)
+		self:release(false)
+	elseif kind == 2 then
+		self:release(true)
+	end
+end
+
+-- the bar handed back; close: a bar still open is emptied and closed without sending
+function Chat:release(close)
+	local b = self.bar
+	if close and self.owns and b and b.Parent then
+		b.Text = ""
+		if b:IsFocused() then b:ReleaseFocus(false) end
+	end
+	self.owns = false
+	self.E.typing.chatReplay = false
+end
+
+function Chat:playRange(tl, from, to)
+	for i = from, to do
+		local l = tl:getList("Chat", i)
+		if type(l) == "table" then
+			for _, e in ipairs(l) do self:apply(e) end
+		end
+	end
+end
+
+-- Test starts on frame f: the bar as it was just before f (open with its text if typing was going on)
+function Chat:onPlaybackBegin(tl, f)
+	self.active = self.E.settings:on("replayChat") and self:box() ~= nil
+	if not self.active then return end
+	self.played = f - 1
+	local last
+	for i = 1, f - 1 do
+		local l = tl:getList("Chat", i)
+		if type(l) == "table" and #l > 0 then last = l[#l] end
+	end
+	if last and last[2] == nil then self:apply(last) end
+end
+
+-- every entry from the last frame played up to f, in order (frames skipped by speed or a long frame too)
+function Chat:onPlayTo(tl, f)
+	if not self.active then return end
+	if f < self.played then
+		self:release(true)
+		self:onPlaybackBegin(tl, f + 1)
+		return
+	end
+	if f > self.played then
+		self:playRange(tl, self.played + 1, f)
+		self.played = f
+	end
+end
+
+-- the end of Test: the last frames when it ran to the end, then the bar handed back (closed, unsent)
+function Chat:onEndPlayback()
+	if not self.active then return end
+	local tl, E = self.E.tl, self.E
+	local n = tl:count()
+	if E.frame >= n - 1 and self.played < n then self:playRange(tl, self.played + 1, n) end
+	self.active = false
+	self:release(true)
+end
+
+-- Test left another way (Idle, Create): the bar handed back, closed and unsent
+function Chat:onRelease()
+	if not self.active then return end
+	self.active = false
+	self:release(true)
+end
+
 return Chat

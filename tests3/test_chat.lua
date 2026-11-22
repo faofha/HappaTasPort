@@ -67,6 +67,102 @@ M.steps(3)
 req("pause")
 eq(#entries(f0 + 2, n), 0, "the chat after the new end is gone (" .. tl:count() .. " frames)")
 
+-- ------------------------------------------------------------------------------------------------ Test
+local function waitIdle()
+	local g = 0
+	while E.busy and g < 2000 do M.step(1 / 60); g = g + 1 end
+	return not E.busy
+end
+E.modes:seek(tl:count()); M.steps(2)
+req("unpause")
+M.steps(3)
+local fOpen = tl:count() + 1
+box:CaptureFocus(); M.steps(1)
+typeOn("/e")
+typeOn("/e dance2")
+box:ReleaseFocus(true); M.steps(1)
+local fSend = tl:count()
+M.steps(40) -- (the send well before the end: at Playback Speed 10 its frame is skipped, not caught up at the end)
+req("pause")
+req("idle")
+check(fSend > fOpen + 1, "a run with chat (" .. fOpen .. " .. " .. fSend .. ")")
+
+-- plays Test to the end (or until stopAt(frame) is true); returns sends, texts seen, frame of the send
+local function playTest(stopAt)
+	local s0 = #M.chatSent
+	local seen, sentAt = {}, nil
+	req("test")
+	for _ = 1, tl:count() * 4 + 60 do
+		if E.mode ~= 3 then break end
+		if box.Text ~= "" then seen[box.Text] = true end
+		if not sentAt and #M.chatSent > s0 then sentAt = E.frame end
+		if stopAt and stopAt() then break end
+		M.step(1 / 60)
+	end
+	if not sentAt and #M.chatSent > s0 then sentAt = E.frame end
+	return #M.chatSent - s0, seen, sentAt
+end
+
+section("Test types and sends")
+local sends, seen, at = playTest()
+eq(sends, 1, "sent once")
+eq(M.chatSent[#M.chatSent], "/e dance2", "the recorded text")
+check(seen["/e"] and seen["/e dance2"], "the text grew in the bar")
+check(at and math.abs(at - fSend) <= 1, "on the send frame (" .. tostring(at) .. " vs " .. fSend .. ")")
+check(not box:IsFocused() and box.Text == "", "the bar is closed and empty after")
+
+section("skipped frames: Playback Speed 10")
+E.settings:set("playbackSpeed", 10)
+sends = playTest()
+eq(sends, 1, "still sent once")
+eq(M.chatSent[#M.chatSent], "/e dance2", "the whole text")
+E.settings:set("playbackSpeed", 1)
+
+section("start mid-typing")
+E.settings:set("restartWhenTesting", 0)
+req("create")
+E.modes:seek(fOpen + 2); M.steps(2)
+local s0 = #M.chatSent
+E.modes:request("test")
+check(box:IsFocused() and box.Text == "/e", "the bar opens at once with the text typed so far (" .. box.Text .. ")")
+for _ = 1, tl:count() * 4 + 60 do if E.mode ~= 3 then break end M.step(1 / 60) end
+eq(E.mode, 1, "Test ran to the end")
+eq(#M.chatSent - s0, 1, "then sends it")
+E.settings:set("restartWhenTesting", 1)
+
+section("stop mid-typing, keys still work")
+local active
+sends = playTest(function()
+	if box:IsFocused() and box.Text == "/e" then active = E.typing:active(); return true end
+	return false
+end)
+eq(active, false, "while the replay types, HappaTAS's keys still work")
+req("idle")
+eq(sends, 0, "nothing sent")
+check(not box:IsFocused() and box.Text == "", "the bar is closed and empty")
+
+section("Replay Chat off")
+E.settings:set("replayChat", 0)
+local focused = false
+local fc = box.Focused:Connect(function() focused = true end)
+sends = playTest()
+fc:Disconnect()
+eq(sends, 0, "nothing sent")
+eq(focused, false, "the bar never opened")
+E.settings:set("replayChat", 1)
+
+section("save / load")
+check((E.persist:save("chat run", "")), "save started")
+check(waitIdle(), "saved")
+for i = 1, tl:count() do tl:setList("Chat", i, nil) end
+sends = playTest()
+eq(sends, 0, "a run without chat sends nothing")
+check((E.persist:load("chat run.tas")), "load started")
+check(waitIdle(), "loaded")
+M.steps(2)
+sends = playTest()
+eq(sends, 1, "the loaded run sends it again")
+
 section("no chat bar: no errors, nothing recorded")
 local errors = 0
 local conn = game:GetService("LogService").MessageOut:Connect(function(m, t)
@@ -74,6 +170,7 @@ local conn = game:GetService("LogService").MessageOut:Connect(function(m, t)
 end)
 game:GetService("CoreGui").ExperienceChat:Destroy()
 local had = #entries()
+req("create")
 req("unpause")
 for _ = 1, 200 do M.step(1 / 60) end -- (past the 2 s look-up again)
 req("pause")
