@@ -73,6 +73,20 @@ function K.rect(self, rect, z)
 	return rect
 end
 
+-- a self-sizing frame in a scrolling page: live, Roblox didn't draw its background after it grew until the page
+-- scrolled once (its texts were drawn). Moving the canvas 1 px and back in the same frame makes it draw, with no
+-- visible scroll (V3.1)
+function K.redrawOnGrow(frame, scroller)
+	return frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		task.defer(function()
+			if not scroller.Parent then return end
+			local p = scroller.CanvasPosition
+			scroller.CanvasPosition = p + Vector2.new(0, 1)
+			scroller.CanvasPosition = p
+		end)
+	end)
+end
+
 -- Tasability's layered edge on a kit control (the theme's compact mode), none otherwise (V3.1)
 function K.edge(gui, th)
 	if th.compact and th.shades then
