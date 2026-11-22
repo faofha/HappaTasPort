@@ -34,6 +34,7 @@ local HelpWin = import("ui/win/help")
 local AboutWin = import("ui/win/about")
 local Classic = import("ui/classic/classic")
 local Compact = import("ui/compact/compact")
+local Square = import("ui/compact/square")
 local Touch = import("ui/touch")
 
 local UI = {}
@@ -144,6 +145,13 @@ function UI:setInterface(name)
 	self.live = name
 	if self.wm then self.wm:setHideAll(name == "Tasability") end
 	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+	-- (Tasability: every corner square; the corners' own radii are kept first and put back first, so the theme's
+	-- restyle on the switch back finds them as they were)
+	if self.root and self.root.layer then
+		self.square = self.square or Square.new(self.root.layer)
+		if name ~= "Tasability" then self.square:set(false) end
+		if name == "Tasability" then self.square:set(true) end
+	end
 	if self.theme then self.theme:setCompact(name == "Tasability") end
 	if self.compact then self.compact:setLive(name == "Tasability") end
 	self:applyShown()

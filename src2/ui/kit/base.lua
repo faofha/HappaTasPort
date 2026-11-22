@@ -73,6 +73,17 @@ function K.rect(self, rect, z)
 	return rect
 end
 
+-- Tasability's layered edge on a kit control (the theme's compact mode), none otherwise (V3.1)
+function K.edge(gui, th)
+	if th.compact and th.shades then
+		W.set(gui, "BorderMode", Enum.BorderMode.Inset)
+		W.set(gui, "BorderSizePixel", 2)
+		W.set(gui, "BorderColor3", th.shades.border)
+	else
+		W.set(gui, "BorderSizePixel", 0)
+	end
+end
+
 function K.style(self, f)
 	f(self.ctx.theme)
 	self.offs[#self.offs + 1] = self.ctx.theme:changed(function() f(self.ctx.theme) end)
