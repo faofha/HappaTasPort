@@ -14430,6 +14430,15 @@ __mods["ui/kit/base"] = function(import)
 		self.rects[#self.rects + 1] = rect
 		return rect
 	end
+	function K.edge(gui, th)
+		if th.compact and th.shades then
+			W.set(gui, "BorderMode", Enum.BorderMode.Inset)
+			W.set(gui, "BorderSizePixel", 2)
+			W.set(gui, "BorderColor3", th.shades.border)
+		else
+			W.set(gui, "BorderSizePixel", 0)
+		end
+	end
 	function K.style(self, f)
 		f(self.ctx.theme)
 		self.offs[#self.offs + 1] = self.ctx.theme:changed(function() f(self.ctx.theme) end)
@@ -14501,8 +14510,12 @@ __mods["ui/kit/button"] = function(import)
 				return
 			end
 			W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
+			K.edge(gui, th)
 			if self.kind == "primary" then
 				W.set(gui, "BackgroundColor3", th.c.accent)
+				W.set(gui, "BackgroundTransparency", 0)
+			elseif th.compact and th.shades then
+				W.set(gui, "BackgroundColor3", th.shades.element)
 				W.set(gui, "BackgroundTransparency", 0)
 			else
 				W.set(gui, "BackgroundColor3", Color3.new(1, 1, 1))
@@ -14819,7 +14832,7 @@ __mods["ui/kit/field"] = function(import)
 			icon.Size = UDim2.new(0, 14, 0, 14)
 			local lens = K.frame("Lens", icon)
 			lens.Size = UDim2.new(0, 10, 0, 10)
-			K.corner(lens, 999)
+			K.corner(lens, 999):SetAttribute("HappaRound", true)
 			local rim = K.stroke(lens, Color3.new(1, 1, 1), 0, 1.5)
 			local handle = K.frame("Handle", icon, Color3.new(1, 1, 1))
 			handle.BackgroundTransparency = 0
@@ -14836,6 +14849,9 @@ __mods["ui/kit/field"] = function(import)
 		local size = opts.search and 13.5 or 12
 		K.style(self, function(th)
 			W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
+			K.edge(gui, th)
+			W.set(gui, "BackgroundColor3", (th.compact and th.shades) and th.shades.element or Color3.new(0, 0, 0))
+			W.set(gui, "BackgroundTransparency", (th.compact and th.shades) and 0 or 0.75)
 			W.set(box, "FontFace", th.font(opts.number and "number" or "text"))
 			W.set(box, "TextSize", th.size(size))
 			W.set(box, "TextColor3", th.c.text)
@@ -15034,7 +15050,12 @@ __mods["ui/kit/dropdown"] = function(import)
 		arrow.AnchorPoint = Vector2.new(1, 0.5)
 		arrow.Position = UDim2.new(1, -10, 0.5, 0)
 		arrow.Size = UDim2.new(0, 12, 0, 12)
-		K.style(self, function(th) W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control"))) end)
+		K.style(self, function(th)
+			W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
+			K.edge(gui, th)
+			W.set(gui, "BackgroundColor3", (th.compact and th.shades) and th.shades.element or Color3.new(1, 1, 1))
+			W.set(gui, "BackgroundTransparency", (th.compact and th.shades) and 0 or 0.88)
+		end)
 		K.rect(self, { onRelease = function(_, clicked) if clicked then self:open() end end }, opts.z)
 		self:show()
 		return self
@@ -15508,7 +15529,7 @@ __mods["ui/kit/icon"] = function(import)
 				p.AnchorPoint = Vector2.new(0.5, 0.5)
 				p.Position = UDim2.new(0.5, 0, 0.5, 0)
 				p.Size = UDim2.new(0.7, 0, 0.7, 0)
-				K.corner(p, 999)
+				K.corner(p, 999):SetAttribute("HappaRound", true)
 			else
 				p = K.frame("Diamond", self.gui, Color3.new(1, 1, 1))
 				p.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -16564,7 +16585,7 @@ __mods["ui/bar/bar"] = function(import)
 		self.unsaved = K.frame("Unsaved", body, Color3.new(1, 1, 1))
 		self.unsaved.AnchorPoint = Vector2.new(0, 0.5)
 		self.unsaved.Size = UDim2.new(0, 6, 0, 6)
-		K.corner(self.unsaved, 999)
+		K.corner(self.unsaved, 999):SetAttribute("HappaRound", true)
 		self.unsaved.Visible = false
 		local track = K.frame("Track", body)
 		track.ZIndex = 3
@@ -21733,6 +21754,51 @@ __mods["ui/compact/kit"] = function(import)
 	end
 	return CK
 end
+__mods["ui/compact/square"] = function(import)
+	local Square = {}
+	Square.__index = Square
+	local KEPT = "HappaRadius"
+	local function squareOne(c)
+		if not c:IsA("UICorner") or c:GetAttribute("HappaRound") then return end
+		if c:GetAttribute(KEPT) == nil then
+			local r = c.CornerRadius
+			c:SetAttribute(KEPT, r.Offset)
+			c:SetAttribute(KEPT .. "Scale", r.Scale)
+		end
+		if c.CornerRadius ~= UDim.new(0, 0) then c.CornerRadius = UDim.new(0, 0) end
+	end
+	local function restoreOne(c)
+		if not c:IsA("UICorner") then return end
+		local v = c:GetAttribute(KEPT)
+		if v == nil then return end
+		local scale = c:GetAttribute(KEPT .. "Scale") or 0
+		c:SetAttribute(KEPT, nil)
+		c:SetAttribute(KEPT .. "Scale", nil)
+		c.CornerRadius = UDim.new(scale, v)
+	end
+	function Square.new(root)
+		return setmetatable({ root = root, on = false, conn = nil }, Square)
+	end
+	function Square:set(on)
+		on = on == true
+		if on == self.on then return end
+		self.on = on
+		local root = self.root
+		if on then
+			for _, d in ipairs(root:GetDescendants()) do squareOne(d) end
+			self.conn = root.DescendantAdded:Connect(function(d)
+				if d:IsA("UICorner") then
+					task.defer(function() if self.on and d.Parent then squareOne(d) end end)
+				end
+			end)
+		else
+			if self.conn then self.conn:Disconnect(); self.conn = nil end
+			for _, d in ipairs(root:GetDescendants()) do restoreOne(d) end
+		end
+	end
+	function Square:destroy() self:set(false) end
+	return Square
+end
 __mods["ui/compact/parts"] = function(import)
 	local W = import("ui/write")
 	local K = import("ui/kit/base")
@@ -23063,6 +23129,7 @@ __mods["ui/app"] = function(import)
 	local AboutWin = import("ui/win/about")
 	local Classic = import("ui/classic/classic")
 	local Compact = import("ui/compact/compact")
+	local Square = import("ui/compact/square")
 	local Touch = import("ui/touch")
 	local UI = {}
 	UI.__index = UI
@@ -23157,6 +23224,11 @@ __mods["ui/app"] = function(import)
 		self.live = name
 		if self.wm then self.wm:setHideAll(name == "Tasability") end
 		if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+		if self.root and self.root.layer then
+			self.square = self.square or Square.new(self.root.layer)
+			if name ~= "Tasability" then self.square:set(false) end
+			if name == "Tasability" then self.square:set(true) end
+		end
 		if self.theme then self.theme:setCompact(name == "Tasability") end
 		if self.compact then self.compact:setLive(name == "Tasability") end
 		self:applyShown()

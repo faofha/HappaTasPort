@@ -35,8 +35,12 @@ function Button.new(ctx, parent, opts)
 			return
 		end
 		W.set(self.cornerObj, "CornerRadius", UDim.new(0, th.corner("control")))
+		K.edge(gui, th)
 		if self.kind == "primary" then
 			W.set(gui, "BackgroundColor3", th.c.accent)
+			W.set(gui, "BackgroundTransparency", 0)
+		elseif th.compact and th.shades then
+			W.set(gui, "BackgroundColor3", th.shades.element)
 			W.set(gui, "BackgroundTransparency", 0)
 		else
 			W.set(gui, "BackgroundColor3", Color3.new(1, 1, 1))

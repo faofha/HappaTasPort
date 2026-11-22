@@ -70,7 +70,7 @@ function Icon:setKind(kind)
 			p.AnchorPoint = Vector2.new(0.5, 0.5)
 			p.Position = UDim2.new(0.5, 0, 0.5, 0)
 			p.Size = UDim2.new(0.7, 0, 0.7, 0)
-			K.corner(p, 999)
+			K.corner(p, 999):SetAttribute("HappaRound", true) -- (the record dot stays round)
 		else
 			p = K.frame("Diamond", self.gui, Color3.new(1, 1, 1))
 			p.AnchorPoint = Vector2.new(0.5, 0.5)

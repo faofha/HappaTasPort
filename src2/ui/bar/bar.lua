@@ -137,7 +137,7 @@ function Bar:build()
 	self.unsaved = K.frame("Unsaved", body, Color3.new(1, 1, 1))
 	self.unsaved.AnchorPoint = Vector2.new(0, 0.5)
 	self.unsaved.Size = UDim2.new(0, 6, 0, 6)
-	K.corner(self.unsaved, 999)
+	K.corner(self.unsaved, 999):SetAttribute("HappaRound", true)
 	self.unsaved.Visible = false
 	local track = K.frame("Track", body)
 	track.ZIndex = 3
