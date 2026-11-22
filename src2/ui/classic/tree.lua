@@ -3,7 +3,7 @@
 --  (commit aaa21b6): STYLES (a style = every property of its class: a base + what differs), TREE (node =
 --  { class, name, style, properties, children }) and TEMPLATES (a control row, a save slot). Changes from
 --  V2.38.17: the titles carry HappaTAS 3's version; the update log holds this version's What's new list
---  (ui/win/helptext; V2's rows are in the README's version history); the Help
+--  and the credits come from ui/win/helptext (V2's rows are in the README's version history); the Help
 --  list is empty (the classic menu fills it from ui/win/helptext); the Settings list is empty (filled from
 --  the settings schema). Built by ui/classic/build.
 -- ================================================================================================
@@ -268,23 +268,21 @@ do -- (the style / tree helpers are locals of this block, as in V2)
 			{"ScrollingFrame","MoreFrame",29,{Position=u(0,0,0,71),Size=u(0,400,1,-71),Visible=false,CanvasSize=u(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y},{
 				{"Frame","List",19,{Position=u(0,20,0,0),Size=u(0,360,0,0),AutomaticSize=Enum.AutomaticSize.Y},{
 					{"UIListLayout","UIListLayout",44,{}},
-					{"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108),AutomaticSize=Enum.AutomaticSize.Y},{
-						UC,
-						LV("0", " Happy_Liam/happa - Main Scripter/UI Design"),
-						UL9,
-						LV("2", " plusgiant5 - Tasability creator"),
-						LV("1", " TestMicrowaveDinner - Scripting Help"),
-						LV("3", " Skittlesuna - Playtester")
-					}},
+					(function() -- (the credits: Help's one list, a row per name in its order)
+						local kids = { UC, UL9 }
+						for i, name in ipairs(HelpText.CREDITS) do kids[#kids + 1] = LV(string.format("%02d", i), " " .. name) end
+						return {"Frame","5Credits",45,{Position=u(0,0,0,0),Size=u(1,0,0,108),AutomaticSize=Enum.AutomaticSize.Y},kids}
+					end)(),
 					HD("4CreditsN", "Credits", 14),
 					(function() -- (V2's 3UpdateLog: a version line, then its items)
 						local items = HelpText.WHATS_NEW.items
 						local kids = { LV("0", " HappaTAS " .. HelpText.WHATS_NEW.version) }
 						for i, item in ipairs(items) do kids[#kids + 1] = LI(tostring(i), "   -   " .. item) end
 						kids[#kids + 1] = UL9
+						kids[#kids + 1] = UC -- (rounded like the credits above it)
 						return { "Frame", "3UpdateLog", 46, { Position = u(0, 0, 0, 0), Size = u(1, 0, 0, 30 + 20 * #items), AutomaticSize = Enum.AutomaticSize.Y }, kids }
 					end)(),
-					HD("0ModelN", "Executor port - client side script", 14),
+					HD("0ModelN", HelpText.PORT, 14),
 					{"TextButton","ToggleMicroProfiler",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Toggle MicroProfiler",TextSize=16},{ K(21), ST(48) }},
 					{"TextButton","1Model",20,{Position=u(0.25,0,0.5,0),Size=u(1,0,0,30),AnchorPoint=v2(0.5,0.5),Text="Unload HappaTAS",TextSize=16},{ K(21), ST(48) }}
 				}}

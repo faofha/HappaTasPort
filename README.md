@@ -19,7 +19,7 @@ Run `wow` (or `wow1`, the same file) in your executor.
 3. While paused, `F` / `G` step one frame back / forward, `R` / `T` hold back / forward. Unpausing on an
    earlier frame cuts the frames after it.
 4. Press `3` (Test) to play the run back, `1` (Idle) to stop.
-5. The Dock at the top opens the windows (Inspector, Library, Settings, Controls, Help); `M` hides or shows
+5. The Dock at the top opens the windows (Inspector, Library, Settings, Controls, Help, About); `M` hides or shows
    the whole interface.
 
 ## Default controls (all can be changed in the Controls window)
@@ -246,4 +246,5 @@ of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor,
 - **V2.37 - V2.37.2**: faster and smaller, no keys while typing, bugs found in a real client fixed.
 - **V2.36**: MicroProfiler like Roblox's. **V2.35**: rebuilt into modules.
 
-Credits: Happy_Liam/happa (HappaTAS), plusgiant5 (Tasability), TestMicrowaveDinner, Skittlesuna.
+Credits (the About window; Classic: More): Happy_Liam/happa (UI design), plusgiant5 (Tasability creator), 9kwr
+(Tasability UI design), TestMicrowaveDinner (scripting help), Skittlesuna (playtester).

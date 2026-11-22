@@ -1,6 +1,6 @@
 -- ================================================================================================
 --  DOCK  (HappaTAS 3 ui): the small glass pill at the top centre, below the top bar: "HappaTAS" and a
---  button per window (ui:addDockButton(id), in ORDER: Inspector, Library, Settings, Controls, Help; any other
+--  button per window (ui:addDockButton(id), in ORDER: Inspector, Library, Settings, Controls, Help, About; any other
 --  after them); a click opens / closes that
 --  window, and the buttons of open windows are lit. The spec names no launcher (phase 5a plan ruling).
 -- ================================================================================================
@@ -14,7 +14,7 @@ local Dock = {}
 Dock.__index = Dock
 
 local Z, ZINDEX, H, PAD, GAP, TOP = 50000000, 500000, 36, 14, 8, 8
-local ORDER = { "inspector", "library", "settings", "controls", "help" }
+local ORDER = { "inspector", "library", "settings", "controls", "help", "about" }
 
 function Dock.new(ui)
 	local self = setmetatable({ ui = ui, buttons = {}, order = {}, rects = {}, offs = {} }, Dock)

@@ -1,16 +1,17 @@
 -- ================================================================================================
---  HELP TEXT  (HappaTAS 3 ui): the Help window's topics, rewritten for HappaTAS 3 from V2.38.17's help (every
---  V2 topic has a home here: its title, or named in a body). topics(E) -> { { id, title, body } }; a body's
+--  HELP TEXT  (HappaTAS 3 ui): the Help topics, short sections in short sentences (every V2.38.17 help
+--  topic has a home here: its title, or named in a body). topics(E) -> { { id, title, body } }; a body's
 --  {key:<control>} becomes the control's key as bound now, in brackets. "missing" lists Env.notes. Text uses
---  only characters every listed font has (ASCII and × ▼ ← … •).
+--  only characters every listed font has (ASCII and × ▼ ← … •). The credits and what's new aren't Help
+--  topics: the About window and Classic's More page show them (one list each, here).
 -- ================================================================================================
 local CONFIG = import("config")
 local Env = import("platform/env")
 
 local HelpText = {}
 
--- what this version brings: the Help topic "What's new" and the classic interface's update log (More tab);
--- one line an item, at most 60 characters (a classic update log row is 360 px of 12 px text)
+-- what this version brings: the About window's update log and Classic's (More tab); one line an item, at
+-- most 60 characters (a classic update log row is 360 px of 12 px text)
 HelpText.WHATS_NEW = {
 	version = CONFIG.VERSION,
 	items = {
@@ -25,172 +26,182 @@ HelpText.WHATS_NEW = {
 	},
 }
 
-local function whatsNew()
-	local lines = { "HappaTAS " .. HelpText.WHATS_NEW.version }
-	for _, item in ipairs(HelpText.WHATS_NEW.items) do lines[#lines + 1] = "• " .. item end
-	return table.concat(lines, "\n")
-end
-
-local CREDITS = table.concat({
-	"Happy_Liam/happa - Main Scripter/UI Design",
+-- the credits, in order (the About window and Classic's More page)
+HelpText.CREDITS = {
+	"Happy_Liam/happa - UI design",
 	"plusgiant5 - Tasability creator",
+	"9kwr - Tasability UI design",
 	"TestMicrowaveDinner - Scripting Help",
 	"Skittlesuna - Playtester",
-	"Executor port - client side script",
-}, "\n")
+}
+HelpText.PORT = "Executor port - client side script"
 
 local TOPICS = {
 	{ "start", "Getting started",
-		"HappaTAS records what you do frame by frame and plays it back. There are three modes: Idle {key:idle}, "
-		.. "Create {key:create} and Test {key:test}.\n\nIn Create you record, pause, go back and record over your "
-		.. "mistakes. Test plays the run. The Dock at the top opens the windows; {key:menu} hides or shows the whole "
-		.. "interface.\n\nIf you used V2, its settings and keys were converted on the first start "
-		.. "(HappaTasPort/Settings3.json). To convert them again: unload HappaTAS first (Unload HappaTAS below the "
-		.. "topics, or rejoin), then delete HappaTasPort/Settings3.json, then run the script. That also resets what "
-		.. "only HappaTAS 3 has: the look, the windows and the interface choice." },
-	{ "whatsnew", "What's new", whatsNew() },
-	{ "idle", "Idle",
-		"Idle {key:idle} is the default mode: everything TAS related stops and you play the game like normal. The "
-		.. "run you made stays, so you can save it, test it or go back to Create." },
-	{ "create", "Create",
-		"Create {key:create} switches you to Create mode and pauses you at the last frame of the run (or at the "
-		.. "start of a new one). While paused nothing moves: the character, the camera, client objects and the kit's "
-		.. "timers all wait for you." },
+		"HappaTAS records what you do, frame by frame, and plays it back.\n\n"
+		.. "1. Press {key:create} for Create. You start paused.\n"
+		.. "2. Press {key:unpause} to record. Press {key:pause} to pause.\n"
+		.. "3. Made a mistake? Go back, then unpause to record over it.\n"
+		.. "4. Press {key:test} to play the run.\n"
+		.. "5. Save it in the Library.\n\n"
+		.. "The Dock at the top opens the windows. {key:menu} hides or shows the interface.\n\n"
+		.. "If you used V2, its settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
+		.. "To convert them again: unload HappaTAS first (Unload HappaTAS below the topics, or rejoin), then delete "
+		.. "HappaTasPort/Settings3.json, then run the script. That also resets the look, the windows and the "
+		.. "interface choice." },
+	{ "modes", "Modes",
+		"• Idle {key:idle}: play the game normally. Your run stays, so you can save it, test it or go back to "
+		.. "Create.\n"
+		.. "• Create {key:create}: record. You start paused on the run's last frame (or at the start of a new run). "
+		.. "While paused nothing moves: the character, the camera, client objects and the kit's timers wait.\n"
+		.. "• Test {key:test}: play the run." },
 	{ "pause", "Pause and Unpause",
-		"Unpause {key:unpause} starts recording from the frame you are on; anything after it is recorded over. Pause "
-		.. "{key:pause} stops recording.\n\nIf you unpause on the frame you jump off a ladder, you are unpaused a frame "
-		.. "earlier. A coyote jump you had before pausing is kept." },
+		"• Unpause {key:unpause} records from the frame you are on. Everything after it is recorded over.\n"
+		.. "• Pause {key:pause} stops recording.\n\n"
+		.. "A coyote jump you had before pausing is kept. Unpausing on the frame you jump off a ladder unpauses you "
+		.. "a frame earlier." },
 	{ "time", "Moving through the run",
-		"Back/Forward ({key:back} / {key:forward}): hold to move back and forward through the run; they pause you if "
-		.. "you are recording.\n\nBack/Forward 1 Frame ({key:back1} / {key:forward1}): one frame each press.\n\n"
-		.. "Return {key:return}: back to the frame you last unpaused at.\n\nUnpause 1 Frame {key:unpause1}: records "
-		.. "exactly one frame (two after a landing or a ladder jump). Turn Lock Camera (Paused) off if you want to "
-		.. "turn the camera between frames.\n\nThe timeline bar does the same with the mouse: drag the playhead while "
-		.. "paused." },
+		"• Back/Forward ({key:back} / {key:forward}): hold to move through the run. They pause you if you are "
+		.. "recording.\n"
+		.. "• Back/Forward 1 Frame ({key:back1} / {key:forward1}): one frame each press.\n"
+		.. "• Return {key:return}: back to the frame you last unpaused at.\n"
+		.. "• Unpause 1 Frame {key:unpause1}: records exactly one frame (two after a landing or a ladder jump).\n"
+		.. "• The timeline bar: drag the playhead while paused.\n\n"
+		.. "• Optimize TAS {key:optimize} (in Idle): removes still frames, where nothing moved, the camera stayed and "
+		.. "no new animation started.\n"
+		.. "• Delete TAS {key:deleteTas}: throws the run away. Save it first if you want to keep it." },
 	{ "test", "Test",
-		"Test {key:test} plays the run. Playback Speed sets how fast (Test at another speed always shows the "
-		.. "Inspector's Frame section). Restart When Testing starts from frame 1, or from the frame you are on when "
-		.. "it is off.\n\nInterpolate Playback (on by default) places the character between the two recorded frames "
-		.. "for the time that has passed, which stays smooth at any frame rate. Off, the run is played one frame at a "
-		.. "time.\n\nShow Completion Message says when the run has finished." },
+		"• Playback Speed: how fast Test plays. At another speed the Inspector always shows its Frame section.\n"
+		.. "• Restart When Testing: on, Test starts from frame 1. Off, from the frame you are on.\n"
+		.. "• Interpolate Playback (on by default): the character is placed between the two recorded frames, so "
+		.. "playback is smooth at any frame rate. Off, the run plays one frame at a time.\n"
+		.. "• Show Completion Message: says when the run has finished." },
 	{ "camera", "The camera",
-		"Lock Camera (Mode): Lock Camera (Paused) holds the camera on the recorded frame while you are paused; with Lock "
-		.. "Camera (Test) it follows the recorded camera while testing.\n\nLook Around {key:lookAround}: while paused with the "
-		.. "camera locked, look around freely; press it again (or unpause) and the camera goes back to the frame. "
+		"• Lock Camera (Mode): Lock Camera (Paused) holds the camera on the recorded frame while you are paused. "
+		.. "Lock Camera (Test) follows the recorded camera while testing.\n"
+		.. "• Look Around {key:lookAround}: while paused with the camera locked, look around freely. Press it again "
+		.. "(or unpause) and the camera goes back to the frame.\n"
+		.. "• Turn Lock Camera (Paused) off to turn the camera between frames.\n\n"
 		.. "Zoom and shift lock are recorded with every frame." },
-	{ "edit", "Optimize TAS and Delete TAS",
-		"Optimize TAS {key:optimize} (in Idle) removes still frames: frames where nothing moved, the camera stayed "
-		.. "and no new animation started.\n\nDelete TAS {key:deleteTas} throws the run away. Save it first if you "
-		.. "want to keep it." },
 	{ "bar", "Timeline bar",
-		"The bar at the bottom shows the run while you are in Create or Test. On the left: the mode and the speed; "
-		.. "then the buttons: start, back one frame, record / pause, forward one frame, Test and marker. On the right: "
-		.. "a dot when the run has changes that aren't saved, and the frame and time.\n\nDrag on it while paused to "
-		.. "jump to a frame, scrub it while testing, and zoom with the mouse wheel. The marker button puts a marker on "
-		.. "the frame (saved with the run). ▼ opens the lanes: deaths, states and tools, inputs, the kit's events and "
-		.. "buttons." },
+		"The bar at the bottom shows the run in Create and Test.\n\n"
+		.. "• Left: the mode and the speed.\n"
+		.. "• Buttons: start, back one frame, record / pause, forward one frame, Test, marker.\n"
+		.. "• Right: a dot when the run has unsaved changes, then the frame and the time.\n\n"
+		.. "Drag on it while paused to jump to a frame, or while testing to scrub. The mouse wheel zooms. The marker "
+		.. "button marks the frame (saved with the run). ▼ opens the lanes: deaths, states and tools, inputs, the "
+		.. "kit's events and buttons." },
 	{ "inspector", "Inspector",
-		"The Inspector shows the numbers of the frame you are on: Frame, Character, Camera & input, World and "
-		.. "Performance. Paused, it shows the recorded frame; recording, the newest one; in Test, the playback; in "
-		.. "Idle, the character as it is.\n\nPin a row (•) to keep it at the top, hide it (×), and fold sections. "
-		.. "Show Stats (Mode) (Idle / Create / Test) chooses whether it shows values in that mode, and Stats Text Size "
-		.. "sizes them. It doesn't take the mouse from the game." },
-	{ "library", "Library and attempts",
-		"Saving and Loading happen in the Library. Every run is a compact .tas file in HappaTasPort/<PlaceId>/ in "
-		.. "your executor's workspace, so you only see the runs of the place you are in. There is no size or count "
-		.. "limit.\n\nType a name and press Save; saving over a name that exists asks again. New attempt saves "
-		.. "\"Name (2)\", \"Name (3)\"… next to the run; they fold under it in the list. Folders go three levels "
-		.. "deep. Search, sort, Rename, Move to and Delete (it asks twice) are there too. You can't save while "
-		.. "recording, or load while testing." },
+		"The numbers of the frame you are on, in sections: Frame, Character, Camera & input, World, Performance.\n\n"
+		.. "• Paused: the recorded frame. Recording: the newest one. Test: the playback. Idle: the character now.\n"
+		.. "• Pin a row (•) to keep it at the top, hide it (×), fold a section.\n"
+		.. "• Show Stats (Mode) (Idle / Create / Test): whether it shows values in that mode. Stats Text Size "
+		.. "sizes them.\n\n"
+		.. "It doesn't take the mouse from the game." },
+	{ "library", "Library: Saving and Loading",
+		"Saving and Loading happen in the Library.\n\n"
+		.. "• Each run is a .tas file in HappaTasPort/<PlaceId>/ in your executor's workspace. You only see the runs "
+		.. "of the place you are in. No size or count limit.\n"
+		.. "• Type a name and press Save. Saving over a name that exists asks again.\n"
+		.. "• New attempt saves \"Name (2)\", \"Name (3)\"… They fold under the run in the list.\n"
+		.. "• Folders (three levels), search, sort, Rename, Move to and Delete (it asks twice).\n"
+		.. "• You can't save while recording, or load while testing.\n"
+		.. "• Old .tas files load." },
 	{ "merge", "Merging a TAS",
-		"Pick a saved run in the Library and press Merge. It goes before or after the run you have: before only if "
-		.. "its last frame is on the ground (Running), after only if its first frame is.\n\nYou then record the piece "
-		.. "between them, from the red box (where the run before ends) to the green box (where the run after starts). "
-		.. "The Merge window shows how far you are and how close you must be: Complete merge when close enough, "
-		.. "Cancel merge otherwise. Closing the window cancels the merge." },
+		"1. Pick a saved run in the Library and press Merge.\n"
+		.. "2. Choose Before or After. Before works only if its last frame is on the ground (Running); after, only if "
+		.. "its first frame is.\n"
+		.. "3. Record the piece between them: from the red box (where the run before ends) to the green box (where "
+		.. "the run after starts).\n"
+		.. "4. The Merge window shows how far you are and how close you must be. Press Complete merge when close "
+		.. "enough, or Cancel merge.\n\n"
+		.. "Closing the window cancels the merge." },
 	{ "inputs", "Keyboard and Mouse Inputs",
-		"Your keys, mouse buttons, wheel and mouse position are recorded with every frame and replayed while "
-		.. "testing through the executor's input functions (keypress, mouse1press, mouse2press, mousemoveabs, "
-		.. "mousescroll). HappaTAS's own keys are never recorded, and nothing reacts while you type in chat or a text "
-		.. "box. Keep the Roblox window focused during playback (Window Guarding stops replayed input while it isn't) and keep "
-		.. "your hands off the keyboard and mouse.\n\nReplay Keyboard, Replay Mouse Clicks and Replay Mouse Movement "
-		.. "turn each part off. The cursor is stored as a fraction of the screen, so a run aims the same at another "
-		.. "window size. NohBoard Cursor draws a still cursor while the camera is locked (right click, shift lock, "
-		.. "first person); NohBoard Mouse Speed (at most 1) scales how the hidden cursor moves. Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the "
-		.. "frame shown while you are paused, and puts the mouse back there when you unpause. Hold right click while "
-		.. "paused and the cursor stays locked, as in the game, so unpausing with it held doesn't turn the camera." },
-	{ "death", "Death & Respawn Recording",
-		"With Record Death & Respawn on, a run can go through deaths (kill bricks, resets, respawn shortcuts): the "
-		.. "death frame is kept and playback carries on with the new character." },
-	{ "tools", "Tool Actions Support",
-		"Record Tool Actions records equipping, unequipping and using tools. During playback a tool that isn't there "
-		.. "is skipped with a short notice." },
-	{ "buttons", "Button & Obby Mechanism Sync",
-		"With Sync Client Objects on, the EToH kit's buttons and timers (timed switches, pressure plates, countdown "
-		.. "doors, disappearing parts) are saved with every press. While paused the timers wait; going back puts the "
-		.. "buttons back exactly; testing runs them on the run's clock. Lighting changes are kept with the run too." },
-	{ "co", "Client Objects",
+		"Your keys, mouse buttons, wheel and mouse position are recorded with every frame. Test replays them "
+		.. "through the executor (keypress, mouse1press, mouse2press, mousemoveabs, mousescroll).\n\n"
+		.. "• Keep the Roblox window focused during playback, and your hands off. Window Guarding stops replayed input "
+		.. "while it isn't focused.\n"
+		.. "• HappaTAS's own keys are never recorded. Nothing reacts while you type in chat or a text box.\n"
+		.. "• Replay Keyboard, Replay Mouse Clicks and Replay Mouse Movement turn each part off.\n"
+		.. "• The cursor is stored as a fraction of the screen, so a run aims the same at another window size.\n"
+		.. "• NohBoard Cursor draws a still cursor while the camera is locked (right click, shift lock, first "
+		.. "person). NohBoard Mouse Speed (at most 1) scales how the hidden cursor moves.\n"
+		.. "• Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the frame shown, and "
+		.. "puts the mouse back there when you unpause.\n"
+		.. "• Hold right click while paused and the cursor stays locked, as in the game, so unpausing with it held "
+		.. "doesn't turn the camera." },
+	{ "world", "Client Objects and the world",
 		"Sync Client Objects (on by default) is one switch for everything that follows the run besides your "
-		.. "character: the parts only your game client moves (moving, falling and swinging platforms, pushboxes, "
-		.. "vanishers, morphs and the like), timed buttons, lighting and the EToH kit. Client objects are saved with "
-		.. "the run and put back while testing and scrubbing, blended between the saved positions so they move "
-		.. "smoothly at any frame rate. Only objects on screen or within 25 studs are kept, which keeps files small." },
-	{ "kit", "EToH Kit Objects",
-		"With Sync Client Objects on, the EToH kit's own timers (waits, delays, tweens) follow the run's clock, so they "
-		.. "stop while paused and slow down with the speed hack. A jump launcher's push, moving platforms and spawner "
-		.. "cooldowns keep the same timing whether you pause or not.\n\nBeat blocks follow the run's "
-		.. "time, turret bullets are saved with their hits and damage, pushboxes are hidden before they were spawned, "
-		.. "and bounce pad and launcher effects play again in Test." },
+		.. "character.\n\n"
+		.. "• Client Objects: parts only your game client moves (moving, falling and swinging platforms, pushboxes, "
+		.. "vanishers, morphs). Saved with the run, put back while testing and scrubbing, smooth at any frame rate. "
+		.. "Only objects on screen or within 25 studs are kept, which keeps files small.\n"
+		.. "• Button & Obby Mechanism Sync: the EToH kit's buttons and timers (timed switches, pressure plates, "
+		.. "countdown doors, disappearing parts) are saved with every press. Paused, the timers wait.\n"
+		.. "• EToH Kit Objects: the kit's own timers follow the run's clock. Beat blocks follow the run's time, turret "
+		.. "bullets are saved with their hits, pushboxes are hidden before they spawn, bounce pad and launcher "
+		.. "effects play again in Test.\n"
+		.. "• Lighting changes are kept with the run.\n\n"
+		.. "Death & Respawn Recording (Record Death & Respawn): a run can go through deaths; playback carries on with "
+		.. "the new character.\n"
+		.. "Tool Actions Support (Record Tool Actions): equipping, unequipping and using tools. A tool that isn't "
+		.. "there in playback is skipped." },
 	{ "speed", "Speed Hack (Slow Motion)",
-		"Turn on Speed Hack to record in slow motion, like a video played slower. Speed Hack Speed "
-		.. "goes from 0.1 to 1. Bind Toggle Speed Hack {key:toggleSpeedHack} in Controls to switch it while "
-		.. "recording. Speed Hack In picks where it works: Create (recording, the default) and / or Idle (playing "
-		.. "without recording; nothing is saved there).\n\nThe run is saved in normal time, so Test plays it at normal speed. Gravity, walking, "
-		.. "jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, bounce pads, "
-		.. "ziplines, the kit's timers) all change speed.\n\nBelow 1x Roblox's normal physics runs on some frames only "
-		.. "and everything is held in between, the humanoid and its timers too (Frame Step), so walking, jumping, "
-		.. "landing and coyote time are exactly like normal speed, also on a loose platform you push or stand on. "
-		.. "Above 1x the physics is sped up instead: close to normal speed, not exact. Use it to get through waits, "
-		.. "and record what matters at 1x or below.\n\nSlow motion draws the frames in between: your "
-		.. "character, loose platforms and the camera glide from one physics step to the next instead of jumping, so "
-		.. "slow motion looks as smooth as your frame rate. It changes the picture only, a step or two behind the "
-		.. "physics; the run recorded is the same. Things the kit's scripts move still move in steps." },
+		"Records in slow motion, like a video played slower. Test plays the run at normal speed.\n\n"
+		.. "• Speed Hack turns it on. Speed Hack Speed goes from 0.1 to 1.\n"
+		.. "• Toggle Speed Hack {key:toggleSpeedHack} (bind it in Controls) switches it while recording.\n"
+		.. "• Speed Hack In: Create (recording, the default) and / or Idle (nothing is saved there).\n\n"
+		.. "Gravity, walking, jumping, animations, the zoom and the world (spinners, platforms, swings, conveyors, "
+		.. "bounce pads, ziplines, the kit's timers) all slow down.\n\n"
+		.. "Roblox's physics runs on some frames only and everything waits in between (Frame Step), so walking, "
+		.. "jumping, landing and coyote time are exactly like normal speed. The frames in between are drawn smoothly; things the kit's scripts move still move in "
+		.. "steps." },
 	{ "glide", "Glide Manipulation",
-		"A glide: falling fast along a part with shift lock, strafing with A / D, the camera turns your torso's "
-		.. "vertical corner into the part's side. If a physics step starts with the torso 0.1 - 0.2 studs inside the "
-		.. "part, Roblox may push it out so hard that your fall stops or slows and you are thrown outward, tilted. "
-		.. "Normally that is luck (frame rate, the part's exact position). With Glide Manipulation on, Glide Chance "
-		.. "decides each part you hug: 0 % never glides (the torso is kept shallower, a glide that happens anyway is "
-		.. "undone), 100 % always glides (the torso is put in the band; when Roblox doesn't glide, HappaTAS makes the "
-		.. "glide), in between is one roll per part. After a glide, sinking into the wall again (falling fast again, "
-		.. "or off the wall and back) glides again. HappaTAS moves you by at most a few tenths of a stud. Works in "
-		.. "Idle and while recording, for R6 characters." },
-	{ "classiclook", "Classic Look",
-		"The Classic interface's own colours and background (Classic's Settings tab, Classic Look; the New interface "
-		.. "has its Appearance instead). Main Colour: every colour set to Auto follows it, darker parts staying darker. "
-		.. "Each of the 23 colours Classic draws has its own row: type #RRGGBB or r, g, b, clear the box for Auto, or "
-		.. "click the swatch for the picker (drag the square and the hue bar, Apply).\n\nBackground: a picture link "
-		.. "(downloaded once into HappaTasPort/Backgrounds, then loaded from there: the only time HappaTAS uses the "
-		.. "internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files from links, "
-		.. "only Roblox videos. Background Transparency is how much the window colour shows over it; Background Fit "
-		.. "is Crop, Fit or Stretch." },
+		"A glide: falling fast along a part with shift lock, strafing with A / D, your torso's vertical corner "
+		.. "turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, Roblox "
+		.. "may push it out hard: your fall stops or slows and you are thrown outward, tilted.\n\n"
+		.. "• Normally that is luck. With Glide Manipulation on, Glide Chance decides each part you hug.\n"
+		.. "• 0 %: never glides. 100 %: always glides. In between: one roll per part.\n"
+		.. "• Sinking into the wall again (falling fast again, or off the wall and back) glides again.\n"
+		.. "• HappaTAS moves you by at most a few tenths of a stud.\n"
+		.. "• Idle and recording, R6 characters." },
+	{ "classiclook", "Classic interface",
+		"Settings > Interface switches between the New and the Classic interface.\n\n"
+		.. "Classic Look (Classic's Settings tab) sets Classic's colours and background:\n"
+		.. "• Main Colour: every colour set to Auto follows it.\n"
+		.. "• Each of the 23 colours has a row: type #RRGGBB or r, g, b, clear the box for Auto, or click the "
+		.. "swatch for the picker.\n"
+		.. "• Background: a picture link (downloaded once into HappaTasPort/Backgrounds: the only time HappaTAS "
+		.. "uses the internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files "
+		.. "from links.\n"
+		.. "• Background Transparency and Background Fit (Crop, Fit, Stretch)." },
 	{ "settings", "Executor Port Settings",
-		"Ignore Game Processed lets HappaTAS's keys work when Roblox marks a key as used by the game (the Menu key "
-		.. "always works). No HappaTAS key does anything while you type.\n\n"
-		.. "Settings and Controls are their own windows; every setting has a reset arrow (←) when it isn't at its "
-		.. "default." },
+		"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
+		.. "always works.\n"
+		.. "• No HappaTAS key does anything while you type.\n"
+		.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←)." },
 	{ "profiler", "MicroProfiler",
-		"A copy of Roblox's MicroProfiler ({key:microProfiler}). Time = the last frame, Avg = the average of every frame "
-		.. "since the count started, Max = the biggest frame so far. Aggregate Infinite counts the frames; picking it "
-		.. "starts Avg and Max again. Custom > TAS Timeline shows your run (green = the current frame, click to jump there). "
-		.. "Mode: Detailed, Timers, Counters, Frame, Hidden. [Dump] saves the frames to the place's folder. Pause or "
-		.. "Ctrl+P freezes it; hold Ctrl to click through it. Hover a menu to open it, click a line to pick it." },
-	{ "limits", "Known limits",
-		"Some things can't follow the run: other players; in slow motion a push against a loose platform can start "
-		.. "later (up to about 0.2 s of game time); kit listeners whose function the executor can't see. Keep Sync Client "
-		.. "Objects on for platforms you need exactly." },
+		"A copy of Roblox's MicroProfiler ({key:microProfiler}).\n\n"
+		.. "• Time: the last frame. Avg: the average of every frame since the count started. Max: the biggest frame "
+		.. "so far.\n"
+		.. "• Aggregate Infinite counts the frames; picking it starts Avg and Max again.\n"
+		.. "• Mode: Detailed, Timers, Counters, Frame, Hidden.\n"
+		.. "• Custom > TAS Timeline shows your run (green = the current frame, click to jump there).\n"
+		.. "• [Dump] saves the frames to the place's folder.\n"
+		.. "• Pause or Ctrl+P freezes it. Hold Ctrl to click through it.\n"
+		.. "• Hover a menu to open it, click a line to pick it." },
+	{ "problems", "Common problems",
+		"• Keys do nothing: you are typing in chat or a text box, or the Roblox menu is open.\n"
+		.. "• The mouse is stuck in the middle: the camera is locked while paused. Hold Ctrl, or press Look Around "
+		.. "{key:lookAround}.\n"
+		.. "• Test doesn't press keys: keep the Roblox window focused.\n"
+		.. "• The cursor moves too fast in NohBoard: lower NohBoard Mouse Speed.\n\n"
+		.. "Known limits:\n"
+		.. "• Other players don't follow the run.\n"
+		.. "• In slow motion a push against a loose platform can start later (up to about 0.2 s of game time).\n"
+		.. "• Kit listeners whose function the executor can't see keep real time.\n"
+		.. "• Keep Sync Client Objects on for platforms you need exactly." },
 	{ "missing", "Missing executor functions", "" },
-	{ "credits", "Credits", CREDITS },
 }
 
 -- the topics with keys filled in (the controls as bound now) and the missing functions listed

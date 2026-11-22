@@ -83,6 +83,7 @@ ui/win/library
 ui/win/merge
 ui/win/helptext
 ui/win/help
+ui/win/about
 ui/touch
 ui/classic/tree
 ui/classic/build
