@@ -149,10 +149,10 @@ do
 	local sf7, s7 = fresh()
 	eq(sf7:load(), "v2", "converted")
 	eq(s7:get("glass"), "Tint", "glass default")
-	eq(s7:get("accentColor"), "#3F7CF0", "accent default")
+	eq(s7:get("accentColor"), "#3FB950", "accent default (V3.1: green)")
 	eq(s7:get("font"), "BuilderSans", "font default")
 	local v3j = HttpService:JSONDecode(files:read(V3_PATH))
-	eq(v3j.settings.accentColor, "#3F7CF0", "strings saved")
+	eq(v3j.settings.accentColor, "#3FB950", "strings saved")
 	eq(v3j.settings.textSize, 13, "numbers saved")
 	local ui = sf7:getUi()
 	check(type(ui) == "table" and type(ui.themes) == "table" and type(ui.layout) == "table" and type(ui.recentColors) == "table",

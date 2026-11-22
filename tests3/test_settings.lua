@@ -194,18 +194,18 @@ do
 	check(s3:set("glass", "frost"), "set a choice")
 	eq(s3:get("glass"), "Frost", "get returns the string")
 	eq(s3:set("accentColor", "nope"), false, "a bad colour refused by set")
-	eq(s3:get("accentColor"), "#3F7CF0", "unchanged")
+	eq(s3:get("accentColor"), "#3FB950", "unchanged")
 	local fired = 0
 	s3:changed("glassColor", function() fired = fired + 1 end)
-	s3:set("glassColor", "#242a38")
+	s3:set("glassColor", "#232b26")
 	eq(fired, 0, "the same colour in another case is no change")
 end
 
 section("appearance defaults (phase 5a)")
 do
 	local want = {
-		theme = "Default", glass = "Tint", glassColor = "#242A38", glassTransparency = 54, blurStrength = 70, edgeLight = 16,
-		accentColor = "#3F7CF0", textColor = "#FFFFFF", secondaryTextColor = "#B4BBC8", recordingColor = "#FF5A5A",
+		theme = "Default", glass = "Tint", glassColor = "#232B26", glassTransparency = 54, blurStrength = 70, edgeLight = 16,
+		accentColor = "#3FB950", textColor = "#FFFFFF", secondaryTextColor = "#B4BBC8", recordingColor = "#FF5A5A",
 		font = "BuilderSans", numberFont = "RobotoMono", textSize = 13, interfaceScale = 100, windowCorners = 16,
 		buttonShape = "Pill", shadows = 1, animations = "Smooth", animationLength = 0.2, easing = "Preset",
 		easingDirection = "Out", bezierX1 = 0.25, bezierY1 = 0.1, bezierX2 = 0.25, bezierY2 = 1,

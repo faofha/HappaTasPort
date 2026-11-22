@@ -102,6 +102,9 @@ end
 -- (V3.1: settings that follow another or are fixed values are never read from a file. A file from before V3.1 has
 -- the six settings Sync Client Objects now stands for: it is on when it or any of them was on, so button timers,
 -- lighting and the kit stay synced for a file that had client objects off, the old default.)
+-- (V3.1: the default blue became green; a file still holding the old default exactly was never customised)
+local OLD_DEFAULTS = { accentColor = "#3F7CF0", glassColor = "#242A38" }
+
 local function loadSettings(settings, entries)
 	local old, any = false, false
 	for key, v in pairs(entries) do
@@ -109,6 +112,8 @@ local function loadSettings(settings, entries)
 		if def and def.follows then
 			old = true
 			if tonumber(v) and tonumber(v) ~= 0 then any = true end
+		elseif OLD_DEFAULTS[key] and type(v) == "string" and v:upper() == OLD_DEFAULTS[key] then
+			-- (left on the new default)
 		elseif def and not def.hidden then
 			settings:set(key, v)
 		end

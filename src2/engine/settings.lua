@@ -32,11 +32,11 @@ local function look(key, default, extra, desc) return row(key, nil, "Appearance"
 Settings.SCHEMA = {
 	look("theme", "Default", { kind = "text" }, "Save your look and switch between saved looks"),
 	look("glass", "Tint", choice({ "Clear", "Tint", "Frost" }), "Frost blurs the game behind (high graphics only)"),
-	look("glassColor", "#242A38", color(), "The colour of the windows' glass"),
+	look("glassColor", "#232B26", color(), "The colour of the windows' glass"),
 	look("glassTransparency", 54, num(0, 100, true), "How much of the game shows through the glass"),
 	look("blurStrength", 70, num(0, 100, true), "How strongly Frost blurs the game behind"),
 	look("edgeLight", 16, num(0, 100, true), "The light on the windows' edges"),
-	look("accentColor", "#3F7CF0", color(), "Switches, sliders and main buttons"),
+	look("accentColor", "#3FB950", color(), "Switches, sliders and main buttons"),
 	look("textColor", "#FFFFFF", color(), "The interface's text"),
 	look("secondaryTextColor", "#B4BBC8", color(), "Explanations and other quieter text"),
 	look("recordingColor", "#FF5A5A", color(), "Shown while recording"),
