@@ -255,7 +255,8 @@ function SettingsWin.build(ui, body, win)
 			end
 		end
 		for _, def in ipairs(Settings.SCHEMA) do
-			if def.section == secName and not BEZIER[def.key] and not def.hidden then
+			-- (hosted by Compact: the New interface's own look rows aren't shown, V3.1)
+			if def.section == secName and not BEZIER[def.key] and not def.hidden and not (win.compact and def.newOnly) then
 				local ctl, kind = controlFor(lctx, s, def, sw)
 				local row = Row.new(lctx, list, { name = def.name, desc = def.desc, control = ctl })
 				local r = { row = row, ctl = ctl, kind = kind, def = def }
