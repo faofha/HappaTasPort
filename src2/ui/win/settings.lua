@@ -58,7 +58,11 @@ local function swatch(ctx, s, key)
 	self.gui, self.swatch = gui, gui
 	self.set = function(_, v) W.set(gui, "BackgroundColor3", Color3.fromHex(tostring(v):sub(2))) end
 	K.rect(self, { onRelease = function(_, clicked)
-		if clicked then ColorPicker.open(ctx, gui, { value = s:get(key), onApply = function(hex) s:set(key, hex) end }) end
+		if clicked then
+			-- (the colour shows on the interface while picking; Cancel puts the old one back)
+			ColorPicker.open(ctx, gui, { value = s:get(key), default = Settings.byKey[key].default,
+				onPreview = function(hex) s:set(key, hex) end, onApply = function(hex) s:set(key, hex) end })
+		end
 	end })
 	self:set(s:get(key))
 	return self

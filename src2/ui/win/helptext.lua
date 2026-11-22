@@ -179,7 +179,10 @@ local TOPICS = {
 		"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
 		.. "always works.\n"
 		.. "• No HappaTAS key does anything while you type.\n"
-		.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←)." },
+		.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←).\n"
+		.. "• A colour swatch opens the colour picker: drag the square and the hue bar, type #RRGGBB or r, g, b, or "
+		.. "pick a quick or recent colour. The colour shows while you pick. Cancel puts the old one back; Reset to "
+		.. "default sets the default." },
 	{ "profiler", "MicroProfiler",
 		"A copy of Roblox's MicroProfiler ({key:microProfiler}).\n\n"
 		.. "• Time: the last frame. Avg: the average of every frame since the count started. Max: the biggest frame "

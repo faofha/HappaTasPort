@@ -1,20 +1,22 @@
 -- ================================================================================================
---  CLASSIC COLOUR PICKER  (HappaTAS 3 ui, Classic Look): a small window in Classic's own look for one colour
---  setting: a saturation / brightness square, a hue bar (the same maths as the New interface's picker,
---  ui/kit/colorpicker), the old and new colour side by side, one box for "#RRGGBB" or "r, g, b", and Apply /
---  Cancel (plus Auto on a colour that can follow the Main Colour). One at a time (classic.picker). Esc, a click
---  outside it, another tab, hiding Classic or Unload close it without applying. It is built in V2's colours and
---  the Classic Look paints it like any other part.
+--  CLASSIC COLOUR PICKER  (HappaTAS 3 ui, Classic Look; V3.1 layout): a small window in Classic's own look for
+--  one colour setting, the same design as the New interface's picker (ui/kit/colorpicker): a saturation /
+--  brightness square and a hue bar (press and drag), the old and new colour side by side, one box for "#RRGGBB"
+--  or "r, g, b", the quick colours, the recent colours, Reset (to the default: Auto on a colour that can follow
+--  the Main Colour), Cancel and Apply. The colour shows on Classic live while picking; closing without Apply
+--  (Cancel, Esc, a click outside it, another tab, hiding Classic, Unload) puts the old value back. One at a
+--  time (classic.picker). It is built in V2's colours and the Classic Look paints it like any other part.
 -- ================================================================================================
 local Env = import("platform/env")
 local Settings = import("engine/settings")
 local Palette = import("ui/classic/palette")
+local KitPicker = import("ui/kit/colorpicker")
 
 local ClassicPicker = {}
 ClassicPicker.__index = ClassicPicker
 
 local NAME = "HappaTASColorPicker"
-local W, H, SQ, BAR = 260, 250, 150, 16
+local W, H, SQ, BAR, SW, STEP = 300, 344, 180, 22, 24, 28
 local Z = 40
 local u, rgb = UDim2.new, Color3.fromRGB
 local COLOR_DEF = { kind = "color" }
@@ -53,7 +55,7 @@ function ClassicPicker.open(classic, key)
 	local s = classic.E.settings
 	local def = Settings.byKey[key]
 	local start = (key == "classicMainColor") and Color3.fromHex(s:get(key):sub(2)) or classic.look:color(key)
-	local self = setmetatable({ classic = classic, key = key, offs = {} }, ClassicPicker)
+	local self = setmetatable({ classic = classic, key = key, offs = {}, original = s:get(key), quick = {}, recent = {} }, ClassicPicker)
 	self.h, self.s, self.v = start:ToHSV()
 	-- (the window, in V2's colours: the Classic Look repaints it)
 	local f = frame(NAME, classic.gui, rgb(0, 35, 73), u(0.5, 0, 0.5, 0), u(0, W, 0, H), Z)
@@ -79,9 +81,9 @@ function ClassicPicker.open(classic, key)
 	local bg = Instance.new("UIGradient")
 	bg.Rotation, bg.Transparency = 90, NumberSequence.new(1, 0)
 	bg.Parent = black
-	local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4, true)
+	local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 12, 0, 12), Z + 4, true)
 	mark.AnchorPoint, mark.BackgroundTransparency = Vector2.new(0.5, 0.5), 1
-	corner(mark, 4)
+	corner(mark, 6)
 	local ms = Instance.new("UIStroke")
 	ms.Color, ms.Thickness = rgb(255, 255, 255), 2
 	ms.Parent = mark
@@ -93,7 +95,7 @@ function ClassicPicker.open(classic, key)
 	local hg = Instance.new("UIGradient")
 	hg.Rotation, hg.Color = 90, ColorSequence.new(keys)
 	hg.Parent = hue
-	local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2, true)
+	local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 6, 0, 4), Z + 2, true)
 	hueMark.AnchorPoint = Vector2.new(0.5, 0.5)
 	-- old / new
 	local x = 10 + SQ + 8 + BAR + 10
@@ -109,12 +111,34 @@ function ClassicPicker.open(classic, key)
 	box.Parent = f
 	corner(box, 5)
 	self.box = box
-	local by = 28 + SQ + 8 + 22 + 8
-	local auto = def and def.kind == "autocolor"
-	local bw = auto and (W - 40) / 3 or (W - 30) / 2
-	self.applyButton = button("Apply", f, "Apply", u(0, 10, 0, by), u(0, bw, 0, 24), rgb(0, 52, 129))
-	self.cancelButton = button("Cancel", f, "Cancel", u(0, 10 + bw + 10, 0, by), u(0, bw, 0, 24), rgb(142, 11, 0))
-	if auto then self.autoButton = button("Auto", f, "Auto", u(0, 10 + 2 * (bw + 10), 0, by), u(0, bw, 0, 24), rgb(0, 52, 129)) end
+	-- the quick and the recent colours: a caption, then a round swatch each
+	local function swatches(list, into, title, ry)
+		local l = Instance.new("TextLabel")
+		l.Name, l.BackgroundTransparency, l.Text = title .. "Title", 1, title
+		l.TextColor3, l.TextSize, l.ZIndex = rgb(255, 255, 255), 13, Z + 1
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.Position, l.Size = u(0, 10, 0, ry), u(0, 50, 0, SW)
+		l.Parent = f
+		for i, hex in ipairs(list) do
+			local b = Instance.new("TextButton")
+			b.Name, b.Text, b.BorderSizePixel, b.AutoButtonColor = title, "", 0, false
+			b:SetAttribute("HappaTASNoLook", true)
+			b.BackgroundColor3 = Color3.fromHex(hex:sub(2))
+			b.Position, b.Size, b.ZIndex = u(0, 64 + (i - 1) * STEP, 0, ry), u(0, SW, 0, SW), Z + 1
+			b.Parent = f
+			corner(b, SW / 2)
+			into[i] = { button = b, hex = hex }
+		end
+	end
+	local qy = 28 + SQ + 8 + 22 + 8
+	swatches(KitPicker.QUICK, self.quick, "Quick", qy)
+	local data = classic.E.settingsFile and classic.E.settingsFile:getUi()
+	swatches(data and data.recentColors or {}, self.recent, "Recent", qy + SW + 6)
+	local by = qy + 2 * (SW + 6) + 2
+	local bw = (W - 40) / 3
+	self.resetButton = button("Reset", f, "Reset", u(0, 10, 0, by), u(0, bw, 0, 26), rgb(0, 52, 129))
+	self.cancelButton = button("Cancel", f, "Cancel", u(0, 10 + bw + 10, 0, by), u(0, bw, 0, 26), rgb(142, 11, 0))
+	self.applyButton = button("Apply", f, "Apply", u(0, 10 + 2 * (bw + 10), 0, by), u(0, bw, 0, 26), rgb(0, 52, 129))
 	-- input
 	local function conn(sig, fn)
 		local c = sig:Connect(fn)
@@ -122,7 +146,10 @@ function ClassicPicker.open(classic, key)
 	end
 	conn(self.applyButton.MouseButton1Click, function() self:apply() end)
 	conn(self.cancelButton.MouseButton1Click, function() self:close() end)
-	if self.autoButton then conn(self.autoButton.MouseButton1Click, function() self:auto() end) end
+	conn(self.resetButton.MouseButton1Click, function() self:reset() end)
+	for _, list in ipairs({ self.quick, self.recent }) do
+		for _, it in ipairs(list) do conn(it.button.MouseButton1Click, function() self:typed(it.hex) end) end
+	end
 	conn(box.FocusLost, function() self:typed(box.Text) end)
 	local uis = Env.svc("UserInputService")
 	local function point(inp) return Vector2.new(inp.Position.X, inp.Position.Y) end
@@ -161,6 +188,8 @@ function ClassicPicker.open(classic, key)
 		if PRESS[inp.UserInputType] then self.dragging = nil end
 	end)
 	self:show()
+	self.startHex = Palette.hex(self.newColor)
+	self.ready = true -- (from here a change previews on Classic)
 	classic.picker = self
 	return self
 end
@@ -200,19 +229,36 @@ function ClassicPicker:show()
 	self.hueMark.Position = u(0.5, 0, self.h, 0)
 	self.newHalf.BackgroundColor3 = col
 	self.box.Text = Palette.hex(col)
+	-- (the colour shows on Classic while picking)
+	local hex = Palette.hex(col)
+	if self.ready and not self.done and hex ~= (self.lastPreview or self.startHex) then
+		self.lastPreview = hex
+		self.classic.E.settings:set(self.key, hex)
+	end
 end
 
 function ClassicPicker:apply()
-	self.classic.E.settings:set(self.key, Palette.hex(self.newColor))
+	local hex = Palette.hex(self.newColor)
+	self.done = true
+	self.classic.E.settings:set(self.key, hex)
+	if self.classic.E.settingsFile then KitPicker.remember(self.classic.E.settingsFile, hex) end
 	self:close()
 end
 
-function ClassicPicker:auto()
-	if self.autoButton then self.classic.E.settings:set(self.key, "Auto") end
+-- the setting's default (Auto on a colour that can follow the Main Colour)
+function ClassicPicker:reset()
+	local def = Settings.byKey[self.key]
+	self.done = true
+	if def then self.classic.E.settings:set(self.key, def.default) end
 	self:close()
 end
 
 function ClassicPicker:close()
+	-- (closed without Apply or Reset: the old value back)
+	if not self.done and self.lastPreview then
+		self.done = true
+		self.classic.E.settings:set(self.key, self.original)
+	end
 	for _, off in ipairs(self.offs) do pcall(off) end
 	self.offs = {}
 	if self.frame then pcall(function() self.frame:Destroy() end) end
