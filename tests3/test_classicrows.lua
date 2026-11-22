@@ -34,6 +34,20 @@ local c = ui.classic
 local rows = c.settingsRows
 local list = c.byPath["MainMenu.SettingsFrame.List"]
 
+section("Classic: Replay Chat (V3.1)")
+do
+	local rc = rows.replayChat
+	check(rc ~= nil and rc.switch ~= nil, "Replay Chat: a switch in Classic's Settings tab")
+	if rc and rc.switch then
+		eq(rc.label.Text, "Replay Chat", "its name")
+		local was = s:get("replayChat")
+		rc.switch.MouseButton1Click:Fire()
+		eq(s:get("replayChat"), (was == 1) and 0 or 1, "the switch switches it")
+		rc.switch.MouseButton1Click:Fire()
+		eq(s:get("replayChat"), was, "and back")
+	end
+end
+
 section("Classic: the Glide settings")
 do
 	check(list:FindFirstChild("Section_Glide") ~= nil, "a Glide section")
