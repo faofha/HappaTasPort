@@ -4,7 +4,7 @@ HappaTAS as **one client-side Luau script** for Roblox executors. It records and
 (tool-assisted speedrun) runs frame by frame and saves them as compact `.tas` files in
 `<executor workspace>/HappaTasPort/<PlaceId>/`.
 
-**Latest version: HappaTAS V3.1**: a third interface (Compact), an About window with the whole update log, a new
+**Latest version: HappaTAS V3.1**: a third interface (Tasability), an About window with the whole update log, a new
 colour picker, green default colours, one Sync Client Objects switch and an exact slow-motion speed hack, on top of
 HappaTAS 3.0, a rewrite from scratch of HappaTAS V2.38.17 with a new interface, a library for your runs and smaller
 files that save faster. Every V2 feature stays, and your old runs and settings carry over.
@@ -55,18 +55,20 @@ chat or a text box.
   can be changed far more than V2's: theme, glass (Frost blurs the game behind a window at high graphics
   quality), colours, fonts, text size, scale, corners, shadows and animations (Settings > Appearance).
 - **Classic**: V2.38.17's interface, the menu on `M` with Controls, Settings, Saves, Help and More. Pick it in
-  Settings > Interface > Interface (New / Classic / Compact; in Classic, click the box to go to the next one). It looks and works like V2.38.17: its settings, fonts
+  Settings > Interface > Interface (New / Classic / Tasability; in Classic, click the box to go to the next one). It looks and works like V2.38.17: its settings, fonts
   and colours; the New interface's Appearance settings aren't shown there and keep their values. Classic has
   its own **Classic Look** instead (only in Classic's Settings tab): a Main Colour that every colour on Auto
   follows, a row (and a colour picker) for each of the 23 colours it draws, and a background: a picture link
   (downloaded once into `HappaTasPort/Backgrounds`, HappaTAS's only network use), a Roblox image id or a Roblox
   video id (`video:123`; video files from links don't play in Roblox).
-- **Compact** (V3.1, inspired by Tasability's look; no code or assets taken from it): one main window with a
+- **Tasability** (V3.1, in Tasability's style; no code or assets taken from it): one main window with a
   title bar (version, the mode, a settings search, minimise to the title bar), tabs CONTROLS / SETTINGS / HELP /
   ABOUT and two side panels docked to it, LIBRARY on the left and INSPECTOR on the right. Square, dark, with
-  the accent colour on its edges and section titles. It uses the accent, text colours and text size; the New
-  interface's glass, fonts, corners and animations don't apply. The timeline bar, messages and the Merge window
-  are the New interface's.
+  the accent colour on its edges and section titles. Its SETTINGS tab and KEYS list are its own, in Tasability's
+  style: checkboxes, value boxes, dropdowns, colour boxes and key boxes in two columns of sections, a RESET per
+  section, descriptions when you hover a row. It uses the accent, text colours and text size; the New interface's
+  glass, fonts, corners and animations don't apply. The timeline bar, messages and the Merge window are the New
+  interface's.
 
 All three read one settings store: a setting changed in one shows in the others at once. Phones (a touch
 screen without a keyboard) always get Classic, with V2's mobile buttons.
@@ -144,7 +146,7 @@ screen without a keyboard) always get Classic, with V2's mobile buttons.
 | Glide | Glide Manipulation, Glide Chance (%) (in Classic's Settings tab too) |
 | Inputs | Replay Keyboard, Replay Mouse Clicks, Replay Mouse Movement, NohBoard Cursor, Keep Mouse Position (Paused), NohBoard Mouse Speed (at most 1), Window Guarding |
 | World sync | Sync Client Objects (client objects, timed buttons, lighting and the EToH kit; on by default) |
-| Interface | Interface (New / Classic / Compact), Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale |
+| Interface | Interface (New / Classic / Tasability), Show Stats (Idle / Create / Test), Stats Text Size, Show MicroProfiler, MicroProfiler Scale |
 | Appearance | Theme, Glass, colours, fonts, text size, interface scale, corners, button shape, shadows, animations |
 | Classic look (Classic only) | Main Colour, 23 colours (Window, Panel, Button, Shade, Scroll Bar, Light Fill, Text, Dark Text, Label Text, Placeholder Text, Section Title, Outline, Field Outline, Divider, Line, Light Outline, Cancel, Warning, Merge OK, Toggle Off, Icon Button, Switch On, Switch Off), Background, Background Transparency, Background Fit |
 
@@ -229,10 +231,10 @@ of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor,
 
 ## Version history (short)
 
-The whole log, every version since 2.01, is in the About window (New), on Classic's More page and on Compact's
+The whole log, every version since 2.01, is in the About window (New), on Classic's More page and on Tasability's
 ABOUT tab.
 
-- **HappaTAS V3.1**: the Compact interface (inspired by Tasability's look); an About window with the credits and
+- **HappaTAS V3.1**: the Tasability interface (in Tasability's style); an About window with the credits and
   the whole update log; a shorter Help; a new colour picker (one box, quick and recent colours, live preview);
   green default colours; one Sync Client Objects switch and fewer settings; the speed hack in exact slow motion
   (Frame Step, Smooth Slow Motion, capped at 1x), Speed Hack In, Glide Manipulation, Classic Look, smaller TAS

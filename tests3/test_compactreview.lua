@@ -16,7 +16,7 @@ M.steps(2)
 local timing0 = E.pipe.timing
 wm:open("settings")
 M.steps(1)
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 

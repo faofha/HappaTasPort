@@ -9,12 +9,11 @@
 -- ================================================================================================
 local W = import("ui/write")
 local K = import("ui/kit/base")
-local Button = import("ui/kit/button")
-local Toggle = import("ui/kit/toggle")
-local Slider = import("ui/kit/slider")
+local Parts = import("ui/compact/parts")
 local CK = import("ui/compact/kit")
 local Env = import("platform/env")
 local Util = import("engine/util")
+local TKeys = import("ui/compact/keys")
 
 local Controls = {}
 Controls.__index = Controls
@@ -23,7 +22,7 @@ local EVERY = 0.1
 local MODE = { "Idle", "Create", "Test" }
 local GAP, TOP, ROW = 7, 26, 21 -- (between sections; a section's first row; a row's pitch)
 -- section heights: title + rows + padding
-local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + 320 + 6, tools = TOP + 24 + 8 }
+local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + TKeys.height() + 8, tools = TOP + 24 + 8 }
 
 local function column(parent, x)
 	local f = K.frame(x == 0 and "Left" or "Right", parent)
@@ -45,7 +44,8 @@ local function fix(sec, y, h)
 end
 
 function Controls.build(cp)
-	local ui, ctx = cp.ui, cp.ctx
+	local ui = cp.ui
+	local ctx = cp:clippedCtx(cp.pages.controls) -- (rows scrolled out of view take no click)
 	local E = ui.E
 	local self = setmetatable({ cp = cp, ui = ui, E = E, values = {}, buttons = {}, labels = {}, last = {}, t = 0, file = "-" }, Controls)
 	local page = cp.pages.controls
@@ -84,11 +84,10 @@ function Controls.build(cp)
 	local brow = K.frame("Buttons", self.run.body)
 	brow.Size = UDim2.new(1, -16, 0, 24)
 	brow.Position = UDim2.new(0, 8, 0, 4 + 4 * ROW)
-	local function button(key, text, parent, x, w, onClick, kind)
-		local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w, h = 22 })
+	local function button(key, text, parent, x, w, onClick)
+		local b = Parts.button(ctx, parent, text, { onClick = onClick })
 		b.gui.Position = UDim2.new(x, x > 0 and 2 or 0, 0, 0)
 		b.gui.Size = UDim2.new(w and 0 or 0.333, w or -3, 0, 22)
-		b.onClick = onClick
 		self.buttons[key] = b
 		cp.pieces[#cp.pieces + 1] = b
 		return b
@@ -100,18 +99,9 @@ function Controls.build(cp)
 	-- SPEED HACK
 	self.speed = section(self.left, "speed hack", H.run + GAP, H.speed)
 	local s = E.settings
-	local tr = K.frame("Row_speedHack", self.speed.body)
-	tr.Size = UDim2.new(1, -16, 0, 26)
-	tr.Position = UDim2.new(0, 8, 0, 4)
-	local tl = K.text("TextLabel", "Name", tr)
-	tl.Text = "Speed Hack"
-	tl.Size = UDim2.new(0.6, 0, 1, 0)
-	tl.TextXAlignment = Enum.TextXAlignment.Left
-	self.labels[#self.labels + 1] = tl
-	local tog = Toggle.new(ctx, tr)
-	tog.gui.AnchorPoint = Vector2.new(1, 0.5)
-	tog.gui.Position = UDim2.new(1, 0, 0.5, 0)
-	tog.onChange = function(on) s:set("speedHack", on and 1 or 0) end
+	local tog = Parts.checkbox(ctx, self.speed.body, "Speed Hack", { onChange = function(on) s:set("speedHack", on and 1 or 0) end })
+	tog.gui.Size = UDim2.new(1, -16, 0, 18)
+	tog.gui.Position = UDim2.new(0, 8, 0, 6)
 	tog:set(s:on("speedHack"))
 	self.speedToggle = tog
 	cp.pieces[#cp.pieces + 1] = tog
@@ -123,10 +113,11 @@ function Controls.build(cp)
 	sl.Size = UDim2.new(0.3, 0, 1, 0)
 	sl.TextXAlignment = Enum.TextXAlignment.Left
 	self.labels[#self.labels + 1] = sl
-	local slider = Slider.new(ctx, sr, { min = 0.1, max = 1, w = 120, fmt = function(v) return string.format("%gx", v) end })
+	local slider = Parts.slider(ctx, sr, { min = 0.1, max = 1, fmt = function(v) return string.format("%.2fx", v) end,
+		onChange = function(x) s:set("speedHackSpeed", math.floor(x * 100 + 0.5) / 100) end })
 	slider.gui.AnchorPoint = Vector2.new(1, 0.5)
 	slider.gui.Position = UDim2.new(1, 0, 0.5, 0)
-	slider.onChange = function(x) s:set("speedHackSpeed", x) end
+	slider.gui.Size = UDim2.new(0.7, 0, 0, 22)
 	slider:set(s:get("speedHackSpeed"))
 	self.speedSlider = slider
 	cp.pieces[#cp.pieces + 1] = slider
@@ -136,7 +127,8 @@ function Controls.build(cp)
 	cp.keysSection.gui.Parent = self.right
 	fix(cp.keysSection, 0, H.keys)
 	cp.keysFrame.Position = UDim2.new(0, 4, 0, 2)
-	cp.keysFrame.Size = UDim2.new(1, -8, 0, 320)
+	cp.keysFrame.Size = UDim2.new(1, -16, 0, TKeys.height())
+	cp.keysFrame.Position = UDim2.new(0, 8, 0, 4)
 	self.right.Size = UDim2.new(0.5, -5, 0, H.keys + GAP + H.tools)
 	self.tools = section(self.right, "tools", H.keys + GAP, H.tools)
 	local trow = K.frame("Buttons", self.tools.body)

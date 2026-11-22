@@ -101,10 +101,10 @@ function UI.start(E)
 end
 
 -- the new interface (or Compact, which shares its machinery) is live and shown: its per-frame work runs only then
-function UI:newActive() return (self.live == "New" or self.live == "Compact") and self.shown end
+function UI:newActive() return (self.live == "New" or self.live == "Tasability") and self.shown end
 
 -- the Compact interface is live
-function UI:isCompact() return self.live == "Compact" end
+function UI:isCompact() return self.live == "Tasability" end
 
 -- the live interface is shown
 function UI:liveShown()
@@ -124,13 +124,13 @@ function UI:endTyping()
 	E.typing.rebinding = false
 end
 
--- "New", "Classic" or "Compact" (anything else is New): the others hidden, in the same frame
+-- "New", "Classic" or "Tasability" (anything else is New): the others hidden, in the same frame
 function UI:setInterface(name)
-	if name ~= "Classic" and name ~= "Compact" then name = "New" end
+	if name ~= "Classic" and name ~= "Tasability" then name = "New" end
 	if self.classicOnly then name = "Classic" end
 	if name == self.live and (name ~= "Classic" or self.classic) then return end
 	self:endTyping()
-	if name == "Compact" and not self.compact then
+	if name == "Tasability" and not self.compact then
 		self.compact = Compact.new(self)
 		local cp = self.compact
 		self.life:own(function() cp:destroy() end)
@@ -142,10 +142,10 @@ function UI:setInterface(name)
 		self.E.typing:watch(c.gui)
 	end
 	self.live = name
-	if self.wm then self.wm:setHideAll(name == "Compact") end
-	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Compact") end
-	if self.theme then self.theme:setCompact(name == "Compact") end
-	if self.compact then self.compact:setLive(name == "Compact") end
+	if self.wm then self.wm:setHideAll(name == "Tasability") end
+	if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+	if self.theme then self.theme:setCompact(name == "Tasability") end
+	if self.compact then self.compact:setLive(name == "Tasability") end
 	self:applyShown()
 	if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
 	if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
@@ -171,7 +171,7 @@ end
 function UI:updateModal()
 	if self.live == "Classic" then
 		self.modal = self.classic ~= nil and self.classic:modal()
-	elseif self.live == "Compact" then
+	elseif self.live == "Tasability" then
 		self.modal = self.shown and self.compact ~= nil and self.compact:modal()
 	else
 		self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()

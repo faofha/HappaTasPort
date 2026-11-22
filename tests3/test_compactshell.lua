@@ -13,7 +13,7 @@ local Env = __T3("platform/env")
 local HttpService = game:GetService("HttpService")
 local guard = 0
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 local sw, sh = ui.wm:screen()

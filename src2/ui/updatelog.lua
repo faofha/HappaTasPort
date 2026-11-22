@@ -2,14 +2,14 @@
 --  UPDATE LOG  (HappaTAS 3 ui, V3.1): every version, newest first, as { heading, bullets } (V2's update log
 --  form: " date - version", "   -   line"). V3.1 and V3.0 on top; below them V2.38.17's log word for word,
 --  generated from src/parts/p04_ui.lua on branch v2.38.17-humanoid-clock (its 3UpdateLog rows in name order:
---  39 versions, 167 lines; never edited by hand). The About window, Classic's More page and Compact's ABOUT
+--  39 versions, 167 lines; never edited by hand). The About window, Classic's More page and Tasability's ABOUT
 --  tab all show this list.
 -- ================================================================================================
 local UpdateLog = {}
 
 UpdateLog.ENTRIES = {
 	{ heading = " 11/22/26 - V3.1", bullets = {
-		"   -   Compact: a third interface, inspired by Tasability",
+		"   -   Tasability: a third interface in Tasability's style",
 		"   -   About window: version, credits and the update log",
 		"   -   Help rewritten in short sections; credits out of Help",
 		"   -   A new colour picker: one box, quick and recent colours",

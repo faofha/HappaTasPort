@@ -15,10 +15,10 @@ local CK = import("ui/compact/kit")
 local CONFIG = import("config")
 local Host = import("ui/compact/host")
 local Controls = import("ui/compact/controls")
-local SettingsWin = import("ui/win/settings")
+local TSettings = import("ui/compact/settings")
+local TKeys = import("ui/compact/keys")
 local HelpWin = import("ui/win/help")
 local AboutWin = import("ui/win/about")
-local ControlsWin = import("ui/win/controls")
 local LibraryWin = import("ui/win/library")
 local InspectorWin = import("ui/win/inspector")
 
@@ -50,6 +50,12 @@ function Compact.new(ui)
 	self:buildTitleBar()
 	self:buildBody()
 	self.controls = Controls.build(self)
+	-- (SETTINGS: its own page in Tasability's style, V3.1)
+	self.settingsPage = TSettings.build(self)
+	self.pieces[#self.pieces + 1] = self.settingsPage
+	-- (KEYS: its own key boxes, V3.1)
+	self.keys = TKeys.build(self, self.keysFrame, self:clippedCtx(self.pages.controls))
+	self.pieces[#self.pieces + 1] = self.keys
 	self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 	self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
 	self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
@@ -60,8 +66,7 @@ function Compact.new(ui)
 	end)
 	self.search.onInput = function(t)
 		if self.tab ~= "settings" then self:showTab("settings") end
-		local h = self:host("settings")
-		if h and h.obj and h.obj.setQuery then h.obj.setQuery(t or "") end
+		self.settingsPage:filter(t or "")
 	end
 	self:paint()
 	self:load()
@@ -69,6 +74,22 @@ function Compact.new(ui)
 end
 
 -- ------------------------------------------------------------------------------------------------ pointer
+-- a pointer context whose rects are cut to frame (a scrolling page: a row scrolled out of view takes no click,
+-- final review)
+function Compact:clippedCtx(frame)
+	local base = self.ctx
+	local c = {}
+	for k, v in pairs(base) do c[k] = v end
+	c.pointer = {
+		add = function(r, z)
+			r.clip = r.clip or frame
+			return base.pointer.add(r, z)
+		end,
+		remove = base.pointer.remove,
+	}
+	return c
+end
+
 function Compact:addRect(r, z)
 	r.z = Z + (z or 0)
 	r.group = r.group or self.gui
@@ -174,6 +195,11 @@ function Compact:buildBody()
 		page.ZIndex = 2
 		page.Parent = content
 		self.pages[id] = page
+		if page:IsA("ScrollingFrame") then
+			-- (the pointer keeps rects' bounds until told: a scroll moves them, V3.1)
+			local conn = page:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
+			self.offs[#self.offs + 1] = function() conn:Disconnect() end
+		end
 	end
 	local grip = K.frame("Grip", self.gui)
 	grip.AnchorPoint = Vector2.new(1, 1)
@@ -291,6 +317,8 @@ end
 
 function Compact:applyVisible()
 	local on = self.live
+	-- (a dropdown list left open closes when the window folds or the interface changes)
+	if self.settingsPage and not (on and not self.folded) then self.settingsPage:closePopups() end
 	W.set(self.gui, "Visible", on)
 	W.set(self.inline, "Visible", not self.folded)
 	W.set(self.grip, "Visible", not self.folded)
@@ -309,10 +337,8 @@ end
 -- what each hosted window is built from and where it goes
 function Compact:hostSpec(id)
 	local p = self.pages
-	if id == "settings" then return SettingsWin.build, p.settings end
 	if id == "help" then return HelpWin.build, p.help end
 	if id == "about" then return AboutWin.build, p.about end
-	if id == "controls" then return ControlsWin.build, self.keysFrame end
 	if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
 	if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
 	return nil
@@ -349,8 +375,7 @@ end
 
 -- a key being bound ends with the interface going away
 function Compact:endTyping()
-	local h = self.hosted.controls
-	if h and h.obj and h.obj.stopWaiting then h.obj.stopWaiting() end
+	if self.keys then self.keys:stopWaiting() end
 end
 
 function Compact:showTab(id)

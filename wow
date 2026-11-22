@@ -1482,8 +1482,8 @@ __mods["engine/settings"] = function(import)
 		row("syncLighting", "Sync Lighting", "World sync", 1, { follows = "syncClientObjects", desc = "Records and replays lighting changes" }),
 		row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { follows = "syncClientObjects", desc = "The EToH kit's scripts run on the TAS clock" }),
 		row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
-		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic", "Compact" },
-			desc = "New: HappaTAS 3's interface. Classic: V2's. Compact: one window with tabs" }),
+		row("interface", nil, "Interface", "New", { kind = "choice", options = { "New", "Classic", "Tasability" },
+			desc = "New: HappaTAS 3's. Classic: V2's. Tasability: one window with tabs, in Tasability's style" }),
 		row("showStatsIdle", "Show Stats (Idle)", "Interface", 1, { desc = "Shows the stats in Idle" }),
 		row("showStatsCreate", "Show Stats (Create)", "Interface", 1, { desc = "Shows the stats in Create" }),
 		row("showStatsTest", "Show Stats (Test)", "Interface", 1, { desc = "Shows the stats while testing" }),
@@ -4227,6 +4227,8 @@ __mods["persist/settingsfile"] = function(import)
 			if def and def.follows then
 				old = true
 				if tonumber(v) and tonumber(v) ~= 0 then any = true end
+			elseif key == "interface" and v == "Compact" then
+				settings:set(key, "Tasability")
 			elseif OLD_DEFAULTS[key] and type(v) == "string" and v:upper() == OLD_DEFAULTS[key] then
 			elseif def and not def.hidden then
 				settings:set(key, v)
@@ -13714,7 +13716,7 @@ __mods["ui/sounds"] = function(import)
 		local snd = self.sounds[name]
 		if not snd then return end
 		local s = self.E.settings
-		if not s:on("uiSounds") or (self.ui.live ~= "New" and self.ui.live ~= "Compact") then return end
+		if not s:on("uiSounds") or (self.ui.live ~= "New" and self.ui.live ~= "Tasability") then return end
 		self.last = name
 		pcall(function()
 			snd.Volume = math.clamp((tonumber(s:get("uiSoundVolume")) or 50) / 100, 0, 1)
@@ -16889,6 +16891,7 @@ __mods["ui/win/settings"] = function(import)
 		if v == math.floor(v) then return tostring(v) end
 		return (string.format("%.2f", v):gsub("0+$", ""):gsub("%.$", ""))
 	end
+	SettingsWin.num = num
 	local function fmtFor(key)
 		if PERCENT[key] then return function(v) return num(v) .. "%" end end
 		if key == "windowCorners" then return function(v) return num(v) .. "px" end end
@@ -16899,6 +16902,7 @@ __mods["ui/win/settings"] = function(import)
 		if type(v) == "number" and type(def.default) == "number" then return math.abs(v - def.default) < 1e-9 end
 		return v == def.default
 	end
+	SettingsWin.isDefault = isDefault
 	local Swatch = {}
 	Swatch.__index = Swatch
 	Swatch.destroy = K.destroy
@@ -16939,19 +16943,33 @@ __mods["ui/win/settings"] = function(import)
 		s:set("theme", name)
 		return true
 	end
+	function SettingsWin.lookNames(E)
+		local names = {}
+		for name in pairs(E.settingsFile:getUi().themes) do names[#names + 1] = name end
+		table.sort(names)
+		table.insert(names, 1, "Default")
+		return names
+	end
+	function SettingsWin.saveLook(E, name)
+		name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+		if name == "" then return false, "Type a name" end
+		if name:lower() == "default" then return false, "\"Default\" can't be overwritten: pick another name" end
+		local sf = E.settingsFile
+		local data = sf:getUi()
+		local look = {}
+		for _, def in ipairs(appearanceKeys()) do look[def.key] = E.settings:get(def.key) end
+		data.themes[name] = look
+		sf:setUi(data)
+		E.settings:set("theme", name)
+		return true
+	end
 	local function themeControl(ctx, s, sw)
 		local self = K.new(ctx, {})
 		local gui = K.frame("Theme", nil)
 		gui.Size = UDim2.new(0, 238, 0, 24)
 		self.gui = gui
 		local sf = ctx.E.settingsFile
-		local function options()
-			local names = {}
-			for name in pairs(sf:getUi().themes) do names[#names + 1] = name end
-			table.sort(names)
-			table.insert(names, 1, "Default")
-			return names
-		end
+		local function options() return SettingsWin.lookNames(ctx.E) end
 		local dd = Dropdown.new(ctx, gui, { options = options(), w = 150 })
 		local saveAs = Button.new(ctx, gui, { text = "Save as…", kind = "plain", w = 80 })
 		saveAs.gui.Position = UDim2.new(0, 158, 0, 0)
@@ -16972,17 +16990,9 @@ __mods["ui/win/settings"] = function(import)
 			W.set(dd.gui, "Visible", true)
 			local name = tostring(t):gsub("^%s+", ""):gsub("%s+$", "")
 			if name == "" then return true end
-			if name:lower() == "default" then
-				ctx.E.bus:emit("status", "\"Default\" can't be overwritten: pick another name", true)
-				return true
-			end
-			local data = sf:getUi()
-			local look = {}
-			for _, def in ipairs(appearanceKeys()) do look[def.key] = s:get(def.key) end
-			data.themes[name] = look
-			sf:setUi(data)
+			local ok, why = SettingsWin.saveLook(ctx.E, name)
+			if not ok then ctx.E.bus:emit("status", why, true) return true end
 			dd.options = options()
-			s:set("theme", name)
 			return true
 		end
 		self.set = function(_, v)
@@ -17182,6 +17192,60 @@ __mods["ui/win/settings"] = function(import)
 	end
 	return SettingsWin
 end
+__mods["ui/rebind"] = function(import)
+	local Env = import("platform/env")
+	local Keys = import("engine/keys")
+	local Rebind = {}
+	Rebind.__index = Rebind
+	function Rebind.new(E, life)
+		local self = setmetatable({ E = E, waiting = nil, onDone = nil, swallow = nil, conns = {} }, Rebind)
+		local uis = Env.svc("UserInputService")
+		self.conns[#self.conns + 1] = life:connect(uis.InputBegan, function(inp) self:began(inp) end)
+		self.conns[#self.conns + 1] = life:connect(uis.InputEnded, function(inp)
+			if self.swallow and inp.UserInputType == self.swallow then
+				task.defer(function() self.swallow = nil end)
+			end
+		end)
+		self.life = life
+		return self
+	end
+	function Rebind:start(controlKey, onDone)
+		if self.waiting then self:stop() end
+		self.waiting, self.onDone = controlKey, onDone
+		self.E.typing.rebinding = true
+	end
+	function Rebind:stop()
+		if not self.waiting then return end
+		local f = self.onDone
+		self.waiting, self.onDone = nil, nil
+		self.E.typing.rebinding = false
+		if f then f(nil) end
+	end
+	function Rebind:began(inp)
+		if not self.waiting then return end
+		local E = self.E
+		if inp.KeyCode == Enum.KeyCode.Escape then
+			E.typing.boundInput = inp
+			self:stop()
+			return
+		end
+		local name = Keys.fromKey[inp.KeyCode] or Keys.fromKey[inp.UserInputType]
+		if not name then return end
+		E.typing.boundInput = inp
+		local key, f = self.waiting, self.onDone
+		self.waiting, self.onDone = nil, nil
+		E.typing.rebinding = false
+		if inp.UserInputType ~= Enum.UserInputType.Keyboard then self.swallow = inp.UserInputType end
+		E.controls:set(key, name)
+		if f then f(name) end
+	end
+	function Rebind:destroy()
+		self:stop()
+		for _, c in ipairs(self.conns) do self.life:drop(c) end
+		self.conns = {}
+	end
+	return Rebind
+end
 __mods["ui/win/controls"] = function(import)
 	local W = import("ui/write")
 	local K = import("ui/kit/base")
@@ -17190,6 +17254,7 @@ __mods["ui/win/controls"] = function(import)
 	local Keys = import("engine/keys")
 	local Button = import("ui/kit/button")
 	local Row = import("ui/kit/row")
+	local Rebind = import("ui/rebind")
 	local ControlsWin = {}
 	local PAD = 18
 	local SHARED_OK = { pause = "unpause", unpause = "pause" }
@@ -17223,12 +17288,9 @@ __mods["ui/win/controls"] = function(import)
 		lctx.pointer = { add = function(r, z) r.clip = list; return ctx.pointer.add(r, z) end, remove = ctx.pointer.remove }
 		local scrollConn = list:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 		cw.offs[#cw.offs + 1] = function() scrollConn:Disconnect() end
-		local function stopWaiting()
-			local r = cw.waiting
-			cw.waiting = nil
-			E.typing.rebinding = false
-			if r then r.key:setText(c:get(r.ctl.key)) end
-		end
+		local rb = Rebind.new(E, ui.life)
+		cw.rebind = rb
+		local function stopWaiting() rb:stop() end
 		local function refresh()
 			local byKey = {}
 			for _, ctl in ipairs(Controls.LIST) do
@@ -17272,10 +17334,14 @@ __mods["ui/win/controls"] = function(import)
 			local r = { row = row, key = key, clear = clear, ctl = ctl, conflict = false }
 			cw.rows[ctl.key] = r
 			key.onClick = function()
-				if cw.swallow then return end
-				if cw.waiting then stopWaiting() end
+				if rb.swallow then return end
+				stopWaiting()
 				cw.waiting = r
-				E.typing.rebinding = true
+				rb:start(ctl.key, function()
+					if cw.waiting == r then cw.waiting = nil end
+					key:setText(c:get(ctl.key))
+					refresh()
+				end)
 				key:setText(WAITING)
 			end
 			clear.onClick = function() stopWaiting(); c:set(ctl.key, "None") end
@@ -17286,30 +17352,7 @@ __mods["ui/win/controls"] = function(import)
 			stopWaiting()
 			for _, ctl in ipairs(Controls.LIST) do c:set(ctl.key, ctl.default) end
 		end
-		local uis = Env.svc("UserInputService")
-		local conn = uis.InputBegan:Connect(function(inp)
-			local r = cw.waiting
-			if not r then return end
-			if inp.KeyCode == Enum.KeyCode.Escape then
-				E.typing.boundInput = inp
-				stopWaiting()
-				return
-			end
-			local name = Keys.fromKey[inp.KeyCode] or Keys.fromKey[inp.UserInputType]
-			if not name then return end
-			E.typing.boundInput = inp
-			cw.waiting = nil
-			E.typing.rebinding = false
-			if inp.UserInputType ~= Enum.UserInputType.Keyboard then cw.swallow = inp.UserInputType end
-			c:set(r.ctl.key, name)
-			refresh()
-		end)
-		local endConn = uis.InputEnded:Connect(function(inp)
-			if cw.swallow and inp.UserInputType == cw.swallow then
-				task.defer(function() cw.swallow = nil end)
-			end
-		end)
-		cw.offs[#cw.offs + 1] = function() conn:Disconnect(); endConn:Disconnect() end
+		cw.offs[#cw.offs + 1] = function() rb:destroy() end
 		cw.offs[#cw.offs + 1] = c:changed(function() refresh() end)
 		cw.offs[#cw.offs + 1] = function() stopWaiting() end
 		ui.life:own(function() for _, off in ipairs(cw.offs) do off() end end)
@@ -18626,7 +18669,7 @@ __mods["ui/updatelog"] = function(import)
 	local UpdateLog = {}
 	UpdateLog.ENTRIES = {
 		{ heading = " 11/22/26 - V3.1", bullets = {
-			"   -   Compact: a third interface, inspired by Tasability",
+			"   -   Tasability: a third interface in Tasability's style",
 			"   -   About window: version, credits and the update log",
 			"   -   Help rewritten in short sections; credits out of Help",
 			"   -   A new colour picker: one box, quick and recent colours",
@@ -18937,7 +18980,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "3. Made a mistake? Go back, then unpause to record over it.\n"
 			.. "4. Press {key:test} to play the run.\n"
 			.. "5. Save it in the Library.\n\n"
-			.. "In the New interface the Dock at the top opens the windows; Compact has one window with tabs. {key:menu} "
+			.. "In the New interface the Dock at the top opens the windows; Tasability has one window with tabs. {key:menu} "
 			.. "hides or shows the interface.\n\n"
 			.. "If you used V2, its settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
 			.. "To convert them again: unload HappaTAS first (Unload HappaTAS below the topics, or rejoin), then delete "
@@ -19060,7 +19103,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "• HappaTAS moves you by at most a few tenths of a stud.\n"
 			.. "• Idle and recording, R6 characters." },
 		{ "classiclook", "Classic interface",
-			"Settings > Interface switches between the New, the Classic and the Compact interface.\n\n"
+			"Settings > Interface switches between the New, the Classic and the Tasability interface.\n\n"
 			.. "Classic Look (Classic's Settings tab) sets Classic's colours and background:\n"
 			.. "• Main Colour: every colour set to Auto follows it.\n"
 			.. "• Each of the 23 colours has a row: type #RRGGBB or r, g, b, clear the box for Auto, or click the "
@@ -19069,7 +19112,7 @@ __mods["ui/win/helptext"] = function(import)
 			.. "uses the internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files "
 			.. "from links.\n"
 			.. "• Background Transparency and Background Fit (Crop, Fit, Stretch)." },
-		{ "compact", "Compact interface",
+		{ "compact", "Tasability interface",
 			"One window holds everything. Pick it in Settings > Interface (not on phones).\n\n"
 			.. "• The title bar: drag it to move the window, the corner grip resizes it. It shows the version, the mode "
 			.. "(and paused / recording), a search box that finds settings, and minimise (_), which folds the window to "
@@ -19077,6 +19120,10 @@ __mods["ui/win/helptext"] = function(import)
 			.. "• The tabs: CONTROLS (your run, the speed hack, your keys, the MicroProfiler and Unload), SETTINGS, HELP "
 			.. "and ABOUT.\n"
 			.. "• LIBRARY opens your saved runs on the left, INSPECTOR the frame's numbers on the right.\n"
+			.. "• SETTINGS: tick a box to turn a setting on, type a number and press Enter, pick from a list (▼), or click a "
+			.. "colour's swatch for the picker. RESET puts a section back to its defaults; hover a row to read what it does.\n"
+			.. "• KEYS (on CONTROLS): click a key box and press the new key (Esc cancels), × clears it, Reset all puts every "
+			.. "key back. Two actions on one key are marked; hover one to see the other.\n"
 			.. "• It uses your accent colour, text colours and text size; the New interface's glass, fonts, corners and "
 			.. "animations don't apply here.\n"
 			.. "• The timeline bar, messages and the Merge window are the same as in the New interface." },
@@ -19084,7 +19131,7 @@ __mods["ui/win/helptext"] = function(import)
 			"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
 			.. "always works.\n"
 			.. "• No HappaTAS key does anything while you type.\n"
-			.. "• In the New interface, Settings and Controls are their own windows; Compact has them as tabs. A setting "
+			.. "• In the New interface, Settings and Controls are their own windows; Tasability has them as tabs. A setting "
 			.. "that isn't at its default has a reset arrow (←).\n"
 			.. "• A colour swatch opens the colour picker: drag the square and the hue bar, type #RRGGBB or r, g, b, or "
 			.. "pick a quick or recent colour. The colour shows while you pick. Cancel puts the old one back; Reset to "
@@ -21672,6 +21719,686 @@ __mods["ui/compact/kit"] = function(import)
 	end
 	return CK
 end
+__mods["ui/compact/parts"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local CK = import("ui/compact/kit")
+	local Popover = import("ui/kit/popover")
+	local ColorPicker = import("ui/kit/colorpicker")
+	local Settings = import("engine/settings")
+	local P = {}
+	local Part = {}
+	Part.__index = Part
+	Part.destroy = K.destroy
+	local WAIT_COLOR = Color3.fromHex("DCC83C")
+	local COLOR_DEF = { kind = "color" }
+	local function sh(th) return th.shades or {} end
+	local function uiScale(ctx)
+		local ui = ctx.ui
+		return ui and ui.root and ui.root.scale.Scale or 1
+	end
+	local function text(parent, name, str, align)
+		local l = K.text("TextLabel", name, parent)
+		l.Text = str or ""
+		l.TextXAlignment = align or Enum.TextXAlignment.Left
+		l.TextTruncate = Enum.TextTruncate.AtEnd
+		K.stroke(l, Color3.new(0, 0, 0), 0, 1)
+		return l
+	end
+	local function paintText(l, th, size, color, bold)
+		W.set(l, "FontFace", th.font(bold and "bold" or "text"))
+		W.set(l, "TextSize", th.size(size))
+		W.set(l, "TextColor3", color)
+	end
+	function P.checkbox(ctx, parent, label, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		self.value, self.hover = false, false
+		local gui = K.frame("Checkbox", parent)
+		gui.Size = UDim2.new(1, 0, 0, 18)
+		self.gui = gui
+		local box = K.frame("Box", gui, Color3.new(0, 0, 0))
+		box.Position, box.Size = UDim2.new(0, 0, 0, 3), UDim2.new(0, 12, 0, 12)
+		local stroke = CK.border(box)
+		local tick = K.frame("Tick", box, Color3.new(1, 1, 1))
+		tick.AnchorPoint, tick.Position, tick.Size = Vector2.new(0.5, 0.5), UDim2.new(0.5, 0, 0.5, 0), UDim2.new(0, 6, 0, 6)
+		tick.Visible = false
+		local l = text(gui, "Label", label)
+		l.Position, l.Size = UDim2.new(0, 20, 0, 0), UDim2.new(1, -20, 1, 0)
+		self.box, self.tick, self.label = box, tick, l
+		local function paint(th)
+			local s = sh(th)
+			W.set(box, "BackgroundColor3", self.value and th.c.accent:Lerp(s.deep or Color3.new(0, 0, 0), 0.7) or (s.deep or Color3.new(0, 0, 0)))
+			CK.paintBorder(box, stroke, th)
+			W.set(tick, "BackgroundColor3", th.c.accent)
+			W.set(tick, "Visible", self.value)
+			paintText(l, th, 11, self.hover and th.c.accent or th.c.text)
+		end
+		self.paint = paint
+		K.style(self, paint)
+		function self.set(_, on)
+			self.value = on == true
+			paint(ctx.theme)
+		end
+		K.rect(self, { gui = gui,
+			onHover = function(on) self.hover = on; paint(ctx.theme); if opts.onHover then opts.onHover(on) end end,
+			onRelease = function(_, clicked)
+				if not clicked then return end
+				self:set(not self.value)
+				if opts.onChange then opts.onChange(self.value) end
+			end })
+		return self
+	end
+	local function boxRow(ctx, self, parent, label, opts)
+		local gui = K.frame(opts.name or "ValueBox", parent)
+		gui.Size = UDim2.new(1, 0, 0, 22)
+		self.gui = gui
+		local l = text(gui, "Label", label)
+		l.Size = UDim2.new(0.4, -4, 1, 0)
+		self.label = l
+		local holder = K.frame("Holder", gui, Color3.new(0, 0, 0))
+		holder.Position, holder.Size = UDim2.new(0.4, 0, 0, 0), UDim2.new(0.6, 0, 1, 0)
+		self.holder = holder
+		self.holderStroke = CK.border(holder)
+		return gui
+	end
+	function P.valueBox(ctx, parent, label, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		boxRow(ctx, self, parent, label, opts)
+		local box = K.text("TextBox", "Box", self.holder)
+		box.Position, box.Size = UDim2.new(0, 5, 0, 0), UDim2.new(1, -(opts.rightPad or 0) - 9, 1, 0)
+		box.TextXAlignment = Enum.TextXAlignment.Left
+		box.Text = ""
+		self.box = box
+		local focused = false
+		local function paint(th)
+			local s = sh(th)
+			if s.element then W.set(self.holder, "BackgroundColor3", s.element) end
+			CK.paintBorder(self.holder, self.holderStroke, th)
+			if focused then W.set(self.holderStroke, "Color", th.c.accent) end
+			paintText(self.label, th, 10.5, th.c.text2)
+			paintText(box, th, 11, focused and th.c.accent or th.c.text)
+		end
+		K.style(self, paint)
+		function self.set(_, t)
+			if not focused then box.Text = tostring(t or "") end
+		end
+		K.connect(self, box.Focused, function() focused = true; paint(ctx.theme) end)
+		K.connect(self, box.FocusLost, function()
+			focused = false
+			local ok = opts.commit and opts.commit(box.Text)
+			if opts.current then box.Text = tostring(opts.current()) end
+			paint(ctx.theme)
+			return ok
+		end)
+		K.rect(self, { gui = self.gui, onHover = function(on) if opts.onHover then opts.onHover(on) end end }, -1)
+		K.rect(self, { gui = box, onRelease = function(_, clicked) if clicked then box:CaptureFocus() end end })
+		return self
+	end
+	function P.dropdown(ctx, parent, label, options, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		self.options = options
+		boxRow(ctx, self, parent, label, opts)
+		local button = self.holder
+		button.Name = "Button"
+		self.button = button
+		local v = text(button, "Value", "")
+		v.Position, v.Size = UDim2.new(0, 5, 0, 0), UDim2.new(1, -24, 1, 0)
+		local arrow = text(button, "Arrow", "▼", Enum.TextXAlignment.Center)
+		arrow.AnchorPoint, arrow.Position, arrow.Size = Vector2.new(1, 0), UDim2.new(1, -2, 0, 0), UDim2.new(0, 16, 1, 0)
+		self.valueLabel = v
+		local hover = false
+		local function paint(th)
+			local s = sh(th)
+			if s.element then W.set(button, "BackgroundColor3", hover and s.hover or s.element) end
+			CK.paintBorder(button, self.holderStroke, th)
+			paintText(self.label, th, 10.5, th.c.text2)
+			paintText(v, th, 11, hover and th.c.accent or th.c.text)
+			paintText(arrow, th, 9, th.c.text2)
+		end
+		K.style(self, paint)
+		function self.set(_, val)
+			self.value = val
+			W.set(v, "Text", tostring(val or ""))
+		end
+		function self.close()
+			if self.pop then self.pop:close() end
+		end
+		local function open()
+			local n = #self.options
+			local pop = Popover.open(ctx, button, button.AbsoluteSize.X / uiScale(ctx), 20 * math.min(n, 8) + 4)
+			self.pop, self.list = pop, pop.frame
+			for i, opt in ipairs(self.options) do
+				local item = K.frame("Item", pop.frame, Color3.new(1, 1, 1))
+				item.BackgroundTransparency = 1
+				item.Position, item.Size = UDim2.new(0, 2, 0, 2 + (i - 1) * 20), UDim2.new(1, -4, 0, 20)
+				item.ZIndex = 3
+				local l = text(item, "Label", tostring(opt))
+				l.Position, l.Size, l.ZIndex = UDim2.new(0, 6, 0, 0), UDim2.new(1, -8, 1, 0), 3
+				paintText(l, ctx.theme, 11, ctx.theme.c.text2)
+				pop:add({ gui = item,
+					onHover = function(on)
+						W.set(item, "BackgroundTransparency", on and 0.85 or 1)
+						W.set(l, "TextColor3", on and ctx.theme.c.accent or ctx.theme.c.text2)
+					end,
+					onRelease = function(_, clicked)
+						if not clicked then return end
+						self:set(opt)
+						pop:close()
+						if opts.onChange then opts.onChange(opt) end
+					end }, 2)
+			end
+			pop.onClose = function()
+				if self.pop == pop then self.pop, self.list = nil, nil end
+			end
+		end
+		K.rect(self, { gui = button,
+			onHover = function(on) hover = on; paint(ctx.theme); if opts.onHover then opts.onHover(on) end end,
+			onRelease = function(_, clicked)
+				if not clicked then return end
+				if self.pop then self.pop:close() else open() end
+			end })
+		K.rect(self, { gui = self.gui, onHover = function(on) if opts.onHover then opts.onHover(on) end end }, -1)
+		self.offs[#self.offs + 1] = function() self.close() end
+		return self
+	end
+	function P.colorBox(ctx, parent, label, opts)
+		opts = opts or {}
+		local self
+		self = P.valueBox(ctx, parent, label, { name = "ColorBox", rightPad = 20, onHover = opts.onHover,
+			current = function() return opts.value() end,
+			commit = function(t)
+				local hex = Settings.sanitize(COLOR_DEF, t)
+				if not hex then return false end
+				if opts.onApply then opts.onApply(hex) end
+				return true
+			end })
+		local sw = K.frame("Swatch", self.holder, Color3.new(1, 1, 1))
+		sw.AnchorPoint, sw.Position, sw.Size = Vector2.new(1, 0.5), UDim2.new(1, -4, 0.5, 0), UDim2.new(0, 14, 0, 12)
+		K.stroke(sw, Color3.new(0, 0, 0), 0, 1)
+		self.swatch = sw
+		local valueSet = self.set
+		function self.set(me, hex)
+			valueSet(me, hex)
+			local ok, c = pcall(function() return Color3.fromHex(tostring(hex):sub(2)) end)
+			if ok then W.set(sw, "BackgroundColor3", c) end
+		end
+		K.rect(self, { gui = sw, onRelease = function(_, clicked)
+			if not clicked then return end
+			ColorPicker.open(ctx, sw, { value = opts.value(), default = opts.default,
+				onPreview = opts.onPreview, onApply = opts.onApply })
+		end }, 2)
+		return self
+	end
+	function P.button(ctx, parent, label, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		self.onClick = opts.onClick
+		local gui = K.frame("Button", parent, Color3.new(0, 0, 0))
+		gui.Size = opts.w and UDim2.new(0, opts.w, 0, 22) or UDim2.new(1, 0, 0, 22)
+		self.gui = gui
+		local stroke = CK.border(gui)
+		K.gradient(gui, Color3.new(1, 1, 1), Color3.fromRGB(170, 170, 170))
+		local l = text(gui, "Label", label, Enum.TextXAlignment.Center)
+		l.Size, l.Position = UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, -1)
+		self.label = l
+		local hover = false
+		local function paint(th)
+			local s = sh(th)
+			if s.element then W.set(gui, "BackgroundColor3", hover and s.hover or s.element) end
+			CK.paintBorder(gui, stroke, th)
+			paintText(l, th, 11, hover and th.c.accent or th.c.text)
+		end
+		K.style(self, paint)
+		function self.set(_, t) W.set(l, "Text", tostring(t or "")) end
+		K.rect(self, { gui = gui,
+			onHover = function(on) hover = on; paint(ctx.theme) end,
+			onRelease = function(_, clicked) if clicked and self.onClick then self.onClick() end end })
+		return self
+	end
+	function P.keyBox(ctx, parent, label, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		self.keyName, self.waiting, self.conflict, self.hover = "", false, false, false
+		local gui = K.frame("KeyBox", parent, Color3.new(0, 0, 0))
+		gui.Size = UDim2.new(1, 0, 0, 22)
+		self.gui = gui
+		local stroke = CK.border(gui)
+		local l = text(gui, "Label", label)
+		l.Position, l.Size = UDim2.new(0, 6, 0, 0), UDim2.new(0.58, -8, 1, 0)
+		self.label = l
+		local inset = K.frame("Inset", gui, Color3.new(0, 0, 0))
+		inset.Position, inset.Size = UDim2.new(0.58, 0, 0.15, 0), UDim2.new(0.42, -24, 0.7, 0)
+		inset.BorderSizePixel = 0
+		local insetStroke = K.stroke(inset, Color3.new(1, 1, 1), 0.4, 1)
+		self.inset, self.insetStroke = inset, insetStroke
+		local key = text(inset, "Key", "", Enum.TextXAlignment.Center)
+		key.Size = UDim2.new(1, 0, 1, 0)
+		self.key = key
+		local clear = CK.chip(ctx, gui, "×", { button = true, onClick = function() if opts.onClear then opts.onClear() end end })
+		clear.gui.AnchorPoint, clear.gui.Position, clear.gui.Size = Vector2.new(1, 0.5), UDim2.new(1, -3, 0.5, 0), UDim2.new(0, 16, 0, 16)
+		self.clear = clear
+		self.offs[#self.offs + 1] = function() clear:destroy() end
+		local function paint(th)
+			local s = sh(th)
+			if s.element then W.set(gui, "BackgroundColor3", self.hover and s.hover or s.element) end
+			CK.paintBorder(gui, stroke, th)
+			if s.deep then W.set(inset, "BackgroundColor3", s.deep) end
+			W.set(insetStroke, "Color", self.conflict and th.c.rec or th.c.accent:Lerp(s.deep or Color3.new(0, 0, 0), 0.6))
+			W.set(insetStroke, "Transparency", self.conflict and 0 or 0.4)
+			paintText(l, th, 10.5, self.hover and th.c.accent or th.c.text2)
+			paintText(key, th, 10.5, self.waiting and WAIT_COLOR or th.c.accent)
+			W.set(key, "Text", self.waiting and "..." or self.keyName)
+		end
+		K.style(self, paint)
+		function self.set(_, name)
+			self.keyName = tostring(name or "")
+			paint(ctx.theme)
+		end
+		function self.setWaiting(_, on)
+			self.waiting = on == true
+			paint(ctx.theme)
+		end
+		function self.setConflict(_, on)
+			self.conflict = on == true
+			paint(ctx.theme)
+		end
+		K.rect(self, { gui = gui,
+			onHover = function(on) self.hover = on; paint(ctx.theme); if opts.onHover then opts.onHover(on) end end,
+			onRelease = function(_, clicked) if clicked and opts.onClick then opts.onClick() end end }, -1)
+		return self
+	end
+	function P.slider(ctx, parent, opts)
+		opts = opts or {}
+		local self = K.new(ctx, Part)
+		self.min, self.max = opts.min or 0, opts.max or 1
+		self.fmt = opts.fmt or tostring
+		self.value = self.min
+		self.onChange = opts.onChange
+		local gui = K.frame("Slider", parent)
+		gui.Size = UDim2.new(1, 0, 0, 22)
+		self.gui = gui
+		local track = K.frame("Track", gui, Color3.new(0, 0, 0))
+		track.AnchorPoint, track.Position, track.Size = Vector2.new(0, 0.5), UDim2.new(0, 0, 0.5, 0), UDim2.new(1, -56, 0, 6)
+		local tstroke = CK.border(track)
+		local fill = K.frame("Fill", track, Color3.new(1, 1, 1))
+		fill.Size = UDim2.new(0, 0, 1, 0)
+		local knob = K.frame("Knob", track, Color3.new(1, 1, 1))
+		knob.AnchorPoint, knob.Size = Vector2.new(0.5, 0.5), UDim2.new(0, 10, 0, 10)
+		knob.Position = UDim2.new(0, 0, 0.5, 0)
+		K.stroke(knob, Color3.new(0, 0, 0), 0, 1)
+		local value = K.text("TextBox", "Value", gui)
+		value.AnchorPoint, value.Position, value.Size = Vector2.new(1, 0), UDim2.new(1, 0, 0, 0), UDim2.new(0, 50, 1, 0)
+		value.TextXAlignment = Enum.TextXAlignment.Right
+		self.track, self.fill, self.knob, self.valueLabel = track, fill, knob, value
+		local function show()
+			local a = (self.max > self.min) and (self.value - self.min) / (self.max - self.min) or 0
+			W.set(fill, "Size", UDim2.new(a, 0, 1, 0))
+			W.set(knob, "Position", UDim2.new(a, 0, 0.5, 0))
+			value.Text = self.fmt(self.value)
+		end
+		local function paint(th)
+			local s = sh(th)
+			if s.deep then W.set(track, "BackgroundColor3", s.deep) end
+			CK.paintBorder(track, tstroke, th)
+			W.set(fill, "BackgroundColor3", th.c.accent)
+			W.set(knob, "BackgroundColor3", th.c.accent)
+			paintText(value, th, 11, th.c.text)
+		end
+		K.style(self, paint)
+		function self.set(_, v)
+			v = tonumber(v)
+			if not v then return end
+			self.value = math.clamp(v, self.min, self.max)
+			show()
+		end
+		local function report(v)
+			self:set(v)
+			if self.onChange then self.onChange(self.value) end
+		end
+		local function fromX(pos)
+			local a, w = track.AbsolutePosition.X, track.AbsoluteSize.X
+			if w <= 0 then return end
+			local t = math.clamp((pos.X - a) / w, 0, 1)
+			report(self.min + (self.max - self.min) * t)
+		end
+		K.rect(self, { gui = track, onPress = fromX, onDrag = function(pos) fromX(pos) end })
+		K.rect(self, { gui = value, onRelease = function(_, clicked) if clicked then value:CaptureFocus() end end })
+		K.connect(self, value.FocusLost, function()
+			local n = tonumber((value.Text:gsub("[^%d%.%-]", "")))
+			if n then report(n) else show() end
+		end)
+		show()
+		return self
+	end
+	return P
+end
+__mods["ui/compact/settings"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local CK = import("ui/compact/kit")
+	local P = import("ui/compact/parts")
+	local Settings = import("engine/settings")
+	local SettingsWin = import("ui/win/settings")
+	local TSettings = {}
+	TSettings.__index = TSettings
+	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
+	local TITLE, PADT, PADB, GAP, SEC_GAP, STRIP = 22, 4, 6, 5, 7, 18
+	function TSettings.shown(def)
+		return table.find(SECTIONS, def.section) ~= nil and not BEZIER[def.key] and not def.hidden and not def.newOnly
+	end
+	local function has(list, opt)
+		for o in string.gmatch(tostring(list or ""), "[^,]+") do if o == opt then return true end end
+		return false
+	end
+	function TSettings.build(cp)
+		local ui, ctx = cp.ui, cp.ctx
+		local E = ui.E
+		local s = E.settings
+		local self = setmetatable({ cp = cp, ui = ui, E = E, rows = {}, sections = {}, order = {}, offs = {}, parts = {},
+			dropdowns = {}, query = "" }, TSettings)
+		local root = cp.pages.settings
+		local scroll = Instance.new("ScrollingFrame")
+		scroll.Name = "SettingsPage"
+		scroll.BackgroundTransparency = 1
+		scroll.BorderSizePixel = 0
+		scroll.ScrollBarThickness = 2
+		scroll.Position = UDim2.new(0, 6, 0, 6)
+		scroll.Size = UDim2.new(1, -12, 1, -12 - STRIP)
+		scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+		scroll.Parent = root
+		self.scroll = scroll
+		ctx = cp:clippedCtx(scroll)
+		local scrollConn = scroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
+		self.offs[#self.offs + 1] = function() scrollConn:Disconnect() end
+		local hover = K.text("TextLabel", "Hover", root)
+		hover.Position = UDim2.new(0, 8, 1, -STRIP)
+		hover.Size = UDim2.new(1, -16, 0, STRIP - 2)
+		hover.TextXAlignment = Enum.TextXAlignment.Left
+		hover.TextTruncate = Enum.TextTruncate.AtEnd
+		hover.Text = ""
+		self.hover = hover
+		self.columns = { left = K.frame("Left", scroll), right = K.frame("Right", scroll) }
+		self.columns.left.Size = UDim2.new(0.5, -4, 0, 0)
+		self.columns.right.Position = UDim2.new(0.5, 4, 0, 0)
+		self.columns.right.Size = UDim2.new(0.5, -4, 0, 0)
+		local function hoverFn(desc) return function(on) if on then hover.Text = desc or "" elseif hover.Text == desc then hover.Text = "" end end end
+		local function keep(p) self.parts[#self.parts + 1] = p; return p end
+		local function follow(key, f) self.offs[#self.offs + 1] = s:changed(key, f) end
+		local function makeRow(sec, def)
+			local key, body = def.key, sec.body
+			local r = { def = def, section = sec }
+			local onHover = hoverFn(def.desc)
+			if def.kind == "toggle" then
+				local p = keep(P.checkbox(ctx, body, def.name, { onHover = onHover, onChange = function(on) s:set(key, on and 1 or 0) end }))
+				p:set(s:get(key) == 1)
+				follow(key, function(v) p:set(v == 1) end)
+				r.part, r.gui, r.h = p, p.gui, 18
+			elseif def.kind == "number" then
+				local p = keep(P.valueBox(ctx, body, def.name, { onHover = onHover,
+					current = function() return SettingsWin.num(s:get(key)) end,
+					commit = function(t) return s:set(key, t) ~= false end }))
+				p:set(SettingsWin.num(s:get(key)))
+				follow(key, function(v) p:set(SettingsWin.num(v)) end)
+				r.part, r.gui, r.h = p, p.gui, 22
+			elseif def.kind == "choice" then
+				local p = keep(P.dropdown(ctx, body, def.name, def.options, { onHover = onHover, onChange = function(v) s:set(key, v) end }))
+				p:set(s:get(key))
+				follow(key, function(v) p:set(v) end)
+				self.dropdowns[#self.dropdowns + 1] = p
+				r.part, r.gui, r.h = p, p.gui, 22
+			elseif def.kind == "color" then
+				local p = keep(P.colorBox(ctx, body, def.name, { onHover = onHover, default = def.default,
+					value = function() return s:get(key) end,
+					onPreview = function(hex) s:set(key, hex) end, onApply = function(hex) s:set(key, hex) end }))
+				p:set(s:get(key))
+				follow(key, function(v) p:set(v) end)
+				r.part, r.gui, r.h = p, p.gui, 22
+			elseif def.kind == "multi" then
+				local f = K.frame("Multi_" .. key, body)
+				r.parts = {}
+				for i, opt in ipairs(def.options) do
+					local p = keep(P.checkbox(ctx, f, def.name .. ": " .. opt, { onHover = onHover, onChange = function(on)
+						local out = {}
+						for _, o in ipairs(def.options) do
+							if (o == opt and on) or (o ~= opt and has(s:get(key), o)) then out[#out + 1] = o end
+						end
+						s:set(key, table.concat(out, ","))
+					end }))
+					p.gui.Position = UDim2.new(0, 0, 0, (i - 1) * (18 + GAP))
+					p:set(has(s:get(key), opt))
+					r.parts[i] = p
+				end
+				follow(key, function(v) for i, opt in ipairs(def.options) do r.parts[i]:set(has(v, opt)) end end)
+				r.h = #def.options * (18 + GAP) - GAP
+				f.Size = UDim2.new(1, 0, 0, r.h)
+				r.gui = f
+			elseif def.key == "theme" then
+				local f = K.frame("Theme", body)
+				r.h = 22 + GAP + 22
+				f.Size = UDim2.new(1, 0, 0, r.h)
+				local p = keep(P.dropdown(ctx, f, def.name, SettingsWin.lookNames(E), { onHover = onHover,
+					onChange = function(v) SettingsWin.applyLook(E, v) end }))
+				p:set(s:get(key))
+				self.dropdowns[#self.dropdowns + 1] = p
+				local save = keep(P.valueBox(ctx, f, "Save look as", { onHover = onHover, current = function() return "" end,
+					commit = function(t)
+						if tostring(t or ""):match("^%s*$") then return true end
+						local ok, why = SettingsWin.saveLook(E, t)
+						if not ok then E.bus:emit("status", why, true) end
+						return ok
+					end }))
+				save.gui.Position = UDim2.new(0, 0, 0, 22 + GAP)
+				follow(key, function(v) p.options = SettingsWin.lookNames(E); p:set(v) end)
+				r.part, r.save, r.gui = p, save, f
+			else
+				return nil
+			end
+			return r
+		end
+		for _, name in ipairs(SECTIONS) do
+			local sec = CK.section(ctx, self.columns.left, name)
+			cp.pieces[#cp.pieces + 1] = sec
+			sec.gui.AutomaticSize = Enum.AutomaticSize.None
+			sec.body.AutomaticSize = Enum.AutomaticSize.None
+			sec.body.Size = UDim2.new(1, 0, 1, -TITLE)
+			for _, ch in ipairs(sec.body:GetChildren()) do
+				if ch:IsA("UIListLayout") or ch:IsA("UIPadding") then ch:Destroy() end
+			end
+			local entry = { name = name, gui = sec.gui, body = sec.body, title = sec.title, rows = {}, column = "left" }
+			local reset = CK.chip(ctx, sec.gui, "RESET", { button = true, onClick = function() self:resetSection(entry) end })
+			reset.gui.AnchorPoint, reset.gui.Position, reset.gui.Size = Vector2.new(1, 0), UDim2.new(1, -4, 0, 4), UDim2.new(0, 44, 0, 14)
+			cp.pieces[#cp.pieces + 1] = reset
+			entry.reset = reset
+			for _, def in ipairs(Settings.SCHEMA) do
+				if def.section == name and TSettings.shown(def) then
+					local r = makeRow(entry, def)
+					if r then
+						r.gui.Position = UDim2.new(0, 8, 0, 0)
+						r.gui.Size = UDim2.new(1, -16, 0, r.h)
+						entry.rows[#entry.rows + 1] = r
+						self.rows[def.key] = r
+					end
+				end
+			end
+			if #entry.rows > 0 then
+				self.sections[name] = entry
+				self.order[#self.order + 1] = entry
+			else
+				sec.gui.Visible = false
+			end
+		end
+		local function paint()
+			local th = ui.theme
+			W.set(hover, "FontFace", th.font("text"))
+			W.set(hover, "TextSize", th.size(10.5))
+			W.set(hover, "TextColor3", th.c.text2)
+			W.set(scroll, "ScrollBarImageColor3", th.c.accent)
+		end
+		paint()
+		self.offs[#self.offs + 1] = ui.theme:changed(paint)
+		self:relayout()
+		return self
+	end
+	function TSettings:resetSection(entry)
+		local s = self.E.settings
+		if entry.name == "Appearance" then
+			SettingsWin.applyLook(self.E, "Default")
+			return
+		end
+		for _, r in ipairs(entry.rows) do s:set(r.def.key, r.def.default) end
+	end
+	local function matches(def, q)
+		if q == "" then return true end
+		return (def.name or ""):lower():find(q, 1, true) ~= nil or (def.desc or ""):lower():find(q, 1, true) ~= nil
+	end
+	function TSettings:filter(text)
+		self.query = tostring(text or ""):lower()
+		self:relayout()
+	end
+	function TSettings:relayout()
+		local h = { left = 0, right = 0 }
+		for _, entry in ipairs(self.order) do
+			local y = PADT
+			for _, r in ipairs(entry.rows) do
+				local on = matches(r.def, self.query)
+				W.set(r.gui, "Visible", on)
+				if on then
+					W.set(r.gui, "Position", UDim2.new(0, 8, 0, y))
+					y = y + r.h + GAP
+				end
+			end
+			local any = y > PADT
+			W.set(entry.gui, "Visible", any)
+			if any then
+				local height = TITLE + y - GAP + PADB
+				local col = (h.left <= h.right) and "left" or "right"
+				entry.column = col
+				if entry.gui.Parent ~= self.columns[col] then entry.gui.Parent = self.columns[col] end
+				W.set(entry.gui, "Position", UDim2.new(0, 0, 0, h[col]))
+				W.set(entry.gui, "Size", UDim2.new(1, 0, 0, height))
+				h[col] = h[col] + height + SEC_GAP
+			end
+		end
+		local tall = math.max(h.left, h.right)
+		W.set(self.columns.left, "Size", UDim2.new(0.5, -4, 0, h.left))
+		W.set(self.columns.right, "Size", UDim2.new(0.5, -4, 0, h.right))
+		W.set(self.scroll, "CanvasSize", UDim2.new(0, 0, 0, tall + 4))
+	end
+	function TSettings:closePopups()
+		for _, d in ipairs(self.dropdowns) do d.close() end
+	end
+	function TSettings:destroy()
+		self:closePopups()
+		for _, off in ipairs(self.offs) do pcall(off) end
+		self.offs = {}
+		for _, p in ipairs(self.parts) do pcall(function() p:destroy() end) end
+		self.parts = {}
+	end
+	return TSettings
+end
+__mods["ui/compact/keys"] = function(import)
+	local W = import("ui/write")
+	local K = import("ui/kit/base")
+	local P = import("ui/compact/parts")
+	local Controls = import("engine/controls")
+	local Rebind = import("ui/rebind")
+	local TKeys = {}
+	TKeys.__index = TKeys
+	local ROW, GAP, HOVER = 22, 4, 16
+	local SHARED_OK = { pause = "unpause", unpause = "pause" }
+	function TKeys.height() return #Controls.LIST * (ROW + GAP) + ROW + GAP + HOVER end
+	function TKeys.build(cp, parent, ctx)
+		local ui = cp.ui
+		ctx = ctx or cp.ctx
+		local E = ui.E
+		local c = E.controls
+		local self = setmetatable({ cp = cp, E = E, rows = {}, also = {}, parts = {}, offs = {} }, TKeys)
+		local rb = Rebind.new(E, ui.life)
+		self.rebind = rb
+		local hover = K.text("TextLabel", "Hover", parent)
+		hover.TextXAlignment = Enum.TextXAlignment.Left
+		hover.TextTruncate = Enum.TextTruncate.AtEnd
+		hover.Text = ""
+		self.hover = hover
+		local y = 0
+		for _, ctl in ipairs(Controls.LIST) do
+			local key = ctl.key
+			local kb
+			kb = P.keyBox(ctx, parent, ctl.v2, {
+				onHover = function(on)
+					if on then hover.Text = self.also[key] or ""
+					elseif hover.Text == (self.also[key] or "") then hover.Text = "" end
+				end,
+				onClick = function()
+					if rb.swallow then return end
+					rb:start(key, function() kb:setWaiting(false); self:refresh() end)
+					kb:setWaiting(true)
+				end,
+				onClear = function() rb:stop(); c:set(key, "None") end,
+			})
+			kb.gui.Position = UDim2.new(0, 0, 0, y)
+			y = y + ROW + GAP
+			self.rows[key] = kb
+			self.parts[#self.parts + 1] = kb
+		end
+		local reset = P.button(ctx, parent, "Reset all", { onClick = function()
+			rb:stop()
+			for _, ctl in ipairs(Controls.LIST) do c:set(ctl.key, ctl.default) end
+		end })
+		reset.gui.Position = UDim2.new(0, 0, 0, y)
+		self.resetAll = reset
+		self.parts[#self.parts + 1] = reset
+		hover.Position = UDim2.new(0, 2, 0, y + ROW + GAP)
+		hover.Size = UDim2.new(1, -4, 0, HOVER)
+		local function paint()
+			local th = ui.theme
+			W.set(hover, "FontFace", th.font("text"))
+			W.set(hover, "TextSize", th.size(10.5))
+			W.set(hover, "TextColor3", th.c.text2)
+		end
+		paint()
+		self.offs[#self.offs + 1] = ui.theme:changed(paint)
+		self.offs[#self.offs + 1] = c:changed(function() self:refresh() end)
+		self:refresh()
+		return self
+	end
+	function TKeys:refresh()
+		local c = self.E.controls
+		local byKey = {}
+		for _, ctl in ipairs(Controls.LIST) do
+			local k = c:get(ctl.key)
+			if k ~= "None" then
+				byKey[k] = byKey[k] or {}
+				table.insert(byKey[k], ctl)
+			end
+		end
+		for _, ctl in ipairs(Controls.LIST) do
+			local kb = self.rows[ctl.key]
+			local k = c:get(ctl.key)
+			kb:set(k)
+			local others = {}
+			for _, o in ipairs(byKey[k] or {}) do
+				if o.key ~= ctl.key and SHARED_OK[ctl.key] ~= o.key then others[#others + 1] = o.v2 end
+			end
+			kb.conflict = #others > 0
+			kb:setConflict(kb.conflict)
+			self.also[ctl.key] = (#others > 0) and ("Also: " .. table.concat(others, ", ")) or nil
+		end
+	end
+	function TKeys:stopWaiting() self.rebind:stop() end
+	function TKeys:destroy()
+		self.rebind:destroy()
+		for _, off in ipairs(self.offs) do pcall(off) end
+		self.offs = {}
+		for _, p in ipairs(self.parts) do pcall(function() p:destroy() end) end
+		self.parts = {}
+	end
+	return TKeys
+end
 __mods["ui/compact/host"] = function(import)
 	local K = import("ui/kit/base")
 	local Host = {}
@@ -21715,18 +22442,17 @@ end
 __mods["ui/compact/controls"] = function(import)
 	local W = import("ui/write")
 	local K = import("ui/kit/base")
-	local Button = import("ui/kit/button")
-	local Toggle = import("ui/kit/toggle")
-	local Slider = import("ui/kit/slider")
+	local Parts = import("ui/compact/parts")
 	local CK = import("ui/compact/kit")
 	local Env = import("platform/env")
 	local Util = import("engine/util")
+	local TKeys = import("ui/compact/keys")
 	local Controls = {}
 	Controls.__index = Controls
 	local EVERY = 0.1
 	local MODE = { "Idle", "Create", "Test" }
 	local GAP, TOP, ROW = 7, 26, 21
-	local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + 320 + 6, tools = TOP + 24 + 8 }
+	local H = { run = TOP + 4 * ROW + 24 + 8, speed = TOP + 2 * 31 + 4, keys = TOP + TKeys.height() + 8, tools = TOP + 24 + 8 }
 	local function column(parent, x)
 		local f = K.frame(x == 0 and "Left" or "Right", parent)
 		f.Position = UDim2.new(x, x == 0 and 0 or 5, 0, 0)
@@ -21744,7 +22470,8 @@ __mods["ui/compact/controls"] = function(import)
 		end
 	end
 	function Controls.build(cp)
-		local ui, ctx = cp.ui, cp.ctx
+		local ui = cp.ui
+		local ctx = cp:clippedCtx(cp.pages.controls)
 		local E = ui.E
 		local self = setmetatable({ cp = cp, ui = ui, E = E, values = {}, buttons = {}, labels = {}, last = {}, t = 0, file = "-" }, Controls)
 		local page = cp.pages.controls
@@ -21782,11 +22509,10 @@ __mods["ui/compact/controls"] = function(import)
 		local brow = K.frame("Buttons", self.run.body)
 		brow.Size = UDim2.new(1, -16, 0, 24)
 		brow.Position = UDim2.new(0, 8, 0, 4 + 4 * ROW)
-		local function button(key, text, parent, x, w, onClick, kind)
-			local b = Button.new(ctx, parent, { text = text, kind = kind or "plain", w = w, h = 22 })
+		local function button(key, text, parent, x, w, onClick)
+			local b = Parts.button(ctx, parent, text, { onClick = onClick })
 			b.gui.Position = UDim2.new(x, x > 0 and 2 or 0, 0, 0)
 			b.gui.Size = UDim2.new(w and 0 or 0.333, w or -3, 0, 22)
-			b.onClick = onClick
 			self.buttons[key] = b
 			cp.pieces[#cp.pieces + 1] = b
 			return b
@@ -21797,18 +22523,9 @@ __mods["ui/compact/controls"] = function(import)
 		button("test", "Test", brow, 0.666, nil, function() if E.tl:count() > 0 then request("test") end end)
 		self.speed = section(self.left, "speed hack", H.run + GAP, H.speed)
 		local s = E.settings
-		local tr = K.frame("Row_speedHack", self.speed.body)
-		tr.Size = UDim2.new(1, -16, 0, 26)
-		tr.Position = UDim2.new(0, 8, 0, 4)
-		local tl = K.text("TextLabel", "Name", tr)
-		tl.Text = "Speed Hack"
-		tl.Size = UDim2.new(0.6, 0, 1, 0)
-		tl.TextXAlignment = Enum.TextXAlignment.Left
-		self.labels[#self.labels + 1] = tl
-		local tog = Toggle.new(ctx, tr)
-		tog.gui.AnchorPoint = Vector2.new(1, 0.5)
-		tog.gui.Position = UDim2.new(1, 0, 0.5, 0)
-		tog.onChange = function(on) s:set("speedHack", on and 1 or 0) end
+		local tog = Parts.checkbox(ctx, self.speed.body, "Speed Hack", { onChange = function(on) s:set("speedHack", on and 1 or 0) end })
+		tog.gui.Size = UDim2.new(1, -16, 0, 18)
+		tog.gui.Position = UDim2.new(0, 8, 0, 6)
 		tog:set(s:on("speedHack"))
 		self.speedToggle = tog
 		cp.pieces[#cp.pieces + 1] = tog
@@ -21820,10 +22537,11 @@ __mods["ui/compact/controls"] = function(import)
 		sl.Size = UDim2.new(0.3, 0, 1, 0)
 		sl.TextXAlignment = Enum.TextXAlignment.Left
 		self.labels[#self.labels + 1] = sl
-		local slider = Slider.new(ctx, sr, { min = 0.1, max = 1, w = 120, fmt = function(v) return string.format("%gx", v) end })
+		local slider = Parts.slider(ctx, sr, { min = 0.1, max = 1, fmt = function(v) return string.format("%.2fx", v) end,
+			onChange = function(x) s:set("speedHackSpeed", math.floor(x * 100 + 0.5) / 100) end })
 		slider.gui.AnchorPoint = Vector2.new(1, 0.5)
 		slider.gui.Position = UDim2.new(1, 0, 0.5, 0)
-		slider.onChange = function(x) s:set("speedHackSpeed", x) end
+		slider.gui.Size = UDim2.new(0.7, 0, 0, 22)
 		slider:set(s:get("speedHackSpeed"))
 		self.speedSlider = slider
 		cp.pieces[#cp.pieces + 1] = slider
@@ -21832,7 +22550,8 @@ __mods["ui/compact/controls"] = function(import)
 		cp.keysSection.gui.Parent = self.right
 		fix(cp.keysSection, 0, H.keys)
 		cp.keysFrame.Position = UDim2.new(0, 4, 0, 2)
-		cp.keysFrame.Size = UDim2.new(1, -8, 0, 320)
+		cp.keysFrame.Size = UDim2.new(1, -16, 0, TKeys.height())
+		cp.keysFrame.Position = UDim2.new(0, 8, 0, 4)
 		self.right.Size = UDim2.new(0.5, -5, 0, H.keys + GAP + H.tools)
 		self.tools = section(self.right, "tools", H.keys + GAP, H.tools)
 		local trow = K.frame("Buttons", self.tools.body)
@@ -21927,10 +22646,10 @@ __mods["ui/compact/compact"] = function(import)
 	local CONFIG = import("config")
 	local Host = import("ui/compact/host")
 	local Controls = import("ui/compact/controls")
-	local SettingsWin = import("ui/win/settings")
+	local TSettings = import("ui/compact/settings")
+	local TKeys = import("ui/compact/keys")
 	local HelpWin = import("ui/win/help")
 	local AboutWin = import("ui/win/about")
-	local ControlsWin = import("ui/win/controls")
 	local LibraryWin = import("ui/win/library")
 	local InspectorWin = import("ui/win/inspector")
 	local Compact = {}
@@ -21957,6 +22676,10 @@ __mods["ui/compact/compact"] = function(import)
 		self:buildTitleBar()
 		self:buildBody()
 		self.controls = Controls.build(self)
+		self.settingsPage = TSettings.build(self)
+		self.pieces[#self.pieces + 1] = self.settingsPage
+		self.keys = TKeys.build(self, self.keysFrame, self:clippedCtx(self.pages.controls))
+		self.pieces[#self.pieces + 1] = self.keys
 		self:buildPanel("library", "LIBRARY", Compact.LIB_W, -1)
 		self:buildPanel("inspector", "INSPECTOR", Compact.INS_W, 1)
 		self.offs[#self.offs + 1] = th:changed(function() self:paint() end)
@@ -21966,12 +22689,24 @@ __mods["ui/compact/compact"] = function(import)
 		end)
 		self.search.onInput = function(t)
 			if self.tab ~= "settings" then self:showTab("settings") end
-			local h = self:host("settings")
-			if h and h.obj and h.obj.setQuery then h.obj.setQuery(t or "") end
+			self.settingsPage:filter(t or "")
 		end
 		self:paint()
 		self:load()
 		return self
+	end
+	function Compact:clippedCtx(frame)
+		local base = self.ctx
+		local c = {}
+		for k, v in pairs(base) do c[k] = v end
+		c.pointer = {
+			add = function(r, z)
+				r.clip = r.clip or frame
+				return base.pointer.add(r, z)
+			end,
+			remove = base.pointer.remove,
+		}
+		return c
 	end
 	function Compact:addRect(r, z)
 		r.z = Z + (z or 0)
@@ -22072,6 +22807,10 @@ __mods["ui/compact/compact"] = function(import)
 			page.ZIndex = 2
 			page.Parent = content
 			self.pages[id] = page
+			if page:IsA("ScrollingFrame") then
+				local conn = page:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
+				self.offs[#self.offs + 1] = function() conn:Disconnect() end
+			end
 		end
 		local grip = K.frame("Grip", self.gui)
 		grip.AnchorPoint = Vector2.new(1, 1)
@@ -22177,6 +22916,7 @@ __mods["ui/compact/compact"] = function(import)
 	end
 	function Compact:applyVisible()
 		local on = self.live
+		if self.settingsPage and not (on and not self.folded) then self.settingsPage:closePopups() end
 		W.set(self.gui, "Visible", on)
 		W.set(self.inline, "Visible", not self.folded)
 		W.set(self.grip, "Visible", not self.folded)
@@ -22191,10 +22931,8 @@ __mods["ui/compact/compact"] = function(import)
 	end
 	function Compact:hostSpec(id)
 		local p = self.pages
-		if id == "settings" then return SettingsWin.build, p.settings end
 		if id == "help" then return HelpWin.build, p.help end
 		if id == "about" then return AboutWin.build, p.about end
-		if id == "controls" then return ControlsWin.build, self.keysFrame end
 		if id == "library" then return LibraryWin.build, self.panels.library.body, { narrow = true, group = self.panels.library.gui } end
 		if id == "inspector" then return InspectorWin.build, self.panels.inspector.body, { group = self.panels.inspector.gui } end
 		return nil
@@ -22225,8 +22963,7 @@ __mods["ui/compact/compact"] = function(import)
 		end
 	end
 	function Compact:endTyping()
-		local h = self.hosted.controls
-		if h and h.obj and h.obj.stopWaiting then h.obj.stopWaiting() end
+		if self.keys then self.keys:stopWaiting() end
 	end
 	function Compact:showTab(id)
 		if not self.pages[id] then return end
@@ -22371,8 +23108,8 @@ __mods["ui/app"] = function(import)
 		self:setInterface(E.settings:get("interface"))
 		return self
 	end
-	function UI:newActive() return (self.live == "New" or self.live == "Compact") and self.shown end
-	function UI:isCompact() return self.live == "Compact" end
+	function UI:newActive() return (self.live == "New" or self.live == "Tasability") and self.shown end
+	function UI:isCompact() return self.live == "Tasability" end
 	function UI:liveShown()
 		if self.live == "Classic" then return self.classic ~= nil and self.classic.shown end
 		return self.shown
@@ -22388,11 +23125,11 @@ __mods["ui/app"] = function(import)
 		E.typing.rebinding = false
 	end
 	function UI:setInterface(name)
-		if name ~= "Classic" and name ~= "Compact" then name = "New" end
+		if name ~= "Classic" and name ~= "Tasability" then name = "New" end
 		if self.classicOnly then name = "Classic" end
 		if name == self.live and (name ~= "Classic" or self.classic) then return end
 		self:endTyping()
-		if name == "Compact" and not self.compact then
+		if name == "Tasability" and not self.compact then
 			self.compact = Compact.new(self)
 			local cp = self.compact
 			self.life:own(function() cp:destroy() end)
@@ -22404,10 +23141,10 @@ __mods["ui/app"] = function(import)
 			self.E.typing:watch(c.gui)
 		end
 		self.live = name
-		if self.wm then self.wm:setHideAll(name == "Compact") end
-		if self.dock then W.set(self.dock.gui, "Visible", name ~= "Compact") end
-		if self.theme then self.theme:setCompact(name == "Compact") end
-		if self.compact then self.compact:setLive(name == "Compact") end
+		if self.wm then self.wm:setHideAll(name == "Tasability") end
+		if self.dock then W.set(self.dock.gui, "Visible", name ~= "Tasability") end
+		if self.theme then self.theme:setCompact(name == "Tasability") end
+		if self.compact then self.compact:setLive(name == "Tasability") end
 		self:applyShown()
 		if self.classic then self.classic.gui.Enabled = name == "Classic" and self.classic.shown end
 		if self.classic and name ~= "Classic" and self.classic.picker then self.classic.picker:close() end
@@ -22428,7 +23165,7 @@ __mods["ui/app"] = function(import)
 	function UI:updateModal()
 		if self.live == "Classic" then
 			self.modal = self.classic ~= nil and self.classic:modal()
-		elseif self.live == "Compact" then
+		elseif self.live == "Tasability" then
 			self.modal = self.shown and self.compact ~= nil and self.compact:modal()
 		else
 			self.modal = self.shown and self.wm ~= nil and self.wm:anyModalOpen()

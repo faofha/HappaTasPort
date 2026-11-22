@@ -12,7 +12,7 @@ local guard = 0
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
 
 section("the setting")
-eq(table.concat(Settings.byKey.interface.options, ","), "New,Classic,Compact", "three interfaces")
+eq(table.concat(Settings.byKey.interface.options, ","), "New,Classic,Tasability", "three interfaces")
 local HIDDEN = { "glass", "glassColor", "glassTransparency", "blurStrength", "edgeLight", "font", "numberFont",
 	"windowCorners", "buttonShape", "shadows", "animations", "animationLength", "easing", "easingDirection",
 	"bezierX1", "bezierY1", "bezierX2", "bezierY2" }
@@ -22,9 +22,9 @@ for _, k in ipairs(HIDDEN) do eq(Settings.byKey[k].newOnly, true, k .. " is New 
 for _, k in ipairs(SHOWN) do check(not Settings.byKey[k].newOnly, k .. " is used by Compact too") end
 
 section("switching")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
-eq(ui.live, "Compact", "Compact is live")
+eq(ui.live, "Tasability", "Compact is live")
 eq(ui:isCompact(), true, "isCompact")
 eq(ui:newActive(), true, "the shared machinery is active (bar, Inspector, pointer)")
 check(ui.compact ~= nil, "the Compact interface exists")
@@ -46,14 +46,14 @@ M.steps(2)
 eq(ui.live, "New", "an unknown value is New")
 eq(ui.dock.gui.Visible, true, "the Dock is back")
 eq(ui:isCompact(), false, "not Compact")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 E.settings:set("interface", "Classic")
 M.steps(2)
 eq(ui.live, "Classic", "Compact -> Classic")
 eq(ui:newActive(), false, "Classic: the shared machinery idle")
 ui.classicOnly = true
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 eq(ui.live, "Classic", "a phone stays Classic")
 ui.classicOnly = false

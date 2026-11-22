@@ -29,7 +29,7 @@ local function record(n)
 	M.steps(2)
 	E.char.hrp.AssemblyLinearVelocity = Vector3.zero
 end
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 local cp = ui.compact
 
@@ -60,9 +60,8 @@ eq(#corners, 0, "no rounded corner in it (" .. table.concat(corners, ", ") .. ")
 section("the colour picker")
 cp:showTab("settings")
 M.steps(2)
-local sw = cp.hosted.settings.obj
-local acc = sw.rows.accentColor
-UIH.click(acc.ctl.gui)
+local acc = cp.settingsPage.rows.accentColor
+UIH.click(acc.part.swatch)
 M.steps(1)
 local pop
 for _, d in ipairs(ui.root.layer:GetDescendants()) do if d.Name == "Popover" then pop = d end end
@@ -95,7 +94,7 @@ check(E.merge, "merging")
 E.settings:set("interface", "New")
 M.steps(2)
 check(mwin.holder.Visible, "still shown in New")
-E.settings:set("interface", "Compact")
+E.settings:set("interface", "Tasability")
 M.steps(2)
 check(mwin.holder.Visible, "and back in Compact")
 check(E.merge, "the merge goes on")

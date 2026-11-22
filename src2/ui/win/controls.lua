@@ -13,6 +13,7 @@ local Controls = import("engine/controls")
 local Keys = import("engine/keys")
 local Button = import("ui/kit/button")
 local Row = import("ui/kit/row")
+local Rebind = import("ui/rebind")
 
 local ControlsWin = {}
 
@@ -52,12 +53,10 @@ function ControlsWin.build(ui, body, win)
 	local scrollConn = list:GetPropertyChangedSignal("CanvasPosition"):Connect(function() W.bump() end)
 	cw.offs[#cw.offs + 1] = function() scrollConn:Disconnect() end
 
-	local function stopWaiting()
-		local r = cw.waiting
-		cw.waiting = nil
-		E.typing.rebinding = false
-		if r then r.key:setText(c:get(r.ctl.key)) end
-	end
+	-- (waiting for a key: ui/rebind, shared with the Tasability KEYS list)
+	local rb = Rebind.new(E, ui.life)
+	cw.rebind = rb
+	local function stopWaiting() rb:stop() end
 	local function refresh()
 		local byKey = {}
 		for _, ctl in ipairs(Controls.LIST) do
@@ -102,10 +101,14 @@ function ControlsWin.build(ui, body, win)
 		local r = { row = row, key = key, clear = clear, ctl = ctl, conflict = false }
 		cw.rows[ctl.key] = r
 		key.onClick = function()
-			if cw.swallow then return end -- (the release of the mouse press that just bound a key)
-			if cw.waiting then stopWaiting() end
+			if rb.swallow then return end -- (the release of the mouse press that just bound a key)
+			stopWaiting()
 			cw.waiting = r
-			E.typing.rebinding = true
+			rb:start(ctl.key, function()
+				if cw.waiting == r then cw.waiting = nil end
+				key:setText(c:get(ctl.key))
+				refresh()
+			end)
 			key:setText(WAITING)
 		end
 		clear.onClick = function() stopWaiting(); c:set(ctl.key, "None") end
@@ -116,32 +119,7 @@ function ControlsWin.build(ui, body, win)
 		stopWaiting()
 		for _, ctl in ipairs(Controls.LIST) do c:set(ctl.key, ctl.default) end
 	end
-	-- the key that binds (the engine's keys are off: Typing.rebinding; the press itself stays ignored:
-	-- Typing.boundInput)
-	local uis = Env.svc("UserInputService")
-	local conn = uis.InputBegan:Connect(function(inp)
-		local r = cw.waiting
-		if not r then return end
-		if inp.KeyCode == Enum.KeyCode.Escape then
-			E.typing.boundInput = inp
-			stopWaiting()
-			return
-		end
-		local name = Keys.fromKey[inp.KeyCode] or Keys.fromKey[inp.UserInputType]
-		if not name then return end
-		E.typing.boundInput = inp
-		cw.waiting = nil
-		E.typing.rebinding = false
-		if inp.UserInputType ~= Enum.UserInputType.Keyboard then cw.swallow = inp.UserInputType end
-		c:set(r.ctl.key, name)
-		refresh()
-	end)
-	local endConn = uis.InputEnded:Connect(function(inp)
-		if cw.swallow and inp.UserInputType == cw.swallow then
-			task.defer(function() cw.swallow = nil end) -- (after the pointer has had this release)
-		end
-	end)
-	cw.offs[#cw.offs + 1] = function() conn:Disconnect(); endConn:Disconnect() end
+	cw.offs[#cw.offs + 1] = function() rb:destroy() end
 	cw.offs[#cw.offs + 1] = c:changed(function() refresh() end)
 	cw.offs[#cw.offs + 1] = function() stopWaiting() end
 	ui.life:own(function() for _, off in ipairs(cw.offs) do off() end end)

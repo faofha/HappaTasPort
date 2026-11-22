@@ -27,7 +27,7 @@ local TOPICS = {
 		.. "3. Made a mistake? Go back, then unpause to record over it.\n"
 		.. "4. Press {key:test} to play the run.\n"
 		.. "5. Save it in the Library.\n\n"
-		.. "In the New interface the Dock at the top opens the windows; Compact has one window with tabs. {key:menu} "
+		.. "In the New interface the Dock at the top opens the windows; Tasability has one window with tabs. {key:menu} "
 		.. "hides or shows the interface.\n\n"
 		.. "If you used V2, its settings and keys were converted on the first start (HappaTasPort/Settings3.json). "
 		.. "To convert them again: unload HappaTAS first (Unload HappaTAS below the topics, or rejoin), then delete "
@@ -150,7 +150,7 @@ local TOPICS = {
 		.. "• HappaTAS moves you by at most a few tenths of a stud.\n"
 		.. "• Idle and recording, R6 characters." },
 	{ "classiclook", "Classic interface",
-		"Settings > Interface switches between the New, the Classic and the Compact interface.\n\n"
+		"Settings > Interface switches between the New, the Classic and the Tasability interface.\n\n"
 		.. "Classic Look (Classic's Settings tab) sets Classic's colours and background:\n"
 		.. "• Main Colour: every colour set to Auto follows it.\n"
 		.. "• Each of the 23 colours has a row: type #RRGGBB or r, g, b, clear the box for Auto, or click the "
@@ -159,7 +159,7 @@ local TOPICS = {
 		.. "uses the internet), a Roblox image id, or video: and a Roblox video id. Roblox can't play video files "
 		.. "from links.\n"
 		.. "• Background Transparency and Background Fit (Crop, Fit, Stretch)." },
-	{ "compact", "Compact interface",
+	{ "compact", "Tasability interface",
 		"One window holds everything. Pick it in Settings > Interface (not on phones).\n\n"
 		.. "• The title bar: drag it to move the window, the corner grip resizes it. It shows the version, the mode "
 		.. "(and paused / recording), a search box that finds settings, and minimise (_), which folds the window to "
@@ -167,6 +167,10 @@ local TOPICS = {
 		.. "• The tabs: CONTROLS (your run, the speed hack, your keys, the MicroProfiler and Unload), SETTINGS, HELP "
 		.. "and ABOUT.\n"
 		.. "• LIBRARY opens your saved runs on the left, INSPECTOR the frame's numbers on the right.\n"
+		.. "• SETTINGS: tick a box to turn a setting on, type a number and press Enter, pick from a list (▼), or click a "
+		.. "colour's swatch for the picker. RESET puts a section back to its defaults; hover a row to read what it does.\n"
+		.. "• KEYS (on CONTROLS): click a key box and press the new key (Esc cancels), × clears it, Reset all puts every "
+		.. "key back. Two actions on one key are marked; hover one to see the other.\n"
 		.. "• It uses your accent colour, text colours and text size; the New interface's glass, fonts, corners and "
 		.. "animations don't apply here.\n"
 		.. "• The timeline bar, messages and the Merge window are the same as in the New interface." },
@@ -174,7 +178,7 @@ local TOPICS = {
 		"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
 		.. "always works.\n"
 		.. "• No HappaTAS key does anything while you type.\n"
-		.. "• In the New interface, Settings and Controls are their own windows; Compact has them as tabs. A setting "
+		.. "• In the New interface, Settings and Controls are their own windows; Tasability has them as tabs. A setting "
 		.. "that isn't at its default has a reset arrow (←).\n"
 		.. "• A colour swatch opens the colour picker: drag the square and the hue bar, type #RRGGBB or r, g, b, or "
 		.. "pick a quick or recent colour. The colour shows while you pick. Cancel puts the old one back; Reset to "

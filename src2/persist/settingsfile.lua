@@ -121,6 +121,8 @@ local function loadSettings(settings, entries)
 		if def and def.follows then
 			old = true
 			if tonumber(v) and tonumber(v) ~= 0 then any = true end
+		elseif key == "interface" and v == "Compact" then
+			settings:set(key, "Tasability") -- (V3.1: the third interface shipped as Compact, then was renamed)
 		elseif OLD_DEFAULTS[key] and type(v) == "string" and v:upper() == OLD_DEFAULTS[key] then
 			-- (left on the new default)
 		elseif def and not def.hidden then
