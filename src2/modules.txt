@@ -32,6 +32,7 @@ world/cursor
 world/animation
 world/tools
 world/thumbstick
+world/chat
 world/co/format
 world/co/registry
 world/co/recorder

@@ -418,6 +418,7 @@ function Modes:seek(f)
 		E.testTime = self:totalAt(f)
 		E.inputs:replayTo(tl, f)
 		E.poseT = nil
+		E.plugins:call("onSeek", tl, f)
 		self:publish()
 	end
 end
