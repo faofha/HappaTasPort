@@ -15205,6 +15205,9 @@ __mods["ui/kit/colorpicker"] = function(import)
 		local new = K.frame("New", f, c0)
 		new.Position, new.Size, new.ZIndex = UDim2.new(0, 50, 0, y), UDim2.new(0, 36, 0, 28), 3
 		self.oldHalf, self.newHalf = old, new
+		local r = math.min(6, ctx.theme.corner("control"))
+		K.corner(old, r)
+		K.corner(new, r)
 		local pctx = pop.ctx
 		local cap = K.label(self, f, "HEX", "bold", 11, true)
 		cap.Position, cap.Size = UDim2.new(0, 98, 0, y), UDim2.new(0, 30, 0, 28)
@@ -20213,6 +20216,8 @@ __mods["ui/classic/colorpicker"] = function(import)
 		local x = 10 + SQ + 8 + BAR + 10
 		local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40), nil, true)
 		local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40), nil, true)
+		corner(old, 5)
+		corner(new, 5)
 		self.square, self.mark, self.hueBar, self.hueMark, self.newHalf = sq, mark, hue, hueMark, new
 		local box = Instance.new("TextBox")
 		box.Name, box.ClearTextOnFocus, box.BorderSizePixel = "Value", false, 0

@@ -101,6 +101,8 @@ function ClassicPicker.open(classic, key)
 	local x = 10 + SQ + 8 + BAR + 10
 	local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40), nil, true)
 	local new = frame("New", f, start, u(0, x, 0, 68), u(0, W - x - 10, 0, 40), nil, true)
+	corner(old, 5)
+	corner(new, 5)
 	self.square, self.mark, self.hueBar, self.hueMark, self.newHalf = sq, mark, hue, hueMark, new
 	-- the box and the buttons
 	local box = Instance.new("TextBox")

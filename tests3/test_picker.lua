@@ -113,6 +113,12 @@ UIH.click(pk.quick[2])
 eq(pk:hex(), ColorPicker.QUICK[2], "a quick swatch picks its colour")
 UIH.typeInto(pk.box.box, "#FFFF80", true)
 
+section("the old / new colour boxes are rounded")
+for _, half in ipairs({ pk.oldHalf, pk.newHalf }) do
+	local c = half:FindFirstChildOfClass("UICorner")
+	check(c ~= nil and c.CornerRadius.Offset > 0, half.Name .. ": rounded corners")
+end
+
 section("Apply, recent colours")
 local data = E.settingsFile:getUi()
 data.recentColors = { "#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888" }
