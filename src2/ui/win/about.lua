@@ -67,6 +67,7 @@ function AboutWin.build(ui, body, win)
 		p.Size = UDim2.new(1, -8, 0, 0)
 		p.AutomaticSize = Enum.AutomaticSize.Y
 		K.corner(p, 10)
+		K.redrawOnGrow(p, page)
 		local pad = Instance.new("UIPadding")
 		pad.PaddingLeft, pad.PaddingRight = UDim.new(0, 12), UDim.new(0, 12)
 		pad.PaddingTop, pad.PaddingBottom = UDim.new(0, 10), UDim.new(0, 10)
