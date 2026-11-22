@@ -99,6 +99,7 @@ ui/classic/stats
 ui/classic/mobile
 ui/classic/classic
 ui/compact/kit
+ui/compact/parts
 ui/compact/host
 ui/compact/controls
 ui/compact/compact
