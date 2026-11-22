@@ -1,3 +1,4 @@
+-- needs: ui
 -- ================================================================================================
 -- HappaTAS 3, V3.1: chat replay. What is typed into Roblox's chat bar while recording is saved per frame
 -- (column Chat: { text } a change, { text, 1 } sent, { text, 2 } closed without sending) and typed and sent
@@ -162,6 +163,16 @@ check(waitIdle(), "loaded")
 M.steps(2)
 sends = playTest()
 eq(sends, 1, "the loaded run sends it again")
+
+section("Help and the update log")
+do
+	local inputs
+	for _, t in ipairs(__T3("ui/win/helptext").topics(E)) do if t.id == "inputs" then inputs = t.body end end
+	check(inputs and inputs:find("Replay Chat", 1, true) ~= nil and inputs:find("/e dance2", 1, true) ~= nil,
+		"the Keyboard and Mouse Inputs topic explains chat replay")
+	local v31 = table.concat(__T3("ui/updatelog").ENTRIES[1].bullets, " ")
+	check(v31:find("chat", 1, true) ~= nil, "V3.1's log has it")
+end
 
 section("no chat bar: no errors, nothing recorded")
 local errors = 0

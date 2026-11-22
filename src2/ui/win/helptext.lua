@@ -134,7 +134,11 @@ local TOPICS = {
 		.. "Keep Mouse Position (Paused) shows a see-through cursor where the mouse was on the frame you are on, and "
 		.. "puts the mouse back there when you unpause.\n\n"
 		.. "Holding right click while paused keeps the cursor locked like in the game, so unpausing with it held "
-		.. "doesn't turn the camera." },
+		.. "doesn't turn the camera.\n\n"
+		.. "Chat: what you type in the chat bar while recording is saved with your TAS, letter by letter. Test "
+		.. "types it into the chat bar again on the same frames and sends it, so a command like /e dance2 makes you "
+		.. "dance again.\n\nA normal message is really sent again every time, so other players see it. Replay Chat "
+		.. "turns it off. It works with Roblox's current chat only." },
 	{ "world", "Client Objects and the world",
 		"Sync Client Objects (on by default) is one switch for everything besides your character that follows your "
 		.. "TAS.\n\n"

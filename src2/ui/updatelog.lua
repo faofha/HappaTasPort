@@ -11,7 +11,8 @@ UpdateLog.ENTRIES = {
 	{ heading = " 11/22/26 - V3.1", bullets = {
 		"   -   Tasability: a third interface in Tasability's style",
 		"   -   About window: version, credits and the update log",
-		"   -   Help rewritten in short sections; credits out of Help",
+		"   -   Help rewritten in V2's friendly style; credits moved out",
+		"   -   Chat replay: Test types your recorded chat again",
 		"   -   A new colour picker: one box, quick and recent colours",
 		"   -   Green default colours for the New interface",
 		"   -   One Sync Client Objects switch; fewer settings",
