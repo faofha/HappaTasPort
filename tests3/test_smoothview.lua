@@ -16,6 +16,9 @@
 -- (headless mock, not a real game: "the picture" = the poses after PreRender, before PreAnimation)
 -- ================================================================================================
 check(boot(30), "boots")
+-- (these checks are about the speed hack / a registry of their own: HappaTAS's own client objects, on by default
+-- since V3.1, would hold the same test parts while paused)
+getgenv().__HappaTAS3_T.engine.settings:set("syncClientObjects", 0)
 local E = getgenv().__HappaTAS3_T.engine
 local SettingsMod = __T3("engine/settings")
 local S = {

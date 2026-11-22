@@ -74,7 +74,7 @@ Settings.SCHEMA = {
 		classic = { Idle = "Speed Hack in Idle", Create = "Speed Hack in Create" },
 		desc = "Where the speed hack works: Idle (playing, nothing recorded) and / or Create (recording)" }),
 	-- (no V2 name: V2's slow motion had no in-between picture)
-	row("smoothSlowMotion", nil, "Speed hack", 1, { desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
+	row("smoothSlowMotion", nil, "Speed hack", 1, { hidden = true, desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
 	-- (no V2 name: the torso-edge glide, world/glide.lua)
 	-- (classicToo: no V2 name, but Classic's Settings tab shows it as well)
 	row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
@@ -83,19 +83,19 @@ Settings.SCHEMA = {
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 	row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
-	row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { desc = "Mouse positions follow the screen size" }),
+	row("normalizeMouseUV", "Normalize Mouse UV", "Inputs", 1, { hidden = true, desc = "Mouse positions follow the screen size" }),
 	row("nohboardCursor", "NohBoard Cursor", "Inputs", 1, { desc = "Shows a cursor where the mouse is, for key overlays" }),
 	row("pausedMouse", nil, "Inputs", 1, { desc = "Paused: a cursor image shows the frame's mouse; unpausing puts the mouse back there" }),
-	row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 100, desc = "How fast the hidden mouse moves when the camera is locked" }),
+	row("invisibleMouseSpeed", "Invisible Mouse Speed Multiplier", "Inputs", 1, { kind = NUM, min = 0.01, max = 1, desc = "How fast the hidden mouse moves when the camera is locked" }),
 	row("windowGuarding", "Window Guarding", "Inputs", 1, { desc = "Stops replayed input when the Roblox window isn't focused" }),
 
-	row("syncClientObjects", "Sync Client Objects", "World sync", 0, { desc = "Records and replays the parts only you see" }),
-	row("smoothClientObjects", "Smooth Client Objects", "World sync", 1, { desc = "Fills the gaps between client object frames smoothly" }),
-	row("frustumCullingCO", "Frustum Culling CO", "World sync", 1, { desc = "Only records client objects on screen or close by" }),
-	row("syncButtonTimers", "Sync Button Timers", "World sync", 1, { desc = "Timed buttons follow the TAS clock" }),
-	row("syncLighting", "Sync Lighting", "World sync", 1, { desc = "Records and replays lighting changes" }),
-	row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { desc = "The EToH kit's scripts run on the TAS clock" }),
-	row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
+	row("syncClientObjects", "Sync Client Objects", "World sync", 1, { desc = "Client objects, button timers, lighting and the EToH kit follow the TAS" }),
+	row("smoothClientObjects", "Smooth Client Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Fills the gaps between client object frames smoothly" }),
+	row("frustumCullingCO", "Frustum Culling CO", "World sync", 1, { follows = "syncClientObjects", desc = "Only records client objects on screen or close by" }),
+	row("syncButtonTimers", "Sync Button Timers", "World sync", 1, { follows = "syncClientObjects", desc = "Timed buttons follow the TAS clock" }),
+	row("syncLighting", "Sync Lighting", "World sync", 1, { follows = "syncClientObjects", desc = "Records and replays lighting changes" }),
+	row("kitScriptsOnTasClock", "Kit Scripts On TAS Clock", "World sync", 1, { follows = "syncClientObjects", desc = "The EToH kit's scripts run on the TAS clock" }),
+	row("syncKitObjects", "Sync Kit Objects", "World sync", 1, { follows = "syncClientObjects", desc = "Beat blocks, turrets and other kit objects follow TAS time" }),
 
 	-- (a choice of two: a pill in the New interface's Settings window, in Classic a box that goes to the next
 	-- choice when it is clicked)
@@ -110,8 +110,8 @@ Settings.SCHEMA = {
 	row("statsTextSize", "Stats Text Size", "Interface", 11, { kind = NUM, min = 6, max = 30, integer = true, desc = "The size of the stats text" }),
 	row("showMicroProfiler", "Show MicroProfiler", "Interface", 0, { desc = "Shows the MicroProfiler" }),
 	row("microProfilerScale", "MicroProfiler Scale", "Interface", 1, { kind = NUM, min = 0.5, max = 4, desc = "The size of the MicroProfiler" }),
-	row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, desc = "Moves the MicroProfiler's text up or down" }),
-	row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { desc = "Lets the interface sit where game scripts can see it" }),
+	row("microProfilerTextOffset", "MicroProfiler Text Offset", "Interface", 0, { kind = NUM, min = -6, max = 6, integer = true, hidden = true, desc = "Moves the MicroProfiler's text up or down" }),
+	row("allowPlayerGuiInterface", "Allow PlayerGui Interface", "Interface", 0, { hidden = true, desc = "Lets the interface sit where game scripts can see it" }),
 	-- (Classic Look: the Classic interface's own colours and background; only Classic's Settings tab shows them.
 	-- A colour row is "Auto" (follows the Main Colour, ui/classic/palette) or a colour typed / picked)
 	row("classicMainColor", nil, "Classic look", "#003481", { kind = "color", classicOnly = true, desc = "The colour every Auto colour follows (darker parts stay darker)" }),
@@ -152,16 +152,25 @@ local NAMES = {
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion",
+	pausedMouse = "Keep Mouse Position (Paused)", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
 	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 	classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 }
-Settings.byKey, Settings.byV2 = {}, {}
+-- (V3.1: a row with `follows` is no setting of its own any more: it always has the value of the row it follows
+-- (Sync Client Objects does what six settings did). `hidden` rows are fixed values (V3.1 removed them as settings).
+-- Both are shown nowhere and never saved or read from a file; the code reading them by their key is unchanged.)
+Settings.byKey, Settings.byV2, Settings.followers = {}, {}, {}
 for i, r in ipairs(Settings.SCHEMA) do
 	r.order = i
 	r.name = NAMES[r.key] or r.v2
 	Settings.byKey[r.key] = r
 	if r.v2 then Settings.byV2[r.v2] = r end
+	if r.follows then
+		r.hidden = true
+		local list = Settings.followers[r.follows] or {}
+		list[#list + 1] = r.key
+		Settings.followers[r.follows] = list
+	end
 end
 
 -- nil when the value isn't allowed (V2 Settings.Sanitize)
@@ -265,6 +274,9 @@ function Settings:set(key, v)
 		local ok, err = pcall(f, key, v)
 		if not ok and self.errs then self.errs:report("settings", err) end
 	end
+	-- (the rows that follow this one take its value, with their own listeners)
+	local fl = Settings.followers[key]
+	if fl then for _, fk in ipairs(fl) do self:set(fk, v) end end
 	return true
 end
 

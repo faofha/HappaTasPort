@@ -21,7 +21,7 @@ local ROW_H, HEADER_H = 30, 28
 local SWITCH_ON = { Position = u(1, 0, 0.5, 0), color = "classicSwitchOn" }
 -- V2.38.17's labels and section names where they differ from its setting names
 local LABELS = { speedHack = "Speed Hack (slow motion)", speedHackSpeed = "Speed (0.1 - 1, 0.5 = half)",
-	invisibleMouseSpeed = "Invisible Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
+	invisibleMouseSpeed = "NohBoard Mouse Speed", syncKitObjects = "Sync Kit Objects (Beat Blocks, Turrets)",
 	microProfilerScale = "MicroProfiler Size (1 = Roblox)", microProfilerTextOffset = "MicroProfiler Text Offset (px, - = up)",
 	allowPlayerGuiInterface = "Allow Visible Interface (PlayerGui)" }
 local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync", ["Classic look"] = "Classic Look" }
@@ -29,6 +29,7 @@ local SECTIONS = { ["Speed hack"] = "Speed Hack", ["World sync"] = "World Sync",
 -- (and Classic Look: the rows only Classic has)
 -- (and the rows marked classicToo: the Glide settings)
 local function shownHere(def)
+	if def.hidden then return false end -- (V3.1: no setting of its own any more)
 	return def.v2 ~= nil or def.key == "interface" or (def.kind == "multi" and def.classic ~= nil) or def.classicOnly == true
 		or def.classicToo == true
 end
