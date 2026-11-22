@@ -120,6 +120,29 @@ for _ = 1, 12 do M.step(1 / 60) end
 eq(#staticCalls, 0, "no zoom set at once while the tween comes in")
 check(spring.x < 8.5, "it came in to the goal (" .. spring.x .. ")")
 
+section("a tween into first person, pause, unpause: it goes on, no snap (V3.1)")
+M.steps(20)
+scroll(0.5)
+M.steps(3)
+click() -- (pause)
+M.steps(5)
+local nF = tl:count()
+local fx, fv = tl:getN("ZoomSpring", nF)
+check(fx > 1, "paused part way in (" .. tostring(fx) .. ")")
+click() -- (unpause)
+staticCalls = {}
+M.step(1 / 60)
+local wantF = { x = fx, v = fv, goal = 0.5, freq = 4.5, minValue = 0.5, maxValue = 128 }
+stepSpring(wantF, 1 / 60)
+eq(#staticCalls, 0, "no zoom set at once")
+check(math.abs(spring.x - wantF.x) < 1e-6, "it went on from the paused frame's distance (" .. spring.x .. " vs " .. wantF.x .. ")")
+eq(camCtrl.inFirstPerson, true, "and the camera is in first person, as recorded")
+for _ = 1, 60 do M.step(1 / 60) end
+check(spring.x < 0.6, "it reaches first person (" .. spring.x .. ")")
+scroll(12.5)
+camCtrl.inFirstPerson = false
+M.steps(60)
+
 section("a frame without a kept spring (e.g. loaded from a file): the zoom lands at once, as before")
 scroll(15)
 M.steps(4)

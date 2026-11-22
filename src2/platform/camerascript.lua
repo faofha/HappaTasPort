@@ -435,14 +435,16 @@ function CameraScript.new(life, errs, hooks)
 	end
 
 	-- the zoom with its spring part way (a tween in progress): the camera's next updates go on from x / v toward
-	-- zoom, like the recording did. False when that can't be done (no spring, first person): use setZoom(static).
+	-- zoom, like the recording did. False when that can't be done (no spring): use setZoom(static). A zoom into
+	-- first person goes on too (V3.1: it snapped): the camera enters first person as Roblox's does when the zoom
+	-- target passes the threshold, and the spring keeps coming in to 0.5.
 	function cs:setZoomSpring(zoom, x, v)
 		local s = zoomSpring
-		if not s or type(zoom) ~= "number" or zoom < FIRST_PERSON or type(x) ~= "number" or x <= 0 or type(v) ~= "number" then
+		if not s or type(zoom) ~= "number" or type(x) ~= "number" or x <= 0 or type(v) ~= "number" then
 			return false
 		end
 		cs:setZoom(zoom, false)
-		s.goal, s.x, s.v = zoom, x, v
+		s.goal, s.x, s.v = (zoom < FIRST_PERSON) and 0.5 or zoom, x, v
 		snapZoom = false
 		return true
 	end
