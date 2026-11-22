@@ -1,7 +1,9 @@
 # HappaTAS V3.1: the third interface (Tasability-inspired)
 
 Date: 2026-11-22. Item 12 of the V3.1 list (branch feature/third-ui). Research notes: the V3.1 Part 1 research,
-sections 13 (inventory) and 14 (third interface).
+sections 13 (inventory) and 14 (third interface): `docs/superpowers/specs/2026-11-21-v3-1-part1-research.md` on
+branch `v3-credits-key-ui` (commit 355559e; not on this branch). Style reference: dzr's Tasability script, kept
+outside the repo at `C:/Users/User/Downloads/tasabilitythis.lua` (never committed).
 
 ## Why
 
@@ -103,12 +105,29 @@ changes both. No preset list of its own.
 - Minimise hides the main window and its panels; the Menu key does the same as in the other interfaces (hide /
   show everything). The timeline bar stays while hidden only if the New interface's bar does today.
 - Fonts are fixed: GothamMedium for text, GothamBold for titles (Tasability's look); the shared `textSize`
-  setting scales them; the New interface's font settings don't apply here (shown, but marked "New interface",
-  like Classic does for its own rows - the builder follows the existing `classicOnly` pattern with a
-  `newOnly`-style filter or equivalent).
-- Settings that only make sense for one interface are hidden here: the New interface's Glass / blur / corners /
-  shadows / button shape / fonts / animations rows and Classic Look rows. Shared rows (accent, text colours,
-  text size, interface scale) apply.
+  setting scales them.
+- Appearance rows in Compact (a schema flag in the spirit of `classicOnly`, e.g. `newOnly`, marks the rest):
+  - **Shown and used:** `theme` (saved looks still store every Appearance key; loading one in Compact applies
+    the keys Compact uses), `accentColor`, `textColor`, `secondaryTextColor`, `recordingColor`, `textSize`,
+    `interfaceScale`, `uiSounds`, `uiSoundVolume` (Compact plays the same interface sounds as New: `Sounds:play`
+    learns the third value).
+  - **Hidden here (New only):** `glass`, `glassColor`, `glassTransparency`, `blurStrength`, `edgeLight`, `font`,
+    `numberFont`, `windowCorners`, `buttonShape`, `shadows`, `animations`, `animationLength`, `easing`,
+    `easingDirection` and the custom curve. Compact's panels are solid (no glass, no blur), square, without
+    shadows; hover changes are instant or a fixed short fade.
+  - Classic Look rows stay Classic-only.
+- Minimise folds the main window to its title bar (the side panels close with it; the title bar stays draggable
+  and clickable, and its minimise button unfolds it). The fold is saved in the `ui` table. The Menu key still
+  hides / shows everything (today's `shown` flag); folded is not hidden, so the title bar counts for
+  `pointerOver`, and the timeline bar and toasts stay as they are.
+- Inspector panel: the Show Stats rows (`showStatsIdle` / `Create` / `Test`) decide per mode, as in the New
+  interface; the INSPECTOR toggle opens / closes it until the next mode change, which applies Show Stats again.
+  The Library panel's open state is saved in the `ui` table.
+- Help: the shared topics stay; `ui/win/helptext` gets a "Compact interface" topic (title bar, tabs, panels,
+  minimise) next to "Classic interface", and the New-only lines ("The Dock at the top opens the windows",
+  "Settings and Controls are their own windows", "The Merge window") are reworded so they read right in every
+  interface, or name the interface they describe. The What's new / update log lists aren't touched here (PR 13
+  owns them).
 - Merge: the merge flow opens as a small window in this style (same states as the New Merge window). Toasts
   use this style too.
 - Inspector panel: the same values and update rules as the New Inspector (every frame while open, slow rows 5
