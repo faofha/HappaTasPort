@@ -339,9 +339,11 @@ function M.focus(box, submitted)
 	M.focusedBox = box
 	if old then
 		if old == M.chatBox then M.chatBar.IsFocused = false end
+		local sentText = old.Text
+		if old == M.chatBox and submitted == true and M.chatClearFirst then old.Text = "" end
 		old.FocusLost:Fire(submitted == true, nil)
 		if old == M.chatBox and submitted == true then
-			if old.Text ~= "" then M.chatSent[#M.chatSent + 1] = old.Text end
+			if sentText ~= "" then M.chatSent[#M.chatSent + 1] = sentText end
 			old.Text = ""
 		end
 	end

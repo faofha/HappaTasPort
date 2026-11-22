@@ -164,6 +164,66 @@ M.steps(2)
 sends = playTest()
 eq(sends, 1, "the loaded run sends it again")
 
+section("review: a seek in Test sends nothing it jumps over")
+local sk0 = #M.chatSent
+local sought = false
+playTest(function()
+	if E.frame >= 3 and E.frame < fOpen then E.modes:seek(fSend + 10); sought = true; return true end
+	return false
+end)
+for _ = 1, tl:count() * 4 do if E.mode ~= 3 then break end M.step(1 / 60) end
+check(sought, "sought past the send during Test")
+eq(#M.chatSent - sk0, 0, "the seek past the send sent nothing")
+
+section("review: one send per frame, in order (two sends a frame apart, Playback Speed 10)")
+req("create")
+E.modes:seek(tl:count()); M.steps(2)
+req("unpause")
+M.steps(2)
+box:CaptureFocus(); M.steps(1)
+typeOn("first")
+box:ReleaseFocus(true); M.steps(1)
+box:CaptureFocus(); M.steps(1)
+typeOn("second")
+box:ReleaseFocus(true); M.steps(1)
+M.steps(40)
+req("pause")
+req("idle")
+E.settings:set("playbackSpeed", 10)
+local perStep, worst, order = 0, 0, {}
+local s1 = #M.chatSent
+req("test")
+for _ = 1, tl:count() * 4 do
+	if E.mode ~= 3 then break end
+	local before2 = #M.chatSent
+	M.step(1 / 60)
+	perStep = #M.chatSent - before2
+	if perStep > worst then worst = perStep end
+end
+E.settings:set("playbackSpeed", 1)
+for i = s1 + 1, #M.chatSent do order[#order + 1] = M.chatSent[i] end
+local got2 = table.concat(order, ",")
+check(got2:sub(-12) == "first,second", "both sent, in order (" .. got2 .. ")")
+eq(worst, 1, "never two sends in one frame")
+
+section("review: Roblox empties the bar before FocusLost: the send keeps its text")
+M.chatClearFirst = true
+req("create")
+E.modes:seek(tl:count()); M.steps(2)
+req("unpause")
+M.steps(2)
+local fA = tl:count() + 1
+box:CaptureFocus(); M.steps(1)
+typeOn("/e wave")
+M.steps(2)
+box:ReleaseFocus(true); M.steps(1)
+req("pause")
+M.chatClearFirst = false
+local lastE
+for _, x in ipairs(entries(fA)) do lastE = x end
+check(lastE and lastE.kind == 1 and lastE.text == "/e wave", "recorded as { /e wave, 1 } (" .. tostring(lastE and lastE.text) .. ")")
+req("idle")
+
 section("Help and the update log")
 do
 	local inputs

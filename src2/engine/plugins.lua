@@ -11,7 +11,7 @@
 --  onBeginRecording, onUnpause, onStep(t), onPausedTick, onHeartbeatStart(mode), onFrameEnd(dt),
 --  onCreateStats(tl, f), onPlayedFrame, onAfterPhysics, onDataChanged, onReset, onLoaded, onCursorReset,
 --  onUnload), and phase 4's onFrameStart (first in PreRender), onPreSimulation(dt) (first in PreSimulation),
---  onCut(tl, n) (frames after n were cut when unpausing), onSave(tl) (before a file is built),
+--  onCut(tl, n) (frames after n were cut when unpausing), onSeek(tl, f) (Test jumped to frame f), onSave(tl) (before a file is built),
 --  onLoading(tl) (a loaded run before the engine takes it: its ids translated, may yield). A plugin's own methods must not use these names (the registry would call them).
 --  Each call is protected: an error is reported once per message (the frame goes on).
 -- ================================================================================================

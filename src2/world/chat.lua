@@ -15,7 +15,7 @@ local FIND_EVERY = 2 -- (seconds between looks for the chat bar while it is miss
 
 function Chat.new(E)
 	local self = setmetatable({ E = E, core = Env.svc("CoreGui"), bar = nil, found = -math.huge, pending = {},
-		conns = {}, played = 0, owns = false }, Chat)
+		conns = {}, played = 0, owns = false, queue = {}, lastText = nil }, Chat)
 	E.tl:addColumn("Chat", "list", 1, { key = "Chat", keep = true })
 	E.life:own(function() self:unhook() end)
 	return self
@@ -33,6 +33,7 @@ function Chat:note(text, kind)
 	if self.owns or not self:recording() then return end
 	local p = self.pending
 	local last = p[#p]
+	self.lastText = (kind == nil) and text or nil
 	if kind == nil and last and last[2] == nil then last[1] = text return end
 	p[#p + 1] = { text, kind }
 end
@@ -45,9 +46,8 @@ function Chat:hook(b)
 		if b:IsFocused() then self:note(b.Text, nil) end
 	end)
 	c[#c + 1] = b.FocusLost:Connect(function(enter)
-		local p = self.pending
 		local text = b.Text
-		if text == "" and p[#p] and p[#p][2] == nil then text = p[#p][1] end -- (Roblox may empty it first)
+		if text == "" and self.lastText then text = self.lastText end -- (Roblox may empty the bar first)
 		self:note(text, enter and 1 or 2)
 	end)
 end
@@ -115,12 +115,25 @@ function Chat:release(close)
 	self.E.typing.chatReplay = false
 end
 
+-- the entries of frames from .. to join the queue; drain applies them, stopping after one send a frame (all:
+-- every one): Roblox's chat reads the bar's text after the script let go of it, so two sends in one frame could
+-- merge (review, V3.1)
 function Chat:playRange(tl, from, to)
+	local q = self.queue
 	for i = from, to do
 		local l = tl:getList("Chat", i)
 		if type(l) == "table" then
-			for _, e in ipairs(l) do self:apply(e) end
+			for _, e in ipairs(l) do q[#q + 1] = e end
 		end
+	end
+end
+
+function Chat:drain(all)
+	local q = self.queue
+	while #q > 0 do
+		local e = table.remove(q, 1)
+		self:apply(e)
+		if e[2] == 1 and not all then return end
 	end
 end
 
@@ -129,6 +142,7 @@ function Chat:onPlaybackBegin(tl, f)
 	self.active = self.E.settings:on("replayChat") and self:box() ~= nil
 	if not self.active then return end
 	self.played = f - 1
+	self.queue = {}
 	local last
 	for i = 1, f - 1 do
 		local l = tl:getList("Chat", i)
@@ -149,6 +163,14 @@ function Chat:onPlayTo(tl, f)
 		self:playRange(tl, self.played + 1, f)
 		self.played = f
 	end
+	self:drain(false)
+end
+
+-- Test jumped to frame f (the timeline, TAS Timeline): the bar as it was there, nothing in between is sent
+function Chat:onSeek(tl, f)
+	if not self.active then return end
+	self:release(true)
+	self:onPlaybackBegin(tl, f + 1)
 end
 
 -- the end of Test: the last frames when it ran to the end, then the bar handed back (closed, unsent)
@@ -157,6 +179,7 @@ function Chat:onEndPlayback()
 	local tl, E = self.E.tl, self.E
 	local n = tl:count()
 	if E.frame >= n - 1 and self.played < n then self:playRange(tl, self.played + 1, n) end
+	self:drain(true)
 	self.active = false
 	self:release(true)
 end
@@ -164,6 +187,7 @@ end
 -- Test left another way (Idle, Create): the bar handed back, closed and unsent
 function Chat:onRelease()
 	if not self.active then return end
+	self.queue = {}
 	self.active = false
 	self:release(true)
 end
