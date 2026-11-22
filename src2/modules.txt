@@ -81,6 +81,7 @@ ui/win/inspectorvalues
 ui/win/inspector
 ui/win/library
 ui/win/merge
+ui/updatelog
 ui/win/helptext
 ui/win/help
 ui/win/about

@@ -1,8 +1,10 @@
 -- ================================================================================================
 --  CONFIG  (HappaTAS 3)
 -- ================================================================================================
+-- (VERSION is the number saved in .tas headers and the handle; LABEL is how it is shown: "V3.1")
 return {
-	VERSION = "3.0.0",
+	VERSION = "3.1",
+	LABEL = "V3.1",
 	Debug = false, -- (tests turn this on)
 	MaxFileBytes = 512 * 1024 * 1024, -- (V2's limit: anything bigger is refused, damaged or not)
 	MaxFrames = 16777216,

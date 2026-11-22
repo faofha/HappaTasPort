@@ -4,9 +4,10 @@ HappaTAS as **one client-side Luau script** for Roblox executors. It records and
 (tool-assisted speedrun) runs frame by frame and saves them as compact `.tas` files in
 `<executor workspace>/HappaTasPort/<PlaceId>/`.
 
-**Latest version: HappaTAS 3.0.0**, a rewrite from scratch of HappaTAS V2.38.17 with a new interface, a
-library for your runs and smaller files that save faster. Every V2 feature stays, and your old runs and settings
-carry over.
+**Latest version: HappaTAS V3.1**: a third interface (Compact), an About window with the whole update log, a new
+colour picker, green default colours, one Sync Client Objects switch and an exact slow-motion speed hack, on top of
+HappaTAS 3.0, a rewrite from scratch of HappaTAS V2.38.17 with a new interface, a library for your runs and smaller
+files that save faster. Every V2 feature stays, and your old runs and settings carry over.
 No network code.
 
 Run `wow` (or `wow1`, the same file) in your executor.
@@ -228,6 +229,15 @@ of V2's size. Versions 1 - 5 are V2's (v5: kit events and the speed hack factor,
 
 ## Version history (short)
 
+The whole log, every version since 2.01, is in the About window (New), on Classic's More page and on Compact's
+ABOUT tab.
+
+- **HappaTAS V3.1**: the Compact interface (inspired by Tasability's look); an About window with the credits and
+  the whole update log; a shorter Help; a new colour picker (one box, quick and recent colours, live preview);
+  green default colours; one Sync Client Objects switch and fewer settings; the speed hack in exact slow motion
+  (Frame Step, Smooth Slow Motion, capped at 1x), Speed Hack In, Glide Manipulation, Classic Look, smaller TAS
+  files, Classic on phones, the Inspector every frame, Keep Mouse Position (Paused), interface sounds; fixes for
+  the face when zoomed in, the zoom through a pause, the timeline drag, the speed slider and cut-off text.
 - **HappaTAS 3.0.0**: rewritten from scratch. A new interface (Dock, windows, timeline bar, Inspector) and
   the classic one; a library with folders, search, sort and numbered attempts; file format v6 (smaller,
   safe saving); old runs and settings carry over; smaller files that save faster and a clean Unload; touch

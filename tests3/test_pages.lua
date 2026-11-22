@@ -41,11 +41,12 @@ M.steps(2)
 eq(ui.wm:isOpen("about"), true, "a click opens it")
 local aw = ui.aboutWin
 check(aw ~= nil, "built")
-eq(aw.title.Text, "HappaTAS " .. __T3("config").VERSION, "the version")
+eq(aw.title.Text, "HappaTAS " .. __T3("config").LABEL, "the version")
 eq(aw.creditsText.Text, table.concat(CREDITS, "\n"), "the credits, word for word")
-local log = aw.logText.Text
-check(log:find("HappaTAS " .. HelpText.WHATS_NEW.version, 1, true) == 1, "the log starts with the version")
-for _, item in ipairs(HelpText.WHATS_NEW.items) do check(log:find("• " .. item, 1, true) ~= nil, "log: " .. item) end
+local log = aw.logAll()
+local UL = __T3("ui/updatelog").ENTRIES
+check(log:find(UL[1].heading, 1, true) == 1, "the log starts with the newest version")
+for _, item in ipairs(UL[1].bullets) do check(log:find(item, 1, true) ~= nil, "log: " .. item) end
 for _, p in ipairs({ aw.credits, aw.log }) do
 	check(p:FindFirstChildOfClass("UICorner") ~= nil, p.Name .. ": a rounded panel")
 	eq(aw.creditsText.TextWrapped, true, p.Name .. ": the text wraps")
