@@ -15092,21 +15092,31 @@ __mods["ui/kit/colorpicker"] = function(import)
 	local Popover = import("ui/kit/popover")
 	local Field = import("ui/kit/field")
 	local Button = import("ui/kit/button")
-	local Segmented = import("ui/kit/segmented")
 	local Settings = import("engine/settings")
 	local ColorPicker = {}
 	ColorPicker.__index = ColorPicker
-	local SQ_W, SQ_H, HUE_W, MAX_RECENT = 180, 150, 16, 8
+	ColorPicker.QUICK = { "#3FB950", "#3F7CF0", "#A371F7", "#DB61A2", "#F85149", "#F0883E", "#E3B341", "#FFFFFF" }
+	ColorPicker.MAX_RECENT = 8
+	local PW, PH = 300, 372
+	local SQ_W, SQ_H, HUE_W, SW, STEP = 238, 150, 22, 26, 30
+	local COLOR_DEF = { kind = "color" }
 	local function hexOf(c) return "#" .. c:ToHex():upper() end
-	local function toInt(text, lo, hi)
-		local n = tonumber(text)
-		if not n or n ~= n or n % 1 ~= 0 or n < lo or n > hi then return nil end
-		return n
+	local function fromHex(hex) return Color3.fromHex(hex:sub(2)) end
+	function ColorPicker.remember(settingsFile, hex)
+		local data = settingsFile:getUi()
+		local list = { hex }
+		for _, c in ipairs(data.recentColors or {}) do
+			if c ~= hex and #list < ColorPicker.MAX_RECENT then list[#list + 1] = c end
+		end
+		data.recentColors = list
+		settingsFile:setUi(data)
 	end
 	function ColorPicker.open(ctx, anchor, opts)
-		local pop = Popover.open(ctx, anchor, 268, 336)
-		local self = setmetatable({ ctx = pop.ctx, pop = pop, frame = pop.frame, onApply = opts.onApply, fields = {}, recent = {} }, ColorPicker)
-		local c0 = Color3.fromHex((Settings.sanitize(Settings.byKey.accentColor, opts.value) or "#FFFFFF"):sub(2))
+		local pop = Popover.open(ctx, anchor, PW, PH)
+		local self = setmetatable({ ctx = pop.ctx, pop = pop, frame = pop.frame, onApply = opts.onApply,
+			onPreview = opts.onPreview, default = opts.default, quick = {}, recent = {}, rects = {}, offs = {} }, ColorPicker)
+		self.original = Settings.sanitize(COLOR_DEF, opts.value) or "#FFFFFF"
+		local c0 = fromHex(self.original)
 		self.h, self.s, self.v = c0:ToHSV()
 		local f = pop.frame
 		local sq = K.frame("Square", f, Color3.new(1, 0, 0))
@@ -15127,13 +15137,13 @@ __mods["ui/kit/colorpicker"] = function(import)
 		bg.Parent = black
 		K.corner(black, 6)
 		local mark = K.frame("Mark", sq)
-		mark.Size, mark.AnchorPoint, mark.ZIndex = UDim2.new(0, 10, 0, 10), Vector2.new(0.5, 0.5), 4
-		K.corner(mark, 5)
+		mark.Size, mark.AnchorPoint, mark.ZIndex = UDim2.new(0, 12, 0, 12), Vector2.new(0.5, 0.5), 4
+		K.corner(mark, 6)
 		K.stroke(mark, Color3.new(1, 1, 1), 0, 2)
 		self.square, self.mark = sq, mark
 		local hue = K.frame("Hue", f, Color3.new(1, 1, 1))
 		hue.Position, hue.Size, hue.ZIndex = UDim2.new(0, 14 + SQ_W + 10, 0, 14), UDim2.new(0, HUE_W, 0, SQ_H), 3
-		K.corner(hue, 4)
+		K.corner(hue, 5)
 		local keys = {}
 		for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV((i / 6) % 1, 1, 1)) end
 		local hg = Instance.new("UIGradient")
@@ -15141,76 +15151,62 @@ __mods["ui/kit/colorpicker"] = function(import)
 		hg.Color = ColorSequence.new(keys)
 		hg.Parent = hue
 		local hueMark = K.frame("HueMark", hue, Color3.new(1, 1, 1))
-		hueMark.Size, hueMark.AnchorPoint, hueMark.ZIndex = UDim2.new(1, 4, 0, 3), Vector2.new(0.5, 0.5), 4
+		hueMark.Size, hueMark.AnchorPoint, hueMark.ZIndex = UDim2.new(1, 6, 0, 4), Vector2.new(0.5, 0.5), 4
 		self.hueBar, self.hueMark = hue, hueMark
-		local old = K.frame("Old", f, c0)
-		old.Position, old.Size, old.ZIndex = UDim2.new(0, 14 + SQ_W + HUE_W + 20, 0, 14), UDim2.new(0, 34, 0, 36), 3
-		local new = K.frame("New", f, c0)
-		new.Position, new.Size, new.ZIndex = UDim2.new(0, 14 + SQ_W + HUE_W + 20, 0, 50), UDim2.new(0, 34, 0, 36), 3
-		self.oldHalf, self.newHalf = old, new
-		local pctx = pop.ctx
 		pop:add({ gui = sq, onPress = function(p) self:fromSquare(p) end, onDrag = function(p) self:fromSquare(p) end }, 5)
 		pop:add({ gui = hue, onPress = function(p) self:fromHue(p) end, onDrag = function(p) self:fromHue(p) end }, 5)
-		local tabs = Segmented.new(pctx, f, { options = { "HEX", "RGB", "HSV" }, z = 5 })
-		tabs.gui.Position = UDim2.new(0, 14, 0, 176)
-		tabs.onChange = function(t) self:setTab(t) end
-		self.tabs = tabs
-		local function field(name, x, w, commit, label)
-			local fd = Field.new(pctx, f, { w = w, number = true, z = 5, onCommit = commit })
-			fd.gui.Position = UDim2.new(0, x, 0, 210)
-			fd.gui.ZIndex = 3
-			if label then
-				local l = K.label(fd, f, label, "bold", 10.5, true)
-				l.Position, l.Size = UDim2.new(0, x, 0, 236), UDim2.new(0, w, 0, 14)
-				fd.caption = l
-			end
-			self.fields[name] = fd
-			return fd
-		end
-		field("HEX", 14, 120, function(t)
-			local hex = Settings.sanitize(Settings.byKey.accentColor, t)
-			if not hex then self:refreshFields() return false end
-			self:setColor(Color3.fromHex(hex:sub(2)))
+		local y = 14 + SQ_H + 12
+		local old = K.frame("Old", f, c0)
+		old.Position, old.Size, old.ZIndex = UDim2.new(0, 14, 0, y), UDim2.new(0, 36, 0, 28), 3
+		local new = K.frame("New", f, c0)
+		new.Position, new.Size, new.ZIndex = UDim2.new(0, 50, 0, y), UDim2.new(0, 36, 0, 28), 3
+		self.oldHalf, self.newHalf = old, new
+		local pctx = pop.ctx
+		local cap = K.label(self, f, "HEX", "bold", 11, true)
+		cap.Position, cap.Size = UDim2.new(0, 98, 0, y), UDim2.new(0, 30, 0, 28)
+		self.box = Field.new(pctx, f, { w = PW - 14 - 132, z = 5, placeholder = "#RRGGBB or r, g, b", onCommit = function(t)
+			local hex = Settings.sanitize(COLOR_DEF, t)
+			if not hex then self:refreshBox() return false end
+			self:setColor(fromHex(hex))
 			return true
-		end, "HEX")
-		for i, ch in ipairs({ "R", "G", "B" }) do
-			field(ch, 14 + (i - 1) * 64, 56, function(t)
-				local n = toInt(t, 0, 255)
-				if not n then self:refreshFields() return false end
-				local r, g, b = self:rgb()
-				if ch == "R" then r = n elseif ch == "G" then g = n else b = n end
-				self:setColor(Color3.fromRGB(r, g, b))
-				return true
-			end, ch)
+		end })
+		self.box.gui.Position = UDim2.new(0, 132, 0, y + 2)
+		self.box.gui.ZIndex = 3
+		local function row(list, into, title, ry)
+			local l = K.label(self, f, title, "bold", 10.5, true)
+			l.Position, l.Size = UDim2.new(0, 14, 0, ry), UDim2.new(0, 100, 0, 14)
+			for i, hex in ipairs(list) do
+				local sw = K.frame(title, f, fromHex(hex))
+				sw.Position, sw.Size, sw.ZIndex = UDim2.new(0, 14 + (i - 1) * STEP, 0, ry + 16), UDim2.new(0, SW, 0, SW), 3
+				K.corner(sw, SW / 2)
+				K.stroke(sw, Color3.new(1, 1, 1), 0.7, 1)
+				into[i] = sw
+				pop:add({ gui = sw, onRelease = function(_, clicked) if clicked then self:setColor(fromHex(hex)) end end }, 5)
+			end
 		end
-		for i, ch in ipairs({ "H", "S", "V" }) do
-			field(ch, 14 + (i - 1) * 64, 56, function(t)
-				local n = toInt(t, 0, ch == "H" and 360 or 100)
-				if not n then self:refreshFields() return false end
-				if ch == "H" then self.h = (n / 360) % 1 elseif ch == "S" then self.s = n / 100 else self.v = n / 100 end
-				self:show()
-				return true
-			end, ch)
-		end
-		local rec = pctx.E.settingsFile:getUi().recentColors
-		for i, hex in ipairs(rec) do
-			local sw = K.frame("Recent", f, Color3.fromHex(hex:sub(2)))
-			sw.Position, sw.Size, sw.ZIndex = UDim2.new(0, 14 + (i - 1) * 26, 0, 262), UDim2.new(0, 20, 0, 20), 3
-			K.corner(sw, 10)
-			self.recent[i] = sw
-			pop:add({ gui = sw, onRelease = function(_, clicked) if clicked then self:setColor(Color3.fromHex(hex:sub(2))) end end }, 5)
-		end
+		row(ColorPicker.QUICK, self.quick, "Quick", y + 38)
+		row(pctx.E.settingsFile:getUi().recentColors or {}, self.recent, "Recent", y + 84)
 		local cancel = Button.new(pctx, f, { text = "Cancel", kind = "plain", z = 5 })
-		cancel.gui.AnchorPoint, cancel.gui.Position = Vector2.new(1, 1), UDim2.new(1, -96, 1, -14)
+		cancel.gui.AnchorPoint, cancel.gui.Position = Vector2.new(1, 1), UDim2.new(1, -86, 1, -14)
 		cancel.onClick = function() self:cancel() end
 		local apply = Button.new(pctx, f, { text = "Apply", kind = "primary", z = 5 })
 		apply.gui.AnchorPoint, apply.gui.Position = Vector2.new(1, 1), UDim2.new(1, -14, 1, -14)
 		apply.onClick = function() self:apply() end
-		self.controls = { tabs, cancel, apply }
-		for _, fd in pairs(self.fields) do self.controls[#self.controls + 1] = fd end
-		pop.onClose = function() for _, c in ipairs(self.controls) do c:destroy() end end
-		self:setTab("HEX")
-		self:show()
+		self.cancelButton, self.applyButton = cancel, apply
+		self.controls = { cancel, apply, self.box }
+		if self.default then
+			local reset = Button.new(pctx, f, { text = "Reset to default", kind = "plain", z = 5 })
+			reset.gui.AnchorPoint, reset.gui.Position = Vector2.new(0, 1), UDim2.new(0, 14, 1, -14)
+			reset.onClick = function() self:reset() end
+			self.resetButton = reset
+			self.controls[#self.controls + 1] = reset
+		end
+		pop.onClose = function()
+			for _, c in ipairs(self.controls) do c:destroy() end
+			K.destroy(self)
+			if not self.done and self.previewed and self.onPreview then self.onPreview(self.original) end
+		end
+		self:show(true)
 		return self
 	end
 	function ColorPicker:color() return Color3.fromHSV(self.h, self.s, self.v) end
@@ -15241,41 +15237,34 @@ __mods["ui/kit/colorpicker"] = function(import)
 		if self.h >= 1 then self.h = 0.999999 end
 		self:show()
 	end
-	function ColorPicker:refreshFields()
-		local r, g, b = self:rgb()
-		local h, s, v = self:hsv()
-		local vals = { HEX = self:hex(), R = r, G = g, B = b, H = h, S = s, V = v }
-		for k, fd in pairs(self.fields) do fd:set(tostring(vals[k])) end
-	end
-	function ColorPicker:show()
+	function ColorPicker:refreshBox() self.box:set(self:hex()) end
+	function ColorPicker:show(first)
 		W.set(self.square, "BackgroundColor3", Color3.fromHSV(self.h, 1, 1))
 		W.set(self.mark, "Position", UDim2.new(self.s, 0, 1 - self.v, 0))
 		W.set(self.hueMark, "Position", UDim2.new(0.5, 0, self.h, 0))
 		W.set(self.newHalf, "BackgroundColor3", self:color())
-		self:refreshFields()
-	end
-	function ColorPicker:setTab(tab)
-		self.tab = tab
-		local on = { HEX = { HEX = true }, RGB = { R = true, G = true, B = true }, HSV = { H = true, S = true, V = true } }
-		for k, fd in pairs(self.fields) do
-			local vis = on[tab][k] == true
-			W.set(fd.gui, "Visible", vis)
-			if fd.caption then W.set(fd.caption, "Visible", vis) end
+		self:refreshBox()
+		if not first and self.onPreview and not self.done then
+			local hex = self:hex()
+			if hex ~= self.lastPreview then
+				self.lastPreview = hex
+				self.previewed = true
+				self.onPreview(hex)
+			end
 		end
-		self.tabs:set(tab)
 	end
 	function ColorPicker:apply()
 		local hex = self:hex()
-		local sf = self.ctx.E.settingsFile
-		local data = sf:getUi()
-		local list = { hex }
-		for _, c in ipairs(data.recentColors) do
-			if c ~= hex and #list < MAX_RECENT then list[#list + 1] = c end
-		end
-		data.recentColors = list
-		sf:setUi(data)
+		self.done = true
+		ColorPicker.remember(self.ctx.E.settingsFile, hex)
 		self.pop:close()
 		if self.onApply then self.onApply(hex) end
+	end
+	function ColorPicker:reset()
+		if not self.default then return end
+		self.done = true
+		self.pop:close()
+		if self.onApply then self.onApply(self.default) end
 	end
 	function ColorPicker:cancel() self.pop:close() end
 	return ColorPicker
@@ -16861,7 +16850,10 @@ __mods["ui/win/settings"] = function(import)
 		self.gui, self.swatch = gui, gui
 		self.set = function(_, v) W.set(gui, "BackgroundColor3", Color3.fromHex(tostring(v):sub(2))) end
 		K.rect(self, { onRelease = function(_, clicked)
-			if clicked then ColorPicker.open(ctx, gui, { value = s:get(key), onApply = function(hex) s:set(key, hex) end }) end
+			if clicked then
+				ColorPicker.open(ctx, gui, { value = s:get(key), default = Settings.byKey[key].default,
+					onPreview = function(hex) s:set(key, hex) end, onApply = function(hex) s:set(key, hex) end })
+			end
 		end })
 		self:set(s:get(key))
 		return self
@@ -18706,7 +18698,10 @@ __mods["ui/win/helptext"] = function(import)
 			"• Ignore Game Processed: HappaTAS's keys work even when Roblox says the game used the key. The Menu key "
 			.. "always works.\n"
 			.. "• No HappaTAS key does anything while you type.\n"
-			.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←)." },
+			.. "• Settings and Controls are their own windows. A setting that isn't at its default has a reset arrow (←).\n"
+			.. "• A colour swatch opens the colour picker: drag the square and the hue bar, type #RRGGBB or r, g, b, or "
+			.. "pick a quick or recent colour. The colour shows while you pick. Cancel puts the old one back; Reset to "
+			.. "default sets the default." },
 		{ "profiler", "MicroProfiler",
 			"A copy of Roblox's MicroProfiler ({key:microProfiler}).\n\n"
 			.. "• Time: the last frame. Avg: the average of every frame since the count started. Max: the biggest frame "
@@ -19727,10 +19722,11 @@ __mods["ui/classic/colorpicker"] = function(import)
 	local Env = import("platform/env")
 	local Settings = import("engine/settings")
 	local Palette = import("ui/classic/palette")
+	local KitPicker = import("ui/kit/colorpicker")
 	local ClassicPicker = {}
 	ClassicPicker.__index = ClassicPicker
 	local NAME = "HappaTASColorPicker"
-	local W, H, SQ, BAR = 260, 250, 150, 16
+	local W, H, SQ, BAR, SW, STEP = 300, 344, 180, 22, 24, 28
 	local Z = 40
 	local u, rgb = UDim2.new, Color3.fromRGB
 	local COLOR_DEF = { kind = "color" }
@@ -19765,7 +19761,7 @@ __mods["ui/classic/colorpicker"] = function(import)
 		local s = classic.E.settings
 		local def = Settings.byKey[key]
 		local start = (key == "classicMainColor") and Color3.fromHex(s:get(key):sub(2)) or classic.look:color(key)
-		local self = setmetatable({ classic = classic, key = key, offs = {} }, ClassicPicker)
+		local self = setmetatable({ classic = classic, key = key, offs = {}, original = s:get(key), quick = {}, recent = {} }, ClassicPicker)
 		self.h, self.s, self.v = start:ToHSV()
 		local f = frame(NAME, classic.gui, rgb(0, 35, 73), u(0.5, 0, 0.5, 0), u(0, W, 0, H), Z)
 		f.AnchorPoint, f.Active = Vector2.new(0.5, 0.5), true
@@ -19789,9 +19785,9 @@ __mods["ui/classic/colorpicker"] = function(import)
 		local bg = Instance.new("UIGradient")
 		bg.Rotation, bg.Transparency = 90, NumberSequence.new(1, 0)
 		bg.Parent = black
-		local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 8, 0, 8), Z + 4, true)
+		local mark = frame("Mark", sq, rgb(255, 255, 255), u(0, 0, 0, 0), u(0, 12, 0, 12), Z + 4, true)
 		mark.AnchorPoint, mark.BackgroundTransparency = Vector2.new(0.5, 0.5), 1
-		corner(mark, 4)
+		corner(mark, 6)
 		local ms = Instance.new("UIStroke")
 		ms.Color, ms.Thickness = rgb(255, 255, 255), 2
 		ms.Parent = mark
@@ -19802,7 +19798,7 @@ __mods["ui/classic/colorpicker"] = function(import)
 		local hg = Instance.new("UIGradient")
 		hg.Rotation, hg.Color = 90, ColorSequence.new(keys)
 		hg.Parent = hue
-		local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 4, 0, 3), Z + 2, true)
+		local hueMark = frame("HueMark", hue, rgb(255, 255, 255), u(0.5, 0, 0, 0), u(1, 6, 0, 4), Z + 2, true)
 		hueMark.AnchorPoint = Vector2.new(0.5, 0.5)
 		local x = 10 + SQ + 8 + BAR + 10
 		local old = frame("Old", f, start, u(0, x, 0, 28), u(0, W - x - 10, 0, 40), nil, true)
@@ -19816,19 +19812,43 @@ __mods["ui/classic/colorpicker"] = function(import)
 		box.Parent = f
 		corner(box, 5)
 		self.box = box
-		local by = 28 + SQ + 8 + 22 + 8
-		local auto = def and def.kind == "autocolor"
-		local bw = auto and (W - 40) / 3 or (W - 30) / 2
-		self.applyButton = button("Apply", f, "Apply", u(0, 10, 0, by), u(0, bw, 0, 24), rgb(0, 52, 129))
-		self.cancelButton = button("Cancel", f, "Cancel", u(0, 10 + bw + 10, 0, by), u(0, bw, 0, 24), rgb(142, 11, 0))
-		if auto then self.autoButton = button("Auto", f, "Auto", u(0, 10 + 2 * (bw + 10), 0, by), u(0, bw, 0, 24), rgb(0, 52, 129)) end
+		local function swatches(list, into, title, ry)
+			local l = Instance.new("TextLabel")
+			l.Name, l.BackgroundTransparency, l.Text = title .. "Title", 1, title
+			l.TextColor3, l.TextSize, l.ZIndex = rgb(255, 255, 255), 13, Z + 1
+			l.TextXAlignment = Enum.TextXAlignment.Left
+			l.Position, l.Size = u(0, 10, 0, ry), u(0, 50, 0, SW)
+			l.Parent = f
+			for i, hex in ipairs(list) do
+				local b = Instance.new("TextButton")
+				b.Name, b.Text, b.BorderSizePixel, b.AutoButtonColor = title, "", 0, false
+				b:SetAttribute("HappaTASNoLook", true)
+				b.BackgroundColor3 = Color3.fromHex(hex:sub(2))
+				b.Position, b.Size, b.ZIndex = u(0, 64 + (i - 1) * STEP, 0, ry), u(0, SW, 0, SW), Z + 1
+				b.Parent = f
+				corner(b, SW / 2)
+				into[i] = { button = b, hex = hex }
+			end
+		end
+		local qy = 28 + SQ + 8 + 22 + 8
+		swatches(KitPicker.QUICK, self.quick, "Quick", qy)
+		local data = classic.E.settingsFile and classic.E.settingsFile:getUi()
+		swatches(data and data.recentColors or {}, self.recent, "Recent", qy + SW + 6)
+		local by = qy + 2 * (SW + 6) + 2
+		local bw = (W - 40) / 3
+		self.resetButton = button("Reset", f, "Reset", u(0, 10, 0, by), u(0, bw, 0, 26), rgb(0, 52, 129))
+		self.cancelButton = button("Cancel", f, "Cancel", u(0, 10 + bw + 10, 0, by), u(0, bw, 0, 26), rgb(142, 11, 0))
+		self.applyButton = button("Apply", f, "Apply", u(0, 10 + 2 * (bw + 10), 0, by), u(0, bw, 0, 26), rgb(0, 52, 129))
 		local function conn(sig, fn)
 			local c = sig:Connect(fn)
 			self.offs[#self.offs + 1] = function() c:Disconnect() end
 		end
 		conn(self.applyButton.MouseButton1Click, function() self:apply() end)
 		conn(self.cancelButton.MouseButton1Click, function() self:close() end)
-		if self.autoButton then conn(self.autoButton.MouseButton1Click, function() self:auto() end) end
+		conn(self.resetButton.MouseButton1Click, function() self:reset() end)
+		for _, list in ipairs({ self.quick, self.recent }) do
+			for _, it in ipairs(list) do conn(it.button.MouseButton1Click, function() self:typed(it.hex) end) end
+		end
 		conn(box.FocusLost, function() self:typed(box.Text) end)
 		local uis = Env.svc("UserInputService")
 		local function point(inp) return Vector2.new(inp.Position.X, inp.Position.Y) end
@@ -19867,6 +19887,8 @@ __mods["ui/classic/colorpicker"] = function(import)
 			if PRESS[inp.UserInputType] then self.dragging = nil end
 		end)
 		self:show()
+		self.startHex = Palette.hex(self.newColor)
+		self.ready = true
 		classic.picker = self
 		return self
 	end
@@ -19899,16 +19921,30 @@ __mods["ui/classic/colorpicker"] = function(import)
 		self.hueMark.Position = u(0.5, 0, self.h, 0)
 		self.newHalf.BackgroundColor3 = col
 		self.box.Text = Palette.hex(col)
+		local hex = Palette.hex(col)
+		if self.ready and not self.done and hex ~= (self.lastPreview or self.startHex) then
+			self.lastPreview = hex
+			self.classic.E.settings:set(self.key, hex)
+		end
 	end
 	function ClassicPicker:apply()
-		self.classic.E.settings:set(self.key, Palette.hex(self.newColor))
+		local hex = Palette.hex(self.newColor)
+		self.done = true
+		self.classic.E.settings:set(self.key, hex)
+		if self.classic.E.settingsFile then KitPicker.remember(self.classic.E.settingsFile, hex) end
 		self:close()
 	end
-	function ClassicPicker:auto()
-		if self.autoButton then self.classic.E.settings:set(self.key, "Auto") end
+	function ClassicPicker:reset()
+		local def = Settings.byKey[self.key]
+		self.done = true
+		if def then self.classic.E.settings:set(self.key, def.default) end
 		self:close()
 	end
 	function ClassicPicker:close()
+		if not self.done and self.lastPreview then
+			self.done = true
+			self.classic.E.settings:set(self.key, self.original)
+		end
 		for _, off in ipairs(self.offs) do pcall(off) end
 		self.offs = {}
 		if self.frame then pcall(function() self.frame:Destroy() end) end
