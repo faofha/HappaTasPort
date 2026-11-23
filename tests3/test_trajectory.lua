@@ -163,6 +163,20 @@ do
 	check(not info2.jumped, "held 0.2 s off the floor: no jump")
 end
 
+section("predictor: a tap (one jump, the red line)")
+do
+	local st = startNow({ pos = Vector3.new(-60, 3, 0), vel = Vector3.zero, onFloor = true })
+	local pts, info = Sim.run(st, { move = Vector3.zero, tap = true }, W, { time = 1.5, every = 1 / 30 })
+	check(info.jumped, "it jumps")
+	local ups = 0
+	for k = 2, #pts do if pts[k].Y > pts[k - 1].Y + 1e-6 and (k == 2 or pts[k - 1].Y <= pts[k - 2].Y + 1e-6) then ups = ups + 1 end end
+	eq(ups, 1, "once: it lands and stays down")
+	check(math.abs(pts[#pts].Y - 3) < 1e-6, "on the floor at the end (" .. pts[#pts].Y .. ")")
+	local st2 = startNow({ pos = Vector3.new(-60, 40, 0), vel = Vector3.zero, onFloor = false, offTime = 1 })
+	local _, info2 = Sim.run(st2, { move = Vector3.zero, tap = true }, W, { time = 1, every = 1 / 30 })
+	check(not info2.jumped, "no tap jump in the air past coyote time")
+end
+
 section("predictor: a wall")
 local wall = part("Wall", Vector3.new(2, 20, 40), Vector3.new(-80, 10, 0))
 do
@@ -171,11 +185,12 @@ do
 	local face = -81
 	local maxX = -math.huge
 	for _, p in ipairs(pts) do maxX = math.max(maxX, p.X) end
-	check(maxX <= face - 1 + 0.01, "stops at the wall face (" .. maxX .. ")")
+	-- (the body turns to the move direction like Roblox's AutoRotate: the 1 stud deep torso meets the wall, live)
+	check(maxX <= face - 0.5 + 0.01 and maxX > face - 0.5 - 0.05, "stops at the wall face, torso turned to it (" .. maxX .. ")")
 	local diag = Vector3.new(1, 0, 1).Unit
 	local pts2 = Sim.run(st, { move = diag, jump = false }, W, { time = 1.5, every = 1 / 30 })
 	local last = pts2[#pts2]
-	check(last.X <= face - 1 + 0.01 and last.Z > 10, "a diagonal walk slides along it (" .. tostring(last) .. ")")
+	check(last.X <= face - 0.3 and last.Z > 10, "a diagonal walk slides along it (" .. tostring(last) .. ")")
 end
 wall:Destroy()
 
@@ -241,6 +256,22 @@ M.steps(6)
 check(TR ~= nil and TR.lines.green ~= nil and #TR.lines.green > 1, "a green line")
 check(TR and TR.lines.red ~= nil, "and a red one (on the floor a jump can start)")
 check(shownSegments() > 0, "drawn")
+
+section("lines: standing still, nothing to recompute")
+do
+	local r0 = TR.runs or 0
+	M.steps(12)
+	eq((TR.runs or 0) - r0, 0, "no prediction while nothing changes")
+	hum:Move(Vector3.new(1, 0, 0))
+	M.steps(6)
+	check((TR.runs or 0) > r0, "moving again: predicted again")
+	place(Vector3.new(0, 3, 0))
+	M.steps(6)
+end
+do
+	-- (each line has its own share of the budget: a green line that runs out leaves red its own time)
+	check(TR.lines.red ~= nil and #TR.lines.red == 31, "red has all its points (" .. tostring(TR.lines.red and #TR.lines.red) .. ")")
+end
 
 section("lines: holding jump shows only green")
 M.pressKey(Enum.KeyCode.Space)

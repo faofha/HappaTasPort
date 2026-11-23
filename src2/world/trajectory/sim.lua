@@ -9,14 +9,17 @@
 --  Sim.run(start, input, world, opts) -> points (every opts.every s, the start first), info { jumped, cut }
 --    start = { pos, vel, onFloor, offTime, jumping, ground (root height over the floor), box (collision box),
 --              cf (its rotation), walkSpeed, jumpSpeed, maxSlope (degrees), gravity, top? (head room) }
---    input = { move (horizontal unit vector or zero), jump (held the whole time) }
+--    input = { move (horizontal unit vector or zero), jump (held the whole time), tap (one jump at the start, if it
+--              can: the red line) }
 --    world = { ray(origin, dir) -> { pos, normal }?, cast(cf, size, dir) -> { pos, normal, dist }? }
 --    opts  = { time, every, deadline? (os.clock() limit: the line is cut there) }
 -- ================================================================================================
 local Sim = {}
 
 Sim.STEP = 1 / 240
-Sim.JUMP_SCALE = 1.06 -- (live: Roblox pushes to 1.06 x JumpPower; jump apex 7.27 studs at JumpPower 50)
+-- (live, EToH kit test place 2026-11-23, R6, JumpPower 50: a jump's top 7.485 studs above the floor in three runs;
+-- this push model reaches it at 1.0757 x JumpPower. V2.38.17's 1.06 gave 7.269, measured then)
+Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
@@ -61,6 +64,10 @@ function Sim.run(st, input, world, opts)
 	local ground, box = st.ground or 3, st.box or Vector3.new(2, 2, 1)
 	local top = st.top or (box.Y / 2 + 1)
 	local rot = st.cf and (st.cf - st.cf.Position) or CFrame.new()
+	-- (the body turns to face where it walks, Roblox's AutoRotate: its collision box with it, live 2026-11-23)
+	if st.autoRotate ~= false and input.move and flat(input.move).Magnitude > 1e-6 then
+		rot = CFrame.lookAt(Vector3.zero, flat(input.move).Unit)
+	end
 	local minUp = math.cos(math.rad(st.maxSlope or 89))
 	local move = input.move and flat(input.move) or Vector3.zero
 	local target = (move.Magnitude > 1e-6 and move.Unit or Vector3.zero) * (st.walkSpeed or 16)
@@ -75,7 +82,7 @@ function Sim.run(st, input, world, opts)
 	for i = 1, steps do
 		if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
 		-- a held jump starts one whenever it can
-		if input.jump and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
+		if (input.jump or (input.tap and i == 1)) and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
 			jumping, airJumped, info.jumped = true, true, true
 		end
 		-- walking

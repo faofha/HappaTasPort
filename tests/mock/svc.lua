@@ -1348,7 +1348,13 @@ do
 	end
 	C.Workspace.Methods.Blockcast = function(_, cf, size, dir, params)
 		M.casts = M.casts + 1
-		return sweep(cf.Position, size / 2, dir, params)
+		-- (a turned box as the axis-aligned box around it: exact for turns of 90 degrees)
+		local r, u, l = cf.RightVector, cf.UpVector, cf.LookVector
+		local hs = size / 2
+		local h = Vector3.new(math.abs(r.X) * hs.X + math.abs(u.X) * hs.Y + math.abs(l.X) * hs.Z,
+			math.abs(r.Y) * hs.X + math.abs(u.Y) * hs.Y + math.abs(l.Y) * hs.Z,
+			math.abs(r.Z) * hs.X + math.abs(u.Z) * hs.Y + math.abs(l.Z) * hs.Z)
+		return sweep(cf.Position, h, dir, params)
 	end
 	M.rays = 0
 	C.Workspace.Methods.Raycast = function(_, origin, dir, params)

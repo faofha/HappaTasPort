@@ -15,13 +15,14 @@ local Trajectory = { name = "trajectory", order = 70 }
 Trajectory.__index = Trajectory
 
 local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
-local BUDGET = 0.001 -- (seconds of work per update)
+local BUDGET = 0.002 -- (seconds of work per update: green may use 60 % of it, red the rest; live 0.75 ms for both
+-- 1 s lines standing, more while walking)
 local EVERY = 3 -- (frames between updates while the character moves)
 local Air = Enum.Material.Air
 
 function Trajectory.new(E)
 	local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
-		lines = {}, budget = nil }, Trajectory)
+		lines = {}, budget = nil, runs = 0 }, Trajectory)
 	E.life:own(function() if self.draw then self.draw:destroy() end end)
 	return self
 end
@@ -114,17 +115,27 @@ function Trajectory:onFrameEnd(dt)
 		if key == self.key then return end
 		self.key = key
 	else
-		self.key = nil
 		self.n = self.n + 1
 		if self.n % EVERY ~= 0 and self.lines.green then return end
+		-- (nothing changed since the last prediction: standing still costs nothing)
+		local hrp = E.char.hrp
+		local p, v = hrp.Position, hrp.AssemblyLinearVelocity
+		local key = string.format("%.3f,%.3f,%.3f|%.3f,%.3f,%.3f|", p.X, p.Y, p.Z, v.X, v.Y, v.Z) .. tostring(move) .. "|"
+			.. tostring(held) .. "|" .. tostring(hum.FloorMaterial) .. "|" .. tostring(E.settings:get("trajectoryTime"))
+		if key == self.key and self.lines.green then return end
+		self.key = key
 	end
 	local ok, err = pcall(function()
 		local st = self:start(paused)
 		local world = self:world()
-		local opts = { time = E.settings:get("trajectoryTime"), every = 1 / 30, deadline = os.clock() + (self.budget or BUDGET) }
-		local green = Sim.run(st, { move = move, jump = held }, world, opts)
+		local budget, t0 = self.budget or BUDGET, os.clock()
+		local time = E.settings:get("trajectoryTime")
+		self.runs = self.runs + 1
+		local green = Sim.run(st, { move = move, jump = held }, world, { time = time, every = 1 / 30, deadline = t0 + budget * 0.6 })
 		local red = nil
-		if not held and Sim.canJump(st) then red = Sim.run(st, { move = move, jump = true }, world, opts) end
+		if not held and Sim.canJump(st) then
+			red = Sim.run(st, { move = move, tap = true }, world, { time = time, every = 1 / 30, deadline = math.max(os.clock(), t0 + budget * 0.6) + budget * 0.4 })
+		end
 		self.lines = { green = green, red = red }
 		self:paint()
 	end)
