@@ -1469,6 +1469,11 @@ __mods["engine/settings"] = function(import)
 		row("smoothSlowMotion", nil, "Speed hack", 1, { hidden = true, desc = "Slow motion: draws the frames between two physics steps (the picture only)" }),
 		row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
 		row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, classicToo = true, desc = "0 = never glides, 100 = always glides" }),
+		row("showTrajectory", nil, "Trajectory", 0, { classicToo = true, desc = "Shows where you will go: green with the keys you hold, red if you jump now" }),
+		row("trajectoryTime", nil, "Trajectory", 1, { kind = NUM, min = 0.1, max = 5, classicToo = true, desc = "How far ahead the lines go, in seconds" }),
+		row("showTrajectoryIn", nil, "Trajectory", "Idle,Create", { kind = "multi", options = { "Idle", "Create" },
+			classic = { Idle = "Show Trajectory in Idle", Create = "Show Trajectory in Create" },
+			desc = "Where the lines show: Idle (playing) and / or Create (recording and paused)" }),
 		row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 		row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
 		row("replayMouseMovement", "Replay Mouse Movement", "Inputs", 1, { desc = "Moves the real mouse to the recorded spots while testing" }),
@@ -1533,7 +1538,7 @@ __mods["engine/settings"] = function(import)
 		shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 		easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 		interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-		pausedMouse = "Keep Mouse Position (Paused)", replayChat = "Replay Chat", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
+		pausedMouse = "Keep Mouse Position (Paused)", replayChat = "Replay Chat", showTrajectory = "Show Trajectory", trajectoryTime = "Trajectory Time", showTrajectoryIn = "Show Trajectory In", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
 		glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 		classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 	}
@@ -10892,6 +10897,7 @@ __mods["world/time/control"] = function(import)
 	function TimeControl:stepping() return SH.Stepping() end
 	function TimeControl:stepDt() return SH.StepDt() end
 	function TimeControl:gameDt(dt) return SH.GameDt(dt) end
+	function TimeControl:rate() return SH.anim or 1 end
 	function TimeControl:frameStart() SH.FrameStart() end
 	function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 	function TimeControl:stepEnd() SH.StepEnd() end
@@ -11103,6 +11109,346 @@ __mods["world/glide"] = function(import)
 		p.hug.done = true
 	end
 	return Glide
+end
+__mods["world/trajectory/sim"] = function(import)
+	local Sim = {}
+	Sim.STEP = 1 / 240
+	Sim.JUMP_SCALE = 1.0757
+	Sim.COYOTE = 0.13
+	local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
+	local SKIN = 0.01
+	Sim.CLEAR = nil
+	local UP = Vector3.yAxis
+	function Sim.canJump(st)
+		if st.jumping or st.airJumped then return false end
+		return st.onFloor == true or (st.offTime or math.huge) <= Sim.COYOTE
+	end
+	local function flat(v) return Vector3.new(v.X, 0, v.Z) end
+	local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
+		for pass = 1, 2 do
+			local len = d.Magnitude
+			if len < 1e-9 then break end
+			local dir = d / len
+			if pass == 1 and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
+				clear.left = clear.left - len
+				pos = pos + d
+				break
+			end
+			local look = math.max(len, Sim.CLEAR or 1)
+			local hit = world.cast(rot + pos, box, dir * look)
+			if hit and hit.normal.Y >= minUp then hit = nil end
+			local dist = hit and (hit.dist or look) or look
+			if not hit or dist > len then
+				if pass == 1 then clear.dir, clear.left, clear.y = dir, dist - SKIN - len, pos.Y else clear.dir = nil end
+				pos = pos + d
+				break
+			end
+			clear.dir = nil
+			local t = math.max(0, dist - SKIN) / len
+			pos = pos + d * t
+			local n = flat(hit.normal)
+			if n.Magnitude < 1e-6 then break end
+			n = n.Unit
+			local into = hv:Dot(n)
+			if into < 0 then hv = hv - n * into end
+			local rest = d * (1 - t)
+			d = rest - n * math.min(0, rest:Dot(n))
+		end
+		return pos, hv
+	end
+	function Sim.run(st, input, world, opts)
+		local h = Sim.STEP
+		local g = math.min(st.gravity or 196.2, 1000)
+		local jv = (st.jumpSpeed or 50) * Sim.JUMP_SCALE
+		local ground, box = st.ground or 3, st.box or Vector3.new(2, 2, 1)
+		local top = st.top or (box.Y / 2 + 1)
+		local rot = st.cf and (st.cf - st.cf.Position) or CFrame.new()
+		if st.autoRotate ~= false and input.move and flat(input.move).Magnitude > 1e-6 then
+			rot = CFrame.lookAt(Vector3.zero, flat(input.move).Unit)
+		end
+		local minUp = math.cos(math.rad(st.maxSlope or 89))
+		local move = input.move and flat(input.move) or Vector3.zero
+		local target = (move.Magnitude > 1e-6 and move.Unit or Vector3.zero) * (st.walkSpeed or 16)
+		local pos, vel = st.pos, st.vel or Vector3.zero
+		local onFloor, offTime, jumping = st.onFloor == true, st.offTime or 0, st.jumping == true
+		local airJumped = jumping or st.airJumped == true
+		local floorN = UP
+		local clear = {}
+		local hv = flat(vel)
+		local vy = onFloor and not jumping and 0 or vel.Y
+		local steps = math.max(0, math.floor((opts.time or 1) / h + 0.5))
+		local every = math.max(1, math.floor((opts.every or 1 / 30) / h + 0.5))
+		local points, info = { pos }, { jumped = jumping, cut = false }
+		for i = 1, steps do
+			if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
+			if (input.jump or (input.tap and i == 1)) and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
+				jumping, airJumped, info.jumped = true, true, true
+			end
+			local want = target
+			if onFloor and floorN.Y < 0.9999 and target.Magnitude > 1e-6 then
+				local along = target - floorN * target:Dot(floorN)
+				if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) end
+			end
+			local err = want - hv
+			local m = err.Magnitude
+			if m > 1e-9 then hv = hv + err * (math.min(m * GAIN, (onFloor and CAP_FLOOR or CAP_AIR) * h) / m) end
+			local wasFloor = onFloor
+			if jumping then
+				if jv - vy > 1e-3 then vy = jv else jumping = false; vy = vy - g * h end
+			elseif onFloor then
+				vy = 0
+			else
+				vy = vy - g * h
+			end
+			pos, hv = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+			local dy = vy * h
+			if dy > 0 then
+				local hit = world.ray(pos, UP * (top + dy))
+				if hit then dy = math.max(0, hit.pos.Y - top - pos.Y); vy = 0; jumping = false end
+			end
+			local newY = pos.Y + dy
+			onFloor = false
+			if vy <= 0 then
+				local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
+				local hit = world.ray(pos + UP, -UP * (reach + 1))
+				if hit and hit.pos.Y + ground >= newY - (wasFloor and 0.5 or 0) - 1e-6 then
+					if hit.normal.Y >= minUp then
+						newY, vy, onFloor, airJumped, floorN = hit.pos.Y + ground, 0, true, false, hit.normal
+					else
+						newY = math.max(newY, hit.pos.Y + ground)
+						local v = hv + UP * vy
+						local into = v:Dot(hit.normal)
+						if into < 0 then v = v - hit.normal * into end
+						hv, vy = flat(v), v.Y
+					end
+				end
+			end
+			pos = Vector3.new(pos.X, newY, pos.Z)
+			offTime = onFloor and 0 or offTime + h
+			if i % every == 0 then points[#points + 1] = pos end
+		end
+		return points, info
+	end
+	return Sim
+end
+__mods["world/trajectory/draw"] = function(import)
+	local W = import("ui/write")
+	local Draw = {}
+	Draw.__index = Draw
+	local THICKNESS = 6
+	function Draw.new(parent)
+		return setmetatable({ parent = parent, pools = {}, shown = {} }, Draw)
+	end
+	function Draw:segment(id, i)
+		local pool = self.pools[id]
+		if not pool then pool = {}; self.pools[id] = pool end
+		local a = pool[i]
+		if a and a.Parent then return a end
+		a = Instance.new("LineHandleAdornment")
+		a.Name = "HappaTrajectory"
+		a.Adornee = workspace.Terrain
+		a.AlwaysOnTop = true
+		a.ZIndex = 1
+		a.Thickness = THICKNESS
+		a.Parent = self.parent
+		pool[i] = a
+		return a
+	end
+	function Draw:line(id, points, color)
+		local n = 0
+		for i = 1, #points - 1 do
+			local p0, p1 = points[i], points[i + 1]
+			local len = (p1 - p0).Magnitude
+			if len > 1e-4 then
+				n = n + 1
+				local a = self:segment(id, n)
+				W.set(a, "CFrame", CFrame.lookAt(p0, p1))
+				W.set(a, "Length", len)
+				W.set(a, "Color3", color)
+				W.set(a, "Visible", true)
+			end
+		end
+		local pool = self.pools[id] or {}
+		for i = n + 1, self.shown[id] or 0 do
+			if pool[i] then W.set(pool[i], "Visible", false) end
+		end
+		self.shown[id] = n
+	end
+	function Draw:hide(id)
+		for k, pool in pairs(self.pools) do
+			if id == nil or k == id then
+				for i = 1, self.shown[k] or 0 do
+					if pool[i] then W.set(pool[i], "Visible", false) end
+				end
+				self.shown[k] = 0
+			end
+		end
+	end
+	function Draw:destroy()
+		for _, pool in pairs(self.pools) do
+			for _, a in pairs(pool) do pcall(function() a:Destroy() end) end
+		end
+		self.pools, self.shown = {}, {}
+	end
+	return Draw
+end
+__mods["world/trajectory"] = function(import)
+	local Env = import("platform/env")
+	local Sim = import("world/trajectory/sim")
+	local Draw = import("world/trajectory/draw")
+	local Trajectory = { name = "trajectory", order = 70 }
+	Trajectory.__index = Trajectory
+	local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
+	local BUDGET = 0.004
+	local EVERY = 4
+	local Air = Enum.Material.Air
+	local JUMPING, FREEFALL = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall
+	local MAX_SEGMENTS = 60
+	function Trajectory.new(E)
+		local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
+			lines = {}, budget = nil, runs = 0, jumped = false }, Trajectory)
+		E.life:own(function()
+			if self.draw then self.draw:destroy() end
+			if self.gui then pcall(function() self.gui:Destroy() end) end
+		end)
+		return self
+	end
+	function Trajectory:wanted()
+		local E = self.E
+		local s = E.settings
+		if not s:on("showTrajectory") or not E.char:loaded() then return false end
+		if not E.char.model:IsDescendantOf(workspace) then return false end
+		local hum = E.char.hum
+		if not hum or hum.Health <= 0 then return false end
+		if E.mode == 1 then return s:has("showTrajectoryIn", "Idle") end
+		if E.mode == 2 then return s:has("showTrajectoryIn", "Create") end
+		return false
+	end
+	function Trajectory:clear()
+		self.lines = {}
+		self.key = nil
+		if self.draw then self.draw:hide() end
+	end
+	function Trajectory:jumpHeld()
+		local hum = self.E.char.hum
+		local held = false
+		if self.uis then pcall(function() held = self.uis:IsKeyDown(Enum.KeyCode.Space) end) end
+		return held or (hum ~= nil and hum.Jump == true)
+	end
+	function Trajectory:world()
+		local p = RaycastParams.new()
+		p.FilterType = Enum.RaycastFilterType.Exclude
+		local ex = { self.E.char.model }
+		if workspace.CurrentCamera then ex[#ex + 1] = workspace.CurrentCamera end
+		p.FilterDescendantsInstances = ex
+		p.RespectCanCollide = true
+		return {
+			ray = function(o, d)
+				local r = workspace:Raycast(o, d, p)
+				return r and { pos = r.Position, normal = r.Normal } or nil
+			end,
+			cast = function(cf, size, d)
+				local r = workspace:Blockcast(cf, size, d, p)
+				return r and { pos = r.Position, normal = r.Normal, dist = r.Distance } or nil
+			end,
+		}
+	end
+	function Trajectory:start(paused)
+		local E = self.E
+		local ch, hum, hrp = E.char, E.char.hum, E.char.hrp
+		local r6 = hum.RigType == Enum.HumanoidRigType.R6
+		local st = { ground = (r6 and 2 or hum.HipHeight) + hrp.Size.Y / 2, box = Vector3.new(2, 2, 1),
+			walkSpeed = hum.WalkSpeed, jumpSpeed = hum.UseJumpPower and hum.JumpPower or math.sqrt(2 * workspace.Gravity * hum.JumpHeight) / Sim.JUMP_SCALE,
+			maxSlope = hum.MaxSlopeAngle, gravity = workspace.Gravity, jumping = false }
+		local cf, vel
+		if paused and E.frame >= 1 and E.frame <= E.tl:count() then
+			cf, vel = ch:cframeAt(E.tl, E.frame), ch:linAt(E.tl, E.frame)
+			local cy = E.tl:getList("CY", E.frame)
+			local state = E.tl:get("State", E.frame, 1)
+			local air = state == JUMPING.Value or state == FREEFALL.Value
+			st.onFloor = cy == nil and math.abs(vel.Y) <= 1e-3 and not air
+			st.offTime = (type(cy) == "table" and tonumber(cy[1])) or (st.onFloor and 0 or 1)
+			st.airJumped = (type(cy) == "table" and cy[2] == 1) or state == JUMPING.Value
+		else
+			cf, vel = hrp.CFrame, hrp.AssemblyLinearVelocity
+			st.onFloor = hum.FloorMaterial ~= Air
+			st.offTime = st.onFloor and 0 or self.air
+			st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING)
+		end
+		local look = cf.LookVector
+		st.pos, st.vel = cf.Position, vel
+		st.cf = CFrame.lookAt(Vector3.zero, Vector3.new(look.X, 0, look.Z).Magnitude > 1e-6 and Vector3.new(look.X, 0, look.Z) or Vector3.new(0, 0, -1))
+		return st
+	end
+	function Trajectory:onFrameEnd(dt)
+		local E = self.E
+		if not self:wanted() then
+			self.air, self.jumped = 0, false
+			if self.lines.green or self.lines.red then self:clear() end
+			return
+		end
+		local hum = E.char.hum
+		if hum.FloorMaterial == Air then
+			local rate = E.time and E.time.rate and E.time:rate() or 1
+			self.air = self.air + (dt or 0) * rate
+			if hum:GetState() == JUMPING then self.jumped = true end
+		else
+			self.air, self.jumped = 0, false
+		end
+		local paused = E.mode == 2 and E.paused
+		local move = hum.MoveDirection
+		local held = self:jumpHeld()
+		if paused then
+			local key = tostring(E.frame) .. "|" .. tostring(move) .. "|" .. tostring(held) .. "|" .. tostring(E.settings:get("trajectoryTime"))
+			if key == self.key then return end
+			self.key = key
+		else
+			self.n = self.n + 1
+			if self.n % EVERY ~= 0 and self.lines.green then return end
+			local hrp = E.char.hrp
+			local p, v = hrp.Position, hrp.AssemblyLinearVelocity
+			local key = string.format("%.3f,%.3f,%.3f|%.3f,%.3f,%.3f|", p.X, p.Y, p.Z, v.X, v.Y, v.Z) .. tostring(move) .. "|"
+				.. tostring(held) .. "|" .. tostring(hum.FloorMaterial) .. "|" .. tostring(E.settings:get("trajectoryTime"))
+			if key == self.key and self.lines.green then return end
+			self.key = key
+		end
+		local ok, err = pcall(function()
+			local st = self:start(paused)
+			local world = self:world()
+			local budget, t0 = self.budget or BUDGET, os.clock()
+			local time = E.settings:get("trajectoryTime")
+			local every = math.max(1 / 30, time / MAX_SEGMENTS)
+			self.runs = self.runs + 1
+			local green = Sim.run(st, { move = move, jump = held }, world, { time = time, every = every, deadline = t0 + budget * 0.6 })
+			local red = nil
+			if not held and Sim.canJump(st) then
+				red = Sim.run(st, { move = move, tap = true }, world, { time = time, every = every, deadline = math.max(os.clock(), t0 + budget * 0.6) + budget * 0.4 })
+			end
+			self.lines = { green = green, red = red }
+			self:paint()
+		end)
+		if not ok then E.errs:report("trajectory", err) end
+	end
+	function Trajectory:paint()
+		local E = self.E
+		local root = E.ui and E.ui.root and E.ui.root.gui
+		local place = root and root.Parent
+		if not place then return end
+		if not (self.gui and self.gui.Parent) then
+			local g = Instance.new("ScreenGui")
+			g.Name = "HappaTASTrajectory"
+			g.ResetOnSpawn = false
+			g.Enabled = true
+			g.Parent = place
+			self.gui = g
+			if self.draw then self.draw:destroy() end
+			self.draw = nil
+		end
+		self.draw = self.draw or Draw.new(self.gui)
+		self.draw:line("green", self.lines.green or {}, GREEN)
+		self.draw:line("red", self.lines.red or {}, RED)
+	end
+	return Trajectory
 end
 __mods["world/kit/clock"] = function(import)
 	local Env = import("platform/env")
@@ -17114,7 +17460,7 @@ __mods["ui/win/settings"] = function(import)
 	local ColorPicker = import("ui/kit/colorpicker")
 	local Bezier = import("ui/kit/bezier")
 	local SettingsWin = {}
-	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Trajectory", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 	local PERCENT = { glassTransparency = true, blurStrength = true, edgeLight = true, interfaceScale = true }
 	local HEADER_H, PAD = 30, 18
@@ -18904,6 +19250,7 @@ __mods["ui/updatelog"] = function(import)
 			"   -   About window: version, credits and the update log",
 			"   -   Help rewritten in V2's friendly style; credits moved out",
 			"   -   Chat replay: Test types your recorded chat again",
+			"   -   Show Trajectory: green / red lines of where you go",
 			"   -   A new colour picker: one box, quick and recent colours",
 			"   -   Green default colours for the New interface",
 			"   -   One Sync Client Objects switch; fewer settings",
@@ -19350,7 +19697,14 @@ __mods["ui/win/helptext"] = function(import)
 			.. "bounce pads, ziplines, the kit's timers) all slow down with it.\n\n"
 			.. "Roblox's physics only runs on some frames and everything waits in between (Frame Step), so walking, "
 			.. "jumping, landing and coyote time feel exactly like normal speed. The frames in between are drawn "
-			.. "smoothly, but things the kit's scripts move still move in steps." },
+			.. "smoothly, but things the kit's scripts move still move in steps.\n\n"
+			.. "Show Trajectory: lines show where you are about to go, like the Geometry Dash mods. The green line is where "
+			.. "the keys you hold take you; the red one is where a jump right now would take you.\n\n"
+			.. "Hold jump and the jump is what happens, so only green shows. In the air only green shows too, except right "
+			.. "after walking off an edge, when you can still jump (coyote time).\n\n"
+			.. "Trajectory Time sets how far ahead the lines go, and Show Trajectory In picks Idle and / or Create (paused "
+			.. "too: the lines start from the frame shown). They are HappaTAS's prediction of Roblox's movement, so they "
+			.. "can be a little off further ahead. They never change your run." },
 		{ "glide", "Glide Manipulation",
 			"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 			.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "
@@ -22403,7 +22757,7 @@ __mods["ui/compact/settings"] = function(import)
 	local SettingsWin = import("ui/win/settings")
 	local TSettings = {}
 	TSettings.__index = TSettings
-	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+	local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Trajectory", "Inputs", "World sync", "Interface" }
 	local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 	local TITLE, PADT, PADB, GAP, SEC_GAP, STRIP = 22, 4, 6, 5, 7, 18
 	function TSettings.shown(def)
@@ -26452,6 +26806,7 @@ __mods["main"] = function(import)
 	local Tools = import("world/tools")
 	local Thumbstick = import("world/thumbstick")
 	local Chat = import("world/chat")
+	local Trajectory = import("world/trajectory")
 	local ClientObjects = import("world/clientobjects")
 	local Buttons = import("world/buttons")
 	local Lighting = import("world/lighting")
@@ -26503,6 +26858,7 @@ __mods["main"] = function(import)
 		E.mergeRun = guard(E.plugins:add(Merge.new(E)), "merge")
 		E.time = guard(E.plugins:add(TimeControl.new(E)), "time")
 		E.glide = guard(E.plugins:add(Glide.new(E)), "glide")
+		E.trajectory = guard(E.plugins:add(Trajectory.new(E)), "trajectory")
 		E.kitClock = guard(E.plugins:add(KitClockPlugin.new(E)), "kitClock")
 		E.kitObjects = guard(E.plugins:add(KitObjectsPlugin.new(E)), "kitObjects")
 		Run.registerCarry(E.tl)
