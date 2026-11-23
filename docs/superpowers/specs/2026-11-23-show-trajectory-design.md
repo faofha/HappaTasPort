@@ -1,0 +1,85 @@
+# Show Trajectory (HappaTAS 3) - design
+
+Approved direction: dzr, 2026-11-23 ("Then let's build it!" after approach A). This document is for dzr to approve
+before any code is written.
+
+## Intent
+
+Like the Show Trajectory mods of Geometry Dash: while you play or make a TAS, lines show where your character will
+be over the next moment, so you can see whether a jump lands before you do it.
+
+- **Green line:** what happens with the keys you hold now (walking, holding a direction, holding jump).
+- **Red line:** what happens if you jump now. While jump is held, the jump is what will happen, so that line is the
+  green one (only green shows). In the air, where a jump can't start, only green shows; inside coyote time a jump
+  can still start, so red shows there too.
+- Works in Idle and in Create (paused and recording), chosen like Speed Hack In.
+
+## Why it has to be a prediction
+
+Roblox does not let a script run its physics ahead (`WorldRoot:StepPhysics` refuses in a live game, measured
+2026-11-12). Eternal Obbying can replay from inputs alone because their game runs on their own deterministic
+engine; Roblox's engine is closed and not deterministic run to run. So HappaTAS runs its own copy of the character's
+movement for the next few seconds, starting again from the character's real position and speed at every update. It
+only has to be right for the next moment: each update corrects any drift.
+
+## Goals
+
+- Settings (one store, shown in the New, Tasability and Classic settings, section "Trajectory"):
+  - **Show Trajectory** (on / off, default off).
+  - **Trajectory Time** (seconds ahead, default 1, 0.1 - 5).
+  - **Show Trajectory In** (Idle and / or Create, default both; a multi row like Speed Hack In).
+- Two lines drawn in the world, client only, never seen by game scripts as parts.
+- Phase 1 (this build): the character on the world as it is now, measured against Roblox:
+  walking (62.5 % of the speed gap per 1/240 s step, at most 741.6 stud/s^2 on the floor, 143 in the air), jumping
+  (the jump speed held at each step's start until a step starts there), gravity (workspace.Gravity), coyote time
+  (jump until 0.13 s off the floor, Freefall after 0.125 s), landing, walls, slopes (walk up below
+  Humanoid.MaxSlopeAngle, slide on steeper ones), rotated parts, wedges, cylinders, balls, meshes and unions.
+- Phase 2: trusses (start a climb, climb speed, jumping off), bounce pads and jump launchers (the EToH kit's own
+  config values), conveyors.
+- Phase 3: moving client objects: a platform you stand on carries the line; moving parts are guessed from their
+  current speed and spin.
+
+## Non-goals
+
+- A full copy of Roblox's physics (pushing loose parts, constraints, other players).
+- Being exact over long times: the line is a prediction; a longer Trajectory Time drifts more.
+- Changing anything the TAS records or plays: the lines are only drawn.
+
+## Anti-goals
+
+- The lines must never move the character, touch the world, or change a recording.
+- No measurable lag: the work per frame stays small (below).
+
+## How (decided)
+
+- **Collisions come from Roblox, not from HappaTAS's own shapes:** each step of the simulated character asks
+  Roblox with `workspace:Blockcast` / `Raycast` (the character's collision box and its floor ray), so rotation,
+  wedges, cylinders, meshes and unions are Roblox's own exact shapes. The character and HappaTAS's own parts are
+  excluded.
+- **Movement rules:** the ones measured in the client for the speed hack (listed in Goals), stepped at Roblox's
+  1/240 s. Floor: a ray down from the root (Humanoid.HipHeight, like Roblox's humanoid); the floor's normal gives
+  slopes. Walls: the box cast along the move; the move slides along the wall's surface.
+- **Input:** the keys held now (W A S D or the game's MoveDirection), relative to the camera as the game's control
+  script does, and the jump key. While paused in Create: the keys held now, from the paused frame's position and
+  speed.
+- **Start state:** the real root position, velocity, humanoid state, and the coyote timer HappaTAS already keeps.
+- **Drawing:** a pool of thin line adornments (`LineHandleAdornment` on Terrain, under HappaTAS's hidden interface
+  root), about one segment per 1/30 s of predicted time. Green 0, 255, 0; red 255, 60, 60 (builder may tune).
+- **Cost:** the prediction runs at most every 3rd frame while moving, and once when something changes while
+  paused; a budget of about 1 ms per update (the line is cut short rather than going over it). Bench gate as usual.
+- Settings in `src2/engine/settings.lua`, the feature in a new world module (e.g. `src2/world/trajectory.lua`),
+  Help topic text, update log line.
+
+## Testing
+
+- Headless: the mock's measured Roblox controller (tests/mock `M.robloxController`) is the reference: record what the
+  mock character really does for the predicted time and compare with the line (walking, a jump, a fall off an edge,
+  coyote jump, landing, a wall). Red / green rules: holding jump, in the air, coyote time.
+- Live (Real MCP, EToH kit test place): compare the predicted line with the real path for walk, jump, a ledge, a
+  wedge, a cylinder; the per-update cost.
+
+## Left to the builder
+
+- Exact segment count and line thickness; how the camera-relative input is read (the PlayerModule's control module or
+  the keys plus the camera's look, whichever matches the game live).
+- Whether Classic shows the rows (`classicToo`, like Replay Chat): yes unless it breaks Classic's layout.
