@@ -349,8 +349,15 @@ function Trajectory:trussAhead(cf)
 	local p = RaycastParams.new()
 	p.FilterType = Enum.RaycastFilterType.Exclude
 	p.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
-	local r = workspace:Raycast(cf.Position, look.Unit * 3, p)
-	if not (r and r.Instance and r.Instance:IsA("TrussPart")) then return nil end
+	-- (from the root down to the feet: near the top the root is already above the truss, live; Roblox climbs on to
+	-- 2.4 studs above it)
+	local r
+	for _, dy in ipairs({ 0, -1.5, -2.9 }) do
+		r = workspace:Raycast(cf.Position + Vector3.new(0, dy, 0), look.Unit * 3, p)
+		if r and r.Instance and r.Instance:IsA("TrussPart") then break end
+		r = nil
+	end
+	if not r then return nil end
 	local n = Vector3.new(r.Normal.X, 0, r.Normal.Z)
 	if n.Magnitude < 1e-6 then return nil end
 	return { n = n.Unit, top = topOf(r.Instance) }

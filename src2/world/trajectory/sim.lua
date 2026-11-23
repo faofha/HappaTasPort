@@ -32,9 +32,10 @@ Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
 -- (trusses, measured live 2026-11-23: a climb starts when the body touches a truss face it walks into (a 0.05 s delay
 -- put the line half a stud behind the whole way up, live); climbing speed 0.7 x
--- WalkSpeed x how much the move points at the truss; at 2.4 studs above the top it steps over. A jump off it, phase 3
--- live: JumpPower at 45 degrees out and up plus the climbing speed, scaled back to JumpPower (still 35.4 / 35.4, climbing
--- up 30.2 out / 39.8 up, climbing down 41.3 / 28.2; measured within 0.6))
+-- WalkSpeed x how much the move points at the truss; at 2.4 studs above the top it steps over. A jump off it, live on a
+-- lone truss (2026-11-23, "(SPOOKY) Practice."): the jump speed (JUMP_SCALE x JumpPower) at 45 degrees out and up, and
+-- half the climbing speed moved from out to up: still 38.03 / 38.03, climbing up 32.43 out / 43.63 up, climbing down
+-- 43.63 / 32.43 (each within 0.03). The first measure (35.4 / 35.4) was on a wall of trusses whose neighbours deflected it)
 Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER = 0, 0.7, 2.4
 Sim.LAUNCH_TIME = 0.125
 Sim.LAUNCH_DELAY = 0.05 -- (the kit polls for the launch once a frame, its push starts the frame after: live ~0.05 s,
@@ -124,6 +125,15 @@ function Sim.run(st, input, world, opts)
 	local climbContact = 0
 	local lqPos, lqL = nil, nil
 	local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
+	-- the room above the head for a rise of `rise`: a ray from the root, else the body's footprint (live: a block the
+	-- body's width touched but the root's centre didn't stopped the real jump; the ray alone went through it)
+	local function ceiling(rise, t)
+		local hit = world.ray(pos, UP * (top + rise), t)
+		if hit then return math.max(0, hit.pos.Y - top - pos.Y), hit end
+		local c = world.cast(rot + (pos + UP * (top - 0.05)), Vector3.new(box.X, 0.1, box.Z), UP * rise, t)
+		if c then return math.max(0, c.dist or 0), c end
+		return nil
+	end
 	local function bounce(e)
 		if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
 		jumping, onFloor, airJumped = false, false, true -- (no coyote jump after a bounce)
@@ -142,8 +152,7 @@ function Sim.run(st, input, world, opts)
 			-- climbing a truss: up / down along its face as the move points at it, a jump leaves it, at the top it steps
 			-- over, at the floor it lets go
 			if wants then
-				local V = (climb.n + UP) * (jp / math.sqrt(2)) + UP * vy
-				V = V.Magnitude > 1e-9 and V.Unit * jp or Vector3.zero -- (JumpPower 0, hanging: nothing)
+				local V = (climb.n + UP) * (jv / math.sqrt(2)) + (UP - climb.n) * (vy / 2)
 				hv, vy = flat(V), V.Y
 				climb, airJumped, onFloor, info.jumped = nil, true, false, true
 				pos = pos + (hv + UP * vy) * h
@@ -152,8 +161,8 @@ function Sim.run(st, input, world, opts)
 				vy, hv = Sim.CLIMB_K * ws * toward, Vector3.zero
 				local ny = pos.Y + vy * h
 				if vy > 0 then
-					local hit = world.ray(pos, UP * (top + vy * h), t)
-					if hit then ny, vy = math.min(ny, math.max(pos.Y, hit.pos.Y - top)), 0 end
+					local room = ceiling(vy * h, t)
+					if room then ny, vy = math.min(ny, pos.Y + room), 0 end
 				elseif vy < 0 then
 					local hit = world.ray(pos + UP, -UP * (ground + 1 - vy * h + 0.05), t)
 					if hit and hit.pos.Y + ground >= ny then ny, climb, onFloor, vy, airJumped = hit.pos.Y + ground, nil, true, 0, false end
@@ -230,9 +239,8 @@ function Sim.run(st, input, world, opts)
 		end
 		local dy = vy * h
 		if dy > 0 then
-			local hit = world.ray(pos, UP * (top + dy), t)
-			if hit then
-				local room = math.max(0, hit.pos.Y - top - pos.Y)
+			local room, hit = ceiling(dy, t)
+			if room then
 				local e = hit.part and effect(hit.part)
 				-- (a bounce pad touched from below pushes too)
 				if e and e.kind == "bounce" then bounce(e); dy = math.min(room, vy * h) else dy = room; vy = 0; jumping = false end

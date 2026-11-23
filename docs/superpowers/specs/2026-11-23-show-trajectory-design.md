@@ -106,9 +106,14 @@ only has to be right for the next moment: each update corrects any drift.
 
 ## Phase 3 measured rules (live, 2026-11-23, EToH kit test place, R6, WalkSpeed 16, JumpPower 50, 60 FPS)
 
-- **Jumps off a truss (three kinds):** the jump's velocity is JumpPower at 45 degrees (out along the truss face's normal and
-  up) plus the climbing speed at that moment, scaled back to JumpPower: hanging still 35.4 out / 35.4 up, climbing up
-  (+11.2) 30.2 / 39.8, climbing down (-11.2) 41.3 / 28.2 (measured first frames within 0.6, twice each).
+- **Jumps off a truss (three kinds):** measured again on a lone truss (2026-11-23, "(SPOOKY) Practice.", 1510 trusses): the
+  jump's velocity is the jump speed (1.0757 x JumpPower, as for a normal jump) at 45 degrees out (the face's normal) and up,
+  with half the climbing speed moved from out to up: hanging still 38.03 / 38.03, climbing up (+11.2) 32.43 out / 43.63 up,
+  climbing down (-11.2) 43.63 / 32.43 (each within 0.03, the frame's gravity steps taken off). The first measure in the
+  EToH test place (35.4 / 35.4) was on a wall of five trusses: the neighbours deflected the jump (a sideways 4.7).
+- **Climbing near the top:** the root climbs on to 2.4 studs above the truss, so the truss is looked for from the root
+  down to the feet. **Ceilings:** a block over the body's width (not over the root's centre) stops a jump: the head check
+  uses the body's footprint when the ray from the root misses.
 - **Moving floors:** a physics part (the kit's MovingPlatform: unanchored, AlignPosition) carries a character standing on it,
   the character's speed following the floor's like a conveyor's. An anchored part moved by setting its CFrame carries
   nothing, with or without a velocity set on it (it slides away under the character).

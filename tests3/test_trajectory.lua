@@ -441,7 +441,7 @@ do
 	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
 end
 
-section("phase 3: the three jumps off a truss (live: still, climbing up, climbing down)")
+section("phase 3: the three jumps off a truss (live, a lone truss: still, climbing up, climbing down)")
 do
 	local function jumpV(vy0)
 		local st = base({ pos = Vector3.new(10.4, 10, 0), vel = Vector3.new(0, vy0, 0), onFloor = false, offTime = 1,
@@ -449,16 +449,19 @@ do
 		local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.05, every = 1 / 240 })
 		return (pts[2] - pts[1]) * 240
 	end
-	local function want(vy0)
-		local V = (Vector3.new(-1, 0, 0) + Vector3.yAxis) * (50 / math.sqrt(2)) + Vector3.yAxis * vy0
-		return V.Unit * 50
+	-- (live: 1.0757 x JumpPower at 45 degrees, half the climbing speed moved from out to up; the tests run at JUMP_SCALE 1)
+	local function want(vy0, scale)
+		local n = Vector3.new(-1, 0, 0)
+		return (n + Vector3.yAxis) * (50 * (scale or 1) / math.sqrt(2)) + (Vector3.yAxis - n) * (vy0 / 2)
 	end
 	for _, c in ipairs({ { 0, "still: 45 degrees" }, { 11.2, "climbing up: steeper" }, { -11.2, "climbing down: flatter" } }) do
 		local got, w = jumpV(c[1]), want(c[1])
 		check((got - w).Magnitude < 0.5, c[2] .. " (" .. tostring(got) .. " vs " .. tostring(w) .. ")")
 	end
-	check(math.abs(want(0).X + 35.36) < 0.01 and math.abs(want(11.2).Y - 39.82) < 0.05 and math.abs(want(-11.2).X + 41.29) < 0.05,
-		"the measured values: 35.4 / 35.4, 30.2 / 39.8, 41.3 / 28.2")
+	local k = 1.0757
+	check(math.abs(want(0, k).X + 38.03) < 0.02 and math.abs(want(11.2, k).X + 32.43) < 0.02 and math.abs(want(11.2, k).Y - 43.63) < 0.02
+		and math.abs(want(-11.2, k).X + 43.63) < 0.02 and math.abs(want(-11.2, k).Y - 32.43) < 0.02,
+		"the measured values: 38.03 / 38.03, 32.43 / 43.63, 43.63 / 32.43")
 end
 
 -- (a 6 x 1 x 6 platform, top at y = 0, centre moving along `vel` from the origin; a still floor far below at y = -50)
@@ -574,6 +577,36 @@ do
 	end
 	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 2, every = 1 / 30 })
 	check(top(pts) <= 10 + 1e-6, "the head stays under the ceiling (" .. top(pts) .. ")")
+end
+
+section("phase 3 live: a ceiling the body's width touches, the root's centre not")
+do
+	-- (a block from x 0.5 on, bottom at y 9: a ray up from the root at x 0 misses it, the 2-wide body doesn't)
+	local function ceilingWorld(climbing)
+		local w = climbing and trussWorld() or kitWorld()
+		local ray = w.ray
+		w.ray = function(o, d, t)
+			if d.Y > 0 then return nil end
+			return ray(o, d, t)
+		end
+		local cast = w.cast
+		w.cast = function(cf, size, d, t)
+			if d.Y > 0 then
+				local o = cf.Position
+				if o.X + size.X / 2 < 0.5 + (climbing and 10 or 0) then return nil end
+				local topY = o.Y + size.Y / 2
+				if topY > 9 + 1e-9 or topY + d.Y < 9 then return nil end
+				return { pos = Vector3.new(o.X, 9, o.Z), normal = -Vector3.yAxis, dist = 9 - topY, part = FLOOR }
+			end
+			return cast(cf, size, d, t)
+		end
+		return w
+	end
+	local pts = Sim.run(base(), { move = Vector3.zero, tap = true }, ceilingWorld(false), { time = 0.6, every = 1 / 60 })
+	check(top(pts) <= 9 - 2 + 1e-6, "a jump: the head stops at it (" .. top(pts) .. ")")
+	local st = base({ pos = Vector3.new(10.4, 5, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts2 = Sim.run(st, { move = Vector3.new(1, 0, 0) }, ceilingWorld(true), { time = 1, every = 1 / 60 })
+	check(top(pts2) <= 9 - 2 + 1e-6, "climbing: the head stops at it (" .. top(pts2) .. ")")
 end
 
 section("phase 3 bugs: the launcher query runs per quarter stud moved, not per step")
@@ -1033,6 +1066,17 @@ do
 		t.Position = hrp.Position + Vector3.new(0, 0, -2)
 		t.Parent = workspace.CurrentCamera
 		check(TR:trussAhead(CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(0, 0, -1))) == nil, "not grabbed")
+		t:Destroy()
+	end
+
+	section("phase 3 live: near a truss's top (the root above it, still climbing) the truss is still seen")
+	do
+		local t = Instance.new("TrussPart")
+		t.Anchored, t.Size, t.Position = true, Vector3.new(2, 10, 2), Vector3.new(-600, 5, -2)
+		t.Parent = workspace
+		local root = Vector3.new(-600, 11.5, 0) -- (1.5 above the top: Roblox climbs on to 2.4 above it)
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)))
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6, "seen (" .. tostring(got and got.top) .. ")")
 		t:Destroy()
 	end
 
