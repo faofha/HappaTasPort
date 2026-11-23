@@ -242,6 +242,238 @@ do
 	check(pts2[#pts2].Y < 3, "a 60 degree slope with Max Slope 45 cannot be walked up: it slides down (" .. tostring(pts2[#pts2]) .. ")")
 end
 
+-- ------------------------------------------------------------------------------------------------ phase 2: kit effects
+-- (a made-up world: a floor at y = 0, its x 10..14 strip a bounce pad; a pad wall at x = 20 (its face at 19);
+-- the floor at z >= 100 a conveyor moving +Z at 10)
+local FLOOR, PAD, SIDEPAD, BELT = {}, {}, {}, {}
+local effects = {
+	[PAD] = { kind = "bounce", power = 100 },
+	[SIDEPAD] = { kind = "bounce", power = 100 },
+	[BELT] = { kind = "conveyor", vel = Vector3.new(0, 0, 10) },
+}
+local function kitWorld(relative)
+	return {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local t = -o.Y / d.Y
+			if t < 0 or t > 1 then return nil end
+			local p = o + d * t
+			local part = FLOOR
+			if p.X >= 10 and p.X <= 14 then part = PAD end
+			if p.Z >= 100 then part = BELT end
+			return { pos = p, normal = Vector3.yAxis, part = part }
+		end,
+		cast = function(cf, size, d)
+			local o = cf.Position
+			local half = 0.5 -- (the turned box's depth along +X)
+			if d.X <= 0 then return nil end
+			local face = 19 - half
+			if o.X > face or o.X + d.X < face then return nil end
+			local t = (face - o.X) / d.X
+			return { pos = o + d * t, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * t, part = SIDEPAD }
+		end,
+		effect = function(part)
+			local e = effects[part]
+			if e and e.kind == "bounce" and relative then return { kind = "bounce", power = 100, relative = relative } end
+			return e
+		end,
+	}
+end
+local function base(extra)
+	local st = { pos = Vector3.new(0, 3, 0), vel = Vector3.zero, onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	for k, v in pairs(extra or {}) do st[k] = v end
+	return st
+end
+local function top(pts, from)
+	local m = -math.huge
+	for k = from or 1, #pts do m = math.max(m, pts[k].Y) end
+	return m
+end
+
+section("phase 2: a bounce pad from above")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(12, 20, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, kitWorld(), { time = 1.6, every = 1 / 30 })
+	local up = top(pts) -- (it starts at 20, below the bounce's top)
+	local want = 3 + 100 * 100 / (2 * 196.2)
+	check(math.abs(up - want) < 0.5, "it bounces as high as Power 100 gives (" .. up .. " vs " .. want .. ")")
+end
+
+section("phase 2: a bounce pad from the side")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(15, 3, 0) }), { move = Vector3.new(1, 0, 0) }, kitWorld(), { time = 0.6, every = 1 / 30 })
+	check(top(pts) > 10, "touching the pad wall bounces too (" .. top(pts) .. ")")
+end
+
+section("phase 2: a relative pad")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(12, 6, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, kitWorld(Vector3.new(40, 60, 0)), { time = 0.6, every = 1 / 30 })
+	check(pts[#pts].X > 12 + 5, "pushed along -RightVector x Power (" .. pts[#pts].X .. ")")
+end
+
+section("phase 2: a conveyor")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 100) }), { move = Vector3.zero }, kitWorld(), { time = 1, every = 1 / 30 })
+	local z = pts[#pts].Z - 100
+	check(math.abs(z - 10) < 0.3, "standing: carried at the belt speed (" .. z .. ")")
+	local pts2 = Sim.run(base({ pos = Vector3.new(0, 3, 200) }), { move = Vector3.new(0, 0, -1) }, kitWorld(), { time = 0.5, every = 1 / 30 })
+	local v = (pts2[#pts2].Z - pts2[#pts2 - 3].Z) / (3 / 30)
+	check(math.abs(v - (-6)) < 0.3, "walking against it: 16 - 10 = 6 (" .. v .. ")")
+	local pts3 = Sim.run(base({ pos = Vector3.new(0, 3, 100), vel = Vector3.new(0, 0, 10) }), { move = Vector3.zero, tap = true }, kitWorld(), { time = 0.4, every = 1 / 30 })
+	local late = (pts3[13].Z - pts3[10].Z) / (3 / 30)
+	check(math.abs(late) < 0.5, "jumped off: the belt speed fades in the air (" .. late .. ")")
+end
+
+-- (a launcher hitbox x 30..34, y 0..4, z -2..2: upright, Force 60; another one tilted at x 50..54)
+local function launchWorld(up2)
+	local w = kitWorld()
+	w.launcher = function(pos)
+		if pos.Y > 0 and pos.Y < 6 and math.abs(pos.Z) < 2.5 then
+			if pos.X > 29 and pos.X < 35 then return { up = Vector3.yAxis, force = 60 } end
+			if pos.X > 49 and pos.X < 55 then return { up = up2 or Vector3.new(0.6, 0.8, 0), force = 60 } end
+		end
+		return nil
+	end
+	return w
+end
+
+section("phase 2: a jump in a launcher")
+do
+	local pts, info = Sim.run(base({ pos = Vector3.new(32, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 1.2, every = 1 / 30 })
+	-- (the kit polls for the launch once a frame and its push starts the frame after, about 0.05 s late; the jump key
+	-- starts a normal jump meanwhile: live the real top was 21.4 - 22.2, 1 - 2 above a launch from the floor)
+	local y2 = pts[2].Y -- (0.033 s: a normal jump rising)
+	check(y2 > 3 + 1, "a normal jump during the kit's delay (" .. y2 .. ")")
+	local v = (pts[6].Y - pts[5].Y) * 30 -- (0.13 - 0.17 s)
+	check(math.abs(v - 60) < 1, "then 60 up (" .. v .. ")")
+	local want = 3 + 60 * 0.125 + 60 * 60 / (2 * 196.2) + 1.5
+	check(math.abs(top(pts) - want) < 1, "then gravity: top " .. top(pts) .. " vs " .. want)
+	check(info.jumped, "it counts as the jump")
+end
+
+section("phase 2: a tap outside a launcher is a normal jump")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.8, every = 1 / 30 })
+	check(top(pts) < 3 + 7, "a normal jump's height (" .. top(pts) .. ")")
+end
+
+section("phase 2: a held jump into a launcher")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(24, 3, 0) }), { move = Vector3.new(1, 0, 0), jump = true }, launchWorld(), { time = 1.5, every = 1 / 30 })
+	check(top(pts) > 15, "launched when the body is inside (" .. top(pts) .. ")")
+end
+
+section("phase 2: a tilted launcher pushes along its up")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(52, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.3, every = 1 / 30 })
+	check(pts[#pts].X > 52 + 4, "all axes: it moves along X too (" .. pts[#pts].X .. ")")
+	local pts2 = Sim.run(base({ pos = Vector3.new(32, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0), tap = true }, launchWorld(), { time = 0.3, every = 1 / 30 })
+	check(math.abs((pts2[#pts2].X - 32) - 16 * 0.3) < 0.8, "upright: only Y is forced, walking goes on (" .. pts2[#pts2].X .. ")")
+end
+
+-- (a truss x 11..13, its face toward -X at x = 11, top at y = 20; the floor at y = 0)
+local TRUSS = {}
+local function trussWorld()
+	return {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			-- the truss top (x 11..13), then the floor
+			for _, y in ipairs({ 20, 0 }) do
+				local t = (y - o.Y) / d.Y
+				if t >= 0 and t <= 1 then
+					local p = o + d * t
+					if y == 0 then return { pos = p, normal = Vector3.yAxis, part = FLOOR } end
+					if p.X >= 11 and p.X <= 13 then return { pos = p, normal = Vector3.yAxis, part = TRUSS } end
+				end
+			end
+			return nil
+		end,
+		cast = function(cf, size, d)
+			local o = cf.Position
+			if d.X <= 0 or o.Y - 1 >= 20 then return nil end
+			local face = 11 - 0.5
+			if o.X > face + 1e-6 or o.X + d.X < face then return nil end
+			local t = (face - o.X) / d.X
+			return { pos = o + d * t, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * t, part = TRUSS }
+		end,
+		effect = function(part) if part == TRUSS then return { kind = "truss", top = 20 } end return nil end,
+	}
+end
+
+section("phase 2: walking into a truss climbs it")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
+	local last = pts[#pts]
+	check(last.X <= 10.6 and last.Y > 14 and last.Y < 18, "climbing up the face (" .. tostring(last) .. ")")
+	local v = (pts[#pts].Y - pts[#pts - 3].Y) / (3 / 30)
+	check(math.abs(v - 11.2) < 0.3, "at 0.7 x WalkSpeed (" .. v .. ")")
+end
+
+section("phase 2: the climb starts on contact (live)")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 0.6, every = 1 / 240 })
+	local touch, up
+	for k, p in ipairs(pts) do
+		if not touch and p.X >= 10.48 then touch = k end
+		if not up and p.Y > 3.001 then up = k end
+	end
+	check(touch and up and up - touch <= 2, "climbing from the step it touches (" .. tostring(touch) .. ", " .. tostring(up) .. ")")
+end
+
+section("phase 2: the truss top")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 2.4, every = 1 / 30 })
+	local onTop = false
+	for _, p in ipairs(pts) do if p.X > 11.2 and math.abs(p.Y - 23) < 0.05 then onTop = true end end
+	check(onTop, "it steps over and stands on the top")
+end
+
+section("phase 2: a jump off a truss")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	check(Sim.canJump(st), "climbing: a jump can start")
+	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 60 })
+	local vx = (pts[2].X - pts[1].X) * 60
+	local vy = (pts[2].Y - pts[1].Y) * 60
+	check(math.abs(vx - (-0.68 * 50)) < 2 and math.abs(vy - 0.84 * 50) < 3, "away 0.68 x and up 0.84 x JumpPower (" .. vx .. ", " .. vy .. ")")
+end
+
+section("phase 2: hanging and climbing down")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts = Sim.run(st, { move = Vector3.zero }, trussWorld(), { time = 0.5, every = 1 / 30 })
+	check(math.abs(pts[#pts].Y - 10) < 1e-6, "no input: it hangs (" .. pts[#pts].Y .. ")")
+	local pts2 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 0.3, every = 1 / 30 })
+	check(math.abs(pts2[#pts2].Y - (10 - 11.2 * 0.3)) < 0.2, "moving away: down at 11.2 (" .. pts2[#pts2].Y .. ")")
+	local pts3 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
+	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
+end
+
+section("phase 2 review: a pad touched from below bounces")
+do
+	-- (a pad as a ceiling at y = 9 that pushes down: RelativeForce, its -RightVector pointing down)
+	local CEIL = {}
+	local w = kitWorld()
+	local floorRay = w.ray
+	w.ray = function(o, d)
+		if d.Y > 0 then
+			local t = (9 - o.Y) / d.Y
+			if t >= 0 and t <= 1 then return { pos = o + d * t, normal = Vector3.new(0, -1, 0), part = CEIL } end
+			return nil
+		end
+		return floorRay(o, d)
+	end
+	local effect = w.effect
+	w.effect = function(part)
+		if part == CEIL then return { kind = "bounce", power = 100, relative = Vector3.new(0, -100, 0) } end
+		return effect(part)
+	end
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, tap = true }, w, { time = 0.4, every = 1 / 60 })
+	local fastest = 0
+	for k = 2, #pts do fastest = math.min(fastest, (pts[k].Y - pts[k - 1].Y) * 60) end
+	check(fastest < -60, "pushed down by the pad, not just stopped (" .. fastest .. ")")
+end
+
 section("predictor: a start inside a part")
 do
 	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))
@@ -478,6 +710,123 @@ hum:Move(Vector3.zero)
 s:set("trajectoryTime", 1)
 s:set("showTrajectory", 0)
 M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+
+-- ------------------------------------------------------------------------------------------------ phase 2: the kit in the world
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	s:set("trajectoryTime", 1.5)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	local kit = Instance.new("Folder")
+	kit.Name = "KitStandIns"
+	kit.Parent = workspace
+	local function kpart(name, size, pos, class)
+		local p = Instance.new(class or "Part")
+		p.Name, p.Anchored, p.Size, p.Position = name, true, size, pos
+		p.Parent = kit
+		return p
+	end
+	local function config(part, name, attrs)
+		local c = Instance.new("Configuration")
+		c.Name = name
+		for k, v in pairs(attrs or {}) do c:SetAttribute(k, v) end
+		c.Parent = part
+		return c
+	end
+	local function fresh(p, move)
+		place(p)
+		if move then hum:Move(move) end
+		TR.key = nil
+		M.steps(6)
+	end
+	local function topY(pts) local m = -math.huge for _, p in ipairs(pts or {}) do m = math.max(m, p.Y) end return m end
+
+	section("phase 2 plugin: a bounce pad (its config, the kit's defaults)")
+	local pad = kpart("BouncePad", Vector3.new(4, 0.5, 4), Vector3.new(-200, 0.25, 0))
+	config(pad, "BouncePadConfiguration", {}) -- (no attributes: the kit's defaults, Power 100, not relative)
+	fresh(Vector3.new(-205, 3, 0), Vector3.new(1, 0, 0))
+	check(topY(TR.lines.green) > 15, "walking onto the pad: the green line bounces (" .. topY(TR.lines.green) .. ")")
+	pad:Destroy()
+
+	section("phase 2 plugin: a conveyor")
+	local belt = kpart("Conveyor", Vector3.new(6, 1, 40), Vector3.new(-200, -0.49, 0)) -- (0.01 above the test floor)
+	config(belt, "ConveyorConfiguration", { Speed = 10 }) -- (its config alone)
+	fresh(Vector3.new(-200, 3, 0))
+	local g = TR.lines.green
+	check(g ~= nil and math.abs((g[#g] - g[1]).Magnitude - 15) < 0.6, "standing on it: carried 10 x 1.5 s (" .. tostring(g and (g[#g] - g[1]).Magnitude) .. ")")
+	belt.ConveyorConfiguration:Destroy()
+	belt.AssemblyLinearVelocity = Vector3.new(0, 0, 8) -- (no config: an anchored part that moves)
+	fresh(Vector3.new(-200, 3, 0))
+	g = TR.lines.green
+	check(g ~= nil and math.abs((g[#g] - g[1]).Magnitude - 12) < 0.6, "any moving anchored part carries too (" .. tostring(g and (g[#g] - g[1]).Magnitude) .. ")")
+	belt:Destroy()
+
+	section("phase 2 plugin: a jump launcher")
+	local model = Instance.new("Model")
+	model.Parent = kit
+	local launcher = Instance.new("Part")
+	launcher.Name, launcher.Anchored, launcher.Size, launcher.Position = "JumpLauncher", true, Vector3.new(2, 2, 2), Vector3.new(-230, -1.5, 0)
+	launcher.Parent = model
+	config(launcher, "LauncherConfiguration", { Force = 60 })
+	local hitbox = Instance.new("Part")
+	-- (only the legs in it, like standing on a launcher: live the kit checks the whole body, the torso is above)
+	hitbox.Name, hitbox.Anchored, hitbox.CanCollide, hitbox.Size, hitbox.Position = "JumpLauncherHitbox", true, false, Vector3.new(4, 4, 4), Vector3.new(-230, -1, 0)
+	hitbox.Parent = model
+	TR.launchersAt = nil -- (look for launchers again now)
+	fresh(Vector3.new(-230, 3, 0))
+	check(TR.lines.red ~= nil and topY(TR.lines.red) > 3 + 15, "inside its hitbox: the red line launches (" .. topY(TR.lines.red) .. ")")
+	model:Destroy()
+	TR.launchersAt = nil
+
+	section("phase 2 plugin: a truss")
+	local truss = kpart("Truss", Vector3.new(2, 20, 6), Vector3.new(-249, 10, 0), "TrussPart")
+	fresh(Vector3.new(-256, 3, 0), Vector3.new(1, 0, 0))
+	check(topY(TR.lines.green) > 8, "walking into it: the green line climbs (" .. topY(TR.lines.green) .. ")")
+	hum:Move(Vector3.zero)
+	place(Vector3.new(-250.6, 8, 0))
+	hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(1, 0, 0))
+	hrp.Anchored = true -- (the mock character has no climbing: held where a climb would hold it)
+	hum:ChangeState(Enum.HumanoidStateType.Climbing)
+	local st = TR:start(false)
+	check(st.climb ~= nil and math.abs(st.climb.top - 20) < 1e-6, "a climbing character starts on the truss (top " .. tostring(st.climb and st.climb.top) .. ")")
+	check(Sim.canJump(st), "and can jump off it")
+	hrp.Anchored = false
+	truss:Destroy()
+
+	kit:Destroy()
+	hum:Move(Vector3.zero)
+	s:set("trajectoryTime", 1)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 2 review: paused on frame 0, rising after a bounce")
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	local was = E.frame
+	E.frame = 0 -- (after Delete TAS while paused)
+	local ok, st = pcall(function() return TR:start(true) end)
+	check(ok and type(st) == "table", "no error on frame 0 (" .. tostring(st) .. ")")
+	E.frame = was
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	-- (bounced: in the air, Freefall, going up fast without a jump)
+	place(Vector3.new(0, 30, 0))
+	hrp.AssemblyLinearVelocity = Vector3.new(0, 80, 0)
+	hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	M.steps(1)
+	TR.air = 0.05
+	local st2 = TR:start(false)
+	check(not Sim.canJump(st2), "rising after a bounce: no coyote jump")
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
 
 section("help and the update log")
 do

@@ -11115,16 +11115,21 @@ __mods["world/trajectory/sim"] = function(import)
 	Sim.STEP = 1 / 240
 	Sim.JUMP_SCALE = 1.0757
 	Sim.COYOTE = 0.13
+	Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER, Sim.CLIMB_OUT, Sim.CLIMB_UP = 0, 0.7, 2.4, 0.68, 0.84
+	Sim.LAUNCH_TIME = 0.125
+	Sim.LAUNCH_DELAY = 0.05
 	local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 	local SKIN = 0.01
 	Sim.CLEAR = nil
 	local UP = Vector3.yAxis
 	function Sim.canJump(st)
+		if st.climb then return true end
 		if st.jumping or st.airJumped then return false end
 		return st.onFloor == true or (st.offTime or math.huge) <= Sim.COYOTE
 	end
 	local function flat(v) return Vector3.new(v.X, 0, v.Z) end
 	local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
+		local met, metN = nil, nil
 		for pass = 1, 2 do
 			local len = d.Magnitude
 			if len < 1e-9 then break end
@@ -11144,6 +11149,7 @@ __mods["world/trajectory/sim"] = function(import)
 				break
 			end
 			clear.dir = nil
+			met, metN = hit.part or met, hit.normal
 			local t = math.max(0, dist - SKIN) / len
 			pos = pos + d * t
 			local n = flat(hit.normal)
@@ -11154,7 +11160,7 @@ __mods["world/trajectory/sim"] = function(import)
 			local rest = d * (1 - t)
 			d = rest - n * math.min(0, rest:Dot(n))
 		end
-		return pos, hv
+		return pos, hv, met, metN
 	end
 	function Sim.run(st, input, world, opts)
 		local h = Sim.STEP
@@ -11173,47 +11179,122 @@ __mods["world/trajectory/sim"] = function(import)
 		local onFloor, offTime, jumping = st.onFloor == true, st.offTime or 0, st.jumping == true
 		local airJumped = jumping or st.airJumped == true
 		local floorN = UP
+		local floorVel = Vector3.zero
+		local effect = world.effect or function() return nil end
 		local clear = {}
 		local hv = flat(vel)
 		local vy = onFloor and not jumping and 0 or vel.Y
+		local launchLeft, launchV, launchAll = 0, Vector3.zero, false
+		local launchWait, launchNext = 0, nil
+		local climb = st.climb and { n = flat(st.climb.n).Unit, top = st.climb.top } or nil
+		local climbContact = 0
+		local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
+		local function bounce(e)
+			if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
+			jumping, onFloor, airJumped = false, false, true
+		end
 		local steps = math.max(0, math.floor((opts.time or 1) / h + 0.5))
 		local every = math.max(1, math.floor((opts.every or 1 / 30) / h + 0.5))
 		local points, info = { pos }, { jumped = jumping, cut = false }
 		for i = 1, steps do
 			if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
-			if (input.jump or (input.tap and i == 1)) and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
+			local skip = false
+			local wants = input.jump or (input.tap and i == 1)
+			if climb then
+				if wants then
+					hv, vy = climb.n * (Sim.CLIMB_OUT * jp), Sim.CLIMB_UP * jp
+					climb, airJumped, onFloor, info.jumped = nil, true, false, true
+					pos = pos + (hv + UP * vy) * h
+				else
+					local toward = (move.Magnitude > 1e-6) and move.Unit:Dot(-climb.n) or 0
+					vy, hv = Sim.CLIMB_K * ws * toward, Vector3.zero
+					local ny = pos.Y + vy * h
+					if vy < 0 then
+						local hit = world.ray(pos + UP, -UP * (ground + 1 - vy * h + 0.05))
+						if hit and hit.pos.Y + ground >= ny then ny, climb, onFloor, vy, airJumped = hit.pos.Y + ground, nil, true, 0, false end
+					end
+					pos = Vector3.new(pos.X, ny, pos.Z)
+					if climb and pos.Y >= climb.top + Sim.CLIMB_OVER then hv, vy, climb = -climb.n * ws, 0, nil end
+				end
+				offTime = 0
+				if i % every == 0 then points[#points + 1] = pos end
+				skip = true
+			end
+			if not skip then
+			local L = wants and launchLeft <= 0 and not launchNext and world.launcher
+				and world.launcher(pos + UP * ((top - ground) / 2), Vector3.new(box.X, ground + top, box.Z), rot)
+			if L then
+				launchNext, launchWait, info.jumped = L, Sim.LAUNCH_DELAY, true
+				if not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then jumping, airJumped = true, true end
+			end
+			if launchNext then
+				launchWait = launchWait - h
+				if launchWait <= 1e-9 then
+					launchLeft, launchV = Sim.LAUNCH_TIME, launchNext.up * launchNext.force
+					launchAll = not (math.abs(launchNext.up.X) < 0.1 and math.abs(launchNext.up.Z) < 0.1)
+					jumping, airJumped, onFloor, launchNext = false, true, false, nil
+				end
+			elseif wants and launchLeft <= 0 and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
 				jumping, airJumped, info.jumped = true, true, true
 			end
 			local want = target
+			if onFloor and floorVel.Magnitude > 1e-9 then want = target + floorVel end
 			if onFloor and floorN.Y < 0.9999 and target.Magnitude > 1e-6 then
 				local along = target - floorN * target:Dot(floorN)
-				if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) end
+				if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) + floorVel end
 			end
 			local err = want - hv
 			local m = err.Magnitude
 			if m > 1e-9 then hv = hv + err * (math.min(m * GAIN, (onFloor and CAP_FLOOR or CAP_AIR) * h) / m) end
 			local wasFloor = onFloor
-			if jumping then
+			if launchLeft > 0 then
+				launchLeft = launchLeft - h
+				vy = launchV.Y
+				if launchAll then hv = flat(launchV) end
+			elseif jumping then
 				if jv - vy > 1e-3 then vy = jv else jumping = false; vy = vy - g * h end
 			elseif onFloor then
 				vy = 0
 			else
 				vy = vy - g * h
 			end
-			pos, hv = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+			local wallPart, wallN
+			pos, hv, wallPart, wallN = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+			local wallE = wallPart and effect(wallPart)
+			if wallE and wallE.kind == "bounce" then bounce(wallE) end
+			local trussN = wallE and wallE.kind == "truss" and wallN and flat(wallN)
+			if trussN and trussN.Magnitude > 1e-6 and target:Dot(trussN.Unit) < -0.5 * target.Magnitude then
+				climbContact = climbContact + h
+				if climbContact >= Sim.CLIMB_DELAY - 1e-9 then
+					climb, climbContact, jumping, launchLeft = { n = trussN.Unit, top = wallE.top }, 0, false, 0
+					vy, hv = 0, Vector3.zero
+				end
+			else
+				climbContact = 0
+			end
 			local dy = vy * h
 			if dy > 0 then
 				local hit = world.ray(pos, UP * (top + dy))
-				if hit then dy = math.max(0, hit.pos.Y - top - pos.Y); vy = 0; jumping = false end
+				if hit then
+					local room = math.max(0, hit.pos.Y - top - pos.Y)
+					local e = hit.part and effect(hit.part)
+					if e and e.kind == "bounce" then bounce(e); dy = math.min(room, vy * h) else dy = room; vy = 0; jumping = false end
+				end
 			end
 			local newY = pos.Y + dy
 			onFloor = false
+			floorVel = Vector3.zero
 			if vy <= 0 then
 				local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
 				local hit = world.ray(pos + UP, -UP * (reach + 1))
 				if hit and hit.pos.Y + ground >= newY - (wasFloor and 0.5 or 0) - 1e-6 then
-					if hit.normal.Y >= minUp then
+					local e = hit.part and effect(hit.part)
+					if e and e.kind == "bounce" then
+						newY = hit.pos.Y + ground
+						bounce(e)
+					elseif hit.normal.Y >= minUp then
 						newY, vy, onFloor, airJumped, floorN = hit.pos.Y + ground, 0, true, false, hit.normal
+						if e and e.kind == "conveyor" then floorVel = flat(e.vel) end
 					else
 						newY = math.max(newY, hit.pos.Y + ground)
 						local v = hv + UP * vy
@@ -11226,6 +11307,7 @@ __mods["world/trajectory/sim"] = function(import)
 			pos = Vector3.new(pos.X, newY, pos.Z)
 			offTime = onFloor and 0 or offTime + h
 			if i % every == 0 then points[#points + 1] = pos end
+			end
 		end
 		return points, info
 	end
@@ -11302,7 +11384,7 @@ __mods["world/trajectory"] = function(import)
 	local BUDGET = 0.004
 	local EVERY = 4
 	local Air = Enum.Material.Air
-	local JUMPING, FREEFALL = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall
+	local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Climbing
 	local MAX_SEGMENTS = 60
 	function Trajectory.new(E)
 		local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
@@ -11335,6 +11417,35 @@ __mods["world/trajectory"] = function(import)
 		if self.uis then pcall(function() held = self.uis:IsKeyDown(Enum.KeyCode.Space) end) end
 		return held or (hum ~= nil and hum.Jump == true)
 	end
+	local function topOf(part)
+		local cf, sz = part.CFrame, part.Size
+		return part.Position.Y + (math.abs(cf.RightVector.Y) * sz.X + math.abs(cf.UpVector.Y) * sz.Y + math.abs(cf.LookVector.Y) * sz.Z) / 2
+	end
+	local function effectOf(part)
+		if part:IsA("TrussPart") then return { kind = "truss", top = topOf(part) } end
+		if part:GetAttribute("Activated") == false then return nil end
+		local c = part:FindFirstChild("BouncePadConfiguration")
+		if c then
+			local power = tonumber(c:GetAttribute("Power")) or 100
+			local rel = c:GetAttribute("RelativeForce") == true
+			return { kind = "bounce", power = power, relative = rel and (-part.CFrame.RightVector * power) or nil }
+		end
+		local cc = part:FindFirstChild("ConveyorConfiguration")
+		if cc then return { kind = "conveyor", vel = part.CFrame.LookVector * (tonumber(cc:GetAttribute("Speed")) or 10) } end
+		if part.Anchored and part.AssemblyLinearVelocity.Magnitude > 1e-3 then return { kind = "conveyor", vel = part.AssemblyLinearVelocity } end
+		return nil
+	end
+	local function launcherOf(hitbox)
+		local parent = hitbox.Parent
+		if not parent then return nil end
+		for _, k in ipairs(parent:GetChildren()) do
+			if k:IsA("BasePart") and k:FindFirstChild("LauncherConfiguration") then
+				if k:GetAttribute("Activated") == false then return nil end
+				return { up = k.CFrame.UpVector, force = tonumber(k.LauncherConfiguration:GetAttribute("Force")) or 60 }
+			end
+		end
+		return nil
+	end
 	function Trajectory:world()
 		local p = RaycastParams.new()
 		p.FilterType = Enum.RaycastFilterType.Exclude
@@ -11342,16 +11453,47 @@ __mods["world/trajectory"] = function(import)
 		if workspace.CurrentCamera then ex[#ex + 1] = workspace.CurrentCamera end
 		p.FilterDescendantsInstances = ex
 		p.RespectCanCollide = true
+		local o = OverlapParams.new()
+		o.FilterType = Enum.RaycastFilterType.Exclude
+		o.FilterDescendantsInstances = ex
+		local effects, launchers = {}, {}
 		return {
-			ray = function(o, d)
-				local r = workspace:Raycast(o, d, p)
-				return r and { pos = r.Position, normal = r.Normal } or nil
+			ray = function(origin, d)
+				local r = workspace:Raycast(origin, d, p)
+				return r and { pos = r.Position, normal = r.Normal, part = r.Instance } or nil
 			end,
 			cast = function(cf, size, d)
 				local r = workspace:Blockcast(cf, size, d, p)
-				return r and { pos = r.Position, normal = r.Normal, dist = r.Distance } or nil
+				return r and { pos = r.Position, normal = r.Normal, dist = r.Distance, part = r.Instance } or nil
+			end,
+			effect = function(part)
+				local e = effects[part]
+				if e == nil then e = effectOf(part) or false; effects[part] = e end
+				return e or nil
+			end,
+			launcher = function(pos, box, rot)
+				for _, hit in ipairs(workspace:GetPartBoundsInBox(rot + pos, box, o)) do
+					if hit.Name == "JumpLauncherHitbox" then
+						local l = launchers[hit]
+						if l == nil then l = launcherOf(hit) or false; launchers[hit] = l end
+						if l then return l end
+					end
+				end
+				return nil
 			end,
 		}
+	end
+	function Trajectory:trussAhead(cf)
+		local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+		if look.Magnitude < 1e-6 then return nil end
+		local p = RaycastParams.new()
+		p.FilterType = Enum.RaycastFilterType.Exclude
+		p.FilterDescendantsInstances = { self.E.char.model }
+		local r = workspace:Raycast(cf.Position, look.Unit * 3, p)
+		if not (r and r.Instance and r.Instance:IsA("TrussPart")) then return nil end
+		local n = Vector3.new(r.Normal.X, 0, r.Normal.Z)
+		if n.Magnitude < 1e-6 then return nil end
+		return { n = n.Unit, top = topOf(r.Instance) }
 	end
 	function Trajectory:start(paused)
 		local E = self.E
@@ -11373,8 +11515,10 @@ __mods["world/trajectory"] = function(import)
 			cf, vel = hrp.CFrame, hrp.AssemblyLinearVelocity
 			st.onFloor = hum.FloorMaterial ~= Air
 			st.offTime = st.onFloor and 0 or self.air
-			st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING)
+			st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING or (hum:GetState() == FREEFALL and vel.Y > 1))
 		end
+		local climbing = (paused and E.frame >= 1 and E.frame <= E.tl:count() and E.tl:get("State", E.frame, 1) == CLIMBING.Value) or (not paused and hum:GetState() == CLIMBING)
+		if climbing then st.climb = self:trussAhead(cf) end
 		local look = cf.LookVector
 		st.pos, st.vel = cf.Position, vel
 		st.cf = CFrame.lookAt(Vector3.zero, Vector3.new(look.X, 0, look.Z).Magnitude > 1e-6 and Vector3.new(look.X, 0, look.Z) or Vector3.new(0, 0, -1))
@@ -19251,6 +19395,7 @@ __mods["ui/updatelog"] = function(import)
 			"   -   Help rewritten in V2's friendly style; credits moved out",
 			"   -   Chat replay: Test types your recorded chat again",
 			"   -   Show Trajectory: green / red lines of where you go",
+			"   -   Trajectory: bounce pads, launchers, conveyors, trusses",
 			"   -   A new colour picker: one box, quick and recent colours",
 			"   -   Green default colours for the New interface",
 			"   -   One Sync Client Objects switch; fewer settings",
@@ -19704,7 +19849,9 @@ __mods["ui/win/helptext"] = function(import)
 			.. "after walking off an edge, when you can still jump (coyote time).\n\n"
 			.. "Trajectory Time sets how far ahead the lines go, and Show Trajectory In picks Idle and / or Create (paused "
 			.. "too: the lines start from the frame shown). They are HappaTAS's prediction of Roblox's movement, so they "
-			.. "can be a little off further ahead. They never change your run." },
+			.. "can be a little off further ahead. They never change your run.\n\n"
+			.. "They also follow the EToH kit: bounce pads bounce them, a jump inside a jump launcher launches them, "
+			.. "conveyors carry them, and trusses are climbed (the red line on a truss is a jump off it)." },
 		{ "glide", "Glide Manipulation",
 			"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 			.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "

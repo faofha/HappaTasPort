@@ -83,3 +83,23 @@ only has to be right for the next moment: each update corrects any drift.
 - Exact segment count and line thickness; how the camera-relative input is read (the PlayerModule's control module or
   the keys plus the camera's look, whichever matches the game live).
 - Whether Classic shows the rows (`classicToo`, like Replay Chat): yes unless it breaks Classic's layout.
+
+## Phase 2 measured rules (live, 2026-11-23, EToH kit test place, R6, WalkSpeed 16, JumpPower 50, 60 FPS)
+
+- **Truss (TrussPart):** walking into a truss face starts a climb about 0.1 s after the body touches it (root 0.6 - 0.9
+  studs from the face; the root then holds its distance). Climbing speed = 0.7 x WalkSpeed (11.2) times how much
+  the move points at the truss: toward it = up, away = down, none = hang (still Climbing, speed 0). At the top the
+  climb goes on until the root is 2.4 studs above the truss top, then the character steps over it (Landed on the
+  top, walking on). At the bottom, climbing down onto the floor lets go. A jump while climbing: on the first frame
+  the velocity is about 34 studs/s away from the truss (along -LookVector, flat: 0.68 x JumpPower) and 42 up
+  (0.84 x JumpPower), then gravity and the air steering (143 stud/s^2) as usual; walking toward the truss again grabs
+  it again.
+- **Conveyor (`ConveyorConfiguration`, Speed 10):** the belt's AssemblyLinearVelocity is LookVector x Speed. On it,
+  walking aims at belt velocity + move x WalkSpeed (standing: carried at the belt speed from the second frame; walking
+  against a 10 belt: 6). In the air the target is the move alone: the belt speed fades at the air steering rate.
+- **Bounce pad (`BouncePadConfiguration`):** the test place's pad has RelativeForce true (Power 100): its RightVector
+  points down, so -RightVector x 100 is straight up. A fall onto it left at about 100 up the next frame (93.5 one
+  frame of gravity later). Matches the kit's rule.
+- **Jump launcher (`LauncherConfiguration`, Force 60):** hitbox `JumpLauncherHitbox` 4 x 4 x 4 around the 3 x 3 x 3
+  launcher. A jump inside it: 60 up from the next frame, held for 0.125 s, then gravity (top 17.9 studs above the
+  start); no normal jump on top of it. Matches the kit's rule.

@@ -172,7 +172,9 @@ local TOPICS = {
 		.. "after walking off an edge, when you can still jump (coyote time).\n\n"
 		.. "Trajectory Time sets how far ahead the lines go, and Show Trajectory In picks Idle and / or Create (paused "
 		.. "too: the lines start from the frame shown). They are HappaTAS's prediction of Roblox's movement, so they "
-		.. "can be a little off further ahead. They never change your run." },
+		.. "can be a little off further ahead. They never change your run.\n\n"
+		.. "They also follow the EToH kit: bounce pads bounce them, a jump inside a jump launcher launches them, "
+		.. "conveyors carry them, and trusses are climbed (the red line on a truss is a jump off it)." },
 	{ "glide", "Glide Manipulation",
 		"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 		.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "
