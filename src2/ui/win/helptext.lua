@@ -165,7 +165,14 @@ local TOPICS = {
 		.. "bounce pads, ziplines, the kit's timers) all slow down with it.\n\n"
 		.. "Roblox's physics only runs on some frames and everything waits in between (Frame Step), so walking, "
 		.. "jumping, landing and coyote time feel exactly like normal speed. The frames in between are drawn "
-		.. "smoothly, but things the kit's scripts move still move in steps." },
+		.. "smoothly, but things the kit's scripts move still move in steps.\n\n"
+		.. "Show Trajectory: lines show where you are about to go, like the Geometry Dash mods. The green line is where "
+		.. "the keys you hold take you; the red one is where a jump right now would take you.\n\n"
+		.. "Hold jump and the jump is what happens, so only green shows. In the air only green shows too, except right "
+		.. "after walking off an edge, when you can still jump (coyote time).\n\n"
+		.. "Trajectory Time sets how far ahead the lines go, and Show Trajectory In picks Idle and / or Create (paused "
+		.. "too: the lines start from the frame shown). They are HappaTAS's prediction of Roblox's movement, so they "
+		.. "can be a little off further ahead. They never change your run." },
 	{ "glide", "Glide Manipulation",
 		"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 		.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "

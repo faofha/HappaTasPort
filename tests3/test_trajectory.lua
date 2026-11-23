@@ -329,4 +329,15 @@ s:set("trajectoryTime", 1)
 s:set("showTrajectory", 0)
 M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 
+section("help and the update log")
+do
+	local body
+	for _, t in ipairs(__T3("ui/win/helptext").topics(E)) do
+		if t.body:find("Show Trajectory", 1, true) then body = t.body end
+	end
+	check(body ~= nil and body:find("red", 1, true) ~= nil and body:find("green", 1, true) ~= nil, "a Help topic explains Show Trajectory")
+	local v31 = table.concat(__T3("ui/updatelog").ENTRIES[1].bullets, " ")
+	check(v31:lower():find("trajectory", 1, true) ~= nil, "V3.1 has it in the log")
+end
+
 finish()
