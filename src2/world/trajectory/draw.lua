@@ -8,7 +8,7 @@ local W = import("ui/write")
 local Draw = {}
 Draw.__index = Draw
 
-local THICKNESS = 4 -- (live: 3 px was hard to see a few studs away)
+local THICKNESS = 6 -- (live: 3 - 4 px were hard to see a few studs away; Roblox shades adornments darker)
 
 function Draw.new(parent)
 	return setmetatable({ parent = parent, pools = {}, shown = {} }, Draw)

@@ -383,6 +383,102 @@ s:set("trajectoryTime", 1)
 s:set("showTrajectory", 0)
 M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 
+-- ------------------------------------------------------------------------------------------------ review fixes
+local function drawnSegments()
+	-- (a segment counts only inside a ScreenGui that is switched on: a disabled one draws nothing, live)
+	local n = 0
+	for _, root in ipairs({ game:GetService("CoreGui"), game }) do
+		for _, d in ipairs(root:GetDescendants()) do
+			if d.ClassName == "LineHandleAdornment" and d.Visible and d.Parent then
+				local sg = d:FindFirstAncestorWhichIsA("ScreenGui")
+				if sg == nil or sg.Enabled then n = n + 1 end
+			end
+		end
+	end
+	return n
+end
+M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+s:set("showTrajectory", 1)
+s:set("trajectoryTime", 1)
+key(Enum.KeyCode.One)
+M.steps(2)
+
+section("review: the lines draw in Classic too")
+s:set("interface", "Classic")
+M.steps(2)
+place(Vector3.new(0, 3, 0))
+hum:Move(Vector3.new(1, 0, 0))
+M.steps(8)
+check(drawnSegments() > 0, "drawn while the interface is Classic (" .. drawnSegments() .. ")")
+s:set("interface", "New")
+M.steps(2)
+hum:Move(Vector3.zero)
+
+section("review: a jump going up is not jumped again")
+place(Vector3.new(-60, 3, 0))
+M.steps(4)
+hum.Jump = true
+M.steps(3)
+do
+	local v = hrp.AssemblyLinearVelocity
+	check(v.Y > 0, "(rising: " .. v.Y .. ")")
+	local st = TR:start(false)
+	check(not Sim.canJump(st), "no jump can start mid-jump")
+	TR.key = nil
+	M.steps(4)
+	check(TR.lines.red == nil, "no red line mid-jump")
+end
+for _ = 1, 60 do M.step(1 / 60) end
+place(Vector3.new(0, 3, 0))
+M.steps(4)
+
+section("review: a paused falling frame without coyote data is not on the floor")
+key(Enum.KeyCode.Two)
+M.steps(2)
+place(Vector3.new(0, 30, 0))
+E.modes:request("unpause")
+M.steps(10)
+E.modes:request("pause")
+M.steps(2)
+do
+	local n = E.tl:count()
+	E.modes:seek(n - 2)
+	M.steps(2)
+	E.tl:setList("CY", E.frame, nil) -- (a run loaded from a file has no CY)
+	local st = TR:start(true)
+	check(st.vel.Y < -1, "(falling: " .. st.vel.Y .. ")")
+	check(not st.onFloor, "not on the floor")
+end
+key(Enum.KeyCode.One)
+M.steps(4)
+
+section("review: coyote time counts game time (speed hack)")
+do
+	local realRate = E.time.rate
+	E.time.rate = function() return 0.1 end
+	place(Vector3.new(30, 3, 0))
+	hum:Move(Vector3.new(1, 0, 0))
+	local g0 = 0
+	while hrp.Position.X < 40.5 and g0 < 200 do M.step(1 / 60); g0 = g0 + 1 end
+	for _ = 1, 12 do M.step(1 / 60) end -- (0.2 s of real time off the floor = 0.02 s of game time)
+	check(TR:start(false).offTime < 0.13, "0.2 s real at 0.1x is inside coyote time (" .. TR:start(false).offTime .. ")")
+	E.time.rate = realRate
+	hum:Move(Vector3.zero)
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+end
+
+section("review: long lines stay at most 60 segments")
+s:set("trajectoryTime", 5)
+TR.key = nil
+hum:Move(Vector3.new(0, 0, 1))
+M.steps(8)
+check(TR.lines.green ~= nil and #TR.lines.green <= 61, "5 s: at most 61 points (" .. tostring(TR.lines.green and #TR.lines.green) .. ")")
+hum:Move(Vector3.zero)
+s:set("trajectoryTime", 1)
+s:set("showTrajectory", 0)
+M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+
 section("help and the update log")
 do
 	local body

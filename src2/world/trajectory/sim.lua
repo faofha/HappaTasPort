@@ -7,7 +7,8 @@
 --  (coyote time), once until the next landing. Floors, walls, slopes and ceilings come from `world` (Roblox's own
 --  Raycast / Blockcast in the game), so any part shape and rotation counts. Pure: no engine, no instances.
 --  Sim.run(start, input, world, opts) -> points (every opts.every s, the start first), info { jumped, cut }
---    start = { pos, vel, onFloor, offTime, jumping, ground (root height over the floor), box (collision box),
+--    start = { pos, vel, onFloor, offTime, jumping, airJumped (jumped since the floor: no coyote jump), ground (root
+--              height over the floor), box (collision box),
 --              cf (its rotation), walkSpeed, jumpSpeed, maxSlope (degrees), gravity, top? (head room) }
 --    input = { move (horizontal unit vector or zero), jump (held the whole time), tap (one jump at the start, if it
 --              can: the red line) }
@@ -28,7 +29,7 @@ local UP = Vector3.yAxis
 
 -- can a jump start from this state
 function Sim.canJump(st)
-	if st.jumping then return false end
+	if st.jumping or st.airJumped then return false end
 	return st.onFloor == true or (st.offTime or math.huge) <= Sim.COYOTE
 end
 
@@ -88,7 +89,7 @@ function Sim.run(st, input, world, opts)
 	local target = (move.Magnitude > 1e-6 and move.Unit or Vector3.zero) * (st.walkSpeed or 16)
 	local pos, vel = st.pos, st.vel or Vector3.zero
 	local onFloor, offTime, jumping = st.onFloor == true, st.offTime or 0, st.jumping == true
-	local airJumped = jumping
+	local airJumped = jumping or st.airJumped == true
 	local floorN = UP -- (the floor's normal: walking follows its surface)
 	local clear = {}
 	local hv = flat(vel)

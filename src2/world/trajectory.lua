@@ -21,11 +21,16 @@ local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
 local BUDGET = 0.004
 local EVERY = 4 -- (frames between updates while the character moves)
 local Air = Enum.Material.Air
+local JUMPING, FREEFALL = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall
+local MAX_SEGMENTS = 60 -- (per line: a long Trajectory Time gets longer segments, not more of them)
 
 function Trajectory.new(E)
 	local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
-		lines = {}, budget = nil, runs = 0 }, Trajectory)
-	E.life:own(function() if self.draw then self.draw:destroy() end end)
+		lines = {}, budget = nil, runs = 0, jumped = false }, Trajectory)
+	E.life:own(function()
+		if self.draw then self.draw:destroy() end
+		if self.gui then pcall(function() self.gui:Destroy() end) end
+	end)
 	return self
 end
 
@@ -86,12 +91,17 @@ function Trajectory:start(paused)
 	if paused and E.frame >= 1 and E.frame <= E.tl:count() then
 		cf, vel = ch:cframeAt(E.tl, E.frame), ch:linAt(E.tl, E.frame)
 		local cy = E.tl:getList("CY", E.frame)
-		st.onFloor = cy == nil and vel.Y <= 1e-3
+		local state = E.tl:get("State", E.frame, 1)
+		local air = state == JUMPING.Value or state == FREEFALL.Value
+		-- (CY isn't saved: a run loaded from a file has none, so a fall is told by its speed and state)
+		st.onFloor = cy == nil and math.abs(vel.Y) <= 1e-3 and not air
 		st.offTime = (type(cy) == "table" and tonumber(cy[1])) or (st.onFloor and 0 or 1)
+		st.airJumped = (type(cy) == "table" and cy[2] == 1) or state == JUMPING.Value
 	else
 		cf, vel = hrp.CFrame, hrp.AssemblyLinearVelocity
 		st.onFloor = hum.FloorMaterial ~= Air
 		st.offTime = st.onFloor and 0 or self.air
+		st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING)
 	end
 	local look = cf.LookVector
 	st.pos, st.vel = cf.Position, vel
@@ -103,7 +113,14 @@ function Trajectory:onFrameEnd(dt)
 	local E = self.E
 	local hum = E.char.hum
 	if hum then
-		if hum.FloorMaterial == Air then self.air = self.air + (dt or 0) else self.air = 0 end
+		-- (time off the floor in game time: the speed hack slows it like Roblox's own timer; a jump since the floor)
+		if hum.FloorMaterial == Air then
+			local rate = E.time and E.time.rate and E.time:rate() or 1
+			self.air = self.air + (dt or 0) * rate
+			if hum:GetState() == JUMPING then self.jumped = true end
+		else
+			self.air, self.jumped = 0, false
+		end
 	end
 	if not self:wanted() then
 		if self.lines.green or self.lines.red then self:clear() end
@@ -132,11 +149,12 @@ function Trajectory:onFrameEnd(dt)
 		local world = self:world()
 		local budget, t0 = self.budget or BUDGET, os.clock()
 		local time = E.settings:get("trajectoryTime")
+		local every = math.max(1 / 30, time / MAX_SEGMENTS)
 		self.runs = self.runs + 1
-		local green = Sim.run(st, { move = move, jump = held }, world, { time = time, every = 1 / 30, deadline = t0 + budget * 0.6 })
+		local green = Sim.run(st, { move = move, jump = held }, world, { time = time, every = every, deadline = t0 + budget * 0.6 })
 		local red = nil
 		if not held and Sim.canJump(st) then
-			red = Sim.run(st, { move = move, tap = true }, world, { time = time, every = 1 / 30, deadline = math.max(os.clock(), t0 + budget * 0.6) + budget * 0.4 })
+			red = Sim.run(st, { move = move, tap = true }, world, { time = time, every = every, deadline = math.max(os.clock(), t0 + budget * 0.6) + budget * 0.4 })
 		end
 		self.lines = { green = green, red = red }
 		self:paint()
@@ -144,11 +162,24 @@ function Trajectory:onFrameEnd(dt)
 	if not ok then E.errs:report("trajectory", err) end
 end
 
+-- (the lines get their own ScreenGui next to HappaTAS's interface: the interface's own is switched off in Classic and
+-- while hidden, and a disabled ScreenGui draws no adornment)
 function Trajectory:paint()
 	local E = self.E
-	local parent = E.ui and E.ui.root and E.ui.root.gui
-	if not parent then return end
-	self.draw = self.draw or Draw.new(parent)
+	local root = E.ui and E.ui.root and E.ui.root.gui
+	local place = root and root.Parent
+	if not place then return end
+	if not (self.gui and self.gui.Parent) then
+		local g = Instance.new("ScreenGui")
+		g.Name = "HappaTASTrajectory"
+		g.ResetOnSpawn = false
+		g.Enabled = true
+		g.Parent = place
+		self.gui = g
+		if self.draw then self.draw:destroy() end
+		self.draw = nil
+	end
+	self.draw = self.draw or Draw.new(self.gui)
 	self.draw:line("green", self.lines.green or {}, GREEN)
 	self.draw:line("red", self.lines.red or {}, RED)
 end
