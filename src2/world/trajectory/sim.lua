@@ -23,6 +23,7 @@ Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
+Sim.CLEAR = nil -- (how far one wall check looks ahead, studs: 1 when nil; 0 = a check every step, for tests)
 local UP = Vector3.yAxis
 
 -- can a jump start from this state
@@ -35,16 +36,30 @@ local function flat(v) return Vector3.new(v.X, 0, v.Z) end
 
 -- the horizontal move d from pos: stops at a wall (a surface too steep to walk), the speed loses its part into it,
 -- what is left slides along it once more; returns the new position and speed
-local function moveFlat(world, pos, d, hv, rot, box, minUp)
-	for _ = 1, 2 do
+-- clear = { dir, left, y }: a check that looked ahead and found nothing: the steps after it in that direction, at that
+-- height, need no check until they have used up `left` (one check a stud instead of one a step; live a step pressed
+-- against a wall cost 7 us, 1.5 in the open)
+local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
+	for pass = 1, 2 do
 		local len = d.Magnitude
 		if len < 1e-9 then break end
-		local hit = world.cast(rot + pos, box, d)
-		if not hit or hit.normal.Y >= minUp then
+		local dir = d / len
+		if pass == 1 and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
+			clear.left = clear.left - len
 			pos = pos + d
 			break
 		end
-		local t = math.max(0, (hit.dist or len) - SKIN) / len
+		local look = math.max(len, Sim.CLEAR or 1)
+		local hit = world.cast(rot + pos, box, dir * look)
+		if hit and hit.normal.Y >= minUp then hit = nil end
+		local dist = hit and (hit.dist or look) or look
+		if not hit or dist > len then
+			if pass == 1 then clear.dir, clear.left, clear.y = dir, dist - SKIN - len, pos.Y else clear.dir = nil end
+			pos = pos + d
+			break
+		end
+		clear.dir = nil
+		local t = math.max(0, dist - SKIN) / len
 		pos = pos + d * t
 		local n = flat(hit.normal)
 		if n.Magnitude < 1e-6 then break end
@@ -74,6 +89,8 @@ function Sim.run(st, input, world, opts)
 	local pos, vel = st.pos, st.vel or Vector3.zero
 	local onFloor, offTime, jumping = st.onFloor == true, st.offTime or 0, st.jumping == true
 	local airJumped = jumping
+	local floorN = UP -- (the floor's normal: walking follows its surface)
+	local clear = {}
 	local hv = flat(vel)
 	local vy = onFloor and not jumping and 0 or vel.Y
 	local steps = math.max(0, math.floor((opts.time or 1) / h + 0.5))
@@ -86,7 +103,13 @@ function Sim.run(st, input, world, opts)
 			jumping, airJumped, info.jumped = true, true, true
 		end
 		-- walking
-		local err = target - hv
+		local want = target
+		if onFloor and floorN.Y < 0.9999 and target.Magnitude > 1e-6 then
+			-- (along the floor's surface at the walk speed: across a slope that is the walk speed x cos(slope))
+			local along = target - floorN * target:Dot(floorN)
+			if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) end
+		end
+		local err = want - hv
 		local m = err.Magnitude
 		if m > 1e-9 then hv = hv + err * (math.min(m * GAIN, (onFloor and CAP_FLOOR or CAP_AIR) * h) / m) end
 		-- vertical (the speed changes at the step's start, then the position moves at it)
@@ -98,7 +121,7 @@ function Sim.run(st, input, world, opts)
 		else
 			vy = vy - g * h
 		end
-		pos, hv = moveFlat(world, pos, hv * h, hv, rot, box, minUp)
+		pos, hv = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
 		local dy = vy * h
 		if dy > 0 then
 			local hit = world.ray(pos, UP * (top + dy))
@@ -112,7 +135,7 @@ function Sim.run(st, input, world, opts)
 			local hit = world.ray(pos + UP, -UP * (reach + 1))
 			if hit and hit.pos.Y + ground >= newY - (wasFloor and 0.5 or 0) - 1e-6 then
 				if hit.normal.Y >= minUp then
-					newY, vy, onFloor, airJumped = hit.pos.Y + ground, 0, true, false
+					newY, vy, onFloor, airJumped, floorN = hit.pos.Y + ground, 0, true, false, hit.normal
 				else
 					newY = math.max(newY, hit.pos.Y + ground)
 					local v = hv + UP * vy

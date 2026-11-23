@@ -8,7 +8,7 @@ local W = import("ui/write")
 local Draw = {}
 Draw.__index = Draw
 
-local THICKNESS = 3
+local THICKNESS = 4 -- (live: 3 px was hard to see a few studs away)
 
 function Draw.new(parent)
 	return setmetatable({ parent = parent, pools = {}, shown = {} }, Draw)

@@ -3,7 +3,7 @@
 --  Show Trajectory mods. Green: where the character goes with the keys held now; red: where it goes if it jumps now
 --  (only while jump isn't held and a jump can start: on the floor or in coyote time). Predicted by world/trajectory/sim
 --  from the character's real position and speed (Idle, recording) or the paused frame's (Create, paused), for
---  Trajectory Time seconds, every 3rd frame while moving and once per change while paused, within a time budget.
+--  Trajectory Time seconds, every 4th frame while moving and once per change while paused, within a time budget.
 --  Settings: Show Trajectory, Trajectory Time, Show Trajectory In (Idle / Create). Never in Test. The lines only
 --  draw: they never move the character, touch the world or change the run.
 -- ================================================================================================
@@ -15,9 +15,11 @@ local Trajectory = { name = "trajectory", order = 70 }
 Trajectory.__index = Trajectory
 
 local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
-local BUDGET = 0.002 -- (seconds of work per update: green may use 60 % of it, red the rest; live 0.75 ms for both
--- 1 s lines standing, more while walking)
-local EVERY = 3 -- (frames between updates while the character moves)
+-- (seconds of work per update: green may use 60 % of it, red the rest. Live, 1 s lines: both 0.75 ms standing, about
+-- 2 ms walking into a wall (two checks every step there), so one update every 4th frame is about 0.5 ms a frame while
+-- moving, and nothing while nothing changes)
+local BUDGET = 0.004
+local EVERY = 4 -- (frames between updates while the character moves)
 local Air = Enum.Material.Air
 
 function Trajectory.new(E)

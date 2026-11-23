@@ -194,6 +194,25 @@ do
 end
 wall:Destroy()
 
+section("predictor: fewer wall checks, the same line")
+do
+	local wall2 = part("Wall2", Vector3.new(2, 20, 40), Vector3.new(-80, 10, 0))
+	local st = startNow({ pos = Vector3.new(-95, 3, 0), vel = Vector3.zero, onFloor = true })
+	local c0 = M.casts
+	local pts = Sim.run(st, { move = Vector3.new(1, 0, 1).Unit, jump = false }, W, { time = 1.5, every = 1 / 30 })
+	local used = M.casts - c0
+	Sim.CLEAR = 0 -- (no clear distance: a check every step)
+	local c1 = M.casts
+	local ref = Sim.run(st, { move = Vector3.new(1, 0, 1).Unit, jump = false }, W, { time = 1.5, every = 1 / 30 })
+	local every = M.casts - c1
+	Sim.CLEAR = nil
+	local worst = 0
+	for k = 1, #ref do worst = math.max(worst, (pts[k] - ref[k]).Magnitude) end
+	check(worst < 1e-6, "the same line as checking every step (" .. worst .. ")")
+	check(used < every / 2, "with far fewer wall checks (the open part; pressed against the wall every step still meets it: " .. used .. " vs " .. every .. ")")
+	wall2:Destroy()
+end
+
 section("predictor: slopes")
 do
 	local function slopeWorld(deg)
@@ -214,6 +233,10 @@ do
 	local pts = Sim.run(st, { move = Vector3.new(1, 0, 0), jump = false }, slopeWorld(30), { time = 1, every = 1 / 30 })
 	local last = pts[#pts]
 	check(last.X > 10 and math.abs(last.Y - (last.X * math.tan(math.rad(30)) + 3)) < 0.2, "a 30 degree slope is walked up (" .. tostring(last) .. ")")
+	-- (Roblox walks along the surface at the walk speed: across, that is walk speed x cos(slope); live on an 18 degree
+	-- wedge the line drifted 0.7 studs ahead in 0.8 s without it)
+	local across = (pts[#pts].X - pts[#pts - 3].X) / (3 / 30)
+	check(math.abs(across - 16 * math.cos(math.rad(30))) < 0.3, "across the slope at walk speed x cos 30 (" .. across .. ")")
 	st.maxSlope = 45
 	local pts2 = Sim.run(st, { move = Vector3.new(1, 0, 0), jump = false }, slopeWorld(60), { time = 1, every = 1 / 30 })
 	check(pts2[#pts2].Y < 3, "a 60 degree slope with Max Slope 45 cannot be walked up: it slides down (" .. tostring(pts2[#pts2]) .. ")")
