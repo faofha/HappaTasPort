@@ -21,7 +21,7 @@ local page = cp.settingsPage
 check(page ~= nil, "the SETTINGS page")
 eq(cp.hosted.settings, nil, "not the New Settings window")
 
-local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Trajectory", "Inputs", "World sync", "Interface" }
 local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 local function shown(def)
 	return table.find(SECTIONS, def.section) and not BEZIER[def.key] and not def.hidden and not def.newOnly

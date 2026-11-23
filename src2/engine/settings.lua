@@ -85,6 +85,12 @@ Settings.SCHEMA = {
 	-- (classicToo: no V2 name, but Classic's Settings tab shows it as well)
 	row("glideManipulation", nil, "Glide", 0, { classicToo = true, desc = "Decides whether a torso-edge glide happens (Idle and recording)" }),
 	row("glideChance", nil, "Glide", 50, { kind = NUM, min = 0, max = 100, integer = true, classicToo = true, desc = "0 = never glides, 100 = always glides" }),
+	-- (no V2 name, V3.1: Show Trajectory, world/trajectory.lua; Classic shows them too)
+	row("showTrajectory", nil, "Trajectory", 0, { classicToo = true, desc = "Shows where you will go: green with the keys you hold, red if you jump now" }),
+	row("trajectoryTime", nil, "Trajectory", 1, { kind = NUM, min = 0.1, max = 5, classicToo = true, desc = "How far ahead the lines go, in seconds" }),
+	row("showTrajectoryIn", nil, "Trajectory", "Idle,Create", { kind = "multi", options = { "Idle", "Create" },
+		classic = { Idle = "Show Trajectory in Idle", Create = "Show Trajectory in Create" },
+		desc = "Where the lines show: Idle (playing) and / or Create (recording and paused)" }),
 
 	row("replayKeyboard", "Replay Keyboard", "Inputs", 1, { desc = "Presses the recorded keys while testing" }),
 	row("replayMouseClicks", "Replay Mouse Clicks", "Inputs", 1, { desc = "Presses the recorded mouse buttons while testing" }),
@@ -159,7 +165,7 @@ local NAMES = {
 	shadows = "Shadows", animations = "Animations", animationLength = "Animation length", easing = "Easing",
 	easingDirection = "Easing direction", bezierX1 = "Curve x1", bezierY1 = "Curve y1", bezierX2 = "Curve x2", bezierY2 = "Curve y2",
 	interface = "Interface", speedHackModes = "Speed Hack In", uiSounds = "Interface sounds", uiSoundVolume = "Sound volume",
-	pausedMouse = "Keep Mouse Position (Paused)", replayChat = "Replay Chat", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
+	pausedMouse = "Keep Mouse Position (Paused)", replayChat = "Replay Chat", showTrajectory = "Show Trajectory", trajectoryTime = "Trajectory Time", showTrajectoryIn = "Show Trajectory In", smoothSlowMotion = "Smooth Slow Motion", invisibleMouseSpeed = "NohBoard Mouse Speed",
 	glideManipulation = "Glide Manipulation", glideChance = "Glide Chance (%)",
 	classicMainColor = "Main Colour", classicWindow = "Window", classicPanel = "Panel", classicButton = "Button", classicShade = "Shade", classicScrollBar = "Scroll Bar", classicLight = "Light Fill", classicText = "Text", classicDarkText = "Dark Text", classicLabelText = "Label Text", classicPlaceholder = "Placeholder Text", classicSectionTitle = "Section Title", classicOutline = "Outline", classicFieldOutline = "Field Outline", classicDivider = "Divider", classicLine = "Line", classicLightOutline = "Light Outline", classicCancel = "Cancel", classicWarning = "Warning", classicMergeOk = "Merge OK", classicToggleOff = "Toggle Off", classicIconButton = "Icon Button", classicSwitchOn = "Switch On", classicSwitchOff = "Switch Off", classicBackground = "Background", classicBackgroundTransparency = "Background Transparency", classicBackgroundFit = "Background Fit",
 }
