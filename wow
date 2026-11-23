@@ -10898,6 +10898,7 @@ __mods["world/time/control"] = function(import)
 	function TimeControl:stepDt() return SH.StepDt() end
 	function TimeControl:gameDt(dt) return SH.GameDt(dt) end
 	function TimeControl:rate() return SH.anim or 1 end
+	function TimeControl:picture() return SH.SV and SH.SV.pose or nil end
 	function TimeControl:frameStart() SH.FrameStart() end
 	function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 	function TimeControl:stepEnd() SH.StepEnd() end
@@ -11115,11 +11116,12 @@ __mods["world/trajectory/sim"] = function(import)
 	Sim.STEP = 1 / 240
 	Sim.JUMP_SCALE = 1.0757
 	Sim.COYOTE = 0.13
-	Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER, Sim.CLIMB_OUT, Sim.CLIMB_UP = 0, 0.7, 2.4, 0.68, 0.84
+	Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER = 0, 0.7, 2.4
 	Sim.LAUNCH_TIME = 0.125
 	Sim.LAUNCH_DELAY = 0.05
 	local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 	local SKIN = 0.01
+	local FOOT = 0.1
 	Sim.CLEAR = nil
 	local UP = Vector3.yAxis
 	function Sim.canJump(st)
@@ -11128,19 +11130,19 @@ __mods["world/trajectory/sim"] = function(import)
 		return st.onFloor == true or (st.offTime or math.huge) <= Sim.COYOTE
 	end
 	local function flat(v) return Vector3.new(v.X, 0, v.Z) end
-	local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
+	local function moveFlat(world, pos, d, hv, rot, box, minUp, clear, t)
 		local met, metN = nil, nil
 		for pass = 1, 2 do
 			local len = d.Magnitude
 			if len < 1e-9 then break end
 			local dir = d / len
-			if pass == 1 and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
+			if pass == 1 and not (world.near and world.near(pos, t)) and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
 				clear.left = clear.left - len
 				pos = pos + d
 				break
 			end
 			local look = math.max(len, Sim.CLEAR or 1)
-			local hit = world.cast(rot + pos, box, dir * look)
+			local hit = world.cast(rot + pos, box, dir * look, t)
 			if hit and hit.normal.Y >= minUp then hit = nil end
 			local dist = hit and (hit.dist or look) or look
 			if not hit or dist > len then
@@ -11188,6 +11190,7 @@ __mods["world/trajectory/sim"] = function(import)
 		local launchWait, launchNext = 0, nil
 		local climb = st.climb and { n = flat(st.climb.n).Unit, top = st.climb.top } or nil
 		local climbContact = 0
+		local lqPos, lqL = nil, nil
 		local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
 		local function bounce(e)
 			if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
@@ -11199,18 +11202,24 @@ __mods["world/trajectory/sim"] = function(import)
 		for i = 1, steps do
 			if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
 			local skip = false
+			local t = (i - 1) * h
 			local wants = input.jump or (input.tap and i == 1)
 			if climb then
 				if wants then
-					hv, vy = climb.n * (Sim.CLIMB_OUT * jp), Sim.CLIMB_UP * jp
+					local V = (climb.n + UP) * (jp / math.sqrt(2)) + UP * vy
+					V = V.Magnitude > 1e-9 and V.Unit * jp or Vector3.zero
+					hv, vy = flat(V), V.Y
 					climb, airJumped, onFloor, info.jumped = nil, true, false, true
 					pos = pos + (hv + UP * vy) * h
 				else
 					local toward = (move.Magnitude > 1e-6) and move.Unit:Dot(-climb.n) or 0
 					vy, hv = Sim.CLIMB_K * ws * toward, Vector3.zero
 					local ny = pos.Y + vy * h
-					if vy < 0 then
-						local hit = world.ray(pos + UP, -UP * (ground + 1 - vy * h + 0.05))
+					if vy > 0 then
+						local hit = world.ray(pos, UP * (top + vy * h), t)
+						if hit then ny, vy = math.min(ny, math.max(pos.Y, hit.pos.Y - top)), 0 end
+					elseif vy < 0 then
+						local hit = world.ray(pos + UP, -UP * (ground + 1 - vy * h + 0.05), t)
 						if hit and hit.pos.Y + ground >= ny then ny, climb, onFloor, vy, airJumped = hit.pos.Y + ground, nil, true, 0, false end
 					end
 					pos = Vector3.new(pos.X, ny, pos.Z)
@@ -11221,8 +11230,13 @@ __mods["world/trajectory/sim"] = function(import)
 				skip = true
 			end
 			if not skip then
-			local L = wants and launchLeft <= 0 and not launchNext and world.launcher
-				and world.launcher(pos + UP * ((top - ground) / 2), Vector3.new(box.X, ground + top, box.Z), rot)
+			local L = nil
+			if wants and launchLeft <= 0 and not launchNext and world.launcher then
+				if not lqPos or (pos - lqPos).Magnitude >= 0.25 then
+					lqPos, lqL = pos, world.launcher(pos + UP * ((top - ground) / 2), Vector3.new(box.X, ground + top, box.Z), rot)
+				end
+				L = lqL
+			end
 			if L then
 				launchNext, launchWait, info.jumped = L, Sim.LAUNCH_DELAY, true
 				if not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then jumping, airJumped = true, true end
@@ -11247,7 +11261,7 @@ __mods["world/trajectory/sim"] = function(import)
 			local m = err.Magnitude
 			if m > 1e-9 then hv = hv + err * (math.min(m * GAIN, (onFloor and CAP_FLOOR or CAP_AIR) * h) / m) end
 			local wasFloor = onFloor
-			if launchLeft > 0 then
+			if launchLeft > 1e-9 then
 				launchLeft = launchLeft - h
 				vy = launchV.Y
 				if launchAll then hv = flat(launchV) end
@@ -11259,14 +11273,14 @@ __mods["world/trajectory/sim"] = function(import)
 				vy = vy - g * h
 			end
 			local wallPart, wallN
-			pos, hv, wallPart, wallN = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+			pos, hv, wallPart, wallN = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear, t)
 			local wallE = wallPart and effect(wallPart)
 			if wallE and wallE.kind == "bounce" then bounce(wallE) end
 			local trussN = wallE and wallE.kind == "truss" and wallN and flat(wallN)
 			if trussN and trussN.Magnitude > 1e-6 and target:Dot(trussN.Unit) < -0.5 * target.Magnitude then
 				climbContact = climbContact + h
 				if climbContact >= Sim.CLIMB_DELAY - 1e-9 then
-					climb, climbContact, jumping, launchLeft = { n = trussN.Unit, top = wallE.top }, 0, false, 0
+					climb, climbContact, jumping, launchLeft, launchNext = { n = trussN.Unit, top = wallE.top }, 0, false, 0, nil
 					vy, hv = 0, Vector3.zero
 				end
 			else
@@ -11274,7 +11288,7 @@ __mods["world/trajectory/sim"] = function(import)
 			end
 			local dy = vy * h
 			if dy > 0 then
-				local hit = world.ray(pos, UP * (top + dy))
+				local hit = world.ray(pos, UP * (top + dy), t)
 				if hit then
 					local room = math.max(0, hit.pos.Y - top - pos.Y)
 					local e = hit.part and effect(hit.part)
@@ -11286,15 +11300,20 @@ __mods["world/trajectory/sim"] = function(import)
 			floorVel = Vector3.zero
 			if vy <= 0 then
 				local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
-				local hit = world.ray(pos + UP, -UP * (reach + 1))
-				if hit and hit.pos.Y + ground >= newY - (wasFloor and 0.5 or 0) - 1e-6 then
+				local hit = world.ray(pos + UP, -UP * (reach + 1), t)
+				local low = newY - (wasFloor and 0.5 or 0) - 1e-6
+				if wasFloor and not (hit and hit.pos.Y + ground >= low) then
+					local fp = world.cast(rot + (pos + UP), Vector3.new(math.max(0.1, box.X - FOOT), 0.1, math.max(0.1, box.Z - FOOT)), -UP * (reach + 1), t)
+					if fp and fp.pos.Y + ground >= low and fp.normal.Y >= minUp then hit = fp end
+				end
+				if hit and hit.pos.Y + ground >= low then
 					local e = hit.part and effect(hit.part)
 					if e and e.kind == "bounce" then
 						newY = hit.pos.Y + ground
 						bounce(e)
 					elseif hit.normal.Y >= minUp then
 						newY, vy, onFloor, airJumped, floorN = hit.pos.Y + ground, 0, true, false, hit.normal
-						if e and e.kind == "conveyor" then floorVel = flat(e.vel) end
+						if e and e.kind == "conveyor" then floorVel = flat(e.vel) elseif hit.carry and hit.vel then floorVel = flat(hit.vel) end
 					else
 						newY = math.max(newY, hit.pos.Y + ground)
 						local v = hv + UP * vy
@@ -11386,9 +11405,12 @@ __mods["world/trajectory"] = function(import)
 	local Air = Enum.Material.Air
 	local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Climbing
 	local MAX_SEGMENTS = 60
+	local MAX_MOVERS, STILL = 24, 1e-3
+	local SPIN = 0.01
+	local CAND_MOVE = 16
 	function Trajectory.new(E)
 		local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
-			lines = {}, budget = nil, runs = 0, jumped = false }, Trajectory)
+			lines = {}, budget = nil, runs = 0, jumped = false, clock = 0, seen = setmetatable({}, { __mode = "k" }), movers = {} }, Trajectory)
 		E.life:own(function()
 			if self.draw then self.draw:destroy() end
 			if self.gui then pcall(function() self.gui:Destroy() end) end
@@ -11414,7 +11436,8 @@ __mods["world/trajectory"] = function(import)
 	function Trajectory:jumpHeld()
 		local hum = self.E.char.hum
 		local held = false
-		if self.uis then pcall(function() held = self.uis:IsKeyDown(Enum.KeyCode.Space) end) end
+		local typing = self.E.typing and self.E.typing:active(nil)
+		if self.uis and not typing then pcall(function() held = self.uis:IsKeyDown(Enum.KeyCode.Space) end) end
 		return held or (hum ~= nil and hum.Jump == true)
 	end
 	local function topOf(part)
@@ -11446,25 +11469,197 @@ __mods["world/trajectory"] = function(import)
 		end
 		return nil
 	end
-	function Trajectory:world()
+	local function poseAt(m, t)
+		local c = m.cache
+		if c.t == t then return c.M, c.inv end
+		Trajectory.poseBuilds = (Trajectory.poseBuilds or 0) + 1
+		local M = CFrame.new(m.v * t)
+		local a = m.w.Magnitude * t
+		if a > 1e-9 then M = M * CFrame.new(m.o) * CFrame.fromAxisAngle(m.w.Unit, a) * CFrame.new(-m.o) end
+		c.t, c.M, c.inv = t, M, M:Inverse()
+		return M, c.inv
+	end
+	local function recorded(s)
+		if not (s and s[1] and s[36]) then return nil end
+		return Vector3.new(s[1], s[2], s[3]) / 1000, Vector3.new(s[36], s[37], s[38]) / 1000, Vector3.new(s[39], s[40], s[41]) / 1000
+	end
+	function Trajectory:motionOf(part, paused, reg, player)
+		local o, v, w, carry
+		if paused then
+			local id = reg and reg.ids and reg.ids[part]
+			local cur = player and player.cur
+			local s = id and cur and cur[id]
+			local key
+			key, v, w = recorded(s)
+			if not key then return nil end
+			o = part.Position
+			local from = key
+			if s[49] ~= 3 then
+				local okC, com = pcall(function() return part.AssemblyCenterOfMass end)
+				from = (okC and typeof(com) == "Vector3") and com or o
+			end
+			v = v + w:Cross(o - from)
+			local was = reg.orig and reg.orig[part]
+			if was == nil then was = part.Anchored end
+			carry = was == false
+		elseif not part.Anchored then
+			o, v, w, carry = part.AssemblyCenterOfMass, part.AssemblyLinearVelocity, part.AssemblyAngularVelocity, true
+		else
+			local cf, now = part.CFrame, self.clock
+			local last = self.seen[part]
+			if not last then
+				self.seen[part] = { cf = cf, t = now }
+				self.watching = true
+				return nil
+			end
+			local lcf, dt = last.cf, now - last.t
+			last.cf, last.t = cf, now
+			if lcf == cf then return nil end
+			self.watching = true
+			if dt < 1e-4 or dt > 0.15 then return nil end
+			cf, last = cf, { cf = lcf }
+			local axis, angle = (cf.Rotation * last.cf.Rotation:Inverse()):ToAxisAngle()
+			o, v, w, carry = cf.Position, (cf.Position - last.cf.Position) / dt, (angle > 1e-9) and axis * (angle / dt) or Vector3.zero, false
+		end
+		if v.Magnitude < STILL and w.Magnitude < STILL then return nil end
+		return { part = part, o = o, v = v, w = w, carry = carry, r = part.Size.Magnitude / 2, cache = {} }
+	end
+	function Trajectory:clearSeen()
+		table.clear(self.seen)
+		self.cand = nil
+	end
+	function Trajectory:findMovers(paused, center, reach)
+		local E = self.E
+		local co = E.co
+		local reg = co and co.reg
+		local player = co and co.player
+		local list = {}
+		self.watching = false
+		local ready = reg and reg.isReady and reg:isReady()
+		local cand = self.cand
+		if not cand or os.clock() - cand.at > 1 or (center - cand.c).Magnitude > CAND_MOVE or cand.reach ~= reach
+			or cand.ready ~= (ready and true or false) or cand.paused ~= paused then
+			cand = { at = os.clock(), c = center, reach = reach, ready = ready and true or false, paused = paused, parts = {} }
+			local within = reach + CAND_MOVE
+			local function list1(part)
+				if part.Parent and part.CanCollide and (part.Position - center).Magnitude <= within + part.Size.Magnitude / 2 then
+					cand.parts[#cand.parts + 1] = part
+				end
+			end
+			if ready then
+				reg:eachPart(list1)
+			elseif not paused then
+				local op = OverlapParams.new()
+				op.FilterType = Enum.RaycastFilterType.Exclude
+				op.FilterDescendantsInstances = { E.char.model }
+				for _, part in ipairs(workspace:GetPartBoundsInRadius(center, within, op)) do
+					if not part.Anchored then list1(part) end
+				end
+			end
+			self.cand = cand
+		end
+		for _, part in ipairs(cand.parts) do
+			if part.Parent and part.CanCollide and (part.Position - center).Magnitude <= reach + part.Size.Magnitude / 2 then
+				local m = self:motionOf(part, paused, reg, player)
+				if m then m.d = (part.Position - center).Magnitude; list[#list + 1] = m end
+			end
+		end
+		table.sort(list, function(a, b) return a.d < b.d end)
+		for k = MAX_MOVERS + 1, #list do list[k] = nil end
+		return list
+	end
+	function Trajectory:world(movers)
+		movers = movers or {}
 		local p = RaycastParams.new()
 		p.FilterType = Enum.RaycastFilterType.Exclude
 		local ex = { self.E.char.model }
 		if workspace.CurrentCamera then ex[#ex + 1] = workspace.CurrentCamera end
+		for _, m in ipairs(movers) do
+			ex[#ex + 1] = m.part
+			local mp = RaycastParams.new()
+			mp.FilterType = Enum.RaycastFilterType.Include
+			mp.FilterDescendantsInstances = { m.part }
+			mp.RespectCanCollide = true
+			m.params = mp
+		end
 		p.FilterDescendantsInstances = ex
 		p.RespectCanCollide = true
 		local o = OverlapParams.new()
 		o.FilterType = Enum.RaycastFilterType.Exclude
-		o.FilterDescendantsInstances = ex
+		o.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
 		local effects, launchers = {}, {}
+		for _, m in ipairs(movers) do
+			local cf, sz = m.part.CFrame, m.part.Size / 2
+			if m.w.Magnitude < SPIN then m.w = Vector3.zero end
+			m.c, m.ws, m.arm = cf.Position, m.w.Magnitude, (cf.Position - m.o).Magnitude
+			if m.ws > 1e-9 then
+				m.half = Vector3.new(m.r, m.r, m.r)
+			else
+				local R, U, L = cf.RightVector, cf.UpVector, cf.LookVector
+				m.half = Vector3.new(math.abs(R.X) * sz.X + math.abs(U.X) * sz.Y + math.abs(L.X) * sz.Z,
+					math.abs(R.Y) * sz.X + math.abs(U.Y) * sz.Y + math.abs(L.Y) * sz.Z,
+					math.abs(R.Z) * sz.X + math.abs(U.Z) * sz.Y + math.abs(L.Z) * sz.Z)
+			end
+		end
+		local function touches(m, t, lo, hi)
+			local c, h = m.c + m.v * t, m.half
+			local g = m.arm * math.min(2, m.ws * t)
+			return c.X + h.X + g >= lo.X and c.X - h.X - g <= hi.X and c.Y + h.Y + g >= lo.Y and c.Y - h.Y - g <= hi.Y
+				and c.Z + h.Z + g >= lo.Z and c.Z - h.Z - g <= hi.Z
+		end
+		local function moverHit(t, a, d, reach, best, query)
+			local hit = nil
+			t = t or 0
+			local b = a + d
+			local lo = Vector3.new(math.min(a.X, b.X) - reach, math.min(a.Y, b.Y) - reach, math.min(a.Z, b.Z) - reach)
+			local hi = Vector3.new(math.max(a.X, b.X) + reach, math.max(a.Y, b.Y) + reach, math.max(a.Z, b.Z) + reach)
+			for _, m in ipairs(movers) do
+				if m.part.Parent and touches(m, t, lo, hi) then
+					local r, pos, normal
+					if m.ws <= 1e-9 then
+						local off = m.v * t
+						r = query(m, nil, off)
+						if r then pos, normal = r.Position + off, r.Normal end
+					else
+						local M, inv = poseAt(m, t)
+						r = query(m, inv)
+						if r then pos, normal = M * r.Position, M:VectorToWorldSpace(r.Normal) end
+					end
+					local dist = r and r.Distance
+					if r and dist < best then
+						best = dist
+						hit = { pos = pos, normal = normal, dist = dist, part = r.Instance,
+							vel = m.v + m.w:Cross(pos - (m.o + m.v * t)), carry = m.carry }
+					end
+				end
+			end
+			return hit
+		end
 		return {
-			ray = function(origin, d)
-				local r = workspace:Raycast(origin, d, p)
-				return r and { pos = r.Position, normal = r.Normal, part = r.Instance } or nil
+			near = function(pos, t)
+				local lo, hi = pos - Vector3.new(2.5, 1.1, 2.5), pos + Vector3.new(2.5, 1.1, 2.5)
+				for _, m in ipairs(movers) do
+					if touches(m, t or 0, lo, hi) then return true end
+				end
+				return false
 			end,
-			cast = function(cf, size, d)
+			ray = function(origin, d, t)
+				local r = workspace:Raycast(origin, d, p)
+				local hit = r and { pos = r.Position, normal = r.Normal, part = r.Instance, dist = r.Distance } or nil
+				if #movers == 0 then return hit end
+				return moverHit(t, origin, d, 0, hit and hit.dist or math.huge, function(m, inv, off)
+					if off then return workspace:Raycast(origin - off, d, m.params) end
+					return workspace:Raycast(inv * origin, inv:VectorToWorldSpace(d), m.params)
+				end) or hit
+			end,
+			cast = function(cf, size, d, t)
 				local r = workspace:Blockcast(cf, size, d, p)
-				return r and { pos = r.Position, normal = r.Normal, dist = r.Distance, part = r.Instance } or nil
+				local hit = r and { pos = r.Position, normal = r.Normal, dist = r.Distance, part = r.Instance } or nil
+				if #movers == 0 then return hit end
+				return moverHit(t, cf.Position, d, size.Magnitude / 2, hit and hit.dist or math.huge, function(m, inv, off)
+					if off then return workspace:Blockcast(cf - off, size, d, m.params) end
+					return workspace:Blockcast(inv * cf, size, inv:VectorToWorldSpace(d), m.params)
+				end) or hit
 			end,
 			effect = function(part)
 				local e = effects[part]
@@ -11488,18 +11683,38 @@ __mods["world/trajectory"] = function(import)
 		if look.Magnitude < 1e-6 then return nil end
 		local p = RaycastParams.new()
 		p.FilterType = Enum.RaycastFilterType.Exclude
-		p.FilterDescendantsInstances = { self.E.char.model }
+		p.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
 		local r = workspace:Raycast(cf.Position, look.Unit * 3, p)
 		if not (r and r.Instance and r.Instance:IsA("TrussPart")) then return nil end
 		local n = Vector3.new(r.Normal.X, 0, r.Normal.Z)
 		if n.Magnitude < 1e-6 then return nil end
 		return { n = n.Unit, top = topOf(r.Instance) }
 	end
+	function Trajectory:body(model, hrp, r6)
+		if self.bodyOf == model and self.bodyBox then return self.bodyBox, self.bodyTop end
+		local box, top = Vector3.new(2, 2, 1), 2
+		pcall(function()
+			local parts = r6 and { model:FindFirstChild("Torso") } or { model:FindFirstChild("UpperTorso"), model:FindFirstChild("LowerTorso") }
+			if #parts > 0 then
+				local x, y, z = 0, 0, 0
+				for _, q in ipairs(parts) do x, y, z = math.max(x, q.Size.X), y + q.Size.Y, math.max(z, q.Size.Z) end
+				if x > 0 and y > 0 and z > 0 then box = Vector3.new(x, y, z) end
+			end
+			local head = model:FindFirstChild("Head")
+			if head and head:IsA("BasePart") then
+				local h = hrp.CFrame:PointToObjectSpace(head.Position).Y + head.Size.Y / 2
+				if h > 0.5 and h < 10 then top = h end
+			end
+		end)
+		self.bodyOf, self.bodyBox, self.bodyTop = model, box, top
+		return box, top
+	end
 	function Trajectory:start(paused)
 		local E = self.E
 		local ch, hum, hrp = E.char, E.char.hum, E.char.hrp
 		local r6 = hum.RigType == Enum.HumanoidRigType.R6
-		local st = { ground = (r6 and 2 or hum.HipHeight) + hrp.Size.Y / 2, box = Vector3.new(2, 2, 1),
+		local box, top = self:body(ch.model, hrp, r6)
+		local st = { ground = (r6 and 2 or hum.HipHeight) + hrp.Size.Y / 2, box = box, top = top,
 			walkSpeed = hum.WalkSpeed, jumpSpeed = hum.UseJumpPower and hum.JumpPower or math.sqrt(2 * workspace.Gravity * hum.JumpHeight) / Sim.JUMP_SCALE,
 			maxSlope = hum.MaxSlopeAngle, gravity = workspace.Gravity, jumping = false }
 		local cf, vel
@@ -11532,18 +11747,22 @@ __mods["world/trajectory"] = function(import)
 			return
 		end
 		local hum = E.char.hum
+		local rate = E.time and E.time.rate and E.time:rate() or 1
+		self.clock = self.clock + (dt or 0) * rate
 		if hum.FloorMaterial == Air then
-			local rate = E.time and E.time.rate and E.time:rate() or 1
 			self.air = self.air + (dt or 0) * rate
 			if hum:GetState() == JUMPING then self.jumped = true end
 		else
 			self.air, self.jumped = 0, false
 		end
 		local paused = E.mode == 2 and E.paused
+		local state = tostring(E.mode) .. tostring(paused)
+		if state ~= self.state then self.state = state; self:clearSeen() end
 		local move = hum.MoveDirection
 		local held = self:jumpHeld()
 		if paused then
-			local key = tostring(E.frame) .. "|" .. tostring(move) .. "|" .. tostring(held) .. "|" .. tostring(E.settings:get("trajectoryTime"))
+			local key = tostring(E.frame) .. "|" .. tostring(E.tl.version) .. "|" .. tostring(E.tl:count()) .. "|" .. tostring(move) .. "|"
+				.. tostring(held) .. "|" .. tostring(E.settings:get("trajectoryTime"))
 			if key == self.key then return end
 			self.key = key
 		else
@@ -11553,20 +11772,26 @@ __mods["world/trajectory"] = function(import)
 			local p, v = hrp.Position, hrp.AssemblyLinearVelocity
 			local key = string.format("%.3f,%.3f,%.3f|%.3f,%.3f,%.3f|", p.X, p.Y, p.Z, v.X, v.Y, v.Z) .. tostring(move) .. "|"
 				.. tostring(held) .. "|" .. tostring(hum.FloorMaterial) .. "|" .. tostring(E.settings:get("trajectoryTime"))
-			if key == self.key and self.lines.green then return end
+			if key == self.key and self.lines.green and #self.movers == 0 and not self.watching then return end
 			self.key = key
 		end
 		local ok, err = pcall(function()
 			local st = self:start(paused)
-			local world = self:world()
 			local budget, t0 = self.budget or BUDGET, os.clock()
 			local time = E.settings:get("trajectoryTime")
+			self.movers = self:findMovers(paused, st.pos, 16 + 60 * time)
+			local world = self:world(self.movers)
 			local every = math.max(1 / 30, time / MAX_SEGMENTS)
 			self.runs = self.runs + 1
 			local green = Sim.run(st, { move = move, jump = held }, world, { time = time, every = every, deadline = t0 + budget * 0.6 })
 			local red = nil
 			if not held and Sim.canJump(st) then
 				red = Sim.run(st, { move = move, tap = true }, world, { time = time, every = every, deadline = math.max(os.clock(), t0 + budget * 0.6) + budget * 0.4 })
+			end
+			local pic = not paused and E.time and E.time.picture and E.time:picture()
+			if pic then
+				table.insert(green, 1, pic.Position)
+				if red then table.insert(red, 1, pic.Position) end
 			end
 			self.lines = { green = green, red = red }
 			self:paint()
@@ -19396,6 +19621,7 @@ __mods["ui/updatelog"] = function(import)
 			"   -   Chat replay: Test types your recorded chat again",
 			"   -   Show Trajectory: green / red lines of where you go",
 			"   -   Trajectory: bounce pads, launchers, conveyors, trusses",
+			"   -   Trajectory: moving parts, the three jumps off a truss",
 			"   -   A new colour picker: one box, quick and recent colours",
 			"   -   Green default colours for the New interface",
 			"   -   One Sync Client Objects switch; fewer settings",
@@ -19851,7 +20077,13 @@ __mods["ui/win/helptext"] = function(import)
 			.. "too: the lines start from the frame shown). They are HappaTAS's prediction of Roblox's movement, so they "
 			.. "can be a little off further ahead. They never change your run.\n\n"
 			.. "They also follow the EToH kit: bounce pads bounce them, a jump inside a jump launcher launches them, "
-			.. "conveyors carry them, and trusses are climbed (the red line on a truss is a jump off it)." },
+			.. "conveyors carry them, and trusses are climbed (the red line on a truss is a jump off it: straight out when "
+			.. "you hang still, steeper while you climb up, flatter while you climb down).\n\n"
+			.. "Moving parts count too: a moving platform you stand on carries the lines, and the lines land on parts where "
+			.. "they will be, guessed from how fast they move and spin right now.\n\n"
+			.. "That guess is a straight line, so parts "
+			.. "that swing or turn back are less exact further ahead. Parts moved by the game's scripts are only seen with "
+			.. "Sync Client Objects on." },
 		{ "glide", "Glide Manipulation",
 			"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 			.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "
