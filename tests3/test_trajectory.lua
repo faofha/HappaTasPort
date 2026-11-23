@@ -10,6 +10,7 @@ local ui = E.ui
 local s = E.settings
 local Settings = __T3("engine/settings")
 local guard = 0
+local function key(kc) M.pressKey(kc); M.releaseKey(kc) end
 while not E.char:loaded() and guard < 200 do M.step(1 / 60); guard = guard + 1 end
 
 section("settings")
@@ -32,5 +33,189 @@ do
 	s:set("interface", "New")
 	M.steps(2)
 end
+
+-- ------------------------------------------------------------------------------------------------ the predictor
+local Sim = __T3("world/trajectory/sim")
+Sim.JUMP_SCALE = 1 -- (the mock controller pushes to JumpPower; live Roblox pushes 1.06 x, measured)
+local hrp, hum = E.char.hrp, E.char.hum
+M.humanoidPhysics = true
+M.robloxController = true
+M.floorY = 0
+M.floorEdgeX = 40
+local world = Instance.new("Folder")
+world.Name = "TrajWorld"
+world.Parent = workspace
+local function part(name, size, pos)
+	local p = Instance.new("Part")
+	p.Name, p.Anchored, p.Size, p.Position = name, true, size, pos
+	p.Parent = world
+	return p
+end
+-- (the floor the mock character walks on: top at M.floorY, ending at x = M.floorEdgeX)
+part("Floor", Vector3.new(400, 1, 400), Vector3.new(40 - 200, -0.5, 0))
+local params = RaycastParams.new()
+params.FilterType = Enum.RaycastFilterType.Exclude
+params.FilterDescendantsInstances = { E.char.model }
+local W = {
+	ray = function(o, d)
+		local r = workspace:Raycast(o, d, params)
+		return r and { pos = r.Position, normal = r.Normal } or nil
+	end,
+	cast = function(cf, size, d)
+		local r = workspace:Blockcast(cf, size, d, params)
+		return r and { pos = r.Position, normal = r.Normal, dist = r.Distance } or nil
+	end,
+}
+local function place(p, v)
+	M.resetRobloxController()
+	hum:ChangeState(Enum.HumanoidStateType.Running)
+	hrp.CFrame = CFrame.new(p)
+	hrp.AssemblyLinearVelocity = v or Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	hum:Move(Vector3.zero)
+	hum.Jump = false
+end
+local function startNow(extra)
+	local v = hrp.AssemblyLinearVelocity
+	local onFloor = hrp.Position.Y <= M.floorY + 3 + 1e-6 and v.Y <= 1e-9 and hrp.Position.X < M.floorEdgeX
+	local st = { pos = hrp.Position, vel = v, onFloor = onFloor, offTime = onFloor and 0 or 1, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = hum.WalkSpeed, jumpSpeed = hum.JumpPower, maxSlope = 89, gravity = workspace.Gravity,
+		cf = CFrame.new() }
+	for k, x in pairs(extra or {}) do st[k] = x end
+	return st
+end
+-- the prediction against the mock character for `time`: the worst distance between a predicted point and where
+-- the root really was then (points every 1/30 s; the mock stepped one physics step (1/240 s) at a time, as Roblox
+-- checks the floor every step: the mock only checks it at a frame start)
+local function compare(st, input, time)
+	local pts = Sim.run(st, input, W, { time = time, every = 1 / 30 })
+	local worst = 0
+	for k = 2, #pts do
+		for _ = 1, 8 do M.step(1 / 240) end
+		local d = (pts[k] - hrp.Position).Magnitude
+		if d > worst then worst = d end
+	end
+	return worst, pts
+end
+key(Enum.KeyCode.One)
+M.steps(2)
+
+section("predictor: standing")
+place(Vector3.new(0, 3, 0))
+M.steps(2)
+do
+	local pts = Sim.run(startNow(), { move = Vector3.zero, jump = false }, W, { time = 1, every = 1 / 30 })
+	eq(#pts, 31, "a point every 1/30 s for 1 s, and the start")
+	local far = 0
+	for _, p in ipairs(pts) do far = math.max(far, (p - pts[1]).Magnitude) end
+	check(far < 1e-6, "all at the start (" .. far .. ")")
+end
+
+section("predictor: walking")
+place(Vector3.new(0, 3, 0))
+M.steps(2)
+hum:Move(Vector3.new(1, 0, 0))
+do
+	local worst = compare(startNow(), { move = Vector3.new(1, 0, 0), jump = false }, 1)
+	check(worst < 0.002, "on the real walk (the same rules as the measured controller: " .. worst .. ")")
+end
+
+section("predictor: a jump")
+place(Vector3.new(-60, 3, 0))
+M.steps(2)
+hum:Move(Vector3.new(1, 0, 0))
+M.steps(10)
+hum.Jump = true
+M.step(1 / 60) -- (the mock turns the state Jumping after this frame's steps: the push starts on the next one)
+do
+	local worst = compare(startNow({ jumping = true, onFloor = true }), { move = Vector3.new(1, 0, 0), jump = false }, 0.7)
+	check(worst < 0.05, "within 0.05 studs of the real jump, up to the landing (" .. worst .. ")")
+end
+
+section("predictor: walking off the edge")
+place(Vector3.new(30, 3, 0))
+M.steps(2)
+hum:Move(Vector3.new(1, 0, 0))
+M.steps(2)
+do
+	local worst = compare(startNow(), { move = Vector3.new(1, 0, 0), jump = false }, 1.2)
+	check(worst < 0.05, "within 0.05 studs of the real fall (" .. worst .. ")")
+end
+
+section("predictor: coyote time")
+check(Sim.canJump({ onFloor = false, offTime = 0.1, jumping = false }), "a jump 0.1 s off the floor")
+check(not Sim.canJump({ onFloor = false, offTime = 0.14, jumping = false }), "none 0.14 s off it")
+check(Sim.canJump({ onFloor = true, offTime = 0, jumping = false }), "on the floor")
+check(not Sim.canJump({ onFloor = false, offTime = 0.05, jumping = true }), "not while a jump is going on")
+do
+	-- (a held jump in the air: it starts inside coyote time, once, not after it)
+	local base = { pos = Vector3.new(0, 50, 0), vel = Vector3.zero, onFloor = false, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2 }
+	local none = { ray = function() return nil end, cast = function() return nil end }
+	base.offTime = 0.05
+	local pts, info = Sim.run(base, { move = Vector3.zero, jump = true }, none, { time = 0.5, every = 1 / 30 })
+	check(info.jumped and pts[2].Y > 50, "held 0.05 s off the floor: it jumps (" .. pts[2].Y .. ")")
+	local apex = -math.huge
+	for _, p in ipairs(pts) do apex = math.max(apex, p.Y) end
+	check(apex < 50 + 7.5, "once, not again in the air (apex " .. apex .. ")")
+	base.offTime = 0.2
+	local _, info2 = Sim.run(base, { move = Vector3.zero, jump = true }, none, { time = 0.5, every = 1 / 30 })
+	check(not info2.jumped, "held 0.2 s off the floor: no jump")
+end
+
+section("predictor: a wall")
+local wall = part("Wall", Vector3.new(2, 20, 40), Vector3.new(-80, 10, 0))
+do
+	local st = startNow({ pos = Vector3.new(-90, 3, 0), vel = Vector3.zero, onFloor = true })
+	local pts = Sim.run(st, { move = Vector3.new(1, 0, 0), jump = false }, W, { time = 1.5, every = 1 / 30 })
+	local face = -81
+	local maxX = -math.huge
+	for _, p in ipairs(pts) do maxX = math.max(maxX, p.X) end
+	check(maxX <= face - 1 + 0.01, "stops at the wall face (" .. maxX .. ")")
+	local diag = Vector3.new(1, 0, 1).Unit
+	local pts2 = Sim.run(st, { move = diag, jump = false }, W, { time = 1.5, every = 1 / 30 })
+	local last = pts2[#pts2]
+	check(last.X <= face - 1 + 0.01 and last.Z > 10, "a diagonal walk slides along it (" .. tostring(last) .. ")")
+end
+wall:Destroy()
+
+section("predictor: slopes")
+do
+	local function slopeWorld(deg)
+		local n = Vector3.new(-math.sin(math.rad(deg)), math.cos(math.rad(deg)), 0)
+		return {
+			-- (a plane through the origin with normal n)
+			ray = function(o, d)
+				local den = n:Dot(d)
+				if math.abs(den) < 1e-9 then return nil end
+				local t = -n:Dot(o) / den
+				if t < 0 or t > 1 then return nil end
+				return { pos = o + d * t, normal = n }
+			end,
+			cast = function() return nil end,
+		}
+	end
+	local st = startNow({ pos = Vector3.new(0, 3, 0), vel = Vector3.zero, onFloor = true, maxSlope = 89 })
+	local pts = Sim.run(st, { move = Vector3.new(1, 0, 0), jump = false }, slopeWorld(30), { time = 1, every = 1 / 30 })
+	local last = pts[#pts]
+	check(last.X > 10 and math.abs(last.Y - (last.X * math.tan(math.rad(30)) + 3)) < 0.2, "a 30 degree slope is walked up (" .. tostring(last) .. ")")
+	st.maxSlope = 45
+	local pts2 = Sim.run(st, { move = Vector3.new(1, 0, 0), jump = false }, slopeWorld(60), { time = 1, every = 1 / 30 })
+	check(pts2[#pts2].Y < 3, "a 60 degree slope with Max Slope 45 cannot be walked up: it slides down (" .. tostring(pts2[#pts2]) .. ")")
+end
+
+section("predictor: a start inside a part")
+do
+	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))
+	local st = startNow({ pos = Vector3.new(-120, 3, 0), vel = Vector3.zero, onFloor = true })
+	local ok, pts = pcall(Sim.run, st, { move = Vector3.new(1, 0, 0), jump = false }, W, { time = 1, every = 1 / 30 })
+	check(ok and type(pts) == "table", "no error")
+	local far = 0
+	if ok then for _, p in ipairs(pts) do far = math.max(far, (p - st.pos).Magnitude) end end
+	check(far <= 16 + 0.1, "nothing shoots off (" .. far .. ")")
+	block:Destroy()
+end
+hum:Move(Vector3.zero)
+M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 
 finish()

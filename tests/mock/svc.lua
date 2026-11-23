@@ -1313,15 +1313,16 @@ do
 	M.casts = 0
 	-- a box from cf along dir: the first part it touches (slab test of the ray against each part's box grown by
 	-- the cast box); parts the box already overlaps at the start are not hit (like Roblox's shapecasts)
-	C.Workspace.Methods.Blockcast = function(_, cf, size, dir, params)
-		M.casts = M.casts + 1
-		local o, h = cf.Position, size / 2
-		local best, bestT = nil, math.huge
+	-- a box (or a point: size zero) from o along dir: the first part it reaches (slab test against each part's box
+	-- grown by the cast box); parts the box already overlaps at the start are not hit (like Roblox's casts). The
+	-- normal is the face entered (V3.1, Show Trajectory)
+	local function sweep(o, h, dir, params)
+		local best, bestT, bestN = nil, math.huge, nil
 		for _, p in ipairs(candidates(params)) do
 			local ph = p.Size / 2 + h
 			local c = p.Position
 			if not overlap(o, h, c, p.Size / 2) then
-				local tmin, tmax = 0, 1
+				local tmin, tmax, nAx, nSign = 0, 1, nil, 0
 				local ok = true
 				for _, ax in ipairs({ "X", "Y", "Z" }) do
 					local d0, lo, hi = dir[ax], c[ax] - ph[ax], c[ax] + ph[ax]
@@ -1330,15 +1331,29 @@ do
 					else
 						local t1, t2 = (lo - o[ax]) / d0, (hi - o[ax]) / d0
 						if t1 > t2 then t1, t2 = t2, t1 end
-						tmin = math.max(tmin, t1); tmax = math.min(tmax, t2)
+						if t1 > tmin then tmin, nAx, nSign = t1, ax, (d0 > 0) and -1 or 1 end
+						tmax = math.min(tmax, t2)
 						if tmin > tmax then ok = false break end
 					end
 				end
-				if ok and tmin < bestT then best, bestT = p, tmin end
+				if ok and tmin < bestT then
+					best, bestT = p, tmin
+					bestN = Vector3.new(nAx == "X" and nSign or 0, nAx == "Y" and nSign or 0, nAx == "Z" and nSign or 0)
+				end
 			end
 		end
 		if not best then return nil end
-		return { Instance = best, Position = o + dir * bestT, Distance = dir.Magnitude * bestT, Normal = Vector3.yAxis, Material = best.Material }
+		if bestN.Magnitude < 0.5 then bestN = Vector3.yAxis end
+		return { Instance = best, Position = o + dir * bestT, Distance = dir.Magnitude * bestT, Normal = bestN, Material = best.Material }
+	end
+	C.Workspace.Methods.Blockcast = function(_, cf, size, dir, params)
+		M.casts = M.casts + 1
+		return sweep(cf.Position, size / 2, dir, params)
+	end
+	M.rays = 0
+	C.Workspace.Methods.Raycast = function(_, origin, dir, params)
+		M.rays = M.rays + 1
+		return sweep(origin, Vector3.zero, dir, params)
 	end
 end
 
