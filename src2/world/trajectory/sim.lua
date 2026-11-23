@@ -45,6 +45,7 @@ local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
 local FOOT = 0.1 -- (the footprint that keeps standing on an edge: the body box less this, live)
 local BACK = 0.05 -- (studs a wall check starts behind the body)
+local EDGE_STEP = 0.5 -- (how far above the feet an edge may catch the body)
 local CLIMB_AWAY = 0.2 -- (how far a move must point away from a truss to climb down, live)
 -- (the body against a wall: Roblox's contacts let the box in a little, live the root rests 0.39 - 0.48 from a wall face
 -- (the box's half depth is 0.5): the wall check uses the box this much smaller across)
@@ -143,8 +144,9 @@ function Sim.run(st, input, world, opts)
 	local function ceiling(rise, t)
 		local hit = world.ray(pos, UP * (top + rise), t)
 		if hit then return math.max(0, hit.pos.Y - top - pos.Y), hit end
-		local c = world.cast(rot + (pos + UP * (top - 0.05)), Vector3.new(box.X, 0.1, box.Z), UP * rise, t)
-		if c then return math.max(0, c.dist or 0), c end
+		-- (from BACK below the head: a head left a hair inside a block (a climb jump under it, live) would skip it)
+		local c = world.cast(rot + (pos + UP * (top - 0.05 - BACK)), Vector3.new(math.max(0.1, box.X - WALL_SHRINK), 0.1, math.max(0.1, box.Z - WALL_SHRINK)), UP * (rise + BACK), t)
+		if c then return math.max(0, (c.dist or 0) - BACK), c end
 		return nil
 	end
 	local function bounce(e)
@@ -166,9 +168,16 @@ function Sim.run(st, input, world, opts)
 			-- over, at the floor it lets go
 			if wants then
 				local V = (climb.n + UP) * (jv / math.sqrt(2)) + (UP - climb.n) * (vy / 2)
-				hv, vy = flat(V), V.Y
-				climb, airJumped, onFloor, info.jumped = nil, true, false, true
-				pos = pos + (hv + UP * vy) * h
+				local room = V.Y > 0 and ceiling(V.Y * h, t)
+				if room and room < 0.05 then
+					-- (the head already against a block over the truss: live the jump starts and the truss is grabbed again
+					-- at once, nothing moves)
+					vy, hv = 0, Vector3.zero
+				else
+					hv, vy = flat(V), V.Y
+					climb, airJumped, onFloor, info.jumped = nil, true, false, true
+					pos = pos + hv * h + UP * math.min(vy * h, room or math.huge)
+				end
 			else
 				-- (live: any move climbs up at full speed, sideways too, unless it points more than 0.2 away from the truss:
 				-- then down at full speed; no move: it hangs)
@@ -303,7 +312,8 @@ function Sim.run(st, input, world, opts)
 				-- (no floor under the root: the body's footprint still stands on an edge, live until the root is 0.45 studs
 				-- past it facing that way: the box less 0.05 a side; falling, it lands on an edge the same way)
 				local fp = world.cast(rot + (pos + UP), Vector3.new(math.max(0.1, box.X - FOOT), 0.1, math.max(0.1, box.Z - FOOT)), -UP * (reach + 1), t)
-				if fp and fp.pos.Y + ground >= low and fp.normal.Y >= minUp then hit = fp end
+				-- (within a small step of the feet only: a block whose top is higher is hit on its side, live)
+				if fp and fp.pos.Y + ground >= low and fp.pos.Y + ground <= newY + EDGE_STEP and fp.normal.Y >= minUp then hit = fp end
 			end
 			if hit and hit.pos.Y + ground >= low then
 				local e = hit.part and effect(hit.part)
