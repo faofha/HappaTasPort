@@ -42,6 +42,7 @@ M.humanoidPhysics = true
 M.robloxController = true
 M.floorY = 0
 M.floorEdgeX = 40
+M.floorEdgeFoot = 0.45 -- (live: the body stands on the edge until the root is 0.45 past it)
 local world = Instance.new("Folder")
 world.Name = "TrajWorld"
 world.Parent = workspace
@@ -139,7 +140,8 @@ hum:Move(Vector3.new(1, 0, 0))
 M.steps(2)
 do
 	local worst = compare(startNow(), { move = Vector3.new(1, 0, 0), jump = false }, 1.2)
-	check(worst < 0.05, "within 0.05 studs of the real fall (" .. worst .. ")")
+	-- (0.06: the mock looks for the floor before a step moves, the predictor after: on the edge that is part of a step)
+	check(worst < 0.06, "within 0.06 studs of the real fall (" .. worst .. ")")
 end
 
 section("predictor: coyote time")
@@ -428,16 +430,6 @@ do
 	check(onTop, "it steps over and stands on the top")
 end
 
-section("phase 2: a jump off a truss")
-do
-	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
-	check(Sim.canJump(st), "climbing: a jump can start")
-	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 60 })
-	local vx = (pts[2].X - pts[1].X) * 60
-	local vy = (pts[2].Y - pts[1].Y) * 60
-	check(math.abs(vx - (-0.68 * 50)) < 2 and math.abs(vy - 0.84 * 50) < 3, "away 0.68 x and up 0.84 x JumpPower (" .. vx .. ", " .. vy .. ")")
-end
-
 section("phase 2: hanging and climbing down")
 do
 	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
@@ -447,6 +439,150 @@ do
 	check(math.abs(pts2[#pts2].Y - (10 - 11.2 * 0.3)) < 0.2, "moving away: down at 11.2 (" .. pts2[#pts2].Y .. ")")
 	local pts3 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
 	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
+end
+
+section("phase 3: the three jumps off a truss (live: still, climbing up, climbing down)")
+do
+	local function jumpV(vy0)
+		local st = base({ pos = Vector3.new(10.4, 10, 0), vel = Vector3.new(0, vy0, 0), onFloor = false, offTime = 1,
+			climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+		local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.05, every = 1 / 240 })
+		return (pts[2] - pts[1]) * 240
+	end
+	local function want(vy0)
+		local V = (Vector3.new(-1, 0, 0) + Vector3.yAxis) * (50 / math.sqrt(2)) + Vector3.yAxis * vy0
+		return V.Unit * 50
+	end
+	for _, c in ipairs({ { 0, "still: 45 degrees" }, { 11.2, "climbing up: steeper" }, { -11.2, "climbing down: flatter" } }) do
+		local got, w = jumpV(c[1]), want(c[1])
+		check((got - w).Magnitude < 0.5, c[2] .. " (" .. tostring(got) .. " vs " .. tostring(w) .. ")")
+	end
+	check(math.abs(want(0).X + 35.36) < 0.01 and math.abs(want(11.2).Y - 39.82) < 0.05 and math.abs(want(-11.2).X + 41.29) < 0.05,
+		"the measured values: 35.4 / 35.4, 30.2 / 39.8, 41.3 / 28.2")
+end
+
+-- (a 6 x 1 x 6 platform, top at y = 0, centre moving along `vel` from the origin; a still floor far below at y = -50)
+local MOVER = {}
+local function moverWorld(vel)
+	local function at(t) return vel * t end
+	local function onTop(p, c, half)
+		return math.abs(p.X - c.X) <= 3 + (half and half.X or 0) and math.abs(p.Z - c.Z) <= 3 + (half and half.Z or 0)
+	end
+	return {
+		moving = true,
+		ray = function(o, d, t)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local c = at(t or 0)
+			local tt = (c.Y - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then
+				local p = o + d * tt
+				if onTop(p, c) then return { pos = p, normal = Vector3.yAxis, part = MOVER, vel = vel, carry = true } end
+			end
+			tt = (-50 - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then return { pos = o + d * tt, normal = Vector3.yAxis, part = FLOOR } end
+			return nil
+		end,
+		cast = function(cf, size, d, t)
+			if d.Y >= 0 then return nil end
+			local o, c = cf.Position, at(t or 0)
+			local tt = (c.Y - o.Y) / d.Y
+			if tt < 0 or tt > 1 or not onTop(o, c, size / 2) then return nil end
+			return { pos = Vector3.new(o.X, c.Y, o.Z), normal = Vector3.yAxis, dist = d.Magnitude * tt, part = MOVER, vel = vel, carry = true }
+		end,
+	}
+end
+
+section("phase 3: standing on a moving platform carries the line")
+do
+	local pts = Sim.run(base({ vel = Vector3.new(8, 0, 0) }), { move = Vector3.zero }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	local last = pts[#pts]
+	check(math.abs(last.X - 8) < 0.3 and math.abs(last.Y - 3) < 1e-6, "carried 8 x 1 s (" .. tostring(last) .. ")")
+	local pts2 = Sim.run(base({ vel = Vector3.new(0, 0, 0) }), { move = Vector3.zero }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	check(math.abs(pts2[#pts2].X - 8) < 0.5, "standing still on it: picked up (" .. pts2[#pts2].X .. ")")
+end
+
+section("phase 3: walking off a moving platform's back edge")
+do
+	local pts = Sim.run(base({ vel = Vector3.new(8, 0, 0) }), { move = Vector3.new(-1, 0, 0) }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	check(pts[#pts].Y < -5, "it falls once the platform has moved on (" .. tostring(pts[#pts]) .. ")")
+	check(math.abs(pts[4].X - (-8 * 0.1)) < 0.4, "walking -16 on a +8 floor: -8 (" .. pts[4].X .. ")")
+end
+
+section("phase 3: a rising platform lifts the line")
+do
+	local pts = Sim.run(base(), { move = Vector3.zero }, moverWorld(Vector3.new(0, 4, 0)), { time = 1, every = 1 / 30 })
+	check(math.abs(pts[#pts].Y - 7) < 0.2, "up 4 x 1 s (" .. pts[#pts].Y .. ")")
+end
+
+section("phase 3: a ledge: the body stands on the edge until the root is 0.45 past it (live)")
+do
+	-- (a still floor x <= 40, top 0; below it nothing)
+	local w = {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 then return nil end
+			local p = o + d * tt
+			if p.X <= 40 then return { pos = p, normal = Vector3.yAxis, part = FLOOR } end
+			return nil
+		end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			local o = cf.Position
+			-- (the box turned to face +X: its depth (Z size) lies along X)
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 or o.X - size.Z / 2 > 40 then return nil end
+			return { pos = Vector3.new(math.min(o.X, 40), 0, o.Z), normal = Vector3.yAxis, dist = d.Magnitude * tt, part = FLOOR }
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(38, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 0.4, every = 1 / 240 })
+	local lastOn
+	for _, p in ipairs(pts) do if p.Y >= 3 - 1e-6 then lastOn = p.X end end
+	check(lastOn and lastOn > 40.3 and lastOn < 40.6, "on the edge until x " .. tostring(lastOn))
+end
+
+section("phase 3 bugs: a launch lasts exactly 0.125 s")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(32, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.4, every = 1 / 240 })
+	local n = 0
+	for k = 2, #pts do if math.abs((pts[k].Y - pts[k - 1].Y) * 240 - 60) < 1e-6 then n = n + 1 end end
+	eq(n, 30, "30 launched steps (0.125 x 240)")
+end
+
+section("phase 3 bugs: a pending launch is dropped when a climb starts")
+do
+	local w = trussWorld()
+	w.launcher = function(pos) if pos.X > 9 and pos.X < 11 then return { up = Vector3.yAxis, force = 60 } end return nil end
+	local pts = Sim.run(base({ pos = Vector3.new(10.2, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0), tap = true }, w,
+		{ time = 2.6, every = 1 / 240 })
+	local launched = false
+	for k = 2, #pts do if math.abs((pts[k].Y - pts[k - 1].Y) * 240 - 60) < 1e-6 then launched = true end end
+	check(not launched, "no launch after the climb")
+end
+
+section("phase 3 bugs: climbing up stops under a ceiling")
+do
+	local w = trussWorld()
+	local ray = w.ray
+	w.ray = function(o, d, t)
+		if d.Y > 0 then
+			local tt = (12 - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then return { pos = o + d * tt, normal = -Vector3.yAxis, part = FLOOR } end
+			return nil
+		end
+		return ray(o, d, t)
+	end
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 2, every = 1 / 30 })
+	check(top(pts) <= 10 + 1e-6, "the head stays under the ceiling (" .. top(pts) .. ")")
+end
+
+section("phase 3 bugs: the launcher query runs per quarter stud moved, not per step")
+do
+	local w = launchWorld()
+	local q, launcher = 0, w.launcher
+	w.launcher = function(...) q = q + 1 return launcher(...) end
+	Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, jump = true }, w, { time = 1, every = 1 / 30 })
+	check(q > 0 and q < 100, "a held jump in place: " .. q .. " queries in 240 steps")
 end
 
 section("phase 2 review: a pad touched from below bounces")
