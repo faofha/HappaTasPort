@@ -120,7 +120,7 @@ function Sim.run(st, input, world, opts)
 	local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
 	local function bounce(e)
 		if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
-		jumping, onFloor = false, false
+		jumping, onFloor, airJumped = false, false, true -- (no coyote jump after a bounce)
 	end
 	local steps = math.max(0, math.floor((opts.time or 1) / h + 0.5))
 	local every = math.max(1, math.floor((opts.every or 1 / 30) / h + 0.5))
@@ -213,7 +213,12 @@ function Sim.run(st, input, world, opts)
 		local dy = vy * h
 		if dy > 0 then
 			local hit = world.ray(pos, UP * (top + dy))
-			if hit then dy = math.max(0, hit.pos.Y - top - pos.Y); vy = 0; jumping = false end
+			if hit then
+				local room = math.max(0, hit.pos.Y - top - pos.Y)
+				local e = hit.part and effect(hit.part)
+				-- (a bounce pad touched from below pushes too)
+				if e and e.kind == "bounce" then bounce(e); dy = math.min(room, vy * h) else dy = room; vy = 0; jumping = false end
+			end
 		end
 		local newY = pos.Y + dy
 		-- the floor under the new position: stand on it (walkable), slide on it (too steep) or nothing

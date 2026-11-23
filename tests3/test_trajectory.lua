@@ -449,6 +449,31 @@ do
 	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
 end
 
+section("phase 2 review: a pad touched from below bounces")
+do
+	-- (a pad as a ceiling at y = 9 that pushes down: RelativeForce, its -RightVector pointing down)
+	local CEIL = {}
+	local w = kitWorld()
+	local floorRay = w.ray
+	w.ray = function(o, d)
+		if d.Y > 0 then
+			local t = (9 - o.Y) / d.Y
+			if t >= 0 and t <= 1 then return { pos = o + d * t, normal = Vector3.new(0, -1, 0), part = CEIL } end
+			return nil
+		end
+		return floorRay(o, d)
+	end
+	local effect = w.effect
+	w.effect = function(part)
+		if part == CEIL then return { kind = "bounce", power = 100, relative = Vector3.new(0, -100, 0) } end
+		return effect(part)
+	end
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, tap = true }, w, { time = 0.4, every = 1 / 60 })
+	local fastest = 0
+	for k = 2, #pts do fastest = math.min(fastest, (pts[k].Y - pts[k - 1].Y) * 60) end
+	check(fastest < -60, "pushed down by the pad, not just stopped (" .. fastest .. ")")
+end
+
 section("predictor: a start inside a part")
 do
 	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))
@@ -772,6 +797,33 @@ do
 	kit:Destroy()
 	hum:Move(Vector3.zero)
 	s:set("trajectoryTime", 1)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 2 review: paused on frame 0, rising after a bounce")
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	local was = E.frame
+	E.frame = 0 -- (after Delete TAS while paused)
+	local ok, st = pcall(function() return TR:start(true) end)
+	check(ok and type(st) == "table", "no error on frame 0 (" .. tostring(st) .. ")")
+	E.frame = was
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	-- (bounced: in the air, Freefall, going up fast without a jump)
+	place(Vector3.new(0, 30, 0))
+	hrp.AssemblyLinearVelocity = Vector3.new(0, 80, 0)
+	hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	M.steps(1)
+	TR.air = 0.05
+	local st2 = TR:start(false)
+	check(not Sim.canJump(st2), "rising after a bounce: no coyote jump")
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
 	s:set("showTrajectory", 0)
 	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 end

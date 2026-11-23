@@ -173,9 +173,9 @@ function Trajectory:start(paused)
 		cf, vel = hrp.CFrame, hrp.AssemblyLinearVelocity
 		st.onFloor = hum.FloorMaterial ~= Air
 		st.offTime = st.onFloor and 0 or self.air
-		st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING)
+		st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING or (hum:GetState() == FREEFALL and vel.Y > 1))
 	end
-	local climbing = (paused and E.tl:get("State", E.frame, 1) == CLIMBING.Value) or (not paused and hum:GetState() == CLIMBING)
+	local climbing = (paused and E.frame >= 1 and E.frame <= E.tl:count() and E.tl:get("State", E.frame, 1) == CLIMBING.Value) or (not paused and hum:GetState() == CLIMBING)
 	if climbing then st.climb = self:trussAhead(cf) end
 	local look = cf.LookVector
 	st.pos, st.vel = cf.Position, vel
