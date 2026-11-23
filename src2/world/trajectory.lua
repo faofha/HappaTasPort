@@ -111,20 +111,20 @@ end
 
 function Trajectory:onFrameEnd(dt)
 	local E = self.E
-	local hum = E.char.hum
-	if hum then
-		-- (time off the floor in game time: the speed hack slows it like Roblox's own timer; a jump since the floor)
-		if hum.FloorMaterial == Air then
-			local rate = E.time and E.time.rate and E.time:rate() or 1
-			self.air = self.air + (dt or 0) * rate
-			if hum:GetState() == JUMPING then self.jumped = true end
-		else
-			self.air, self.jumped = 0, false
-		end
-	end
 	if not self:wanted() then
+		-- (off: no engine read at all; turned on mid-air, the coyote timer starts from 0)
+		self.air, self.jumped = 0, false
 		if self.lines.green or self.lines.red then self:clear() end
 		return
+	end
+	local hum = E.char.hum
+	-- (time off the floor in game time: the speed hack slows it like Roblox's own timer; a jump since the floor)
+	if hum.FloorMaterial == Air then
+		local rate = E.time and E.time.rate and E.time:rate() or 1
+		self.air = self.air + (dt or 0) * rate
+		if hum:GetState() == JUMPING then self.jumped = true end
+	else
+		self.air, self.jumped = 0, false
 	end
 	local paused = E.mode == 2 and E.paused
 	local move = hum.MoveDirection
