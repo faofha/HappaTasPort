@@ -1202,6 +1202,42 @@ do
 	check(pts[#pts].Y < 2, "it falls (" .. pts[#pts].Y .. ")")
 end
 
+section("phase 3 live: standing on a moving platform keeps the cheap wall checks")
+do
+	local plat = Instance.new("Part")
+	plat.Anchored, plat.Size, plat.Position = false, Vector3.new(6, 1, 6), Vector3.new(0, -0.5, 600)
+	plat.Parent = workspace
+	local st = { pos = Vector3.new(0, 3, 600), vel = Vector3.new(8, 0, 0), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local c0 = M.casts
+	Sim.run(st, { move = Vector3.zero }, TR:world({}), { time = 0.5, every = 1 / 30 })
+	local plain = M.casts - c0
+	-- (with the physics jitter of a spin the kit's sliding platform had live)
+	local movers = { { part = plat, o = plat.Position, v = Vector3.new(8, 0, 0), w = Vector3.new(0, 0.0000874, 0), carry = true, r = plat.Size.Magnitude / 2, cache = {} } }
+	c0 = M.casts
+	local pts = Sim.run(st, { move = Vector3.zero }, TR:world(movers), { time = 0.5, every = 1 / 30 })
+	check(M.casts - c0 <= plain + 12, "about the same wall checks as a still floor (" .. (M.casts - c0) .. " vs " .. plain .. ")")
+	check(math.abs(pts[#pts].X - 4) < 0.3, "and carried 8 x 0.5 s (" .. tostring(pts[#pts]) .. ")")
+	plat:Destroy()
+end
+
+section("phase 3 live: a spinning platform carries the line around")
+do
+	local plat = Instance.new("Part")
+	plat.Anchored, plat.Size, plat.Position = false, Vector3.new(10, 1, 10), Vector3.new(0, -0.5, 700)
+	plat.Parent = workspace
+	local w = Vector3.new(0, 1, 0)
+	local st = { pos = Vector3.new(3, 3, 700), vel = w:Cross(Vector3.new(3, 0, 0)), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local movers = { { part = plat, o = plat.Position, v = Vector3.zero, w = w, carry = true, r = plat.Size.Magnitude / 2, cache = {} } }
+	local b0 = TR.poseBuilds or 0
+	local pts = Sim.run(st, { move = Vector3.zero }, TR:world(movers), { time = 1, every = 1 / 30 })
+	local want = Vector3.new(3 * math.cos(1), 3, 700 - 3 * math.sin(1))
+	check((pts[#pts] - want).Magnitude < 0.35, "round the centre (" .. tostring(pts[#pts]) .. " vs " .. tostring(want) .. ")")
+	check((TR.poseBuilds or 0) > b0, "through the turned pose")
+	plat:Destroy()
+end
+
 section("help and the update log")
 do
 	local body

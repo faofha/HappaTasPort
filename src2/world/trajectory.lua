@@ -25,6 +25,7 @@ local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.Humanoi
 local MAX_SEGMENTS = 60 -- (per line: a long Trajectory Time gets longer segments, not more of them)
 -- (phase 3: moving parts near the character, nearest first; one that moves less than this is part of the still world)
 local MAX_MOVERS, STILL = 24, 1e-3
+local SPIN = 0.01 -- (rad/s: slower spins are taken as none, 0.03 studs a second 3 studs from the centre)
 local CAND_MOVE = 16 -- (studs the character may move before the list of parts in reach is made again)
 
 function Trajectory.new(E)
@@ -221,13 +222,6 @@ function Trajectory:findMovers(paused, center, reach)
 	return list
 end
 
--- (is c within r of the segment a .. a + d)
-local function near(c, r, a, d)
-	local L2 = d:Dot(d)
-	local k = L2 > 1e-12 and math.clamp((c - a):Dot(d) / L2, 0, 1) or 0
-	return (a + d * k - c).Magnitude <= r
-end
-
 function Trajectory:world(movers)
 	movers = movers or {}
 	local p = RaycastParams.new()
@@ -248,28 +242,55 @@ function Trajectory:world(movers)
 	o.FilterType = Enum.RaycastFilterType.Exclude
 	o.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
 	local effects, launchers = {}, {}
-	-- (how far a mover's centre can be from where it was at the update after t seconds: no pose needed)
+	-- (each mover's box at the update: turned parts by their turned size, spinning ones as a ball; at t its centre has
+	-- moved by v x t, plus at most its distance from the spin's centre when it spins about another point)
 	for _, m in ipairs(movers) do
-		m.c, m.vs, m.ws, m.arm = m.part.Position, m.v.Magnitude, m.w.Magnitude, (m.part.Position - m.o).Magnitude
+		local cf, sz = m.part.CFrame, m.part.Size / 2
+		-- (physics jitter: live the kit's sliding platform read 0.00009 rad/s; under SPIN it doesn't turn)
+		if m.w.Magnitude < SPIN then m.w = Vector3.zero end
+		m.c, m.ws, m.arm = cf.Position, m.w.Magnitude, (cf.Position - m.o).Magnitude
+		if m.ws > 1e-9 then
+			m.half = Vector3.new(m.r, m.r, m.r)
+		else
+			local R, U, L = cf.RightVector, cf.UpVector, cf.LookVector
+			m.half = Vector3.new(math.abs(R.X) * sz.X + math.abs(U.X) * sz.Y + math.abs(L.X) * sz.Z,
+				math.abs(R.Y) * sz.X + math.abs(U.Y) * sz.Y + math.abs(L.Y) * sz.Z,
+				math.abs(R.Z) * sz.X + math.abs(U.Z) * sz.Y + math.abs(L.Z) * sz.Z)
+		end
 	end
-	local function bound(m, t) return m.r + m.vs * t + m.arm * math.min(2, m.ws * t) end
-	-- (the movers' hit at time t, if nearer than `best`: the query moved back to where the part was at the update)
+	-- (can mover m at time t touch the box lo .. hi)
+	local function touches(m, t, lo, hi)
+		local c, h = m.c + m.v * t, m.half
+		local g = m.arm * math.min(2, m.ws * t)
+		return c.X + h.X + g >= lo.X and c.X - h.X - g <= hi.X and c.Y + h.Y + g >= lo.Y and c.Y - h.Y - g <= hi.Y
+			and c.Z + h.Z + g >= lo.Z and c.Z - h.Z - g <= hi.Z
+	end
+	-- (the movers' hit at time t, if nearer than `best`: the query moved back to where the part was at the update; a
+	-- part that only slides is just shifted back, no turned pose)
 	local function moverHit(t, a, d, reach, best, query)
 		local hit = nil
 		t = t or 0
+		local b = a + d
+		local lo = Vector3.new(math.min(a.X, b.X) - reach, math.min(a.Y, b.Y) - reach, math.min(a.Z, b.Z) - reach)
+		local hi = Vector3.new(math.max(a.X, b.X) + reach, math.max(a.Y, b.Y) + reach, math.max(a.Z, b.Z) + reach)
 		for _, m in ipairs(movers) do
-			if m.part.Parent and near(m.c, bound(m, t) + reach, a, d) then
-			local M, inv = poseAt(m, t)
-			if near(M * m.c, m.r + reach, a, d) then
-				local r = query(m, inv)
+			if m.part.Parent and touches(m, t, lo, hi) then
+				local r, pos, normal
+				if m.ws <= 1e-9 then
+					local off = m.v * t
+					r = query(m, nil, off)
+					if r then pos, normal = r.Position + off, r.Normal end
+				else
+					local M, inv = poseAt(m, t)
+					r = query(m, inv)
+					if r then pos, normal = M * r.Position, M:VectorToWorldSpace(r.Normal) end
+				end
 				local dist = r and r.Distance
 				if r and dist < best then
 					best = dist
-					local pos = M * r.Position
-					hit = { pos = pos, normal = M:VectorToWorldSpace(r.Normal), dist = dist, part = r.Instance,
+					hit = { pos = pos, normal = normal, dist = dist, part = r.Instance,
 						vel = m.v + m.w:Cross(pos - (m.o + m.v * t)), carry = m.carry }
 				end
-			end
 			end
 		end
 		return hit
@@ -277,8 +298,10 @@ function Trajectory:world(movers)
 	return {
 		-- (a mover may be near pos at t: the predictor checks for walls on that step instead of trusting a clear look-ahead)
 		near = function(pos, t)
+			-- (the wall check: the body box (1 stud above and below the root) and its look-ahead)
+			local lo, hi = pos - Vector3.new(2.5, 1.1, 2.5), pos + Vector3.new(2.5, 1.1, 2.5)
 			for _, m in ipairs(movers) do
-				if (pos - m.c).Magnitude <= bound(m, t or 0) + 4 then return true end
+				if touches(m, t or 0, lo, hi) then return true end
 			end
 			return false
 		end,
@@ -286,7 +309,8 @@ function Trajectory:world(movers)
 			local r = workspace:Raycast(origin, d, p)
 			local hit = r and { pos = r.Position, normal = r.Normal, part = r.Instance, dist = r.Distance } or nil
 			if #movers == 0 then return hit end
-			return moverHit(t, origin, d, 0, hit and hit.dist or math.huge, function(m, inv)
+			return moverHit(t, origin, d, 0, hit and hit.dist or math.huge, function(m, inv, off)
+				if off then return workspace:Raycast(origin - off, d, m.params) end
 				return workspace:Raycast(inv * origin, inv:VectorToWorldSpace(d), m.params)
 			end) or hit
 		end,
@@ -294,7 +318,8 @@ function Trajectory:world(movers)
 			local r = workspace:Blockcast(cf, size, d, p)
 			local hit = r and { pos = r.Position, normal = r.Normal, dist = r.Distance, part = r.Instance } or nil
 			if #movers == 0 then return hit end
-			return moverHit(t, cf.Position, d, size.Magnitude / 2, hit and hit.dist or math.huge, function(m, inv)
+			return moverHit(t, cf.Position, d, size.Magnitude / 2, hit and hit.dist or math.huge, function(m, inv, off)
+				if off then return workspace:Blockcast(cf - off, size, d, m.params) end
 				return workspace:Blockcast(inv * cf, size, inv:VectorToWorldSpace(d), m.params)
 			end) or hit
 		end,

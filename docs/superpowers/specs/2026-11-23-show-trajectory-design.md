@@ -117,3 +117,9 @@ only has to be right for the next moment: each update corrects any drift.
 - **Head:** R6's Head collides as its part box (2 x 1 x 1 at +1.5): the head's top is 2.0 above the root.
 - The test place's moving parts: MovingPlatform (physics, about 9 stud/s, slowing near its ends), the Spinning Kill Brick
   and the KeyGroup key (not collidable), the Conveyor (anchored, velocity only).
+- **Phase 3 live results (2026-11-23):** truss jumps (still / up / down) about 1 stud off after 0.4 s; walking off a ledge
+  1.7 studs after the fall (the line used to leave the edge ~0.1 s early); on the kit's MovingPlatform the line is right
+  while the platform keeps its speed (0.17 studs at 0.23 s against 2.3 without phase 3) and drifts when it stops or turns
+  back (it waits at its ends): a speed-based guess can't see that. A 1 s line costs 1.3 - 1.8 ms with two moving parts
+  near (0.6 without); standing still away from moving parts costs nothing. The sliding platform reported a 0.00009 rad/s
+  spin (physics jitter): spins under 0.01 rad/s count as none.
