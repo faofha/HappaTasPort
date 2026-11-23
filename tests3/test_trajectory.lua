@@ -964,6 +964,133 @@ do
 	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 end
 
+-- ------------------------------------------------------------------------------------------------ phase 3: moving parts
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	s:set("trajectoryTime", 1)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	local folder = Instance.new("Folder")
+	folder.Name = "ClientParts" -- (a kit folder: the CO registry knows its anchored parts too)
+	folder.Parent = workspace
+	local function lastOf(pts) return pts and pts[#pts] end
+	local function lowest(pts) local m = math.huge for _, p in ipairs(pts or {}) do m = math.min(m, p.Y) end return m end
+
+	section("phase 3 plugin: a physics platform carries the line")
+	local plat = Instance.new("Part")
+	plat.Name, plat.Anchored, plat.Size, plat.Position = "Platform", false, Vector3.new(6, 1, 6), Vector3.new(-400, -0.5, 0)
+	plat.Parent = folder
+	plat.AssemblyLinearVelocity = Vector3.new(8, 0, 0)
+	place(Vector3.new(-400, 3, 0))
+	TR.key = nil
+	M.steps(8)
+	local g = lastOf(TR.lines.green)
+	check(g ~= nil and math.abs(g.X - (plat.Position.X + 8)) < 0.6 and math.abs(g.Y - 3) < 0.05,
+		"standing on it: the line ends 8 studs on (" .. tostring(g) .. ", platform " .. tostring(plat.Position) .. ")")
+	check(#TR.movers == 1 and TR.movers[1].carry == true, "one mover, it carries")
+
+	section("phase 3 plugin: a mover removed between updates")
+	local errs0 = #E.errs.last
+	plat:Destroy()
+	M.steps(8)
+	eq(#E.errs.last, errs0, "no error (" .. tostring(E.errs.last[#E.errs.last]) .. ")")
+	check(TR.lines.green ~= nil, "the line goes on without it")
+
+	section("phase 3 plugin: an anchored part moved by its CFrame: where it will be, not carried")
+	local slider = Instance.new("Part")
+	slider.Name, slider.Anchored, slider.Size, slider.Position = "Slider", true, Vector3.new(8, 1, 8), Vector3.new(-458, -20.5, 0)
+	slider.Parent = folder
+	place(Vector3.new(-450, 3, 0))
+	TR.key = nil
+	for _ = 1, 12 do
+		slider.CFrame = slider.CFrame + Vector3.new(10 / 60, 0, 0)
+		M.step(1 / 60)
+	end
+	g = TR.lines.green
+	check(g ~= nil and math.abs(lowest(g) - (slider.Position.Y + 0.5 + 3)) < 0.1, "the line lands on it (lowest " .. tostring(lowest(g)) .. ")")
+	check(g ~= nil and math.abs(lastOf(g).X - (-450)) < 0.3, "and isn't carried (" .. tostring(lastOf(g)) .. ")")
+	check(#TR.movers >= 1 and TR.movers[1].carry == false and math.abs(TR.movers[1].v.X - 10) < 0.5, "measured 10 stud/s, no carry")
+	slider:Destroy()
+
+	section("phase 3 plugin: paused, the frame's recorded motion")
+	do
+		local p = Instance.new("Part")
+		p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(1, 2, 3)
+		local reg = { ids = { [p] = 7 }, orig = { [p] = false } }
+		local player = { cur = { [7] = { 1000, 2000, 3000, [36] = 5000, [37] = 0, [38] = 0, [39] = 0, [40] = 2000, [41] = 0 } } }
+		local m = TR:motionOf(p, true, reg, player)
+		check(m ~= nil and m.v == Vector3.new(5, 0, 0) and m.w == Vector3.new(0, 2, 0) and m.carry == true,
+			"speed, spin and carry from the frame (" .. tostring(m and m.v) .. ", " .. tostring(m and m.w) .. ")")
+		check(TR:motionOf(p, true, reg, { cur = {} }) == nil, "no record: still")
+	end
+	folder:Destroy()
+
+	section("phase 3 bugs: the truss check skips HappaTAS's own parts under the camera")
+	do
+		local t = Instance.new("TrussPart")
+		t.Anchored, t.Size = true, Vector3.new(2, 10, 2)
+		t.Position = hrp.Position + Vector3.new(0, 0, -2)
+		t.Parent = workspace.CurrentCamera
+		check(TR:trussAhead(CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(0, 0, -1))) == nil, "not grabbed")
+		t:Destroy()
+	end
+
+	section("phase 3 bugs: Space isn't a held jump while typing")
+	do
+		M.keysDown[Enum.KeyCode.Space] = true
+		check(TR:jumpHeld(), "Space held: a held jump")
+		local active = E.typing.active
+		E.typing.active = function() return true end
+		check(not TR:jumpHeld(), "typing: not a jump")
+		E.typing.active = active
+		M.keysDown[Enum.KeyCode.Space] = nil
+	end
+
+	section("phase 3 bugs: head room from the character's head")
+	do
+		local head = E.char.model:FindFirstChild("Head")
+		local was = head.Size
+		head.Size = Vector3.new(2, 1.4, 1)
+		TR.bodyOf = nil
+		local st = TR:start(false)
+		check(math.abs(st.top - 2.2) < 1e-6, "head top 2.2 above the root (" .. tostring(st.top) .. ")")
+		head.Size = was
+		TR.bodyOf = nil
+	end
+
+	section("phase 3 bugs: Smooth Slow Motion: the lines start at the picture")
+	do
+		local pic = hrp.Position + Vector3.new(0.3, 0, 0)
+		E.time.picture = function() return CFrame.new(pic) end
+		TR.key = nil
+		hum:Move(Vector3.new(0, 0, 1))
+		M.steps(8)
+		check(TR.lines.green ~= nil and (TR.lines.green[1] - pic).Magnitude < 1e-6, "green starts at the picture")
+		E.time.picture = nil
+		hum:Move(Vector3.zero)
+	end
+
+	section("phase 3 bugs: paused, a changed run on the same frame redraws")
+	do
+		key(Enum.KeyCode.Two)
+		M.steps(6)
+		local runs = TR.runs
+		M.steps(4)
+		eq(TR.runs, runs, "nothing changed: no new prediction")
+		E.tl.version = E.tl.version + 1
+		M.steps(2)
+		check(TR.runs > runs, "a new run version: predicted again")
+		key(Enum.KeyCode.One)
+		M.steps(2)
+	end
+
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
 section("help and the update log")
 do
 	local body

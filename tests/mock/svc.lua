@@ -1269,6 +1269,14 @@ do
 		end
 		return out
 	end
+	-- (a sphere as its bounding box, V3.1 Show Trajectory)
+	C.Workspace.Methods.GetPartBoundsInRadius = function(_, c, r, params)
+		local out, h = {}, Vector3.new(r, r, r)
+		for _, p in ipairs(candidates(params)) do
+			if overlap(c, h, p.Position, p.Size / 2) then out[#out + 1] = p end
+		end
+		return out
+	end
 	-- the parts a part overlaps: the query part as a box turned about Y (its yaw), each other part as an axis-aligned
 	-- box, a cylinder standing up (Shape Cylinder: radius = min(Size.Y, Size.Z) / 2, height Size.X, its rotation
 	-- taken to be the upright one) or a ball (radius = the smallest size / 2). Heights overlap by intervals
