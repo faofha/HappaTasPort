@@ -701,8 +701,10 @@ end
 -- jump input turns the state Jumping after the step, the Jumping state pushes the vertical speed up to the jump speed at each step's start until a step starts there (then Freefall). Everything in Roblox's 1/240 s
 -- steps (the velocity changes at a step's start, then the position moves at it; a frame that isn't whole steps
 -- ends with a fraction of one). M.floorEdgeX: no floor at x >= edge.
+-- M.floorEdgeFoot (opt-in): the body keeps standing until the root is that far past the edge (live 0.45, facing it)
 M.robloxController = false
 M.floorEdgeX = nil
+M.floorEdgeFoot = nil
 -- M.landedTime = s (opt-in): Roblox's Landed state after a landing, for that long in real time (live: ~0.05 s, the
 -- same at 2x / 4x, so in game time x s), then Running; no jump from Landed. nil: landings go straight to Running
 M.landedTime = nil
@@ -729,7 +731,7 @@ local function robloxStep(hrp, hum, dt)
 	local y0 = M.floorY + 3
 	local look = hrp.CFrame.LookVector
 	local yaw = math.atan2(-look.X, -look.Z)
-	local hasFloor = (M.floorEdgeX == nil) or pos.X < M.floorEdgeX
+	local hasFloor = (M.floorEdgeX == nil) or pos.X < M.floorEdgeX + (M.floorEdgeFoot or 0)
 	local onFloor = hasFloor and pos.Y <= y0 + 1e-6 and v.Y <= 1e-9
 	if onFloor then RC.engOff, RC.jumpedAir, RC.applied = 0, false, false end
 	if M.jumpNow then M.jumpNow, hum.Jump = false, true end -- (the jump button: Jump stays set until a jump takes it)
@@ -1264,6 +1266,14 @@ do
 		local out, h = {}, size / 2
 		for _, p in ipairs(candidates(params)) do
 			if overlap(cf.Position, h, p.Position, p.Size / 2) then out[#out + 1] = p end
+		end
+		return out
+	end
+	-- (a sphere as its bounding box, V3.1 Show Trajectory)
+	C.Workspace.Methods.GetPartBoundsInRadius = function(_, c, r, params)
+		local out, h = {}, Vector3.new(r, r, r)
+		for _, p in ipairs(candidates(params)) do
+			if overlap(c, h, p.Position, p.Size / 2) then out[#out + 1] = p end
 		end
 		return out
 	end

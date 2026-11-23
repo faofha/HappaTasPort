@@ -103,3 +103,23 @@ only has to be right for the next moment: each update corrects any drift.
 - **Jump launcher (`LauncherConfiguration`, Force 60):** hitbox `JumpLauncherHitbox` 4 x 4 x 4 around the 3 x 3 x 3
   launcher. A jump inside it: 60 up from the next frame, held for 0.125 s, then gravity (top 17.9 studs above the
   start); no normal jump on top of it. Matches the kit's rule.
+
+## Phase 3 measured rules (live, 2026-11-23, EToH kit test place, R6, WalkSpeed 16, JumpPower 50, 60 FPS)
+
+- **Jumps off a truss (three kinds):** the jump's velocity is JumpPower at 45 degrees (out along the truss face's normal and
+  up) plus the climbing speed at that moment, scaled back to JumpPower: hanging still 35.4 out / 35.4 up, climbing up
+  (+11.2) 30.2 / 39.8, climbing down (-11.2) 41.3 / 28.2 (measured first frames within 0.6, twice each).
+- **Moving floors:** a physics part (the kit's MovingPlatform: unanchored, AlignPosition) carries a character standing on it,
+  the character's speed following the floor's like a conveyor's. An anchored part moved by setting its CFrame carries
+  nothing, with or without a velocity set on it (it slides away under the character).
+- **Ledges:** the character keeps standing until its root is about 0.45 studs past the edge facing it (half the body's
+  depth less 0.05).
+- **Head:** R6's Head collides as its part box (2 x 1 x 1 at +1.5): the head's top is 2.0 above the root.
+- The test place's moving parts: MovingPlatform (physics, about 9 stud/s, slowing near its ends), the Spinning Kill Brick
+  and the KeyGroup key (not collidable), the Conveyor (anchored, velocity only).
+- **Phase 3 live results (2026-11-23):** truss jumps (still / up / down) about 1 stud off after 0.4 s; walking off a ledge
+  1.7 studs after the fall (the line used to leave the edge ~0.1 s early); on the kit's MovingPlatform the line is right
+  while the platform keeps its speed (0.17 studs at 0.23 s against 2.3 without phase 3) and drifts when it stops or turns
+  back (it waits at its ends): a speed-based guess can't see that. A 1 s line costs 1.3 - 1.8 ms with two moving parts
+  near (0.6 without); standing still away from moving parts costs nothing. The sliding platform reported a 0.00009 rad/s
+  spin (physics jitter): spins under 0.01 rad/s count as none.

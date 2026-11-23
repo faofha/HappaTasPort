@@ -42,6 +42,7 @@ M.humanoidPhysics = true
 M.robloxController = true
 M.floorY = 0
 M.floorEdgeX = 40
+M.floorEdgeFoot = 0.45 -- (live: the body stands on the edge until the root is 0.45 past it)
 local world = Instance.new("Folder")
 world.Name = "TrajWorld"
 world.Parent = workspace
@@ -139,7 +140,8 @@ hum:Move(Vector3.new(1, 0, 0))
 M.steps(2)
 do
 	local worst = compare(startNow(), { move = Vector3.new(1, 0, 0), jump = false }, 1.2)
-	check(worst < 0.05, "within 0.05 studs of the real fall (" .. worst .. ")")
+	-- (0.06: the mock looks for the floor before a step moves, the predictor after: on the edge that is part of a step)
+	check(worst < 0.06, "within 0.06 studs of the real fall (" .. worst .. ")")
 end
 
 section("predictor: coyote time")
@@ -428,16 +430,6 @@ do
 	check(onTop, "it steps over and stands on the top")
 end
 
-section("phase 2: a jump off a truss")
-do
-	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
-	check(Sim.canJump(st), "climbing: a jump can start")
-	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 60 })
-	local vx = (pts[2].X - pts[1].X) * 60
-	local vy = (pts[2].Y - pts[1].Y) * 60
-	check(math.abs(vx - (-0.68 * 50)) < 2 and math.abs(vy - 0.84 * 50) < 3, "away 0.68 x and up 0.84 x JumpPower (" .. vx .. ", " .. vy .. ")")
-end
-
 section("phase 2: hanging and climbing down")
 do
 	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
@@ -447,6 +439,150 @@ do
 	check(math.abs(pts2[#pts2].Y - (10 - 11.2 * 0.3)) < 0.2, "moving away: down at 11.2 (" .. pts2[#pts2].Y .. ")")
 	local pts3 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
 	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
+end
+
+section("phase 3: the three jumps off a truss (live: still, climbing up, climbing down)")
+do
+	local function jumpV(vy0)
+		local st = base({ pos = Vector3.new(10.4, 10, 0), vel = Vector3.new(0, vy0, 0), onFloor = false, offTime = 1,
+			climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+		local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.05, every = 1 / 240 })
+		return (pts[2] - pts[1]) * 240
+	end
+	local function want(vy0)
+		local V = (Vector3.new(-1, 0, 0) + Vector3.yAxis) * (50 / math.sqrt(2)) + Vector3.yAxis * vy0
+		return V.Unit * 50
+	end
+	for _, c in ipairs({ { 0, "still: 45 degrees" }, { 11.2, "climbing up: steeper" }, { -11.2, "climbing down: flatter" } }) do
+		local got, w = jumpV(c[1]), want(c[1])
+		check((got - w).Magnitude < 0.5, c[2] .. " (" .. tostring(got) .. " vs " .. tostring(w) .. ")")
+	end
+	check(math.abs(want(0).X + 35.36) < 0.01 and math.abs(want(11.2).Y - 39.82) < 0.05 and math.abs(want(-11.2).X + 41.29) < 0.05,
+		"the measured values: 35.4 / 35.4, 30.2 / 39.8, 41.3 / 28.2")
+end
+
+-- (a 6 x 1 x 6 platform, top at y = 0, centre moving along `vel` from the origin; a still floor far below at y = -50)
+local MOVER = {}
+local function moverWorld(vel)
+	local function at(t) return vel * t end
+	local function onTop(p, c, half)
+		return math.abs(p.X - c.X) <= 3 + (half and half.X or 0) and math.abs(p.Z - c.Z) <= 3 + (half and half.Z or 0)
+	end
+	return {
+		near = function() return true end,
+		ray = function(o, d, t)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local c = at(t or 0)
+			local tt = (c.Y - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then
+				local p = o + d * tt
+				if onTop(p, c) then return { pos = p, normal = Vector3.yAxis, part = MOVER, vel = vel, carry = true } end
+			end
+			tt = (-50 - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then return { pos = o + d * tt, normal = Vector3.yAxis, part = FLOOR } end
+			return nil
+		end,
+		cast = function(cf, size, d, t)
+			if d.Y >= 0 then return nil end
+			local o, c = cf.Position, at(t or 0)
+			local tt = (c.Y - o.Y) / d.Y
+			if tt < 0 or tt > 1 or not onTop(o, c, size / 2) then return nil end
+			return { pos = Vector3.new(o.X, c.Y, o.Z), normal = Vector3.yAxis, dist = d.Magnitude * tt, part = MOVER, vel = vel, carry = true }
+		end,
+	}
+end
+
+section("phase 3: standing on a moving platform carries the line")
+do
+	local pts = Sim.run(base({ vel = Vector3.new(8, 0, 0) }), { move = Vector3.zero }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	local last = pts[#pts]
+	check(math.abs(last.X - 8) < 0.3 and math.abs(last.Y - 3) < 1e-6, "carried 8 x 1 s (" .. tostring(last) .. ")")
+	local pts2 = Sim.run(base({ vel = Vector3.new(0, 0, 0) }), { move = Vector3.zero }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	check(math.abs(pts2[#pts2].X - 8) < 0.5, "standing still on it: picked up (" .. pts2[#pts2].X .. ")")
+end
+
+section("phase 3: walking off a moving platform's back edge")
+do
+	local pts = Sim.run(base({ vel = Vector3.new(8, 0, 0) }), { move = Vector3.new(-1, 0, 0) }, moverWorld(Vector3.new(8, 0, 0)), { time = 1, every = 1 / 30 })
+	check(pts[#pts].Y < -5, "it falls once the platform has moved on (" .. tostring(pts[#pts]) .. ")")
+	check(math.abs(pts[4].X - (-8 * 0.1)) < 0.4, "walking -16 on a +8 floor: -8 (" .. pts[4].X .. ")")
+end
+
+section("phase 3: a rising platform lifts the line")
+do
+	local pts = Sim.run(base(), { move = Vector3.zero }, moverWorld(Vector3.new(0, 4, 0)), { time = 1, every = 1 / 30 })
+	check(math.abs(pts[#pts].Y - 7) < 0.2, "up 4 x 1 s (" .. pts[#pts].Y .. ")")
+end
+
+section("phase 3: a ledge: the body stands on the edge until the root is 0.45 past it (live)")
+do
+	-- (a still floor x <= 40, top 0; below it nothing)
+	local w = {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 then return nil end
+			local p = o + d * tt
+			if p.X <= 40 then return { pos = p, normal = Vector3.yAxis, part = FLOOR } end
+			return nil
+		end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			local o = cf.Position
+			-- (the box turned to face +X: its depth (Z size) lies along X)
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 or o.X - size.Z / 2 > 40 then return nil end
+			return { pos = Vector3.new(math.min(o.X, 40), 0, o.Z), normal = Vector3.yAxis, dist = d.Magnitude * tt, part = FLOOR }
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(38, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 0.4, every = 1 / 240 })
+	local lastOn
+	for _, p in ipairs(pts) do if p.Y >= 3 - 1e-6 then lastOn = p.X end end
+	check(lastOn and lastOn > 40.3 and lastOn < 40.6, "on the edge until x " .. tostring(lastOn))
+end
+
+section("phase 3 bugs: a launch lasts exactly 0.125 s")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(32, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.4, every = 1 / 240 })
+	local n = 0
+	for k = 2, #pts do if math.abs((pts[k].Y - pts[k - 1].Y) * 240 - 60) < 1e-6 then n = n + 1 end end
+	eq(n, 30, "30 launched steps (0.125 x 240)")
+end
+
+section("phase 3 bugs: a pending launch is dropped when a climb starts")
+do
+	local w = trussWorld()
+	w.launcher = function(pos) if pos.X > 9 and pos.X < 11 then return { up = Vector3.yAxis, force = 60 } end return nil end
+	local pts = Sim.run(base({ pos = Vector3.new(10.2, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0), tap = true }, w,
+		{ time = 2.6, every = 1 / 240 })
+	local launched = false
+	for k = 2, #pts do if math.abs((pts[k].Y - pts[k - 1].Y) * 240 - 60) < 1e-6 then launched = true end end
+	check(not launched, "no launch after the climb")
+end
+
+section("phase 3 bugs: climbing up stops under a ceiling")
+do
+	local w = trussWorld()
+	local ray = w.ray
+	w.ray = function(o, d, t)
+		if d.Y > 0 then
+			local tt = (12 - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 then return { pos = o + d * tt, normal = -Vector3.yAxis, part = FLOOR } end
+			return nil
+		end
+		return ray(o, d, t)
+	end
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 2, every = 1 / 30 })
+	check(top(pts) <= 10 + 1e-6, "the head stays under the ceiling (" .. top(pts) .. ")")
+end
+
+section("phase 3 bugs: the launcher query runs per quarter stud moved, not per step")
+do
+	local w = launchWorld()
+	local q, launcher = 0, w.launcher
+	w.launcher = function(...) q = q + 1 return launcher(...) end
+	Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, jump = true }, w, { time = 1, every = 1 / 30 })
+	check(q > 0 and q < 100, "a held jump in place: " .. q .. " queries in 240 steps")
 end
 
 section("phase 2 review: a pad touched from below bounces")
@@ -826,6 +962,280 @@ do
 	M.steps(4)
 	s:set("showTrajectory", 0)
 	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+-- ------------------------------------------------------------------------------------------------ phase 3: moving parts
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	s:set("trajectoryTime", 1)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	local folder = Instance.new("Folder")
+	folder.Name = "ClientParts" -- (a kit folder: the CO registry knows its anchored parts too)
+	folder.Parent = workspace
+	local function lastOf(pts) return pts and pts[#pts] end
+	local function lowest(pts) local m = math.huge for _, p in ipairs(pts or {}) do m = math.min(m, p.Y) end return m end
+
+	section("phase 3 plugin: a physics platform carries the line")
+	local plat = Instance.new("Part")
+	plat.Name, plat.Anchored, plat.Size, plat.Position = "Platform", false, Vector3.new(6, 1, 6), Vector3.new(-400, -0.5, 0)
+	plat.Parent = folder
+	plat.AssemblyLinearVelocity = Vector3.new(8, 0, 0)
+	place(Vector3.new(-400, 3, 0))
+	TR.key = nil
+	M.steps(8)
+	local g = lastOf(TR.lines.green)
+	check(g ~= nil and math.abs(g.X - (plat.Position.X + 8)) < 0.6 and math.abs(g.Y - 3) < 0.05,
+		"standing on it: the line ends 8 studs on (" .. tostring(g) .. ", platform " .. tostring(plat.Position) .. ")")
+	check(#TR.movers == 1 and TR.movers[1].carry == true, "one mover, it carries")
+
+	section("phase 3 plugin: a mover removed between updates")
+	local errs0 = #E.errs.last
+	plat:Destroy()
+	M.steps(8)
+	eq(#E.errs.last, errs0, "no error (" .. tostring(E.errs.last[#E.errs.last]) .. ")")
+	check(TR.lines.green ~= nil, "the line goes on without it")
+
+	section("phase 3 plugin: an anchored part moved by its CFrame: where it will be, not carried")
+	local slider = Instance.new("Part")
+	slider.Name, slider.Anchored, slider.Size, slider.Position = "Slider", true, Vector3.new(8, 1, 8), Vector3.new(-458, -20.5, 0)
+	slider.Parent = folder
+	place(Vector3.new(-450, 3, 0))
+	TR.key = nil
+	for _ = 1, 12 do
+		slider.CFrame = slider.CFrame + Vector3.new(10 / 60, 0, 0)
+		M.step(1 / 60)
+	end
+	g = TR.lines.green
+	check(g ~= nil and math.abs(lowest(g) - (slider.Position.Y + 0.5 + 3)) < 0.1, "the line lands on it (lowest " .. tostring(lowest(g)) .. ")")
+	check(g ~= nil and math.abs(lastOf(g).X - (-450)) < 0.3, "and isn't carried (" .. tostring(lastOf(g)) .. ")")
+	check(#TR.movers >= 1 and TR.movers[1].carry == false and math.abs(TR.movers[1].v.X - 10) < 0.5, "measured 10 stud/s, no carry")
+	slider:Destroy()
+
+	section("phase 3 plugin: paused, the frame's recorded motion")
+	do
+		local p = Instance.new("Part")
+		p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(1, 2, 3)
+		local reg = { ids = { [p] = 7 }, orig = { [p] = false } }
+		local player = { cur = { [7] = { 1000, 2000, 3000, [36] = 5000, [37] = 0, [38] = 0, [39] = 0, [40] = 2000, [41] = 0 } } }
+		local m = TR:motionOf(p, true, reg, player)
+		check(m ~= nil and m.v == Vector3.new(5, 0, 0) and m.w == Vector3.new(0, 2, 0) and m.carry == true,
+			"speed, spin and carry from the frame (" .. tostring(m and m.v) .. ", " .. tostring(m and m.w) .. ")")
+		check(TR:motionOf(p, true, reg, { cur = {} }) == nil, "no record: still")
+	end
+	folder:Destroy()
+
+	section("phase 3 bugs: the truss check skips HappaTAS's own parts under the camera")
+	do
+		local t = Instance.new("TrussPart")
+		t.Anchored, t.Size = true, Vector3.new(2, 10, 2)
+		t.Position = hrp.Position + Vector3.new(0, 0, -2)
+		t.Parent = workspace.CurrentCamera
+		check(TR:trussAhead(CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(0, 0, -1))) == nil, "not grabbed")
+		t:Destroy()
+	end
+
+	section("phase 3 bugs: Space isn't a held jump while typing")
+	do
+		M.keysDown[Enum.KeyCode.Space] = true
+		check(TR:jumpHeld(), "Space held: a held jump")
+		local active = E.typing.active
+		E.typing.active = function() return true end
+		check(not TR:jumpHeld(), "typing: not a jump")
+		E.typing.active = active
+		M.keysDown[Enum.KeyCode.Space] = nil
+	end
+
+	section("phase 3 bugs: head room from the character's head")
+	do
+		local head = E.char.model:FindFirstChild("Head")
+		local was = head.Size
+		head.Size = Vector3.new(2, 1.4, 1)
+		TR.bodyOf = nil
+		local st = TR:start(false)
+		check(math.abs(st.top - 2.2) < 1e-6, "head top 2.2 above the root (" .. tostring(st.top) .. ")")
+		head.Size = was
+		TR.bodyOf = nil
+	end
+
+	section("phase 3 bugs: Smooth Slow Motion: the lines start at the picture")
+	do
+		local pic = hrp.Position + Vector3.new(0.3, 0, 0)
+		E.time.picture = function() return CFrame.new(pic) end
+		TR.key = nil
+		hum:Move(Vector3.new(0, 0, 1))
+		M.steps(8)
+		check(TR.lines.green ~= nil and (TR.lines.green[1] - pic).Magnitude < 1e-6, "green starts at the picture")
+		E.time.picture = nil
+		hum:Move(Vector3.zero)
+	end
+
+	section("phase 3 bugs: paused, a changed run on the same frame redraws")
+	do
+		key(Enum.KeyCode.Two)
+		M.steps(6)
+		local runs = TR.runs
+		M.steps(4)
+		eq(TR.runs, runs, "nothing changed: no new prediction")
+		E.tl.version = E.tl.version + 1
+		M.steps(2)
+		check(TR.runs > runs, "a new run version: predicted again")
+		key(Enum.KeyCode.One)
+		M.steps(2)
+	end
+
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 3 review: still kit objects don't keep the lines busy")
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.One)
+	local folder = Instance.new("Folder")
+	folder.Name = "ClientParts"
+	folder.Parent = workspace
+	for k = 1, 5 do
+		local p = Instance.new("Part")
+		p.Name, p.Anchored, p.Size, p.Position = "Still" .. k, true, Vector3.new(2, 1, 2), Vector3.new(-500 + k * 3, 5, 6)
+		p.Parent = folder
+	end
+	place(Vector3.new(-500, 3, 0))
+	TR.key = nil
+	M.steps(12)
+	local runs = TR.runs
+	M.steps(16)
+	eq(TR.runs, runs, "standing still beside still kit objects: no new prediction")
+	-- (the registry is walked about once a second, not every update)
+	local reg = E.co.reg
+	local walks, each = 0, reg.eachPart
+	reg.eachPart = function(r, fn) walks = walks + 1 return each(r, fn) end
+	hum:Move(Vector3.new(0, 0, 1))
+	M.steps(30) -- (0.5 s of updates while walking)
+	reg.eachPart = each
+	hum:Move(Vector3.zero)
+	check(walks <= 1, "the registry walked at most once in 0.5 s (" .. walks .. ")")
+	folder:Destroy()
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 3 review: paused, a spinning part's speed at where it is held")
+do
+	local p = Instance.new("Part")
+	p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(4, 2, 3) -- (held 3 studs on from its keyframe at 1, 2, 3)
+	local reg = { ids = { [p] = 7 }, orig = { [p] = false } }
+	local s3 = { 1000, 2000, 3000, [36] = 0, [37] = 0, [38] = 0, [39] = 0, [40] = 2000, [41] = 0, [49] = 3 }
+	local m = TR:motionOf(p, true, reg, { cur = { [7] = s3 } })
+	local want = Vector3.new(0, 2, 0):Cross(Vector3.new(3, 0, 0))
+	check(m ~= nil and (m.o - p.Position).Magnitude < 1e-6 and (m.v - want).Magnitude < 1e-6,
+		"turning about the keyframe's point: its speed where it is now (" .. tostring(m and m.v) .. " vs " .. tostring(want) .. ")")
+end
+
+section("phase 3 review: far movers cost no pose and no extra wall checks")
+do
+	local far = Instance.new("Part")
+	far.Anchored, far.Size, far.Position = false, Vector3.new(4, 1, 4), Vector3.new(0, 3, 300)
+	far.Parent = workspace
+	local movers = { { part = far, o = far.Position, v = Vector3.new(1, 0, 0), w = Vector3.zero, carry = true, r = 3, cache = {} } }
+	local st = { pos = Vector3.new(0, 3, 0), vel = Vector3.new(16, 0, 0), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local c0 = M.casts
+	Sim.run(st, { move = Vector3.new(1, 0, 0) }, TR:world({}), { time = 0.5, every = 1 / 30 })
+	local plain = M.casts - c0
+	local b0 = TR.poseBuilds or 0
+	c0 = M.casts
+	Sim.run(st, { move = Vector3.new(1, 0, 0) }, TR:world(movers), { time = 0.5, every = 1 / 30 })
+	check(M.casts - c0 <= plain + 2, "the same wall checks (" .. (M.casts - c0) .. " vs " .. plain .. ")")
+	eq((TR.poseBuilds or 0) - b0, 0, "no pose worked out for it")
+	far:Destroy()
+end
+
+section("phase 3 review: motion measured across a pause isn't a speed")
+do
+	local p = Instance.new("Part")
+	p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(0, 50, 0)
+	TR.clock = 10
+	TR:motionOf(p, false, nil, nil)
+	TR.clock = 10.2 -- (0.2 s: too long to tell a speed from)
+	p.Position = Vector3.new(5, 50, 0)
+	check(TR:motionOf(p, false, nil, nil) == nil, "0.2 s apart: not measured")
+	TR.seen[p] = { cf = p.CFrame, t = 10.2 }
+	TR:clearSeen()
+	check(next(TR.seen) == nil, "a pause or a mode change forgets the old looks")
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	TR.seen[p] = { cf = p.CFrame, t = TR.clock }
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	check(next(TR.seen) == nil, "Create after Idle: forgotten")
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	s:set("showTrajectory", 0)
+end
+
+section("phase 3 review: a jump off a truss with JumpPower 0 is no NaN")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, jumpSpeed = 0, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 30 })
+	local p = pts[#pts]
+	check(p.X == p.X and p.Y == p.Y, "a number (" .. tostring(p) .. ")")
+end
+
+section("phase 3 review: the ledge footprint doesn't stand on a steep part")
+do
+	local w = {
+		ray = function() return nil end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			return { pos = cf.Position - Vector3.new(0, 4, 0), normal = Vector3.new(1, 0.005, 0).Unit, dist = 3, part = FLOOR } -- (steeper than the 89 degree limit)
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero }, w, { time = 0.3, every = 1 / 30 })
+	check(pts[#pts].Y < 2, "it falls (" .. pts[#pts].Y .. ")")
+end
+
+section("phase 3 live: standing on a moving platform keeps the cheap wall checks")
+do
+	local plat = Instance.new("Part")
+	plat.Anchored, plat.Size, plat.Position = false, Vector3.new(6, 1, 6), Vector3.new(0, -0.5, 600)
+	plat.Parent = workspace
+	local st = { pos = Vector3.new(0, 3, 600), vel = Vector3.new(8, 0, 0), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local c0 = M.casts
+	Sim.run(st, { move = Vector3.zero }, TR:world({}), { time = 0.5, every = 1 / 30 })
+	local plain = M.casts - c0
+	-- (with the physics jitter of a spin the kit's sliding platform had live)
+	local movers = { { part = plat, o = plat.Position, v = Vector3.new(8, 0, 0), w = Vector3.new(0, 0.0000874, 0), carry = true, r = plat.Size.Magnitude / 2, cache = {} } }
+	c0 = M.casts
+	local pts = Sim.run(st, { move = Vector3.zero }, TR:world(movers), { time = 0.5, every = 1 / 30 })
+	check(M.casts - c0 <= plain + 12, "about the same wall checks as a still floor (" .. (M.casts - c0) .. " vs " .. plain .. ")")
+	check(math.abs(pts[#pts].X - 4) < 0.3, "and carried 8 x 0.5 s (" .. tostring(pts[#pts]) .. ")")
+	plat:Destroy()
+end
+
+section("phase 3 live: a spinning platform carries the line around")
+do
+	local plat = Instance.new("Part")
+	plat.Anchored, plat.Size, plat.Position = false, Vector3.new(10, 1, 10), Vector3.new(0, -0.5, 700)
+	plat.Parent = workspace
+	local w = Vector3.new(0, 1, 0)
+	local st = { pos = Vector3.new(3, 3, 700), vel = w:Cross(Vector3.new(3, 0, 0)), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local movers = { { part = plat, o = plat.Position, v = Vector3.zero, w = w, carry = true, r = plat.Size.Magnitude / 2, cache = {} } }
+	local b0 = TR.poseBuilds or 0
+	local pts = Sim.run(st, { move = Vector3.zero }, TR:world(movers), { time = 1, every = 1 / 30 })
+	local want = Vector3.new(3 * math.cos(1), 3, 700 - 3 * math.sin(1))
+	check((pts[#pts] - want).Magnitude < 0.35, "round the centre (" .. tostring(pts[#pts]) .. " vs " .. tostring(want) .. ")")
+	check((TR.poseBuilds or 0) > b0, "through the turned pose")
+	plat:Destroy()
 end
 
 section("help and the update log")

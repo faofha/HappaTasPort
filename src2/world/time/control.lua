@@ -799,6 +799,8 @@ function TimeControl:stepDt() return SH.StepDt() end
 function TimeControl:gameDt(dt) return SH.GameDt(dt) end
 -- how fast game time runs against real time (the speed hack's TAS clock; 1 without it), read only
 function TimeControl:rate() return SH.anim or 1 end
+-- Smooth Slow Motion: where the character is drawn this frame (its picture), nil when it is drawn where it is
+function TimeControl:picture() return SH.SV and SH.SV.pose or nil end
 function TimeControl:frameStart() SH.FrameStart() end
 function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 function TimeControl:stepEnd() SH.StepEnd() end

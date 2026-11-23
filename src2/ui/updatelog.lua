@@ -15,6 +15,7 @@ UpdateLog.ENTRIES = {
 		"   -   Chat replay: Test types your recorded chat again",
 		"   -   Show Trajectory: green / red lines of where you go",
 		"   -   Trajectory: bounce pads, launchers, conveyors, trusses",
+		"   -   Trajectory: moving parts, the three jumps off a truss",
 		"   -   A new colour picker: one box, quick and recent colours",
 		"   -   Green default colours for the New interface",
 		"   -   One Sync Client Objects switch; fewer settings",
