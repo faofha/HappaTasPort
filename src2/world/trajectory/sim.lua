@@ -14,7 +14,8 @@
 --              can: the red line) }
 --    world = { ray(origin, dir) -> { pos, normal, part }?, cast(cf, size, dir) -> { pos, normal, dist, part }?,
 --              effect(part) -> effect? (phase 2: { kind = "bounce", power, relative? } a kit bounce pad,
---              { kind = "conveyor", vel } a moving floor) }
+--              { kind = "conveyor", vel } a moving floor), launcher(pos, box, rot) -> { up, force }? (a kit jump
+--              launcher's hitbox the body is in) }
 --    opts  = { time, every, deadline? (os.clock() limit: the line is cut there) }
 -- ================================================================================================
 local Sim = {}
@@ -24,6 +25,7 @@ Sim.STEP = 1 / 240
 -- this push model reaches it at 1.0757 x JumpPower. V2.38.17's 1.06 gave 7.269, measured then)
 Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
+Sim.LAUNCH_TIME = 0.125 -- (a kit jump launcher's LinearVelocity, JumpLauncher.lua: destroyed after 0.125 s)
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
 Sim.CLEAR = nil -- (how far one wall check looks ahead, studs: 1 when nil; 0 = a check every step, for tests)
@@ -101,6 +103,7 @@ function Sim.run(st, input, world, opts)
 	local hv = flat(vel)
 	local vy = onFloor and not jumping and 0 or vel.Y
 	-- a kit bounce pad touched: the root's velocity as the kit sets it, a jump in progress ends (it goes to Freefall)
+	local launchLeft, launchV, launchAll = 0, Vector3.zero, false
 	local function bounce(e)
 		if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
 		jumping, onFloor = false, false
@@ -110,8 +113,15 @@ function Sim.run(st, input, world, opts)
 	local points, info = { pos }, { jumped = jumping, cut = false }
 	for i = 1, steps do
 		if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
-		-- a held jump starts one whenever it can
-		if (input.jump or (input.tap and i == 1)) and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
+		-- a jump inside a kit launcher's hitbox launches instead (its up x Force for 0.125 s; only Y when upright, all
+		-- axes when tilted; no normal jump with it, live); otherwise a held jump starts one whenever it can
+		local wants = input.jump or (input.tap and i == 1)
+		local L = wants and launchLeft <= 0 and world.launcher and world.launcher(pos, box, rot)
+		if L then
+			launchLeft, launchV = Sim.LAUNCH_TIME, L.up * L.force
+			launchAll = not (math.abs(L.up.X) < 0.1 and math.abs(L.up.Z) < 0.1)
+			jumping, airJumped, onFloor, info.jumped = false, true, false, true
+		elseif wants and launchLeft <= 0 and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
 			jumping, airJumped, info.jumped = true, true, true
 		end
 		-- walking
@@ -127,7 +137,11 @@ function Sim.run(st, input, world, opts)
 		if m > 1e-9 then hv = hv + err * (math.min(m * GAIN, (onFloor and CAP_FLOOR or CAP_AIR) * h) / m) end
 		-- vertical (the speed changes at the step's start, then the position moves at it)
 		local wasFloor = onFloor
-		if jumping then
+		if launchLeft > 0 then
+			launchLeft = launchLeft - h
+			vy = launchV.Y
+			if launchAll then hv = flat(launchV) end
+		elseif jumping then
 			if jv - vy > 1e-3 then vy = jv else jumping = false; vy = vy - g * h end
 		elseif onFloor then
 			vy = 0

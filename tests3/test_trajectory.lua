@@ -324,6 +324,49 @@ do
 	check(math.abs(late) < 0.5, "jumped off: the belt speed fades in the air (" .. late .. ")")
 end
 
+-- (a launcher hitbox x 30..34, y 0..4, z -2..2: upright, Force 60; another one tilted at x 50..54)
+local function launchWorld(up2)
+	local w = kitWorld()
+	w.launcher = function(pos)
+		if pos.Y > 0 and pos.Y < 6 and math.abs(pos.Z) < 2.5 then
+			if pos.X > 29 and pos.X < 35 then return { up = Vector3.yAxis, force = 60 } end
+			if pos.X > 49 and pos.X < 55 then return { up = up2 or Vector3.new(0.6, 0.8, 0), force = 60 } end
+		end
+		return nil
+	end
+	return w
+end
+
+section("phase 2: a jump in a launcher")
+do
+	local pts, info = Sim.run(base({ pos = Vector3.new(32, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 1.2, every = 1 / 30 })
+	local y4 = pts[5].Y -- (0.133 s)
+	check(math.abs(y4 - (3 + 60 * 0.125)) < 0.6, "60 up for 0.125 s (" .. y4 .. ")")
+	local want = 3 + 60 * 0.125 + 60 * 60 / (2 * 196.2)
+	check(math.abs(top(pts) - want) < 0.6, "then gravity: top " .. top(pts) .. " vs " .. want)
+	check(info.jumped, "it counts as the jump")
+end
+
+section("phase 2: a tap outside a launcher is a normal jump")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.8, every = 1 / 30 })
+	check(top(pts) < 3 + 7, "a normal jump's height (" .. top(pts) .. ")")
+end
+
+section("phase 2: a held jump into a launcher")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(24, 3, 0) }), { move = Vector3.new(1, 0, 0), jump = true }, launchWorld(), { time = 1.5, every = 1 / 30 })
+	check(top(pts) > 15, "launched when the body is inside (" .. top(pts) .. ")")
+end
+
+section("phase 2: a tilted launcher pushes along its up")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(52, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 0.3, every = 1 / 30 })
+	check(pts[#pts].X > 52 + 4, "all axes: it moves along X too (" .. pts[#pts].X .. ")")
+	local pts2 = Sim.run(base({ pos = Vector3.new(32, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0), tap = true }, launchWorld(), { time = 0.3, every = 1 / 30 })
+	check(math.abs((pts2[#pts2].X - 32) - 16 * 0.3) < 0.8, "upright: only Y is forced, walking goes on (" .. pts2[#pts2].X .. ")")
+end
+
 section("predictor: a start inside a part")
 do
 	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))
