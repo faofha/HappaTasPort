@@ -32,7 +32,8 @@ Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
 -- (trusses, measured live 2026-11-23: a climb starts when the body touches a truss face it walks into (a 0.05 s delay
 -- put the line half a stud behind the whole way up, live); climbing speed 0.7 x
--- WalkSpeed x how much the move points at the truss; at 2.4 studs above the top it steps over. A jump off it, live on a
+-- WalkSpeed, up for any move unless it points more than 0.2 away from the truss (down), none: it hangs (measured again
+-- 2026-11-23: at 45 degrees, sideways and 0.19 away it still climbs up at 11.2); at 2.4 studs above the top it steps over. A jump off it, live on a
 -- lone truss (2026-11-23, "(SPOOKY) Practice."): the jump speed (JUMP_SCALE x JumpPower) at 45 degrees out and up, and
 -- half the climbing speed moved from out to up: still 38.03 / 38.03, climbing up 32.43 out / 43.63 up, climbing down
 -- 43.63 / 32.43 (each within 0.03). The first measure (35.4 / 35.4) was on a wall of trusses whose neighbours deflected it)
@@ -43,6 +44,12 @@ Sim.LAUNCH_DELAY = 0.05 -- (the kit polls for the launch once a frame, its push 
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
 local FOOT = 0.1 -- (the footprint that keeps standing on an edge: the body box less this, live)
+local BACK = 0.05 -- (studs a wall check starts behind the body)
+local CLIMB_AWAY = 0.2 -- (how far a move must point away from a truss to climb down, live)
+-- (the body against a wall: Roblox's contacts let the box in a little, live the root rests 0.39 - 0.48 from a wall face
+-- (the box's half depth is 0.5): the wall check uses the box this much smaller across)
+local WALL_SHRINK = 0.15
+local HEAD_FRICTION = 0.73 -- (sideways speed lost per (1 + elasticity) x vertical speed, per unit of friction: live, Plastic)
 Sim.CLEAR = nil -- (how far one wall check looks ahead, studs: 1 when nil; 0 = a check every step, for tests)
 local UP = Vector3.yAxis
 
@@ -61,6 +68,7 @@ local function flat(v) return Vector3.new(v.X, 0, v.Z) end
 -- height, need no check until they have used up `left` (one check a stud instead of one a step; live a step pressed
 -- against a wall cost 7 us, 1.5 in the open)
 local function moveFlat(world, pos, d, hv, rot, box, minUp, clear, t)
+	local wallBox = Vector3.new(math.max(0.1, box.X - WALL_SHRINK), box.Y, math.max(0.1, box.Z - WALL_SHRINK))
 	local met, metN = nil, nil
 	for pass = 1, 2 do
 		local len = d.Magnitude
@@ -72,9 +80,11 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear, t)
 			break
 		end
 		local look = math.max(len, Sim.CLEAR or 1)
-		local hit = world.cast(rot + pos, box, dir * look, t)
+		-- (the check starts BACK studs behind the body: Roblox's casts skip a part the box starts in, and a box left a
+		-- hair inside a wall (stepping over a truss top into the wall above it, live) walked through it)
+		local hit = world.cast(rot + (pos - dir * BACK), wallBox, dir * (look + BACK), t)
 		if hit and hit.normal.Y >= minUp then hit = nil end
-		local dist = hit and (hit.dist or look) or look
+		local dist = hit and math.max(0, (hit.dist or look) - BACK) or look
 		if not hit or dist > len then
 			if pass == 1 then clear.dir, clear.left, clear.y = dir, dist - SKIN - len, pos.Y else clear.dir = nil end
 			pos = pos + d
@@ -122,6 +132,9 @@ function Sim.run(st, input, world, opts)
 	local launchLeft, launchV, launchAll = 0, Vector3.zero, false
 	local launchWait, launchNext = 0, nil
 	local climb = st.climb and { n = flat(st.climb.n).Unit, top = st.climb.top } or nil
+	-- (a climbing body faces its truss and keeps facing it after the climb: turning to the move there would put the box's
+	-- corner into a part above the truss, live (a 2 x 2 part on its top); the real body can't turn into it)
+	if climb then rot = CFrame.lookAt(Vector3.zero, -climb.n) end
 	local climbContact = 0
 	local lqPos, lqL = nil, nil
 	local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
@@ -157,8 +170,11 @@ function Sim.run(st, input, world, opts)
 				climb, airJumped, onFloor, info.jumped = nil, true, false, true
 				pos = pos + (hv + UP * vy) * h
 			else
-				local toward = (move.Magnitude > 1e-6) and move.Unit:Dot(-climb.n) or 0
-				vy, hv = Sim.CLIMB_K * ws * toward, Vector3.zero
+				-- (live: any move climbs up at full speed, sideways too, unless it points more than 0.2 away from the truss:
+				-- then down at full speed; no move: it hangs)
+				local dir = 0
+				if move.Magnitude > 1e-6 then dir = (move.Unit:Dot(-climb.n) < -CLIMB_AWAY) and -1 or 1 end
+				vy, hv = Sim.CLIMB_K * ws * dir, Vector3.zero
 				local ny = pos.Y + vy * h
 				if vy > 0 then
 					local room = ceiling(vy * h, t)
@@ -228,10 +244,24 @@ function Sim.run(st, input, world, opts)
 		if wallE and wallE.kind == "bounce" then bounce(wallE) end
 		-- walking into a truss face starts a climb after CLIMB_DELAY of contact
 		local trussN = wallE and wallE.kind == "truss" and wallN and flat(wallN)
+		if not trussN and wallN and target.Magnitude > 1e-6 then
+			-- (the wall check met a plain part, maybe with a truss under it: a block sitting on a truss's top, live; a ray
+			-- at the body's middle and at its legs looks for the truss face there)
+			local into = -flat(wallN)
+			if into.Magnitude > 1e-6 then
+				into = into.Unit
+				for _, dy in ipairs({ 0, -1.5 }) do
+					local r = world.ray(pos + UP * dy, into * (box.Z / 2 + 0.3), t)
+					local e = r and r.part and effect(r.part)
+					if e and e.kind == "truss" then wallE, trussN = e, flat(r.normal) break end
+				end
+			end
+		end
 		if trussN and trussN.Magnitude > 1e-6 and target:Dot(trussN.Unit) < -0.5 * target.Magnitude then
 			climbContact = climbContact + h
 			if climbContact >= Sim.CLIMB_DELAY - 1e-9 then
 				climb, climbContact, jumping, launchLeft, launchNext = { n = trussN.Unit, top = wallE.top }, 0, false, 0, nil
+				rot = CFrame.lookAt(Vector3.zero, -climb.n)
 				vy, hv = 0, Vector3.zero
 			end
 		else
@@ -243,7 +273,22 @@ function Sim.run(st, input, world, opts)
 			if room then
 				local e = hit.part and effect(hit.part)
 				-- (a bounce pad touched from below pushes too)
-				if e and e.kind == "bounce" then bounce(e); dy = math.min(room, vy * h) else dy = room; vy = 0; jumping = false end
+				if e and e.kind == "bounce" then
+					bounce(e)
+					dy = math.min(room, vy * h)
+				else
+					-- (the head bounces off: Roblox averages the two surfaces' elasticity (the body is Plastic, 0.5), and
+					-- friction takes sideways speed, live: Plastic 40.7 up -> about -20 down and 16 -> 4 sideways, Ice
+					-- about a third back down and 16 -> 12 - 14)
+					local sf = world.surface and hit.part and world.surface(hit.part)
+					local ew, fw = sf and sf.elasticityWeight or 1, sf and sf.frictionWeight or 1
+					local el = (0.5 + (sf and sf.elasticity or 0.5) * ew) / (1 + ew)
+					local mu = (0.3 + (sf and sf.friction or 0.3) * fw) / (1 + fw)
+					local push = (1 + el) * vy
+					local hs = hv.Magnitude
+					if hs > 1e-9 then hv = hv * (math.max(0, hs - HEAD_FRICTION * mu * push) / hs) end
+					dy, vy, jumping = room, -el * vy, false
+				end
 			end
 		end
 		local newY = pos.Y + dy
@@ -254,9 +299,9 @@ function Sim.run(st, input, world, opts)
 			local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
 			local hit = world.ray(pos + UP, -UP * (reach + 1), t)
 			local low = newY - (wasFloor and 0.5 or 0) - 1e-6
-			if wasFloor and not (hit and hit.pos.Y + ground >= low) then
+			if not (hit and hit.pos.Y + ground >= low) then
 				-- (no floor under the root: the body's footprint still stands on an edge, live until the root is 0.45 studs
-				-- past it facing that way: the box less 0.05 a side)
+				-- past it facing that way: the box less 0.05 a side; falling, it lands on an edge the same way)
 				local fp = world.cast(rot + (pos + UP), Vector3.new(math.max(0.1, box.X - FOOT), 0.1, math.max(0.1, box.Z - FOOT)), -UP * (reach + 1), t)
 				if fp and fp.pos.Y + ground >= low and fp.normal.Y >= minUp then hit = fp end
 			end

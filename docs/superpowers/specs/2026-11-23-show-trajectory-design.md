@@ -128,3 +128,16 @@ only has to be right for the next moment: each update corrects any drift.
   back (it waits at its ends): a speed-based guess can't see that. A 1 s line costs 1.3 - 1.8 ms with two moving parts
   near (0.6 without); standing still away from moving parts costs nothing. The sliding platform reported a 0.00009 rad/s
   spin (physics jitter): spins under 0.01 rad/s count as none.
+- **More live rules (2026-11-23, "(SPOOKY) Practice."):**
+  - Climbing: any move climbs up at the full 0.7 x WalkSpeed, also sideways or up to 0.2 away from the truss; more than 0.2
+    away climbs down at full speed; no move hangs. There is no sideways movement while climbing.
+  - A head hitting a ceiling bounces: the vertical speed comes back at the average of the two surfaces' elasticity (the body is
+    Plastic 0.5: Plastic ceiling about half, Ice about a third), and friction takes sideways speed (Plastic: 16 -> 4, Ice:
+    16 -> 12 - 14; 0.73 x friction x (1 + elasticity) x the vertical speed).
+  - Against a wall the root rests 0.39 - 0.48 from the face (the box's half depth is 0.5): walls are checked with the box
+    0.15 smaller across. A wall check starts 0.05 behind the body (a check that starts inside a part ignores it).
+  - The body lands on an edge the same way it stands on one (the footprint); after a climb it keeps facing the truss.
+  - A plain part's edge being climbed counts as a climb (its face and top), and a truss under a block on its top is still
+    grabbed (rays at the body's middle and legs).
+  - The lines are worked out on every frame the character or its keys change: about 1.1 ms for both 1 s lines, more near
+    walls and moving parts (budget 3 ms).
