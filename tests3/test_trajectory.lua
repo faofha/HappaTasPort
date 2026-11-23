@@ -671,6 +671,95 @@ s:set("trajectoryTime", 1)
 s:set("showTrajectory", 0)
 M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 
+-- ------------------------------------------------------------------------------------------------ phase 2: the kit in the world
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	s:set("trajectoryTime", 1.5)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	local kit = Instance.new("Folder")
+	kit.Name = "KitStandIns"
+	kit.Parent = workspace
+	local function kpart(name, size, pos, class)
+		local p = Instance.new(class or "Part")
+		p.Name, p.Anchored, p.Size, p.Position = name, true, size, pos
+		p.Parent = kit
+		return p
+	end
+	local function config(part, name, attrs)
+		local c = Instance.new("Configuration")
+		c.Name = name
+		for k, v in pairs(attrs or {}) do c:SetAttribute(k, v) end
+		c.Parent = part
+		return c
+	end
+	local function fresh(p, move)
+		place(p)
+		if move then hum:Move(move) end
+		TR.key = nil
+		M.steps(6)
+	end
+	local function topY(pts) local m = -math.huge for _, p in ipairs(pts or {}) do m = math.max(m, p.Y) end return m end
+
+	section("phase 2 plugin: a bounce pad (its config, the kit's defaults)")
+	local pad = kpart("BouncePad", Vector3.new(4, 0.5, 4), Vector3.new(-200, 0.25, 0))
+	config(pad, "BouncePadConfiguration", {}) -- (no attributes: the kit's defaults, Power 100, not relative)
+	fresh(Vector3.new(-205, 3, 0), Vector3.new(1, 0, 0))
+	check(topY(TR.lines.green) > 15, "walking onto the pad: the green line bounces (" .. topY(TR.lines.green) .. ")")
+	pad:Destroy()
+
+	section("phase 2 plugin: a conveyor")
+	local belt = kpart("Conveyor", Vector3.new(6, 1, 40), Vector3.new(-200, -0.49, 0)) -- (0.01 above the test floor)
+	config(belt, "ConveyorConfiguration", { Speed = 10 }) -- (its config alone)
+	fresh(Vector3.new(-200, 3, 0))
+	local g = TR.lines.green
+	check(g ~= nil and math.abs((g[#g] - g[1]).Magnitude - 15) < 0.6, "standing on it: carried 10 x 1.5 s (" .. tostring(g and (g[#g] - g[1]).Magnitude) .. ")")
+	belt.ConveyorConfiguration:Destroy()
+	belt.AssemblyLinearVelocity = Vector3.new(0, 0, 8) -- (no config: an anchored part that moves)
+	fresh(Vector3.new(-200, 3, 0))
+	g = TR.lines.green
+	check(g ~= nil and math.abs((g[#g] - g[1]).Magnitude - 12) < 0.6, "any moving anchored part carries too (" .. tostring(g and (g[#g] - g[1]).Magnitude) .. ")")
+	belt:Destroy()
+
+	section("phase 2 plugin: a jump launcher")
+	local model = Instance.new("Model")
+	model.Parent = kit
+	local launcher = Instance.new("Part")
+	launcher.Name, launcher.Anchored, launcher.Size, launcher.Position = "JumpLauncher", true, Vector3.new(2, 2, 2), Vector3.new(-230, -1.5, 0)
+	launcher.Parent = model
+	config(launcher, "LauncherConfiguration", { Force = 60 })
+	local hitbox = Instance.new("Part")
+	hitbox.Name, hitbox.Anchored, hitbox.CanCollide, hitbox.Size, hitbox.Position = "JumpLauncherHitbox", true, false, Vector3.new(4, 8, 4), Vector3.new(-230, 2, 0)
+	hitbox.Parent = model
+	TR.launchersAt = nil -- (look for launchers again now)
+	fresh(Vector3.new(-230, 3, 0))
+	check(TR.lines.red ~= nil and topY(TR.lines.red) > 3 + 15, "inside its hitbox: the red line launches (" .. topY(TR.lines.red) .. ")")
+	model:Destroy()
+	TR.launchersAt = nil
+
+	section("phase 2 plugin: a truss")
+	local truss = kpart("Truss", Vector3.new(2, 20, 6), Vector3.new(-249, 10, 0), "TrussPart")
+	fresh(Vector3.new(-256, 3, 0), Vector3.new(1, 0, 0))
+	check(topY(TR.lines.green) > 8, "walking into it: the green line climbs (" .. topY(TR.lines.green) .. ")")
+	hum:Move(Vector3.zero)
+	place(Vector3.new(-250.6, 8, 0))
+	hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(1, 0, 0))
+	hrp.Anchored = true -- (the mock character has no climbing: held where a climb would hold it)
+	hum:ChangeState(Enum.HumanoidStateType.Climbing)
+	local st = TR:start(false)
+	check(st.climb ~= nil and math.abs(st.climb.top - 20) < 1e-6, "a climbing character starts on the truss (top " .. tostring(st.climb and st.climb.top) .. ")")
+	check(Sim.canJump(st), "and can jump off it")
+	hrp.Anchored = false
+	truss:Destroy()
+
+	kit:Destroy()
+	hum:Move(Vector3.zero)
+	s:set("trajectoryTime", 1)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
 section("help and the update log")
 do
 	local body

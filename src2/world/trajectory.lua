@@ -21,7 +21,7 @@ local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
 local BUDGET = 0.004
 local EVERY = 4 -- (frames between updates while the character moves)
 local Air = Enum.Material.Air
-local JUMPING, FREEFALL = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall
+local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Climbing
 local MAX_SEGMENTS = 60 -- (per line: a long Trajectory Time gets longer segments, not more of them)
 
 function Trajectory.new(E)
@@ -60,6 +60,44 @@ function Trajectory:jumpHeld()
 end
 
 -- the world as the predictor sees it: Roblox's own casts, without the character or HappaTAS's parts (under the camera)
+-- the highest point of a part (its box, turned)
+local function topOf(part)
+	local cf, sz = part.CFrame, part.Size
+	return part.Position.Y + (math.abs(cf.RightVector.Y) * sz.X + math.abs(cf.UpVector.Y) * sz.Y + math.abs(cf.LookVector.Y) * sz.Z) / 2
+end
+
+-- what a part does to the character (phase 2: the EToH kit's objects, with the kit's defaults, v6.1.3): a bounce pad
+-- (BouncePadConfiguration: Power 100, RelativeForce false), a conveyor (ConveyorConfiguration: Speed 10, along
+-- LookVector; any other anchored part that moves too), a truss (TrussPart: top). Attributes are the unscaled values:
+-- the speed hack scales the kit's config tables, not them
+local function effectOf(part)
+	if part:IsA("TrussPart") then return { kind = "truss", top = topOf(part) } end
+	if part:GetAttribute("Activated") == false then return nil end
+	local c = part:FindFirstChild("BouncePadConfiguration")
+	if c then
+		local power = tonumber(c:GetAttribute("Power")) or 100
+		local rel = c:GetAttribute("RelativeForce") == true
+		return { kind = "bounce", power = power, relative = rel and (-part.CFrame.RightVector * power) or nil }
+	end
+	local cc = part:FindFirstChild("ConveyorConfiguration")
+	if cc then return { kind = "conveyor", vel = part.CFrame.LookVector * (tonumber(cc:GetAttribute("Speed")) or 10) } end
+	if part.Anchored and part.AssemblyLinearVelocity.Magnitude > 1e-3 then return { kind = "conveyor", vel = part.AssemblyLinearVelocity } end
+	return nil
+end
+
+-- a kit jump launcher's hitbox (JumpLauncherHitbox, next to the launcher with LauncherConfiguration: Force 60)
+local function launcherOf(hitbox)
+	local parent = hitbox.Parent
+	if not parent then return nil end
+	for _, k in ipairs(parent:GetChildren()) do
+		if k:IsA("BasePart") and k:FindFirstChild("LauncherConfiguration") then
+			if k:GetAttribute("Activated") == false then return nil end
+			return { up = k.CFrame.UpVector, force = tonumber(k.LauncherConfiguration:GetAttribute("Force")) or 60 }
+		end
+	end
+	return nil
+end
+
 function Trajectory:world()
 	local p = RaycastParams.new()
 	p.FilterType = Enum.RaycastFilterType.Exclude
@@ -67,16 +105,50 @@ function Trajectory:world()
 	if workspace.CurrentCamera then ex[#ex + 1] = workspace.CurrentCamera end
 	p.FilterDescendantsInstances = ex
 	p.RespectCanCollide = true
+	local o = OverlapParams.new()
+	o.FilterType = Enum.RaycastFilterType.Exclude
+	o.FilterDescendantsInstances = ex
+	local effects, launchers = {}, {}
 	return {
-		ray = function(o, d)
-			local r = workspace:Raycast(o, d, p)
-			return r and { pos = r.Position, normal = r.Normal } or nil
+		ray = function(origin, d)
+			local r = workspace:Raycast(origin, d, p)
+			return r and { pos = r.Position, normal = r.Normal, part = r.Instance } or nil
 		end,
 		cast = function(cf, size, d)
 			local r = workspace:Blockcast(cf, size, d, p)
-			return r and { pos = r.Position, normal = r.Normal, dist = r.Distance } or nil
+			return r and { pos = r.Position, normal = r.Normal, dist = r.Distance, part = r.Instance } or nil
+		end,
+		effect = function(part)
+			local e = effects[part]
+			if e == nil then e = effectOf(part) or false; effects[part] = e end
+			return e or nil
+		end,
+		-- (asked only while a jump is wanted: one box query at the body)
+		launcher = function(pos, box, rot)
+			for _, hit in ipairs(workspace:GetPartBoundsInBox(rot + pos, box, o)) do
+				if hit.Name == "JumpLauncherHitbox" then
+					local l = launchers[hit]
+					if l == nil then l = launcherOf(hit) or false; launchers[hit] = l end
+					if l then return l end
+				end
+			end
+			return nil
 		end,
 	}
+end
+
+-- a climbing character's truss: the TrussPart in front of the root
+function Trajectory:trussAhead(cf)
+	local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+	if look.Magnitude < 1e-6 then return nil end
+	local p = RaycastParams.new()
+	p.FilterType = Enum.RaycastFilterType.Exclude
+	p.FilterDescendantsInstances = { self.E.char.model }
+	local r = workspace:Raycast(cf.Position, look.Unit * 3, p)
+	if not (r and r.Instance and r.Instance:IsA("TrussPart")) then return nil end
+	local n = Vector3.new(r.Normal.X, 0, r.Normal.Z)
+	if n.Magnitude < 1e-6 then return nil end
+	return { n = n.Unit, top = topOf(r.Instance) }
 end
 
 -- where the prediction starts: the paused frame (Create, paused) or the character now
@@ -103,6 +175,8 @@ function Trajectory:start(paused)
 		st.offTime = st.onFloor and 0 or self.air
 		st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING)
 	end
+	local climbing = (paused and E.tl:get("State", E.frame, 1) == CLIMBING.Value) or (not paused and hum:GetState() == CLIMBING)
+	if climbing then st.climb = self:trussAhead(cf) end
 	local look = cf.LookVector
 	st.pos, st.vel = cf.Position, vel
 	st.cf = CFrame.lookAt(Vector3.zero, Vector3.new(look.X, 0, look.Z).Magnitude > 1e-6 and Vector3.new(look.X, 0, look.Z) or Vector3.new(0, 0, -1))
