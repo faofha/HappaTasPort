@@ -187,8 +187,9 @@ do
 	local face = -81
 	local maxX = -math.huge
 	for _, p in ipairs(pts) do maxX = math.max(maxX, p.X) end
-	-- (the body turns to the move direction like Roblox's AutoRotate: the 1 stud deep torso meets the wall, live)
-	check(maxX <= face - 0.5 + 0.01 and maxX > face - 0.5 - 0.05, "stops at the wall face, torso turned to it (" .. maxX .. ")")
+	-- (the body turns to the move direction like Roblox's AutoRotate: the torso meets the wall with the root 0.39 - 0.48
+	-- from it, live: Roblox's contacts let the 1 stud deep box in a little; the predictor uses 0.425)
+	check(maxX <= face - 0.425 + 0.01 and maxX > face - 0.425 - 0.05, "stops at the wall face, torso turned to it (" .. maxX .. ")")
 	local diag = Vector3.new(1, 0, 1).Unit
 	local pts2 = Sim.run(st, { move = diag, jump = false }, W, { time = 1.5, every = 1 / 30 })
 	local last = pts2[#pts2]
@@ -441,7 +442,7 @@ do
 	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
 end
 
-section("phase 3: the three jumps off a truss (live: still, climbing up, climbing down)")
+section("phase 3: the three jumps off a truss (live, a lone truss: still, climbing up, climbing down)")
 do
 	local function jumpV(vy0)
 		local st = base({ pos = Vector3.new(10.4, 10, 0), vel = Vector3.new(0, vy0, 0), onFloor = false, offTime = 1,
@@ -449,16 +450,19 @@ do
 		local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.05, every = 1 / 240 })
 		return (pts[2] - pts[1]) * 240
 	end
-	local function want(vy0)
-		local V = (Vector3.new(-1, 0, 0) + Vector3.yAxis) * (50 / math.sqrt(2)) + Vector3.yAxis * vy0
-		return V.Unit * 50
+	-- (live: 1.0757 x JumpPower at 45 degrees, half the climbing speed moved from out to up; the tests run at JUMP_SCALE 1)
+	local function want(vy0, scale)
+		local n = Vector3.new(-1, 0, 0)
+		return (n + Vector3.yAxis) * (50 * (scale or 1) / math.sqrt(2)) + (Vector3.yAxis - n) * (vy0 / 2)
 	end
 	for _, c in ipairs({ { 0, "still: 45 degrees" }, { 11.2, "climbing up: steeper" }, { -11.2, "climbing down: flatter" } }) do
 		local got, w = jumpV(c[1]), want(c[1])
 		check((got - w).Magnitude < 0.5, c[2] .. " (" .. tostring(got) .. " vs " .. tostring(w) .. ")")
 	end
-	check(math.abs(want(0).X + 35.36) < 0.01 and math.abs(want(11.2).Y - 39.82) < 0.05 and math.abs(want(-11.2).X + 41.29) < 0.05,
-		"the measured values: 35.4 / 35.4, 30.2 / 39.8, 41.3 / 28.2")
+	local k = 1.0757
+	check(math.abs(want(0, k).X + 38.03) < 0.02 and math.abs(want(11.2, k).X + 32.43) < 0.02 and math.abs(want(11.2, k).Y - 43.63) < 0.02
+		and math.abs(want(-11.2, k).X + 43.63) < 0.02 and math.abs(want(-11.2, k).Y - 32.43) < 0.02,
+		"the measured values: 38.03 / 38.03, 32.43 / 43.63, 43.63 / 32.43")
 end
 
 -- (a 6 x 1 x 6 platform, top at y = 0, centre moving along `vel` from the origin; a still floor far below at y = -50)
@@ -574,6 +578,268 @@ do
 	end
 	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 2, every = 1 / 30 })
 	check(top(pts) <= 10 + 1e-6, "the head stays under the ceiling (" .. top(pts) .. ")")
+end
+
+section("phase 3 live: a ceiling the body's width touches, the root's centre not")
+do
+	-- (a block from x 0.5 on, bottom at y 9: a ray up from the root at x 0 misses it, the 2-wide body doesn't)
+	local function ceilingWorld(climbing)
+		local w = climbing and trussWorld() or kitWorld()
+		local ray = w.ray
+		w.ray = function(o, d, t)
+			if d.Y > 0 then return nil end
+			return ray(o, d, t)
+		end
+		local cast = w.cast
+		w.cast = function(cf, size, d, t)
+			if d.Y > 0 then
+				local o = cf.Position
+				if o.X + size.X / 2 < 0.5 + (climbing and 10 or 0) then return nil end
+				local topY = o.Y + size.Y / 2
+				if topY > 9 + 1e-9 or topY + d.Y < 9 then return nil end
+				return { pos = Vector3.new(o.X, 9, o.Z), normal = -Vector3.yAxis, dist = 9 - topY, part = FLOOR }
+			end
+			return cast(cf, size, d, t)
+		end
+		return w
+	end
+	local pts = Sim.run(base(), { move = Vector3.zero, tap = true }, ceilingWorld(false), { time = 0.6, every = 1 / 60 })
+	check(top(pts) <= 9 - 2 + 1e-6, "a jump: the head stops at it (" .. top(pts) .. ")")
+	local st = base({ pos = Vector3.new(10.4, 5, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts2 = Sim.run(st, { move = Vector3.new(1, 0, 0) }, ceilingWorld(true), { time = 1, every = 1 / 60 })
+	check(top(pts2) <= 9 - 2 + 1e-6, "climbing: the head stops at it (" .. top(pts2) .. ")")
+end
+
+section("friend's report: a wall above a truss top is not walked through")
+do
+	-- (a wall x 10.5 .. 12.5 from y 0 up; the box starts 0.005 inside its face: Roblox's casts skip a part they start in)
+	local face = 10.5
+	local w = {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 then return nil end
+			return { pos = o + d * tt, normal = Vector3.yAxis, part = FLOOR }
+		end,
+		cast = function(cf, size, d)
+			local o = cf.Position
+			if d.X <= 0 then return nil end
+			local front = o.X + size.Z / 2 -- (turned to face +X: its depth along X)
+			if front > face then return nil end -- (starts inside: not hit)
+			if front + d.X < face then return nil end
+			local tt = (face - front) / d.X
+			return { pos = o + d * tt, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * tt, part = FLOOR }
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(face - 0.5 + 0.005, 3, 0), vel = Vector3.new(16, 0, 0) }), { move = Vector3.new(1, 0, 0) }, w,
+		{ time = 0.5, every = 1 / 30 })
+	check(pts[#pts].X < face, "it stays at the wall (" .. tostring(pts[#pts]) .. ")")
+end
+
+section("friend's report: slipping onto an edge lands")
+do
+	-- (a still floor x <= 40, top 0: falling with the root 0.3 past its edge, the body's width is still over it)
+	local w = {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 then return nil end
+			local p = o + d * tt
+			if p.X <= 40 then return { pos = p, normal = Vector3.yAxis, part = FLOOR } end
+			return nil
+		end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			local o = cf.Position
+			local tt = -o.Y / d.Y
+			if tt < 0 or tt > 1 or o.X - size.X / 2 > 40 then return nil end
+			return { pos = Vector3.new(math.min(o.X, 40), 0, o.Z), normal = Vector3.yAxis, dist = d.Magnitude * tt, part = FLOOR }
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(40.3, 6, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, w, { time = 0.6, every = 1 / 30 })
+	check(math.abs(pts[#pts].Y - 3) < 1e-6, "it lands on the edge (" .. tostring(pts[#pts]) .. ")")
+end
+
+section("live: a head hitting a ceiling bounces down (elasticity) and loses speed (friction)")
+do
+	-- (a Plastic ceiling at y 9 everywhere: the head (2 above the root) reaches it at root 7)
+	local CEIL = {}
+	local function world(surface)
+		local w = kitWorld()
+		local ray = w.ray
+		w.ray = function(o, d, t)
+			if d.Y > 0 then
+				local tt = (9 - o.Y) / d.Y
+				if tt >= 0 and tt <= 1 then return { pos = o + d * tt, normal = -Vector3.yAxis, part = CEIL } end
+				return nil
+			end
+			return ray(o, d, t)
+		end
+		w.surface = surface
+		return w
+	end
+	local function bump(w, vx)
+		local pts = Sim.run(base({ vel = Vector3.new(vx, 0, 0) }), { move = Vector3.new(vx > 0 and 1 or 0, 0, 0), tap = true }, w, { time = 0.5, every = 1 / 240 })
+		-- (the contact step is cut short by the ceiling: the speed coming in is the step before it; the step after the
+		-- contact moves at the bounced speed less one step of gravity)
+		for k = 4, #pts do
+			local v1, v2 = (pts[k - 1].Y - pts[k - 2].Y) * 240, (pts[k].Y - pts[k - 1].Y) * 240
+			if v1 > 0 and v2 < 0 then
+				return (pts[k - 2].Y - pts[k - 3].Y) * 240, v2 + 196.2 / 240, (pts[k].X - pts[k - 1].X) * 240
+			end
+		end
+	end
+	local up, down = bump(world(nil), 0)
+	check(up and math.abs(down + 0.5 * up) < 1.5, "Plastic on Plastic: half the speed back down (" .. tostring(up) .. " -> " .. tostring(down) .. ")")
+	local _, _, vx = bump(world(nil), 16)
+	check(vx and vx < 8, "walking: friction takes most of the sideways speed (" .. tostring(vx) .. ")")
+	local upI, downI, vxI = bump(world(function() return { elasticity = 0.15, elasticityWeight = 1, friction = 0.02, frictionWeight = 1 } end), 16)
+	check(upI and math.abs(downI + 0.325 * upI) < 1.5, "Ice: the average elasticity, 0.325 (" .. tostring(upI) .. " -> " .. tostring(downI) .. ")")
+	check(vxI and vxI > 11, "Ice: most of the sideways speed kept (" .. tostring(vxI) .. ")")
+end
+
+section("live: a truss under a block on its top is still grabbed")
+do
+	-- (the wall check meets a plain block at x 10.5 first; a ray at the legs finds the truss face there)
+	local BLOCK = {}
+	local w = trussWorld()
+	local ray = w.ray
+	w.ray = function(o, d, t)
+		if math.abs(d.Y) < 1e-9 and d.X > 0 then
+			if o.X + d.X >= 10.5 and o.X <= 10.5 and o.Y < 4 then
+				local tt = (10.5 - o.X) / d.X
+				return { pos = o + d * tt, normal = Vector3.new(-1, 0, 0), part = TRUSS }
+			end
+			return nil
+		end
+		return ray(o, d, t)
+	end
+	w.cast = function(cf, size, d)
+		local o = cf.Position
+		if d.X <= 0 then return nil end
+		local face = 11 - 0.5
+		if o.X > face + 1e-6 or o.X + d.X < face then return nil end
+		local tt = (face - o.X) / d.X
+		return { pos = o + d * tt, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * tt, part = BLOCK }
+	end
+	local pts = Sim.run(base({ pos = Vector3.new(8, 3, 0) }), { move = Vector3.new(1, 0, 0) }, w, { time = 0.6, every = 1 / 30 })
+	check(top(pts) > 5, "it climbs (" .. top(pts) .. ")")
+end
+
+-- (a small world of axis-aligned boxes for the predictor, with Roblox's rules: casts skip a box they start in)
+local function boxWorld(boxes, effects2)
+	local function slab(o, d, lo, hi)
+		local t0, t1, nrm = 0, 1, nil
+		for _, ax in ipairs({ "X", "Y", "Z" }) do
+			local dd = d[ax]
+			if math.abs(dd) < 1e-12 then
+				if o[ax] < lo[ax] or o[ax] > hi[ax] then return nil end
+			else
+				local a, b = (lo[ax] - o[ax]) / dd, (hi[ax] - o[ax]) / dd
+				local sgn = -1
+				if a > b then a, b, sgn = b, a, 1 end
+				if a > t0 then t0 = a; nrm = Vector3.new(ax == "X" and (dd > 0 and -1 or 1) or 0, ax == "Y" and (dd > 0 and -1 or 1) or 0, ax == "Z" and (dd > 0 and -1 or 1) or 0) end
+				if b < t1 then t1 = b end
+				if t0 > t1 then return nil end
+			end
+		end
+		return t0, nrm
+	end
+	local function first(o, d, grow)
+		local best, bt, bn = nil, math.huge, nil
+		for _, b in ipairs(boxes) do
+			local lo, hi = b.lo - grow, b.hi + grow
+			local inside = o.X > lo.X and o.X < hi.X and o.Y > lo.Y and o.Y < hi.Y and o.Z > lo.Z and o.Z < hi.Z
+			if not inside then
+				local t, n = slab(o, d, lo, hi)
+				if t and n and t < bt then best, bt, bn = b, t, n end
+			end
+		end
+		if not best then return nil end
+		return { pos = o + d * bt, normal = bn, dist = d.Magnitude * bt, part = best.part }
+	end
+	return {
+		ray = function(o, d) return first(o, d, Vector3.zero) end,
+		cast = function(cf, size, d)
+			-- (the turned box's axis-aligned extent)
+			local r, u, l = cf.RightVector, cf.UpVector, cf.LookVector
+			local h = Vector3.new(math.abs(r.X) * size.X + math.abs(u.X) * size.Y + math.abs(l.X) * size.Z,
+				math.abs(r.Y) * size.X + math.abs(u.Y) * size.Y + math.abs(l.Y) * size.Z,
+				math.abs(r.Z) * size.X + math.abs(u.Z) * size.Y + math.abs(l.Z) * size.Z) / 2
+			return first(cf.Position, d, h)
+		end,
+		effect = function(part) return effects2[part] end,
+	}
+end
+
+section("friend's report: a 2 x 2 part on a truss top: walking a little sideways slides off it (live)")
+do
+	local T2, COL, GROUND = {}, {}, {}
+	local w = boxWorld({
+		{ lo = Vector3.new(-40, -1, -40), hi = Vector3.new(40, 0, 40), part = GROUND },
+		{ lo = Vector3.new(-1, 0, -1), hi = Vector3.new(1, 10, 1), part = T2 },
+		{ lo = Vector3.new(-1, 10, -1), hi = Vector3.new(1, 20, 1), part = COL },
+	}, { [T2] = { kind = "truss", top = 10 } })
+	local st = base({ pos = Vector3.new(0, 5, 1.5), onFloor = false, offTime = 1, climb = { n = Vector3.new(0, 0, 1), top = 10 },
+		cf = CFrame.lookAt(Vector3.zero, Vector3.new(0, 0, -1)) })
+	local pts = Sim.run(st, { move = Vector3.new(0.3, 0, -1).Unit }, w, { time = 2.2, every = 1 / 30 })
+	local passed = false
+	for _, p in ipairs(pts) do if math.abs(p.X) < 1 + 0.35 and p.Z < 1 + 0.35 and p.Y > 9 and p.Y < 21 then passed = true end end -- (the root closer than the body allows)
+	check(not passed, "never through the part")
+	-- (live the real one hops between climbing and falling at the top and drifts sideways: 0.9 studs by 2 s in one run,
+	-- off the edge at 1.6 s in another)
+	local last = pts[#pts]
+	check(last.X > 0.8, "it drifts sideways along it (x " .. last.X .. " at 2.2 s)")
+	check(last.Y < 13.5, "and never stands on top of it (y " .. last.Y .. ")")
+end
+
+section("live: climbing is full speed up unless the move points more than 0.2 away from the truss")
+do
+	local st = base({ pos = Vector3.new(10.4, 8, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local function speed(away)
+		local side = math.sqrt(1 - away * away)
+		local pts = Sim.run(st, { move = Vector3.new(-away, 0, side) }, trussWorld(), { time = 0.2, every = 1 / 30 })
+		return (pts[#pts].Y - pts[1].Y) / 0.2
+	end
+	check(math.abs(speed(-0.7) - 11.2) < 0.05, "45 degrees into it: 11.2 up (" .. speed(-0.7) .. ")")
+	check(math.abs(speed(0) - 11.2) < 0.05, "sideways: 11.2 up (" .. speed(0) .. ")")
+	check(math.abs(speed(0.19) - 11.2) < 0.05, "0.19 away: still up (" .. speed(0.19) .. ")")
+	check(math.abs(speed(0.25) + 11.2) < 0.05, "0.25 away: 11.2 down (" .. speed(0.25) .. ")")
+end
+
+section("live: a jump off a truss with the head already against a block over it does nothing")
+do
+	-- (a block's bottom exactly at the head: y 12 over the climber at root 10, live the character jumps and is back on the
+	-- truss at once, not moving)
+	local w = trussWorld()
+	local ray = w.ray
+	w.ray = function(o, d, t)
+		if d.Y > 0 then
+			local tt = (12 - o.Y) / d.Y
+			if tt >= 0 and tt <= 1 and o.X > 8 then return { pos = o + d * tt, normal = -Vector3.yAxis, part = FLOOR } end
+			return nil
+		end
+		return ray(o, d, t)
+	end
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, w, { time = 0.3, every = 1 / 30 })
+	check((pts[#pts] - pts[1]).Magnitude < 1e-6, "it stays on the truss (" .. tostring(pts[#pts]) .. ")")
+	check(top(pts) <= 10 + 1e-6, "never into the block")
+end
+
+section("live: an edge only catches the body within a small step of its feet")
+do
+	-- (beside a block whose top is 2.8 above the feet: live the body hits its side, it doesn't pop up on top)
+	local w = {
+		ray = function() return nil end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			return { pos = Vector3.new(cf.Position.X, 9.8, cf.Position.Z), normal = Vector3.yAxis, dist = cf.Position.Y - 9.8, part = FLOOR }
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(0, 10, 0), vel = Vector3.new(0, -1, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, w,
+		{ time = 0.3, every = 1 / 30 })
+	check(top(pts) <= 10 + 1e-6 and pts[#pts].Y < 9, "it falls past it (" .. tostring(pts[#pts]) .. ")")
 end
 
 section("phase 3 bugs: the launcher query runs per quarter stud moved, not per step")
@@ -1034,6 +1300,98 @@ do
 		t.Parent = workspace.CurrentCamera
 		check(TR:trussAhead(CFrame.lookAt(hrp.Position, hrp.Position + Vector3.new(0, 0, -1))) == nil, "not grabbed")
 		t:Destroy()
+	end
+
+	section("phase 3 live: near a truss's top (the root above it, still climbing) the truss is still seen")
+	do
+		local t = Instance.new("TrussPart")
+		t.Anchored, t.Size, t.Position = true, Vector3.new(2, 10, 2), Vector3.new(-600, 5, -2)
+		t.Parent = workspace
+		local root = Vector3.new(-600, 11.5, 0) -- (1.5 above the top: Roblox climbs on to 2.4 above it)
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)))
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6, "seen (" .. tostring(got and got.top) .. ")")
+		t:Destroy()
+	end
+
+	section("friend's report: climbing a plain part's edge counts as a climb (the three jumps)")
+	do
+		local wall = Instance.new("Part")
+		wall.Anchored, wall.Size, wall.Position = true, Vector3.new(4, 10, 2), Vector3.new(-650, 5, -2)
+		wall.Parent = workspace
+		local root = Vector3.new(-650, 6, 0)
+		check(TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1))) == nil, "walking: a plain part isn't a truss")
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)), true)
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6 and got.n.Z > 0.99, "climbing it: its face and top (" .. tostring(got and got.top) .. ")")
+		place(root)
+		hrp.CFrame = CFrame.lookAt(root, root + Vector3.new(0, 0, -1))
+		hrp.Anchored = true -- (the mock character has no climbing: held where a climb would hold it)
+		hum:ChangeState(Enum.HumanoidStateType.Climbing)
+		local st = TR:start(false)
+		check(st.climb ~= nil, "a character climbing it starts the line on it")
+		hrp.Anchored = false
+		hum:ChangeState(Enum.HumanoidStateType.Running)
+		place(Vector3.new(0, 3, 0))
+		wall:Destroy()
+	end
+
+	section("friend's report: the lines update every frame")
+	do
+		place(Vector3.new(0, 3, 0))
+		hum:Move(Vector3.new(0, 0, 1))
+		M.steps(4)
+		local runs = TR.runs
+		M.steps(8)
+		eq(TR.runs - runs, 8, "walking: 8 frames, 8 predictions")
+		hum:Move(Vector3.zero)
+		M.steps(4)
+	end
+
+	section("friend's report: climbing a plain part's edge counts as a climb (the three jumps)")
+	do
+		local wall = Instance.new("Part")
+		wall.Anchored, wall.Size, wall.Position = true, Vector3.new(4, 10, 2), Vector3.new(-650, 5, -2)
+		wall.Parent = workspace
+		local root = Vector3.new(-650, 6, 0)
+		check(TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1))) == nil, "walking: a plain part isn't a truss")
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)), true)
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6 and got.n.Z > 0.99, "climbing it: its face and top (" .. tostring(got and got.top) .. ")")
+		wall:Destroy()
+	end
+
+	section("friend's report: climbing a plain part's edge counts as a climb (the three jumps)")
+	do
+		local wall = Instance.new("Part")
+		wall.Anchored, wall.Size, wall.Position = true, Vector3.new(4, 10, 2), Vector3.new(-650, 5, -2)
+		wall.Parent = workspace
+		local root = Vector3.new(-650, 6, 0)
+		check(TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1))) == nil, "walking: a plain part isn't a truss")
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)), true)
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6 and got.n.Z > 0.99, "climbing it: its face and top (" .. tostring(got and got.top) .. ")")
+		wall:Destroy()
+	end
+
+	section("friend's report: climbing a plain part's edge counts as a climb (the three jumps)")
+	do
+		local wall = Instance.new("Part")
+		wall.Anchored, wall.Size, wall.Position = true, Vector3.new(4, 10, 2), Vector3.new(-650, 5, -2)
+		wall.Parent = workspace
+		local root = Vector3.new(-650, 6, 0)
+		check(TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1))) == nil, "walking: a plain part isn't a truss")
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)), true)
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6 and got.n.Z > 0.99, "climbing it: its face and top (" .. tostring(got and got.top) .. ")")
+		wall:Destroy()
+	end
+
+	section("friend's report: climbing a plain part's edge counts as a climb (the three jumps)")
+	do
+		local wall = Instance.new("Part")
+		wall.Anchored, wall.Size, wall.Position = true, Vector3.new(4, 10, 2), Vector3.new(-650, 5, -2)
+		wall.Parent = workspace
+		local root = Vector3.new(-650, 6, 0)
+		check(TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1))) == nil, "walking: a plain part isn't a truss")
+		local got = TR:trussAhead(CFrame.lookAt(root, root + Vector3.new(0, 0, -1)), true)
+		check(got ~= nil and math.abs(got.top - 10) < 1e-6 and got.n.Z > 0.99, "climbing it: its face and top (" .. tostring(got and got.top) .. ")")
+		wall:Destroy()
 	end
 
 	section("phase 3 bugs: Space isn't a held jump while typing")

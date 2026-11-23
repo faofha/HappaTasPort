@@ -13,13 +13,15 @@ local Draw = import("world/trajectory/draw")
 
 local Trajectory = { name = "trajectory", order = 70 }
 Trajectory.__index = Trajectory
+Trajectory.Sim = Sim -- (this copy's predictor, for live checks: several loaded builds leave several in memory)
 
 local GREEN, RED = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 60, 60)
--- (seconds of work per update: green may use 60 % of it, red the rest. Live, 1 s lines: both 0.75 ms standing, about
--- 2 ms walking into a wall (two checks every step there), so one update every 4th frame is about 0.5 ms a frame while
--- moving, and nothing while nothing changes)
-local BUDGET = 0.004
-local EVERY = 4 -- (frames between updates while the character moves)
+-- (seconds of work per update: green may use 60 % of it, red the rest. The lines are worked out again on every frame
+-- the character or its keys change (every 4th frame before: it looked slow to follow). Live, 1 s lines: both together
+-- about 0.6 - 1.2 ms walking in the open, more near walls and moving parts; the budget cuts a line short rather than
+-- the frame going over it)
+local BUDGET = 0.003
+local EVERY = 1 -- (frames between updates while the character moves)
 local Air = Enum.Material.Air
 local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.HumanoidStateType.Freefall, Enum.HumanoidStateType.Climbing
 local MAX_SEGMENTS = 60 -- (per line: a long Trajectory Time gets longer segments, not more of them)
@@ -241,7 +243,7 @@ function Trajectory:world(movers)
 	local o = OverlapParams.new()
 	o.FilterType = Enum.RaycastFilterType.Exclude
 	o.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
-	local effects, launchers = {}, {}
+	local effects, launchers, surfaces = {}, {}, {}
 	-- (each mover's box at the update: turned parts by their turned size, spinning ones as a ball; at t its centre has
 	-- moved by v x t, plus at most its distance from the spin's centre when it spins about another point)
 	for _, m in ipairs(movers) do
@@ -323,6 +325,17 @@ function Trajectory:world(movers)
 				return workspace:Blockcast(inv * cf, size, inv:VectorToWorldSpace(d), m.params)
 			end) or hit
 		end,
+		-- (a part's elasticity and friction for a head bounce; nil: Plastic)
+		surface = function(part)
+			local sf = surfaces[part]
+			if sf == nil then
+				local ok, pp = pcall(function() return part.CurrentPhysicalProperties end)
+				sf = (ok and pp and { elasticity = pp.Elasticity, elasticityWeight = pp.ElasticityWeight, friction = pp.Friction,
+					frictionWeight = pp.FrictionWeight }) or false
+				surfaces[part] = sf
+			end
+			return sf or nil
+		end,
 		effect = function(part)
 			local e = effects[part]
 			if e == nil then e = effectOf(part) or false; effects[part] = e end
@@ -342,15 +355,23 @@ function Trajectory:world(movers)
 	}
 end
 
--- a climbing character's truss: the TrussPart in front of the root
-function Trajectory:trussAhead(cf)
+-- a climbing character's truss: the TrussPart in front of the root; `anyPart` (the humanoid is climbing): any part
+-- there, Roblox climbs the edges of plain parts too
+function Trajectory:trussAhead(cf, anyPart)
 	local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
 	if look.Magnitude < 1e-6 then return nil end
 	local p = RaycastParams.new()
 	p.FilterType = Enum.RaycastFilterType.Exclude
 	p.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
-	local r = workspace:Raycast(cf.Position, look.Unit * 3, p)
-	if not (r and r.Instance and r.Instance:IsA("TrussPart")) then return nil end
+	-- (from the root down to the feet: near the top the root is already above the truss, live; Roblox climbs on to
+	-- 2.4 studs above it)
+	local r
+	for _, dy in ipairs({ 0, -1.5, -2.9 }) do
+		r = workspace:Raycast(cf.Position + Vector3.new(0, dy, 0), look.Unit * 3, p)
+		if r and r.Instance and (anyPart or r.Instance:IsA("TrussPart")) then break end
+		r = nil
+	end
+	if not r then return nil end
 	local n = Vector3.new(r.Normal.X, 0, r.Normal.Z)
 	if n.Magnitude < 1e-6 then return nil end
 	return { n = n.Unit, top = topOf(r.Instance) }
@@ -404,7 +425,7 @@ function Trajectory:start(paused)
 		st.airJumped = not st.onFloor and (self.jumped or hum:GetState() == JUMPING or (hum:GetState() == FREEFALL and vel.Y > 1))
 	end
 	local climbing = (paused and E.frame >= 1 and E.frame <= E.tl:count() and E.tl:get("State", E.frame, 1) == CLIMBING.Value) or (not paused and hum:GetState() == CLIMBING)
-	if climbing then st.climb = self:trussAhead(cf) end
+	if climbing then st.climb = self:trussAhead(cf, true) end
 	local look = cf.LookVector
 	st.pos, st.vel = cf.Position, vel
 	st.cf = CFrame.lookAt(Vector3.zero, Vector3.new(look.X, 0, look.Z).Magnitude > 1e-6 and Vector3.new(look.X, 0, look.Z) or Vector3.new(0, 0, -1))
