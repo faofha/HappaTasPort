@@ -7,7 +7,8 @@
 --  (coyote time), once until the next landing. Floors, walls, slopes and ceilings come from `world` (Roblox's own
 --  Raycast / Blockcast in the game), so any part shape and rotation counts. Pure: no engine, no instances.
 --  Sim.run(start, input, world, opts) -> points (every opts.every s, the start first), info { jumped, cut }
---    start = { pos, vel, onFloor, offTime, jumping, airJumped (jumped since the floor: no coyote jump), ground (root
+--    start = { pos, vel, onFloor, offTime, jumping, airJumped (jumped since the floor: no coyote jump), climb?
+--              ({ n = the truss face's outward normal, top = its top's height }: climbing), ground (root
 --              height over the floor), box (collision box),
 --              cf (its rotation), walkSpeed, jumpSpeed, maxSlope (degrees), gravity, top? (head room) }
 --    input = { move (horizontal unit vector or zero), jump (held the whole time), tap (one jump at the start, if it
@@ -25,6 +26,10 @@ Sim.STEP = 1 / 240
 -- this push model reaches it at 1.0757 x JumpPower. V2.38.17's 1.06 gave 7.269, measured then)
 Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
+-- (trusses, measured live 2026-11-23: a climb starts after 0.05 s pressing into a truss face; climbing speed 0.7 x
+-- WalkSpeed x how much the move points at the truss; at 2.4 studs above the top it steps over; a jump off it leaves at
+-- 0.68 x JumpPower outward and 0.84 x JumpPower up)
+Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER, Sim.CLIMB_OUT, Sim.CLIMB_UP = 0.05, 0.7, 2.4, 0.68, 0.84
 Sim.LAUNCH_TIME = 0.125 -- (a kit jump launcher's LinearVelocity, JumpLauncher.lua: destroyed after 0.125 s)
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
@@ -33,6 +38,7 @@ local UP = Vector3.yAxis
 
 -- can a jump start from this state
 function Sim.canJump(st)
+	if st.climb then return true end -- (a jump off the truss)
 	if st.jumping or st.airJumped then return false end
 	return st.onFloor == true or (st.offTime or math.huge) <= Sim.COYOTE
 end
@@ -45,7 +51,7 @@ local function flat(v) return Vector3.new(v.X, 0, v.Z) end
 -- height, need no check until they have used up `left` (one check a stud instead of one a step; live a step pressed
 -- against a wall cost 7 us, 1.5 in the open)
 local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
-	local met = nil
+	local met, metN = nil, nil
 	for pass = 1, 2 do
 		local len = d.Magnitude
 		if len < 1e-9 then break end
@@ -65,7 +71,7 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
 			break
 		end
 		clear.dir = nil
-		met = hit.part or met
+		met, metN = hit.part or met, hit.normal
 		local t = math.max(0, dist - SKIN) / len
 		pos = pos + d * t
 		local n = flat(hit.normal)
@@ -76,7 +82,7 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
 		local rest = d * (1 - t)
 		d = rest - n * math.min(0, rest:Dot(n))
 	end
-	return pos, hv, met
+	return pos, hv, met, metN
 end
 
 function Sim.run(st, input, world, opts)
@@ -104,6 +110,9 @@ function Sim.run(st, input, world, opts)
 	local vy = onFloor and not jumping and 0 or vel.Y
 	-- a kit bounce pad touched: the root's velocity as the kit sets it, a jump in progress ends (it goes to Freefall)
 	local launchLeft, launchV, launchAll = 0, Vector3.zero, false
+	local climb = st.climb and { n = flat(st.climb.n).Unit, top = st.climb.top } or nil
+	local climbContact = 0
+	local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
 	local function bounce(e)
 		if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
 		jumping, onFloor = false, false
@@ -113,9 +122,33 @@ function Sim.run(st, input, world, opts)
 	local points, info = { pos }, { jumped = jumping, cut = false }
 	for i = 1, steps do
 		if opts.deadline and i % 24 == 0 and os.clock() > opts.deadline then info.cut = true break end
+		local skip = false
 		-- a jump inside a kit launcher's hitbox launches instead (its up x Force for 0.125 s; only Y when upright, all
 		-- axes when tilted; no normal jump with it, live); otherwise a held jump starts one whenever it can
 		local wants = input.jump or (input.tap and i == 1)
+		if climb then
+			-- climbing a truss: up / down along its face as the move points at it, a jump leaves it, at the top it steps
+			-- over, at the floor it lets go
+			if wants then
+				hv, vy = climb.n * (Sim.CLIMB_OUT * jp), Sim.CLIMB_UP * jp
+				climb, airJumped, onFloor, info.jumped = nil, true, false, true
+				pos = pos + (hv + UP * vy) * h
+			else
+				local toward = (move.Magnitude > 1e-6) and move.Unit:Dot(-climb.n) or 0
+				vy, hv = Sim.CLIMB_K * ws * toward, Vector3.zero
+				local ny = pos.Y + vy * h
+				if vy < 0 then
+					local hit = world.ray(pos + UP, -UP * (ground + 1 - vy * h + 0.05))
+					if hit and hit.pos.Y + ground >= ny then ny, climb, onFloor, vy, airJumped = hit.pos.Y + ground, nil, true, 0, false end
+				end
+				pos = Vector3.new(pos.X, ny, pos.Z)
+				if climb and pos.Y >= climb.top + Sim.CLIMB_OVER then hv, vy, climb = -climb.n * ws, 0, nil end
+			end
+			offTime = 0
+			if i % every == 0 then points[#points + 1] = pos end
+			skip = true
+		end
+		if not skip then
 		local L = wants and launchLeft <= 0 and world.launcher and world.launcher(pos, box, rot)
 		if L then
 			launchLeft, launchV = Sim.LAUNCH_TIME, L.up * L.force
@@ -148,10 +181,21 @@ function Sim.run(st, input, world, opts)
 		else
 			vy = vy - g * h
 		end
-		local wallPart
-		pos, hv, wallPart = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+		local wallPart, wallN
+		pos, hv, wallPart, wallN = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
 		local wallE = wallPart and effect(wallPart)
 		if wallE and wallE.kind == "bounce" then bounce(wallE) end
+		-- walking into a truss face starts a climb after CLIMB_DELAY of contact
+		local trussN = wallE and wallE.kind == "truss" and wallN and flat(wallN)
+		if trussN and trussN.Magnitude > 1e-6 and target:Dot(trussN.Unit) < -0.5 * target.Magnitude then
+			climbContact = climbContact + h
+			if climbContact >= Sim.CLIMB_DELAY - 1e-9 then
+				climb, climbContact, jumping, launchLeft = { n = trussN.Unit, top = wallE.top }, 0, false, 0
+				vy, hv = 0, Vector3.zero
+			end
+		else
+			climbContact = 0
+		end
 		local dy = vy * h
 		if dy > 0 then
 			local hit = world.ray(pos, UP * (top + dy))
@@ -184,6 +228,7 @@ function Sim.run(st, input, world, opts)
 		pos = Vector3.new(pos.X, newY, pos.Z)
 		offTime = onFloor and 0 or offTime + h
 		if i % every == 0 then points[#points + 1] = pos end
+		end
 	end
 	return points, info
 end

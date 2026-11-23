@@ -367,6 +367,73 @@ do
 	check(math.abs((pts2[#pts2].X - 32) - 16 * 0.3) < 0.8, "upright: only Y is forced, walking goes on (" .. pts2[#pts2].X .. ")")
 end
 
+-- (a truss x 11..13, its face toward -X at x = 11, top at y = 20; the floor at y = 0)
+local TRUSS = {}
+local function trussWorld()
+	return {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			-- the truss top (x 11..13), then the floor
+			for _, y in ipairs({ 20, 0 }) do
+				local t = (y - o.Y) / d.Y
+				if t >= 0 and t <= 1 then
+					local p = o + d * t
+					if y == 0 then return { pos = p, normal = Vector3.yAxis, part = FLOOR } end
+					if p.X >= 11 and p.X <= 13 then return { pos = p, normal = Vector3.yAxis, part = TRUSS } end
+				end
+			end
+			return nil
+		end,
+		cast = function(cf, size, d)
+			local o = cf.Position
+			if d.X <= 0 or o.Y - 1 >= 20 then return nil end
+			local face = 11 - 0.5
+			if o.X > face + 1e-6 or o.X + d.X < face then return nil end
+			local t = (face - o.X) / d.X
+			return { pos = o + d * t, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * t, part = TRUSS }
+		end,
+		effect = function(part) if part == TRUSS then return { kind = "truss", top = 20 } end return nil end,
+	}
+end
+
+section("phase 2: walking into a truss climbs it")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
+	local last = pts[#pts]
+	check(last.X <= 10.6 and last.Y > 14 and last.Y < 18, "climbing up the face (" .. tostring(last) .. ")")
+	local v = (pts[#pts].Y - pts[#pts - 3].Y) / (3 / 30)
+	check(math.abs(v - 11.2) < 0.3, "at 0.7 x WalkSpeed (" .. v .. ")")
+end
+
+section("phase 2: the truss top")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 2.4, every = 1 / 30 })
+	local onTop = false
+	for _, p in ipairs(pts) do if p.X > 11.2 and math.abs(p.Y - 23) < 0.05 then onTop = true end end
+	check(onTop, "it steps over and stands on the top")
+end
+
+section("phase 2: a jump off a truss")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	check(Sim.canJump(st), "climbing: a jump can start")
+	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 60 })
+	local vx = (pts[2].X - pts[1].X) * 60
+	local vy = (pts[2].Y - pts[1].Y) * 60
+	check(math.abs(vx - (-0.68 * 50)) < 2 and math.abs(vy - 0.84 * 50) < 3, "away 0.68 x and up 0.84 x JumpPower (" .. vx .. ", " .. vy .. ")")
+end
+
+section("phase 2: hanging and climbing down")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts = Sim.run(st, { move = Vector3.zero }, trussWorld(), { time = 0.5, every = 1 / 30 })
+	check(math.abs(pts[#pts].Y - 10) < 1e-6, "no input: it hangs (" .. pts[#pts].Y .. ")")
+	local pts2 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 0.3, every = 1 / 30 })
+	check(math.abs(pts2[#pts2].Y - (10 - 11.2 * 0.3)) < 0.2, "moving away: down at 11.2 (" .. pts2[#pts2].Y .. ")")
+	local pts3 = Sim.run(st, { move = Vector3.new(-1, 0, 0) }, trussWorld(), { time = 1.5, every = 1 / 30 })
+	check(math.abs(pts3[#pts3].Y - 3) < 0.05 and pts3[#pts3].X < 10.3, "and lets go at the floor, walking away (" .. tostring(pts3[#pts3]) .. ")")
+end
+
 section("predictor: a start inside a part")
 do
 	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))
