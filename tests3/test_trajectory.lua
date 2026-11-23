@@ -218,4 +218,115 @@ end
 hum:Move(Vector3.zero)
 M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
 
+-- ------------------------------------------------------------------------------------------------ the lines
+local TR = E.trajectory
+local function shownSegments()
+	local n = 0
+	for _, d in ipairs(game:GetDescendants()) do
+		if d.ClassName == "LineHandleAdornment" and d.Visible and d.Parent then n = n + 1 end
+	end
+	for _, d in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+		if d.ClassName == "LineHandleAdornment" and d.Visible and d.Parent then n = n + 1 end
+	end
+	return n
+end
+M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+s:set("showTrajectory", 1)
+key(Enum.KeyCode.One)
+M.steps(2)
+
+section("lines: drawn in Idle")
+place(Vector3.new(0, 3, 0))
+M.steps(6)
+check(TR ~= nil and TR.lines.green ~= nil and #TR.lines.green > 1, "a green line")
+check(TR and TR.lines.red ~= nil, "and a red one (on the floor a jump can start)")
+check(shownSegments() > 0, "drawn")
+
+section("lines: holding jump shows only green")
+M.pressKey(Enum.KeyCode.Space)
+M.steps(6)
+check(TR.lines.green ~= nil and TR.lines.red == nil, "only green")
+M.releaseKey(Enum.KeyCode.Space)
+place(Vector3.new(0, 3, 0))
+M.steps(6)
+
+section("lines: in the air past coyote time, only green")
+place(Vector3.new(0, 60, 0))
+M.steps(20)
+check(TR.lines.green ~= nil and TR.lines.red == nil, "only green (" .. tostring(TR.lines.red) .. ")")
+place(Vector3.new(0, 3, 0))
+M.steps(6)
+
+section("lines: Show Trajectory In = Create, nothing in Idle")
+s:set("showTrajectoryIn", "Create")
+M.steps(6)
+check(TR.lines.green == nil and shownSegments() == 0, "nothing in Idle")
+
+section("lines: paused in Create, from the frame shown")
+key(Enum.KeyCode.Two)
+M.steps(2)
+E.modes:request("unpause")
+hum:Move(Vector3.new(1, 0, 0))
+M.steps(20)
+E.modes:request("pause")
+M.steps(2)
+hum:Move(Vector3.zero)
+E.modes:seek(5)
+M.steps(4)
+do
+	local want = E.char:cframeAt(E.tl, E.frame).Position
+	check(TR.lines.green ~= nil and (TR.lines.green[1] - want).Magnitude < 1e-3, "the line starts on the paused frame")
+	check(TR.lines.green ~= nil and (TR.lines.green[2] - TR.lines.green[1]).Magnitude > 0.01,
+		"with the frame's own speed (it was recorded walking; the held character has none)")
+end
+s:set("showTrajectoryIn", "Idle")
+E.modes:seek(6)
+M.steps(4)
+check(TR.lines.green == nil and shownSegments() == 0, "Show Trajectory In = Idle: nothing while paused in Create")
+s:set("showTrajectoryIn", "Idle,Create")
+
+section("lines: not in Test")
+E.modes:request("test")
+M.steps(6)
+check(TR.lines.green == nil and shownSegments() == 0, "nothing while testing")
+key(Enum.KeyCode.One)
+M.steps(4)
+
+section("lines: off hides them")
+place(Vector3.new(0, 3, 0))
+M.steps(6)
+check(shownSegments() > 0, "(shown)")
+s:set("showTrajectory", 0)
+M.steps(1)
+eq(shownSegments(), 0, "all hidden at once")
+s:set("showTrajectory", 1)
+M.steps(6)
+
+section("lines: respawn")
+do
+	local errs0 = #E.errs.last
+	local old = E.char.model
+	old.Parent = nil
+	M.steps(4)
+	check(TR.lines.green == nil, "no line without a character")
+	local ch2 = M.makeCharacter(Vector3.new(0, 3, 0))
+	M.player.CharacterAdded:Fire(ch2)
+	local g2 = 0
+	while not E.char:loaded() and g2 < 100 do M.step(1 / 60); g2 = g2 + 1 end
+	M.steps(6)
+	check(TR.lines.green ~= nil, "back with the new character")
+	eq(#E.errs.last, errs0, "no error (" .. tostring(E.errs.last[#E.errs.last]) .. ")")
+	hrp, hum = E.char.hrp, E.char.hum
+end
+
+section("lines: the time budget cuts the line, not the frame")
+s:set("trajectoryTime", 5)
+TR.budget = 0
+M.steps(6)
+check(TR.lines.green ~= nil and #TR.lines.green < 5 * 30 + 1, "cut short (" .. tostring(TR.lines.green and #TR.lines.green) .. " points)")
+TR.budget = nil
+s:set("trajectoryTime", 1)
+s:set("showTrajectory", 0)
+M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+
 finish()
