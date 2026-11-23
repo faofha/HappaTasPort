@@ -14,6 +14,7 @@
 --    input = { move (horizontal unit vector or zero), jump (held the whole time), tap (one jump at the start, if it
 --              can: the red line) }
 --    world = { ray(origin, dir) -> { pos, normal, part }?, cast(cf, size, dir) -> { pos, normal, dist, part }?,
+--              (launcher gets the whole body: box from the feet to the head, centred at pos)
 --              effect(part) -> effect? (phase 2: { kind = "bounce", power, relative? } a kit bounce pad,
 --              { kind = "conveyor", vel } a moving floor), launcher(pos, box, rot) -> { up, force }? (a kit jump
 --              launcher's hitbox the body is in) }
@@ -26,11 +27,14 @@ Sim.STEP = 1 / 240
 -- this push model reaches it at 1.0757 x JumpPower. V2.38.17's 1.06 gave 7.269, measured then)
 Sim.JUMP_SCALE = 1.0757
 Sim.COYOTE = 0.13
--- (trusses, measured live 2026-11-23: a climb starts after 0.05 s pressing into a truss face; climbing speed 0.7 x
+-- (trusses, measured live 2026-11-23: a climb starts when the body touches a truss face it walks into (a 0.05 s delay
+-- put the line half a stud behind the whole way up, live); climbing speed 0.7 x
 -- WalkSpeed x how much the move points at the truss; at 2.4 studs above the top it steps over; a jump off it leaves at
 -- 0.68 x JumpPower outward and 0.84 x JumpPower up)
-Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER, Sim.CLIMB_OUT, Sim.CLIMB_UP = 0.05, 0.7, 2.4, 0.68, 0.84
-Sim.LAUNCH_TIME = 0.125 -- (a kit jump launcher's LinearVelocity, JumpLauncher.lua: destroyed after 0.125 s)
+Sim.CLIMB_DELAY, Sim.CLIMB_K, Sim.CLIMB_OVER, Sim.CLIMB_OUT, Sim.CLIMB_UP = 0, 0.7, 2.4, 0.68, 0.84
+Sim.LAUNCH_TIME = 0.125
+Sim.LAUNCH_DELAY = 0.05 -- (the kit polls for the launch once a frame, its push starts the frame after: live ~0.05 s,
+-- with a normal jump going meanwhile) -- (a kit jump launcher's LinearVelocity, JumpLauncher.lua: destroyed after 0.125 s)
 local GAIN, CAP_FLOOR, CAP_AIR = 0.625, 741.6, 143
 local SKIN = 0.01
 Sim.CLEAR = nil -- (how far one wall check looks ahead, studs: 1 when nil; 0 = a check every step, for tests)
@@ -110,6 +114,7 @@ function Sim.run(st, input, world, opts)
 	local vy = onFloor and not jumping and 0 or vel.Y
 	-- a kit bounce pad touched: the root's velocity as the kit sets it, a jump in progress ends (it goes to Freefall)
 	local launchLeft, launchV, launchAll = 0, Vector3.zero, false
+	local launchWait, launchNext = 0, nil
 	local climb = st.climb and { n = flat(st.climb.n).Unit, top = st.climb.top } or nil
 	local climbContact = 0
 	local ws, jp = st.walkSpeed or 16, st.jumpSpeed or 50
@@ -149,11 +154,20 @@ function Sim.run(st, input, world, opts)
 			skip = true
 		end
 		if not skip then
-		local L = wants and launchLeft <= 0 and world.launcher and world.launcher(pos, box, rot)
+		local L = wants and launchLeft <= 0 and not launchNext and world.launcher
+			and world.launcher(pos + UP * ((top - ground) / 2), Vector3.new(box.X, ground + top, box.Z), rot)
 		if L then
-			launchLeft, launchV = Sim.LAUNCH_TIME, L.up * L.force
-			launchAll = not (math.abs(L.up.X) < 0.1 and math.abs(L.up.Z) < 0.1)
-			jumping, airJumped, onFloor, info.jumped = false, true, false, true
+			launchNext, launchWait, info.jumped = L, Sim.LAUNCH_DELAY, true
+			-- (the jump key starts a normal jump meanwhile, live; the launch takes over when it comes)
+			if not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then jumping, airJumped = true, true end
+		end
+		if launchNext then
+			launchWait = launchWait - h
+			if launchWait <= 1e-9 then
+				launchLeft, launchV = Sim.LAUNCH_TIME, launchNext.up * launchNext.force
+				launchAll = not (math.abs(launchNext.up.X) < 0.1 and math.abs(launchNext.up.Z) < 0.1)
+				jumping, airJumped, onFloor, launchNext = false, true, false, nil
+			end
 		elseif wants and launchLeft <= 0 and not jumping and (onFloor or (offTime <= Sim.COYOTE and not airJumped)) then
 			jumping, airJumped, info.jumped = true, true, true
 		end

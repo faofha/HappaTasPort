@@ -340,10 +340,14 @@ end
 section("phase 2: a jump in a launcher")
 do
 	local pts, info = Sim.run(base({ pos = Vector3.new(32, 3, 0) }), { move = Vector3.zero, tap = true }, launchWorld(), { time = 1.2, every = 1 / 30 })
-	local y4 = pts[5].Y -- (0.133 s)
-	check(math.abs(y4 - (3 + 60 * 0.125)) < 0.6, "60 up for 0.125 s (" .. y4 .. ")")
-	local want = 3 + 60 * 0.125 + 60 * 60 / (2 * 196.2)
-	check(math.abs(top(pts) - want) < 0.6, "then gravity: top " .. top(pts) .. " vs " .. want)
+	-- (the kit polls for the launch once a frame and its push starts the frame after, about 0.05 s late; the jump key
+	-- starts a normal jump meanwhile: live the real top was 21.4 - 22.2, 1 - 2 above a launch from the floor)
+	local y2 = pts[2].Y -- (0.033 s: a normal jump rising)
+	check(y2 > 3 + 1, "a normal jump during the kit's delay (" .. y2 .. ")")
+	local v = (pts[6].Y - pts[5].Y) * 30 -- (0.13 - 0.17 s)
+	check(math.abs(v - 60) < 1, "then 60 up (" .. v .. ")")
+	local want = 3 + 60 * 0.125 + 60 * 60 / (2 * 196.2) + 1.5
+	check(math.abs(top(pts) - want) < 1, "then gravity: top " .. top(pts) .. " vs " .. want)
 	check(info.jumped, "it counts as the jump")
 end
 
@@ -403,6 +407,17 @@ do
 	check(last.X <= 10.6 and last.Y > 14 and last.Y < 18, "climbing up the face (" .. tostring(last) .. ")")
 	local v = (pts[#pts].Y - pts[#pts - 3].Y) / (3 / 30)
 	check(math.abs(v - 11.2) < 0.3, "at 0.7 x WalkSpeed (" .. v .. ")")
+end
+
+section("phase 2: the climb starts on contact (live)")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(6, 3, 0) }), { move = Vector3.new(1, 0, 0) }, trussWorld(), { time = 0.6, every = 1 / 240 })
+	local touch, up
+	for k, p in ipairs(pts) do
+		if not touch and p.X >= 10.48 then touch = k end
+		if not up and p.Y > 3.001 then up = k end
+	end
+	check(touch and up and up - touch <= 2, "climbing from the step it touches (" .. tostring(touch) .. ", " .. tostring(up) .. ")")
 end
 
 section("phase 2: the truss top")
@@ -730,7 +745,8 @@ do
 	launcher.Parent = model
 	config(launcher, "LauncherConfiguration", { Force = 60 })
 	local hitbox = Instance.new("Part")
-	hitbox.Name, hitbox.Anchored, hitbox.CanCollide, hitbox.Size, hitbox.Position = "JumpLauncherHitbox", true, false, Vector3.new(4, 8, 4), Vector3.new(-230, 2, 0)
+	-- (only the legs in it, like standing on a launcher: live the kit checks the whole body, the torso is above)
+	hitbox.Name, hitbox.Anchored, hitbox.CanCollide, hitbox.Size, hitbox.Position = "JumpLauncherHitbox", true, false, Vector3.new(4, 4, 4), Vector3.new(-230, -1, 0)
 	hitbox.Parent = model
 	TR.launchersAt = nil -- (look for launchers again now)
 	fresh(Vector3.new(-230, 3, 0))
