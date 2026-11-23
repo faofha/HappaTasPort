@@ -25,6 +25,7 @@ local JUMPING, FREEFALL, CLIMBING = Enum.HumanoidStateType.Jumping, Enum.Humanoi
 local MAX_SEGMENTS = 60 -- (per line: a long Trajectory Time gets longer segments, not more of them)
 -- (phase 3: moving parts near the character, nearest first; one that moves less than this is part of the still world)
 local MAX_MOVERS, STILL = 24, 1e-3
+local CAND_MOVE = 16 -- (studs the character may move before the list of parts in reach is made again)
 
 function Trajectory.new(E)
 	local self = setmetatable({ E = E, uis = Env.svc("UserInputService"), n = 0, air = 0, key = nil, draw = nil,
@@ -109,6 +110,7 @@ end
 local function poseAt(m, t)
 	local c = m.cache
 	if c.t == t then return c.M, c.inv end
+	Trajectory.poseBuilds = (Trajectory.poseBuilds or 0) + 1
 	local M = CFrame.new(m.v * t)
 	local a = m.w.Magnitude * t
 	if a > 1e-9 then M = M * CFrame.new(m.o) * CFrame.fromAxisAngle(m.w.Unit, a) * CFrame.new(-m.o) end
@@ -116,7 +118,8 @@ local function poseAt(m, t)
 	return M, c.inv
 end
 
--- (a part's motion read from the CO player's state for the frame shown: 1-3 position, 36-38 speed, 39-41 spin, x1000)
+-- (a part's motion read from the CO player's state for the frame shown: 1-3 its keyframe's position, 36-38 speed,
+-- 39-41 spin, x1000; 49 = 3: the speed is the one at that position, else the assembly's at its centre of mass)
 local function recorded(s)
 	if not (s and s[1] and s[36]) then return nil end
 	return Vector3.new(s[1], s[2], s[3]) / 1000, Vector3.new(s[36], s[37], s[38]) / 1000, Vector3.new(s[39], s[40], s[41]) / 1000
@@ -129,8 +132,18 @@ function Trajectory:motionOf(part, paused, reg, player)
 	if paused then
 		local id = reg and reg.ids and reg.ids[part]
 		local cur = player and player.cur
-		o, v, w = recorded(id and cur and cur[id])
-		if not o then return nil end
+		local s = id and cur and cur[id]
+		local key
+		key, v, w = recorded(s)
+		if not key then return nil end
+		-- (the part is held on the frame's pose, turned on from its keyframe: the speed where it is now)
+		o = part.Position
+		local from = key
+		if s[49] ~= 3 then
+			local okC, com = pcall(function() return part.AssemblyCenterOfMass end)
+			from = (okC and typeof(com) == "Vector3") and com or o
+		end
+		v = v + w:Cross(o - from)
 		local was = reg.orig and reg.orig[part]
 		if was == nil then was = part.Anchored end
 		carry = was == false
@@ -139,15 +152,29 @@ function Trajectory:motionOf(part, paused, reg, player)
 	else
 		local cf, now = part.CFrame, self.clock
 		local last = self.seen[part]
-		self.watching = true -- (an anchored part is watched: the lines keep updating to measure it)
-		self.seen[part] = { cf = cf, t = now }
-		local dt = last and (now - last.t) or 0
-		if not last or dt < 1e-4 or dt > 0.5 then return nil end
+		if not last then
+			self.seen[part] = { cf = cf, t = now }
+			self.watching = true -- (looked at once: the next update measures it)
+			return nil
+		end
+		local lcf, dt = last.cf, now - last.t
+		last.cf, last.t = cf, now
+		if lcf == cf then return nil end -- (still: nothing to measure, the lines can rest)
+		self.watching = true -- (it moves: the lines keep updating to follow it)
+		-- (0.15 s at most between the two looks: longer, a fast spin could read backwards)
+		if dt < 1e-4 or dt > 0.15 then return nil end
+		cf, last = cf, { cf = lcf }
 		local axis, angle = (cf.Rotation * last.cf.Rotation:Inverse()):ToAxisAngle()
 		o, v, w, carry = cf.Position, (cf.Position - last.cf.Position) / dt, (angle > 1e-9) and axis * (angle / dt) or Vector3.zero, false
 	end
 	if v.Magnitude < STILL and w.Magnitude < STILL then return nil end
 	return { part = part, o = o, v = v, w = w, carry = carry, r = part.Size.Magnitude / 2, cache = {} }
+end
+
+-- forget the anchored parts' last looks (a pause, a mode change: their next look starts a new measure)
+function Trajectory:clearSeen()
+	table.clear(self.seen)
+	self.cand = nil
 end
 
 -- the moving parts near `center`: client objects (the CO registry) or, without it, loose parts within reach
@@ -158,20 +185,35 @@ function Trajectory:findMovers(paused, center, reach)
 	local player = co and co.player
 	local list = {}
 	self.watching = false
-	local function consider(part)
+	-- (the parts in reach are listed about once a second, or after the character moved CAND_MOVE studs: a tower's
+	-- registry can hold thousands of client objects; each update then looks at that short list only)
+	local ready = reg and reg.isReady and reg:isReady()
+	local cand = self.cand
+	if not cand or os.clock() - cand.at > 1 or (center - cand.c).Magnitude > CAND_MOVE or cand.reach ~= reach
+		or cand.ready ~= (ready and true or false) or cand.paused ~= paused then
+		cand = { at = os.clock(), c = center, reach = reach, ready = ready and true or false, paused = paused, parts = {} }
+		local within = reach + CAND_MOVE
+		local function list1(part)
+			if part.Parent and part.CanCollide and (part.Position - center).Magnitude <= within + part.Size.Magnitude / 2 then
+				cand.parts[#cand.parts + 1] = part
+			end
+		end
+		if ready then
+			reg:eachPart(list1)
+		elseif not paused then
+			local op = OverlapParams.new()
+			op.FilterType = Enum.RaycastFilterType.Exclude
+			op.FilterDescendantsInstances = { E.char.model }
+			for _, part in ipairs(workspace:GetPartBoundsInRadius(center, within, op)) do
+				if not part.Anchored then list1(part) end
+			end
+		end
+		self.cand = cand
+	end
+	for _, part in ipairs(cand.parts) do
 		if part.Parent and part.CanCollide and (part.Position - center).Magnitude <= reach + part.Size.Magnitude / 2 then
 			local m = self:motionOf(part, paused, reg, player)
 			if m then m.d = (part.Position - center).Magnitude; list[#list + 1] = m end
-		end
-	end
-	if reg and reg.isReady and reg:isReady() then
-		reg:eachPart(consider)
-	elseif not paused then
-		local op = OverlapParams.new()
-		op.FilterType = Enum.RaycastFilterType.Exclude
-		op.FilterDescendantsInstances = { E.char.model }
-		for _, part in ipairs(workspace:GetPartBoundsInRadius(center, reach, op)) do
-			if not part.Anchored then consider(part) end
 		end
 	end
 	table.sort(list, function(a, b) return a.d < b.d end)
@@ -206,26 +248,40 @@ function Trajectory:world(movers)
 	o.FilterType = Enum.RaycastFilterType.Exclude
 	o.FilterDescendantsInstances = { self.E.char.model, workspace.CurrentCamera }
 	local effects, launchers = {}, {}
+	-- (how far a mover's centre can be from where it was at the update after t seconds: no pose needed)
+	for _, m in ipairs(movers) do
+		m.c, m.vs, m.ws, m.arm = m.part.Position, m.v.Magnitude, m.w.Magnitude, (m.part.Position - m.o).Magnitude
+	end
+	local function bound(m, t) return m.r + m.vs * t + m.arm * math.min(2, m.ws * t) end
 	-- (the movers' hit at time t, if nearer than `best`: the query moved back to where the part was at the update)
 	local function moverHit(t, a, d, reach, best, query)
 		local hit = nil
+		t = t or 0
 		for _, m in ipairs(movers) do
-			local M, inv = poseAt(m, t or 0)
-			if m.part.Parent and near(M * m.part.Position, m.r + reach, a, d) then
+			if m.part.Parent and near(m.c, bound(m, t) + reach, a, d) then
+			local M, inv = poseAt(m, t)
+			if near(M * m.c, m.r + reach, a, d) then
 				local r = query(m, inv)
 				local dist = r and r.Distance
 				if r and dist < best then
 					best = dist
 					local pos = M * r.Position
 					hit = { pos = pos, normal = M:VectorToWorldSpace(r.Normal), dist = dist, part = r.Instance,
-						vel = m.v + m.w:Cross(pos - (m.o + m.v * (t or 0))), carry = m.carry }
+						vel = m.v + m.w:Cross(pos - (m.o + m.v * t)), carry = m.carry }
 				end
+			end
 			end
 		end
 		return hit
 	end
 	return {
-		moving = #movers > 0,
+		-- (a mover may be near pos at t: the predictor checks for walls on that step instead of trusting a clear look-ahead)
+		near = function(pos, t)
+			for _, m in ipairs(movers) do
+				if (pos - m.c).Magnitude <= bound(m, t or 0) + 4 then return true end
+			end
+			return false
+		end,
 		ray = function(origin, d, t)
 			local r = workspace:Raycast(origin, d, p)
 			local hit = r and { pos = r.Position, normal = r.Normal, part = r.Instance, dist = r.Distance } or nil
@@ -349,6 +405,8 @@ function Trajectory:onFrameEnd(dt)
 		self.air, self.jumped = 0, false
 	end
 	local paused = E.mode == 2 and E.paused
+	local state = tostring(E.mode) .. tostring(paused)
+	if state ~= self.state then self.state = state; self:clearSeen() end
 	local move = hum.MoveDirection
 	local held = self:jumpHeld()
 	if paused then

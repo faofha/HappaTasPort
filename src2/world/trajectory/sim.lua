@@ -16,7 +16,7 @@
 --    world = { ray(origin, dir, t) -> { pos, normal, part, vel?, carry? }?, cast(cf, size, dir, t) -> { pos, normal,
 --              dist, part, vel?, carry? }? (t = the step's game time from the start: moving parts are asked where they
 --              will be then; vel = that surface's speed, carry = it carries a character standing on it),
---              moving (true while moving parts are near: every step checks for walls),
+--              near(pos, t)? (true while a moving part may be near pos: that step checks for walls),
 --              (launcher gets the whole body: box from the feet to the head, centred at pos)
 --              effect(part) -> effect? (phase 2: { kind = "bounce", power, relative? } a kit bounce pad,
 --              { kind = "conveyor", vel } a moving floor), launcher(pos, box, rot) -> { up, force }? (a kit jump
@@ -65,7 +65,7 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear, t)
 		local len = d.Magnitude
 		if len < 1e-9 then break end
 		local dir = d / len
-		if pass == 1 and not world.moving and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
+		if pass == 1 and not (world.near and world.near(pos, t)) and clear.dir and clear.left >= len and dir:Dot(clear.dir) > 0.9999 and math.abs(pos.Y - clear.y) < 1e-3 then
 			clear.left = clear.left - len
 			pos = pos + d
 			break
@@ -143,7 +143,7 @@ function Sim.run(st, input, world, opts)
 			-- over, at the floor it lets go
 			if wants then
 				local V = (climb.n + UP) * (jp / math.sqrt(2)) + UP * vy
-				V = V.Unit * jp
+				V = V.Magnitude > 1e-9 and V.Unit * jp or Vector3.zero -- (JumpPower 0, hanging: nothing)
 				hv, vy = flat(V), V.Y
 				climb, airJumped, onFloor, info.jumped = nil, true, false, true
 				pos = pos + (hv + UP * vy) * h
@@ -246,14 +246,11 @@ function Sim.run(st, input, world, opts)
 			local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
 			local hit = world.ray(pos + UP, -UP * (reach + 1), t)
 			local low = newY - (wasFloor and 0.5 or 0) - 1e-6
-			if not (hit and hit.pos.Y + ground >= low) then
+			if wasFloor and not (hit and hit.pos.Y + ground >= low) then
 				-- (no floor under the root: the body's footprint still stands on an edge, live until the root is 0.45 studs
 				-- past it facing that way: the box less 0.05 a side)
 				local fp = world.cast(rot + (pos + UP), Vector3.new(math.max(0.1, box.X - FOOT), 0.1, math.max(0.1, box.Z - FOOT)), -UP * (reach + 1), t)
-				if fp and fp.pos.Y + ground >= low then
-					hit = fp
-					if hit.normal.Y < minUp then hit = { pos = fp.pos, normal = UP, part = fp.part, vel = fp.vel, carry = fp.carry } end
-				end
+				if fp and fp.pos.Y + ground >= low and fp.normal.Y >= minUp then hit = fp end
 			end
 			if hit and hit.pos.Y + ground >= low then
 				local e = hit.part and effect(hit.part)

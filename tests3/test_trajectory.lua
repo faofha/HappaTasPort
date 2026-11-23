@@ -469,7 +469,7 @@ local function moverWorld(vel)
 		return math.abs(p.X - c.X) <= 3 + (half and half.X or 0) and math.abs(p.Z - c.Z) <= 3 + (half and half.Z or 0)
 	end
 	return {
-		moving = true,
+		near = function() return true end,
 		ray = function(o, d, t)
 			if math.abs(d.Y) < 1e-9 then return nil end
 			local c = at(t or 0)
@@ -1089,6 +1089,117 @@ do
 	M.steps(4)
 	s:set("showTrajectory", 0)
 	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 3 review: still kit objects don't keep the lines busy")
+do
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = true, true, 40
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.One)
+	local folder = Instance.new("Folder")
+	folder.Name = "ClientParts"
+	folder.Parent = workspace
+	for k = 1, 5 do
+		local p = Instance.new("Part")
+		p.Name, p.Anchored, p.Size, p.Position = "Still" .. k, true, Vector3.new(2, 1, 2), Vector3.new(-500 + k * 3, 5, 6)
+		p.Parent = folder
+	end
+	place(Vector3.new(-500, 3, 0))
+	TR.key = nil
+	M.steps(12)
+	local runs = TR.runs
+	M.steps(16)
+	eq(TR.runs, runs, "standing still beside still kit objects: no new prediction")
+	-- (the registry is walked about once a second, not every update)
+	local reg = E.co.reg
+	local walks, each = 0, reg.eachPart
+	reg.eachPart = function(r, fn) walks = walks + 1 return each(r, fn) end
+	hum:Move(Vector3.new(0, 0, 1))
+	M.steps(30) -- (0.5 s of updates while walking)
+	reg.eachPart = each
+	hum:Move(Vector3.zero)
+	check(walks <= 1, "the registry walked at most once in 0.5 s (" .. walks .. ")")
+	folder:Destroy()
+	place(Vector3.new(0, 3, 0))
+	M.steps(4)
+	s:set("showTrajectory", 0)
+	M.humanoidPhysics, M.robloxController, M.floorEdgeX = false, false, nil
+end
+
+section("phase 3 review: paused, a spinning part's speed at where it is held")
+do
+	local p = Instance.new("Part")
+	p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(4, 2, 3) -- (held 3 studs on from its keyframe at 1, 2, 3)
+	local reg = { ids = { [p] = 7 }, orig = { [p] = false } }
+	local s3 = { 1000, 2000, 3000, [36] = 0, [37] = 0, [38] = 0, [39] = 0, [40] = 2000, [41] = 0, [49] = 3 }
+	local m = TR:motionOf(p, true, reg, { cur = { [7] = s3 } })
+	local want = Vector3.new(0, 2, 0):Cross(Vector3.new(3, 0, 0))
+	check(m ~= nil and (m.o - p.Position).Magnitude < 1e-6 and (m.v - want).Magnitude < 1e-6,
+		"turning about the keyframe's point: its speed where it is now (" .. tostring(m and m.v) .. " vs " .. tostring(want) .. ")")
+end
+
+section("phase 3 review: far movers cost no pose and no extra wall checks")
+do
+	local far = Instance.new("Part")
+	far.Anchored, far.Size, far.Position = false, Vector3.new(4, 1, 4), Vector3.new(0, 3, 300)
+	far.Parent = workspace
+	local movers = { { part = far, o = far.Position, v = Vector3.new(1, 0, 0), w = Vector3.zero, carry = true, r = 3, cache = {} } }
+	local st = { pos = Vector3.new(0, 3, 0), vel = Vector3.new(16, 0, 0), onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	local c0 = M.casts
+	Sim.run(st, { move = Vector3.new(1, 0, 0) }, TR:world({}), { time = 0.5, every = 1 / 30 })
+	local plain = M.casts - c0
+	local b0 = TR.poseBuilds or 0
+	c0 = M.casts
+	Sim.run(st, { move = Vector3.new(1, 0, 0) }, TR:world(movers), { time = 0.5, every = 1 / 30 })
+	check(M.casts - c0 <= plain + 2, "the same wall checks (" .. (M.casts - c0) .. " vs " .. plain .. ")")
+	eq((TR.poseBuilds or 0) - b0, 0, "no pose worked out for it")
+	far:Destroy()
+end
+
+section("phase 3 review: motion measured across a pause isn't a speed")
+do
+	local p = Instance.new("Part")
+	p.Anchored, p.Size, p.Position = true, Vector3.new(4, 1, 4), Vector3.new(0, 50, 0)
+	TR.clock = 10
+	TR:motionOf(p, false, nil, nil)
+	TR.clock = 10.2 -- (0.2 s: too long to tell a speed from)
+	p.Position = Vector3.new(5, 50, 0)
+	check(TR:motionOf(p, false, nil, nil) == nil, "0.2 s apart: not measured")
+	TR.seen[p] = { cf = p.CFrame, t = 10.2 }
+	TR:clearSeen()
+	check(next(TR.seen) == nil, "a pause or a mode change forgets the old looks")
+	s:set("showTrajectory", 1)
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	TR.seen[p] = { cf = p.CFrame, t = TR.clock }
+	key(Enum.KeyCode.Two)
+	M.steps(2)
+	check(next(TR.seen) == nil, "Create after Idle: forgotten")
+	key(Enum.KeyCode.One)
+	M.steps(2)
+	s:set("showTrajectory", 0)
+end
+
+section("phase 3 review: a jump off a truss with JumpPower 0 is no NaN")
+do
+	local st = base({ pos = Vector3.new(10.4, 10, 0), onFloor = false, offTime = 1, jumpSpeed = 0, climb = { n = Vector3.new(-1, 0, 0), top = 20 } })
+	local pts = Sim.run(st, { move = Vector3.zero, tap = true }, trussWorld(), { time = 0.2, every = 1 / 30 })
+	local p = pts[#pts]
+	check(p.X == p.X and p.Y == p.Y, "a number (" .. tostring(p) .. ")")
+end
+
+section("phase 3 review: the ledge footprint doesn't stand on a steep part")
+do
+	local w = {
+		ray = function() return nil end,
+		cast = function(cf, size, d)
+			if d.Y >= 0 then return nil end
+			return { pos = cf.Position - Vector3.new(0, 4, 0), normal = Vector3.new(1, 0.005, 0).Unit, dist = 3, part = FLOOR } -- (steeper than the 89 degree limit)
+		end,
+	}
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 0) }), { move = Vector3.zero }, w, { time = 0.3, every = 1 / 30 })
+	check(pts[#pts].Y < 2, "it falls (" .. pts[#pts].Y .. ")")
 end
 
 section("help and the update log")

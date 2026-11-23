@@ -177,7 +177,10 @@ local TOPICS = {
 		.. "conveyors carry them, and trusses are climbed (the red line on a truss is a jump off it: straight out when "
 		.. "you hang still, steeper while you climb up, flatter while you climb down).\n\n"
 		.. "Moving parts count too: a moving platform you stand on carries the lines, and the lines land on parts where "
-		.. "they will be, guessed from how fast they move and spin right now." },
+		.. "they will be, guessed from how fast they move and spin right now.\n\n"
+		.. "That guess is a straight line, so parts "
+		.. "that swing or turn back are less exact further ahead. Parts moved by the game's scripts are only seen with "
+		.. "Sync Client Objects on." },
 	{ "glide", "Glide Manipulation",
 		"A glide happens when you fall fast along a part in shift lock, strafing with A / D, with your torso's "
 		.. "corner turned into the part's side. If the torso starts a physics step 0.1 - 0.2 studs inside the part, "
