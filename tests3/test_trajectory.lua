@@ -242,6 +242,88 @@ do
 	check(pts2[#pts2].Y < 3, "a 60 degree slope with Max Slope 45 cannot be walked up: it slides down (" .. tostring(pts2[#pts2]) .. ")")
 end
 
+-- ------------------------------------------------------------------------------------------------ phase 2: kit effects
+-- (a made-up world: a floor at y = 0, its x 10..14 strip a bounce pad; a pad wall at x = 20 (its face at 19);
+-- the floor at z >= 100 a conveyor moving +Z at 10)
+local FLOOR, PAD, SIDEPAD, BELT = {}, {}, {}, {}
+local effects = {
+	[PAD] = { kind = "bounce", power = 100 },
+	[SIDEPAD] = { kind = "bounce", power = 100 },
+	[BELT] = { kind = "conveyor", vel = Vector3.new(0, 0, 10) },
+}
+local function kitWorld(relative)
+	return {
+		ray = function(o, d)
+			if math.abs(d.Y) < 1e-9 then return nil end
+			local t = -o.Y / d.Y
+			if t < 0 or t > 1 then return nil end
+			local p = o + d * t
+			local part = FLOOR
+			if p.X >= 10 and p.X <= 14 then part = PAD end
+			if p.Z >= 100 then part = BELT end
+			return { pos = p, normal = Vector3.yAxis, part = part }
+		end,
+		cast = function(cf, size, d)
+			local o = cf.Position
+			local half = 0.5 -- (the turned box's depth along +X)
+			if d.X <= 0 then return nil end
+			local face = 19 - half
+			if o.X > face or o.X + d.X < face then return nil end
+			local t = (face - o.X) / d.X
+			return { pos = o + d * t, normal = Vector3.new(-1, 0, 0), dist = d.Magnitude * t, part = SIDEPAD }
+		end,
+		effect = function(part)
+			local e = effects[part]
+			if e and e.kind == "bounce" and relative then return { kind = "bounce", power = 100, relative = relative } end
+			return e
+		end,
+	}
+end
+local function base(extra)
+	local st = { pos = Vector3.new(0, 3, 0), vel = Vector3.zero, onFloor = true, offTime = 0, jumping = false, ground = 3,
+		box = Vector3.new(2, 2, 1), walkSpeed = 16, jumpSpeed = 50, maxSlope = 89, gravity = 196.2, cf = CFrame.new() }
+	for k, v in pairs(extra or {}) do st[k] = v end
+	return st
+end
+local function top(pts, from)
+	local m = -math.huge
+	for k = from or 1, #pts do m = math.max(m, pts[k].Y) end
+	return m
+end
+
+section("phase 2: a bounce pad from above")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(12, 20, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, kitWorld(), { time = 1.6, every = 1 / 30 })
+	local up = top(pts) -- (it starts at 20, below the bounce's top)
+	local want = 3 + 100 * 100 / (2 * 196.2)
+	check(math.abs(up - want) < 0.5, "it bounces as high as Power 100 gives (" .. up .. " vs " .. want .. ")")
+end
+
+section("phase 2: a bounce pad from the side")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(15, 3, 0) }), { move = Vector3.new(1, 0, 0) }, kitWorld(), { time = 0.6, every = 1 / 30 })
+	check(top(pts) > 10, "touching the pad wall bounces too (" .. top(pts) .. ")")
+end
+
+section("phase 2: a relative pad")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(12, 6, 0), onFloor = false, offTime = 1 }), { move = Vector3.zero }, kitWorld(Vector3.new(40, 60, 0)), { time = 0.6, every = 1 / 30 })
+	check(pts[#pts].X > 12 + 5, "pushed along -RightVector x Power (" .. pts[#pts].X .. ")")
+end
+
+section("phase 2: a conveyor")
+do
+	local pts = Sim.run(base({ pos = Vector3.new(0, 3, 100) }), { move = Vector3.zero }, kitWorld(), { time = 1, every = 1 / 30 })
+	local z = pts[#pts].Z - 100
+	check(math.abs(z - 10) < 0.3, "standing: carried at the belt speed (" .. z .. ")")
+	local pts2 = Sim.run(base({ pos = Vector3.new(0, 3, 200) }), { move = Vector3.new(0, 0, -1) }, kitWorld(), { time = 0.5, every = 1 / 30 })
+	local v = (pts2[#pts2].Z - pts2[#pts2 - 3].Z) / (3 / 30)
+	check(math.abs(v - (-6)) < 0.3, "walking against it: 16 - 10 = 6 (" .. v .. ")")
+	local pts3 = Sim.run(base({ pos = Vector3.new(0, 3, 100), vel = Vector3.new(0, 0, 10) }), { move = Vector3.zero, tap = true }, kitWorld(), { time = 0.4, every = 1 / 30 })
+	local late = (pts3[13].Z - pts3[10].Z) / (3 / 30)
+	check(math.abs(late) < 0.5, "jumped off: the belt speed fades in the air (" .. late .. ")")
+end
+
 section("predictor: a start inside a part")
 do
 	local block = part("Block", Vector3.new(6, 6, 6), Vector3.new(-120, 3, 0))

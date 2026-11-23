@@ -12,7 +12,9 @@
 --              cf (its rotation), walkSpeed, jumpSpeed, maxSlope (degrees), gravity, top? (head room) }
 --    input = { move (horizontal unit vector or zero), jump (held the whole time), tap (one jump at the start, if it
 --              can: the red line) }
---    world = { ray(origin, dir) -> { pos, normal }?, cast(cf, size, dir) -> { pos, normal, dist }? }
+--    world = { ray(origin, dir) -> { pos, normal, part }?, cast(cf, size, dir) -> { pos, normal, dist, part }?,
+--              effect(part) -> effect? (phase 2: { kind = "bounce", power, relative? } a kit bounce pad,
+--              { kind = "conveyor", vel } a moving floor) }
 --    opts  = { time, every, deadline? (os.clock() limit: the line is cut there) }
 -- ================================================================================================
 local Sim = {}
@@ -41,6 +43,7 @@ local function flat(v) return Vector3.new(v.X, 0, v.Z) end
 -- height, need no check until they have used up `left` (one check a stud instead of one a step; live a step pressed
 -- against a wall cost 7 us, 1.5 in the open)
 local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
+	local met = nil
 	for pass = 1, 2 do
 		local len = d.Magnitude
 		if len < 1e-9 then break end
@@ -60,6 +63,7 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
 			break
 		end
 		clear.dir = nil
+		met = hit.part or met
 		local t = math.max(0, dist - SKIN) / len
 		pos = pos + d * t
 		local n = flat(hit.normal)
@@ -70,7 +74,7 @@ local function moveFlat(world, pos, d, hv, rot, box, minUp, clear)
 		local rest = d * (1 - t)
 		d = rest - n * math.min(0, rest:Dot(n))
 	end
-	return pos, hv
+	return pos, hv, met
 end
 
 function Sim.run(st, input, world, opts)
@@ -91,9 +95,16 @@ function Sim.run(st, input, world, opts)
 	local onFloor, offTime, jumping = st.onFloor == true, st.offTime or 0, st.jumping == true
 	local airJumped = jumping or st.airJumped == true
 	local floorN = UP -- (the floor's normal: walking follows its surface)
+	local floorVel = Vector3.zero -- (a conveyor's speed under the feet: walking aims at it + the move, live)
+	local effect = world.effect or function() return nil end
 	local clear = {}
 	local hv = flat(vel)
 	local vy = onFloor and not jumping and 0 or vel.Y
+	-- a kit bounce pad touched: the root's velocity as the kit sets it, a jump in progress ends (it goes to Freefall)
+	local function bounce(e)
+		if e.relative then hv, vy = flat(e.relative), e.relative.Y else vy = e.power end
+		jumping, onFloor = false, false
+	end
 	local steps = math.max(0, math.floor((opts.time or 1) / h + 0.5))
 	local every = math.max(1, math.floor((opts.every or 1 / 30) / h + 0.5))
 	local points, info = { pos }, { jumped = jumping, cut = false }
@@ -105,10 +116,11 @@ function Sim.run(st, input, world, opts)
 		end
 		-- walking
 		local want = target
+		if onFloor and floorVel.Magnitude > 1e-9 then want = target + floorVel end
 		if onFloor and floorN.Y < 0.9999 and target.Magnitude > 1e-6 then
 			-- (along the floor's surface at the walk speed: across a slope that is the walk speed x cos(slope))
 			local along = target - floorN * target:Dot(floorN)
-			if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) end
+			if along.Magnitude > 1e-6 then want = flat(along.Unit * target.Magnitude) + floorVel end
 		end
 		local err = want - hv
 		local m = err.Magnitude
@@ -122,7 +134,10 @@ function Sim.run(st, input, world, opts)
 		else
 			vy = vy - g * h
 		end
-		pos, hv = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+		local wallPart
+		pos, hv, wallPart = moveFlat(world, pos, hv * h, hv, rot, box, minUp, clear)
+		local wallE = wallPart and effect(wallPart)
+		if wallE and wallE.kind == "bounce" then bounce(wallE) end
 		local dy = vy * h
 		if dy > 0 then
 			local hit = world.ray(pos, UP * (top + dy))
@@ -131,12 +146,18 @@ function Sim.run(st, input, world, opts)
 		local newY = pos.Y + dy
 		-- the floor under the new position: stand on it (walkable), slide on it (too steep) or nothing
 		onFloor = false
+		floorVel = Vector3.zero
 		if vy <= 0 then
 			local reach = ground + math.max(0, -dy) + (wasFloor and 0.5 or 0.05)
 			local hit = world.ray(pos + UP, -UP * (reach + 1))
 			if hit and hit.pos.Y + ground >= newY - (wasFloor and 0.5 or 0) - 1e-6 then
-				if hit.normal.Y >= minUp then
+				local e = hit.part and effect(hit.part)
+				if e and e.kind == "bounce" then
+					newY = hit.pos.Y + ground
+					bounce(e)
+				elseif hit.normal.Y >= minUp then
 					newY, vy, onFloor, airJumped, floorN = hit.pos.Y + ground, 0, true, false, hit.normal
+					if e and e.kind == "conveyor" then floorVel = flat(e.vel) end
 				else
 					newY = math.max(newY, hit.pos.Y + ground)
 					local v = hv + UP * vy
