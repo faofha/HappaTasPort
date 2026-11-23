@@ -315,6 +315,8 @@ class("BodyColors", "Instance")
 class("HumanoidDescription", "Instance")
 class("ParticleEmitter", "Instance", { Enabled = true })
 class("Beam", "Instance", { Enabled = true })
+class("LineHandleAdornment", "Instance", { Adornee = nil, CFrame = CFrame.new(), Length = 5, Thickness = 1, Color3 = Color3.new(1, 1, 1),
+	Transparency = 0, AlwaysOnTop = false, Visible = true, ZIndex = 0 })
 class("Trail", "Instance", { Enabled = true })
 
 M.ReadOnly = { ClassName = true, AbsolutePosition = true, AbsoluteSize = true, AbsoluteRotation = true, TextBounds = true,

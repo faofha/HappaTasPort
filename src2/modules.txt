@@ -42,6 +42,9 @@ world/buttons
 world/lighting
 world/time/control
 world/glide
+world/trajectory/sim
+world/trajectory/draw
+world/trajectory
 world/kit/clock
 world/kit/vanishers
 world/kit/objects

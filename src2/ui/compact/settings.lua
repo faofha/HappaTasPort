@@ -18,7 +18,7 @@ local SettingsWin = import("ui/win/settings")
 local TSettings = {}
 TSettings.__index = TSettings
 
-local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Trajectory", "Inputs", "World sync", "Interface" }
 local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 local TITLE, PADT, PADB, GAP, SEC_GAP, STRIP = 22, 4, 6, 5, 7, 18
 

@@ -797,6 +797,8 @@ function TimeControl:stepTime() return SH.StepTime() end
 function TimeControl:stepping() return SH.Stepping() end
 function TimeControl:stepDt() return SH.StepDt() end
 function TimeControl:gameDt(dt) return SH.GameDt(dt) end
+-- how fast game time runs against real time (the speed hack's TAS clock; 1 without it), read only
+function TimeControl:rate() return SH.anim or 1 end
 function TimeControl:frameStart() SH.FrameStart() end
 function TimeControl:stepBegin(dt) return SH.StepBegin(dt) end
 function TimeControl:stepEnd() SH.StepEnd() end

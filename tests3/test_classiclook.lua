@@ -30,7 +30,7 @@ for _, def in ipairs(Settings.SCHEMA) do
 		eq(rows[def.key], nil, def.key .. " hidden (the New interface's only)")
 	end
 end
-eq(shown, 55, "V2.38.17's 24 settings left in V3.1 (Frame Step went with Part B), the interface choice, Classic Look's 27, the 2 Glide settings and Replay Chat")
+eq(shown, 57, "V2.38.17's 24 settings left in V3.1 (Frame Step went with Part B), the interface choice, Classic Look's 27, the 2 Glide settings, Replay Chat and Show Trajectory / Trajectory Time")
 eq(rows.speedHack.label.Text, "Speed Hack (slow motion)", "its label")
 eq(rows.speedHackSpeed.label.Text, "Speed (0.1 - 1, 0.5 = half)", "its label")
 eq(rows.invisibleMouseSpeed.label.Text, "NohBoard Mouse Speed", "V3.1's name")

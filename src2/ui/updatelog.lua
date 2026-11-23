@@ -13,6 +13,7 @@ UpdateLog.ENTRIES = {
 		"   -   About window: version, credits and the update log",
 		"   -   Help rewritten in V2's friendly style; credits moved out",
 		"   -   Chat replay: Test types your recorded chat again",
+		"   -   Show Trajectory: green / red lines of where you go",
 		"   -   A new colour picker: one box, quick and recent colours",
 		"   -   Green default colours for the New interface",
 		"   -   One Sync Client Objects switch; fewer settings",

@@ -22,7 +22,7 @@ local Bezier = import("ui/kit/bezier")
 
 local SettingsWin = {}
 
-local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Inputs", "World sync", "Interface" }
+local SECTIONS = { "Appearance", "Playback", "Create", "Speed hack", "Glide", "Trajectory", "Inputs", "World sync", "Interface" }
 local BEZIER = { bezierX1 = true, bezierY1 = true, bezierX2 = true, bezierY2 = true }
 local PERCENT = { glassTransparency = true, blurStrength = true, edgeLight = true, interfaceScale = true }
 local HEADER_H, PAD = 30, 18
